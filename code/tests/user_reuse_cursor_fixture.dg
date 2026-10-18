@@ -1,0 +1,42 @@
+// Appended only to the native copy of user.memory. Actual fresh/retirement
+// functions remain intact; only the scan loop receives a transparent counter.
+var CURSOR_FRAMES:[16384]Frame=[EMPTY_RAM;16384];
+var CURSOR_STATES:[16384]u8=[0;16384];
+var CURSOR_JOURNAL:[16384]u16=[0;16384];
+var TEST_SCAN_COUNT:u64=0;
+unsafe extern "sysv64" fn cursor_scan_event(count:u64)void;
+export("cursor_setup") fn cursor_setup(alias:u64)u64 {unsafe{
+ ALIASES=alias;KERNEL_PHYSICAL=0x10_0000;FRAME_COUNT=0;REUSE_FROM=0;EXTENDED=&CURSOR_FRAMES[0];EXTENDED_LIMIT=16384;
+ EXTENDED_RECYCLED=&CURSOR_STATES[0];EXTENDED_JOURNAL=&CURSOR_JOURNAL[0];TEST_SCAN_COUNT=0;
+ STAGE_ID=LIMIT;STAGE_COUNT=0;STAGE_ROOT=0;STAGE_BOUND=false;STAGE_TABLES=false;STAGE_FAILED=false;
+ UNSHARE_RECEIPTS=null;UNSHARE_FRAMES=null;UNSHARE_ACTIVE=false;UNSHARE_ALLOCATING=false;UNSHARE_COUNT=0;UNSHARE_FAILED=false;
+ var id:usize=0;while id<LIMIT {PROCESSES[id]=EMPTY_PROCESS;SPACES[id]=paging.EMPTY_SPACE;PINNED[id]=false;id+=1;}
+ id=0;while id<STATIC_LIMIT {match paging.init(&SPACES[id],TABLES[id][..],0x10_0000+id as u64*0x20_000,META[id][..],48,true){ok=>{},err(e)=>{return e;},}id+=1;}
+}return 0;}
+export("cursor_fresh") fn cursor_fresh()u64 {unsafe{match fresh(){ok(index)=>{return index as u64;},err(e)=>{return e;},}}}
+export("cursor_get") fn cursor_get(kind:u64,index:usize)u64 {unsafe{
+ if kind==0{return REUSE_FROM as u64;}if kind==1{return TEST_SCAN_COUNT;}if kind==2{return FRAME_COUNT as u64;}
+ if kind==3{return *recycled(index) as u64;}if kind==4{return STAGE_FAILED as u64;}if kind==5{return UNSHARE_FAILED as u64;}
+ if kind==6{return PROCESSES[index].ready;}return (*record(index)).physical;
+}}
+export("cursor_change") fn cursor_change(kind:u64,index:usize,value:u64)void {unsafe{
+ if kind==0{REUSE_FROM=value as usize;}else if kind==1{*recycled(index)=value as u8;}
+ else if kind==2{PINNED[index]=value!=0;}else if kind==3{UNSHARE_FAILED=value!=0;}
+ else if kind==4{TEST_SCAN_COUNT=0;}
+}return;}
+export("cursor_recycle_wave") fn cursor_recycle_wave()void {unsafe{
+ var i:usize=0;while i<FRAME_COUNT{*recycled(i)=1;i+=1;}REUSE_FROM=0;TEST_SCAN_COUNT=0;
+}return;}
+export("cursor_map") fn cursor_map(id:usize,index:usize,address:u64)u64 {unsafe{
+ PROCESSES[id].ready=1;PROCESSES[id].root=0x10_0000+id as u64*0x20_000;
+ match paging.map_live(&SPACES[id],address,(*record(index)).physical,paging.USER|paging.WRITE){ok=>{return 0;},err(e)=>{return e;},}
+}}
+export("cursor_stage") fn cursor_stage(indices:*const u16,count:usize)void {unsafe{
+ STAGE_ID=0;STAGE_COUNT=count;STAGE_ROOT=0;STAGE_BOUND=false;STAGE_TABLES=false;
+ var i:usize=0;while i<count{*journal_at(i)=*(indices+i);i+=1;}
+}return;}
+export("cursor_abort") fn cursor_abort()u64 {unsafe{match stage_abort(0){ok=>{return 0;},err(e)=>{return e;},}}}
+export("cursor_unshare") fn cursor_unshare(id:usize,address:u64)u64 {unsafe{
+ match unshare_range(id,address,1){ok=>{return 0;},err(e)=>{return e;},}
+}}
+export("cursor_destroy") fn cursor_destroy(id:usize)u64 {unsafe{match destroy(id){ok=>{return 0;},err(e)=>{return e;},}}}

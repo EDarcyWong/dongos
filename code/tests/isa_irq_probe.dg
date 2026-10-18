@@ -1,0 +1,7 @@
+module isa_irq_probe;
+import irq_platform_probe as base;
+import irq.platform as irq;
+export("isa_route") fn route(s:u64,m:u64,out:*irq.IsaRoute)u64 {unsafe {match irq.route_isa(s,m!=0,out) {ok=>{return 0;},err(e)=>{return e;},}}}
+export("isa_mask") fn mask(s:u64,m:u64)u64 {unsafe {match irq.mask_isa(s,m!=0) {ok=>{return 0;},err(e)=>{return e;},}}}
+export("isa_describe") fn describe(s:u64,out:*irq.IsaRoute)u64 {unsafe {match irq.describe_isa(s,out) {ok=>{return 0;},err(e)=>{return e;},}}}
+export("isa_eoi") fn eoi()u64 {unsafe {match irq.device_eoi() {ok=>{return 0;},err(e)=>{return e;},}}}

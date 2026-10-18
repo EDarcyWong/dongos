@@ -1,0 +1,26 @@
+module l1_defs;
+
+pub enum Flag { First, Second, Third }
+pub enum Event { Timer, Key(u8), Count(i16), Shutdown }
+pub error Failed = 17;
+pub error Rejected = 18;
+
+pub struct Counter { pub value:u64 }
+pub unsafe fn (self:*Counter) add(amount:u64)u64 {
+    unsafe { (*self).value += amount; return (*self).value; }
+}
+pub unsafe fn (self:*const Counter) read()u64 {
+    unsafe { return (*self).value; }
+}
+pub unsafe fn via_free_calls(counter:*Counter)u64 {
+    let readonly:*const Counter=counter;
+    unsafe {return add(counter,1)+read(readonly);}
+}
+
+pub const DEFAULT:Event=Event.Key(203);
+pub const NOTHING:?i16=null;
+pub const NEGATIVE:?i16=-123;
+pub const FAILURE:!u32=error.Failed;
+pub const SUCCESS:!u32=123456;
+pub const EVENTS:[3]Event=[Event.Timer,Event.Count(-7),Event.Shutdown];
+pub var CURRENT:Event=Event.Key(9);

@@ -1,0 +1,24 @@
+module virtio_blk_probe;
+import drivers.pci as pci;
+import drivers.virtio_pci as vp;
+import drivers.virtio_blk as blk;
+export("vb_state_size") fn state_size() usize { return sizeof(blk.State); }
+export("vb_transport_size") fn transport_size() usize { return sizeof(vp.Transport); }
+export("vb_state_reset") fn state_reset(state: *blk.State) void { unsafe { *state = blk.EMPTY_STATE; } }
+export("vb_scan") fn scan(reader: pci.Read32,context:u64,regions:*const pci.Region,count:usize,cursor:*pci.Cursor,out:*pci.Function) u64 {
+    unsafe { match pci.next(reader,context,slice_from_raw_parts(regions,count),cursor,out) { ok(found) => { if found { return 0; } return 1; },err(code)=>{return code;}, } }
+}
+export("vb_discover") fn discover(reader:pci.Read32,context:u64,function:*const pci.Function,bars:*const vp.Bar,out:*vp.Transport)u64 {
+    unsafe { match vp.discover(reader,context,function,slice_from_raw_parts(bars,6),out) { ok=>{return 0;},err(code)=>{return code;}, } }
+}
+export("vb_initialize") fn initialize(state:*blk.State,transport:*const vp.Transport,ops:*const blk.Ops,context:u64)u64 {
+    unsafe { match blk.initialize(state,transport,ops,context) { ok=>{return 0;},err(code)=>{return code;}, } }
+}
+export("vb_read") fn read(state:*blk.State,lba:u64,count:usize,out:*u8)u64 { unsafe { match blk.read_sectors(state,lba,count,out) { ok=>{return 0;},err(code)=>{return code;}, } } }
+export("vb_write") fn write(state:*blk.State,lba:u64,count:usize,input:*const u8)u64 { unsafe { match blk.write_sectors(state,lba,count,input) { ok=>{return 0;},err(code)=>{return code;}, } } }
+export("vb_flush") fn flush(state:*blk.State)u64 { unsafe { match blk.flush(state) { ok=>{return 0;},err(code)=>{return code;}, } } }
+export("vb_close") fn close(state:*blk.State)u64 { unsafe { match blk.close(state) { ok=>{return 0;},err(code)=>{return code;}, } } }
+export("vb_info") fn info(state:*const blk.State,out:*blk.Info)u64 { unsafe { match blk.describe(state,out) { ok=>{return 0;},err(code)=>{return code;}, } } }
+export("vb_callback_read") fn callback_read(context:u64,lba:u64,count:usize,out:*u8)u64 { unsafe { return blk.read_callback(context,lba,count,out); } }
+export("vb_callback_write") fn callback_write(context:u64,lba:u64,count:usize,input:*const u8)u64 { unsafe { return blk.write_callback(context,lba,count,input); } }
+export("vb_callback_flush") fn callback_flush(context:u64)u64 { unsafe { return blk.flush_callback(context); } }

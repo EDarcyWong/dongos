@@ -1,0 +1,37 @@
+// Encode module/item name bytes as a collision-free NASM-internal symbol.
+// Descriptors, aliasing, and need-length arithmetic finish before any read or
+// write. INVALID precedes CAPACITY; failures leave out and *written untouched.
+module bootstrap.nasm_symbol;
+pub const OK:u64=0;pub const INVALID:u64=1;pub const CAPACITY:u64=2;
+const MAX:u64=0xffff_ffff_ffff_ffff;
+const HEAD:usize=10;
+fn span(p:u64,n:u64)bool{return n==0||(p!=0&&n<=MAX-p);}
+fn overlap(a:u64,n:u64,b:u64,m:u64)bool{return n!=0&&m!=0&&a<b+m&&b<a+n;}
+fn hex_lo(n:u8)u8{
+ let v=n as u64;
+ if v<10{return (48+v)as u8;}
+ return (87+v)as u8;
+}
+pub unsafe fn encode(module_name:[]const u8,item_name:[]const u8,out:[]u8,written:*usize)u64{unsafe{
+ let wp=written as u64;let mp=module_name.ptr as u64;let ip=item_name.ptr as u64;let op=out.ptr as u64;
+ if written==null||(wp&7)!=0||!span(wp,8){return INVALID;}
+ if !span(mp,module_name.len)||!span(ip,item_name.len)||!span(op,out.len){return INVALID;}
+ if overlap(op,out.len,mp,module_name.len)||overlap(op,out.len,ip,item_name.len){return INVALID;}
+ if overlap(wp,8,mp,module_name.len)||overlap(wp,8,ip,item_name.len)||overlap(wp,8,op,out.len){return INVALID;}
+ if module_name.len==0||item_name.len==0{return INVALID;}
+ if module_name.len>MAX-item_name.len{return INVALID;}let names=module_name.len+item_name.len;
+ if names>MAX/2{return INVALID;}let hex=2*names;
+ if hex>MAX-HEAD{return INVALID;}let total=HEAD+hex;
+ if total>out.len{return CAPACITY;}
+ // "__dong_m"
+ out[0]=95;out[1]=95;out[2]=100;out[3]=111;out[4]=110;out[5]=103;out[6]=95;out[7]=109;
+ var at:usize=8;var i:usize=0;
+ while i<module_name.len{
+  let b=module_name[i];out[at]=hex_lo(b/16);out[at+1]=hex_lo(b%16);at+=2;i+=1;
+ }
+ out[at]=95;out[at+1]=110;at+=2;i=0;
+ while i<item_name.len{
+  let b=item_name[i];out[at]=hex_lo(b/16);out[at+1]=hex_lo(b%16);at+=2;i+=1;
+ }
+ *written=total;return OK;
+}}

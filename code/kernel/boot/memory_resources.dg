@@ -1,0 +1,181 @@
+// Pure P1 BootInfo-v1 resource collection. Physical addresses remain numbers;
+// only caller-provided BootInfo, raw descriptors and Layout are dereferenced.
+// BootInfo-v1 lacks original AllocatePages bounds, so retain each complete
+// containing UEFI descriptor, including envelopes coalesced by the firmware.
+module boot.memory_resources;
+
+import boot.abi as abi;
+import boot.resource_errors as errors;
+import mm.memory_map as memory_map;
+
+pub struct Span { pub start: u64, pub end: u64 }
+pub struct Layout {
+    pub text: Span, pub rodata: Span, pub data: Span, pub bss: Span,
+    pub gdt: Span, pub tss: Span, pub idt: Span,
+    pub df: Span, pub nmi: Span, pub exception_stack: Span,
+    pub workspace: Span, pub rsdp_size: usize,
+}
+pub struct Resource { pub kind: u64, pub base: u64, pub length: u64 }
+pub const COUNT: usize = 19;
+
+const KERNEL_BASE: u64 = 0xffff_ffff_8000_0000;
+const LOW_LIMIT: u64 = 0x1_0000_0000;
+const WINDOW: u64 = 0x20_0000;
+const PAGE: u64 = 4096;
+const EMPTY_RESOURCE: Resource = Resource { kind: 0, base: 0, length: 0 };
+const EMPTY_RANGE: memory_map.PageRange = memory_map.PageRange { start_page: 0, page_count: 0 };
+
+fn low_range(base: u64, length: u64) !void {
+    if base == 0 || base >= LOW_LIMIT || length == 0 {
+        return error.errors.InvalidPhysicalRange;
+    }
+    if length > LOW_LIMIT - base { return error.errors.InvalidPhysicalRange; }
+    return;
+}
+
+fn read_u32(raw: *const u8, offset: usize) u32 {
+    unsafe { return read_unaligned((raw + offset) as *const u32); }
+}
+
+fn read_u64(raw: *const u8, offset: usize) u64 {
+    unsafe { return read_unaligned((raw + offset) as *const u64); }
+}
+
+// The entire map and the actual resource range have already been validated.
+fn allocation(raw: []const u8, stride: usize, base: u64, length: u64,
+              expected_type: u32, out: *Resource) !void {
+    var offset: usize = 0;
+    while offset < raw.len {
+        if read_u32(raw.ptr, offset) == expected_type {
+            let start: u64 = read_u64(raw.ptr, offset + 8);
+            let bytes: u64 = read_u64(raw.ptr, offset + 24) * PAGE;
+            let end: u64 = start + bytes;
+            if start <= base && base + length <= end {
+                try low_range(start, bytes);
+                unsafe { *out = Resource { kind: 0, base: start, length: bytes }; }
+                return;
+            }
+        }
+        offset += stride;
+    }
+    return error.errors.MissingAllocation;
+}
+
+// Unsafe caller owns valid, disjoint input/output storage for the duration of
+// the call. No output item changes until every check has succeeded.
+pub unsafe fn collect(
+    info: *const abi.BootInfo, info_physical: u64, raw: []const u8,
+    layout: *const Layout, output: []Resource
+) !usize {
+    unsafe {
+        if (*info).magic != 0x544f_4f42_474e_4f44 || (*info).version != 1 ||
+           (*info).size != 160 || ((*info).flags & 1) == 0 {
+            return error.errors.InvalidBootInfo;
+        }
+        if raw.len == 0 || raw.len > 65536 || raw.len != (*info).memory_map_size {
+            return error.errors.InvalidMemoryMap;
+        }
+        // Reuse the normalizer's complete descriptor/overlap/endpoint checks.
+        // This one-page arena needs no dynamic allocation and never publishes.
+        var scratch: [1]u8 = [0; 1];
+        var ranges: [1]memory_map.PageRange = [EMPTY_RANGE; 1];
+        let no_reserved: *const memory_map.ReservedRange = null;
+        match memory_map.normalize(
+            raw, (*info).descriptor_size, (*info).descriptor_version, 0, 1,
+            slice_from_raw_parts(no_reserved, 0),
+            slice_from_raw_parts(&scratch[0], 1), slice_from_raw_parts(&ranges[0], 1)
+        ) {
+            ok(value) => {},
+            err(code) => { return error.errors.InvalidMemoryMap; },
+        }
+        let kernel: u64 = ((*info).kernel_physical as usize) as u64;
+        let kernel_size: u64 = (*info).kernel_size as u64;
+        let map: u64 = ((*info).memory_map as usize) as u64;
+        let stack: u64 = ((*info).stack_physical as usize) as u64;
+        let stack_size: u64 = (*info).stack_size as u64;
+        let root: u64 = abi.bootstrap_root(info);
+        let framebuffer: u64 = ((*info).framebuffer_base as usize) as u64;
+        let framebuffer_size: u64 = (*info).framebuffer_size as u64;
+        let rsdp: u64 = ((*info).rsdp as usize) as u64;
+        if kernel_size == 0 || kernel_size > WINDOW || (kernel & (WINDOW - 1)) != 0 {
+            return error.errors.InvalidPhysicalRange;
+        }
+        if stack_size != 65536 || (stack & (PAGE - 1)) != 0 || (root & (PAGE - 1)) != 0 {
+            return error.errors.InvalidPhysicalRange;
+        }
+        try low_range(kernel, WINDOW);
+        try low_range(info_physical, 160);
+        try low_range(map, raw.len as u64);
+        try low_range(stack, stack_size);
+        try low_range(root, PAGE);
+        try low_range(framebuffer, framebuffer_size);
+        // Actual v1 objects must be disjoint even when the firmware merges
+        // all their allocations into the same LoaderData descriptor.
+        let object_bases: [4]u64 = [info_physical, map, stack, root];
+        let object_lengths: [4]u64 = [160, raw.len as u64, stack_size, PAGE];
+        var a: usize = 0;
+        while a < 4 {
+            var b: usize = a + 1;
+            while b < 4 {
+                if object_bases[a] < object_bases[b] + object_lengths[b] &&
+                   object_bases[b] < object_bases[a] + object_lengths[a] {
+                    return error.errors.InvalidPhysicalRange;
+                }
+                b += 1;
+            }
+            a += 1;
+        }
+        if (*layout).rsdp_size < 36 || (*layout).rsdp_size > 4096 {
+            return error.errors.InvalidLayout;
+        }
+        try low_range(rsdp, (*layout).rsdp_size as u64);
+
+        let image_end: u64 = KERNEL_BASE + ((kernel_size + PAGE - 1) & ~(PAGE - 1));
+        let spans: [11]Span = [
+            (*layout).text, (*layout).rodata, (*layout).data, (*layout).bss,
+            (*layout).gdt, (*layout).tss, (*layout).idt,
+            (*layout).df, (*layout).nmi, (*layout).exception_stack, (*layout).workspace,
+        ];
+        if spans[0].start != KERNEL_BASE || spans[0].end != spans[1].start ||
+           spans[1].end != spans[2].start || spans[2].end != spans[3].start ||
+           spans[3].end > image_end {
+            return error.errors.InvalidLayout;
+        }
+        var index: usize = 0;
+        while index < 11 {
+            if spans[index].start < KERNEL_BASE || spans[index].end <= spans[index].start ||
+               spans[index].end > spans[3].end {
+                return error.errors.InvalidLayout;
+            }
+            if index < 4 && ((spans[index].start | spans[index].end) & (PAGE - 1)) != 0 {
+                return error.errors.InvalidLayout;
+            }
+            index += 1;
+        }
+
+        var resources: [COUNT]Resource = [EMPTY_RESOURCE; COUNT];
+        resources[0] = Resource { kind: 0, base: 0, length: PAGE };
+        try allocation(raw, (*info).descriptor_size, kernel, WINDOW, 1, &resources[1]);
+        try allocation(raw, (*info).descriptor_size, info_physical, 160, 2, &resources[2]);
+        try allocation(raw, (*info).descriptor_size, map, raw.len as u64, 2, &resources[3]);
+        try allocation(raw, (*info).descriptor_size, stack, stack_size, 2, &resources[4]);
+        try allocation(raw, (*info).descriptor_size, root, PAGE, 2, &resources[5]);
+        resources[6] = Resource { kind: 6, base: framebuffer, length: framebuffer_size };
+        resources[7] = Resource { kind: 7, base: rsdp, length: (*layout).rsdp_size as u64 };
+        index = 1;
+        while index <= 5 { resources[index].kind = index as u64; index += 1; }
+        index = 0;
+        while index < 11 {
+            resources[8 + index] = Resource {
+                kind: (8 + index) as u64,
+                base: kernel + (spans[index].start - KERNEL_BASE),
+                length: spans[index].end - spans[index].start,
+            };
+            index += 1;
+        }
+        if output.len < COUNT { return error.errors.OutputTooSmall; }
+        index = 0;
+        while index < COUNT { output[index] = resources[index]; index += 1; }
+        return COUNT;
+    }
+}

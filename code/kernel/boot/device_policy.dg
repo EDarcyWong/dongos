@@ -1,0 +1,117 @@
+// Pure planning for discovered device register aliases. Never reads MMIO.
+module boot.device_policy;
+
+import firmware.acpi as acpi;
+import boot.memory_resources as resources;
+
+pub const BASE: u64 = 0xffff_c000_0000_0000;
+pub const SLOTS: usize = 11;
+const LIMIT: u64 = 0x1_0000_0000;
+const MAX: u64 = 0xffff_ffff_ffff_ffff;
+pub error InvalidInput = 0x0303_0001;
+pub error RamConflict = 0x0303_0002;
+pub error ResourceConflict = 0x0303_0003;
+pub error DuplicatePage = 0x0303_0004;
+pub error Unsupported = 0x0303_0005;
+
+// ABI shared with the controller: one LAPIC, eight IOAPICs, HPET, PM timer.
+pub struct Views { pub lapic: u64, pub ioapics: [8]u64, pub hpet: u64, pub pm_timer: u64 }
+pub struct Plan { pub views: Views, pub physical: [SLOTS]u64, pub count: u64 }
+pub const EMPTY_VIEWS: Views = Views { lapic: 0, ioapics: [0;8], hpet: 0, pm_timer: 0 };
+pub const EMPTY_PLAN: Plan = Plan { views: EMPTY_VIEWS, physical: [0;SLOTS], count: 0 };
+
+unsafe fn u64_at(raw: *const u8, offset: usize) u64 {
+    unsafe { return read_unaligned((raw + offset) as *const u64); }
+}
+
+unsafe fn valid_map(raw: []const u8, stride: usize) bool {
+    unsafe {
+        if raw.ptr == null || raw.len == 0 || raw.len > 65536 || stride < 40
+            || (stride & 7) != 0 || raw.len % stride != 0
+            || (raw.ptr as u64) > MAX - raw.len as u64 { return false; }
+        var a: usize = 0;
+        while a < raw.len {
+            let base = u64_at(raw.ptr,a + 8);
+            let pages = u64_at(raw.ptr,a + 24);
+            if (base & 4095) != 0 || pages == 0 || pages > (MAX - base) / 4096 { return false; }
+            let end = base + pages * 4096;
+            var b: usize = 0;
+            while b < a {
+                let other = u64_at(raw.ptr,b + 8);
+                let stop = other + u64_at(raw.ptr,b + 24) * 4096;
+                if base < stop && other < end { return false; }
+                b += stride;
+            }
+            a += stride;
+        }
+    }
+    return true;
+}
+
+unsafe fn add(candidate: *Plan, slot: usize, address: u64, bytes: u64,
+              raw: []const u8, stride: usize, retained: []const resources.Resource) !u64 {
+    unsafe {
+        if address == 0 || address >= LIMIT || bytes == 0 || bytes > LIMIT - address
+            || (address & 4095) + bytes > 4096 { return error.Unsupported; }
+        let page = address & ~4095;
+        var i: usize = 0;
+        while i < SLOTS {
+            if (*candidate).physical[i] == page { return error.DuplicatePage; }
+            i += 1;
+        }
+        // Firmware may omit device holes. If a descriptor exists, it must
+        // actually classify this complete page as non-runtime MMIO.
+        var offset: usize = 0;
+        while offset < raw.len {
+            let start = u64_at(raw.ptr,offset + 8);
+            let end = start + u64_at(raw.ptr,offset + 24) * 4096;
+            if page < end && start < page + 4096 {
+                let kind = read_unaligned((raw.ptr + offset) as *const u32);
+                if kind != 11 || (u64_at(raw.ptr,offset + 32) & 0x8000_0000_0000_0000) != 0 {
+                    return error.RamConflict;
+                }
+            }
+            offset += stride;
+        }
+        i = 0;
+        while i < retained.len {
+            let r = retained[i];
+            if r.length == 0 || r.base > MAX - r.length { return error.InvalidInput; }
+            if page < r.base + r.length && r.base < page + 4096 { return error.ResourceConflict; }
+            i += 1;
+        }
+        (*candidate).physical[slot] = page;
+        (*candidate).count += 1;
+        return BASE + (slot as u64) * 4096 + (address & 4095);
+    }
+}
+
+// Input bytes/records are readable, aligned as required, immutable and
+// disjoint from aligned writable output. Failure preserves the whole Plan.
+pub unsafe fn plan(inventory: *const acpi.Inventory, raw: []const u8, stride: usize,
+                   retained: []const resources.Resource, out: *Plan) !void {
+    unsafe {
+        if inventory == null || out == null || ((inventory as u64) & 7) != 0 || ((out as u64) & 7) != 0
+            || retained.ptr == null || retained.len == 0 || retained.len > 32 || !valid_map(raw,stride) {
+            return error.InvalidInput;
+        }
+        if (*inventory).ioapic_count == 0 || (*inventory).ioapic_count > 8 { return error.InvalidInput; }
+        if ((*inventory).lapic_address & 4095) != 0 { return error.Unsupported; }
+        var next = EMPTY_PLAN;
+        next.views.lapic = try add(&next,0,(*inventory).lapic_address,4096,raw,stride,retained);
+        var i: usize = 0;
+        while i < ((*inventory).ioapic_count as usize) {
+            next.views.ioapics[i] = try add(&next,i + 1,(*inventory).ioapics[i].address,32,raw,stride,retained);
+            i += 1;
+        }
+        if (*inventory).hpet != 0 {
+            if (*inventory).hpet_gas.address_space != 0 { return error.Unsupported; }
+            next.views.hpet = try add(&next,9,(*inventory).hpet_gas.address,1024,raw,stride,retained);
+        }
+        if (*inventory).pm_timer_gas.address != 0 && (*inventory).pm_timer_gas.address_space == 0 {
+            next.views.pm_timer = try add(&next,10,(*inventory).pm_timer_gas.address,4,raw,stride,retained);
+        }
+        *out = next;
+    }
+    return;
+}

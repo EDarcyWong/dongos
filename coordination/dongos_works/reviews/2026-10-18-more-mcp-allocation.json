@@ -1,0 +1,151 @@
+{
+  "transport": "configured stdio MCP",
+  "project": "dongos",
+  "published": [
+    {
+      "id": "cursor:CR16",
+      "title": "64位整数一元与零比较发射",
+      "write_paths": [
+        "cursor-works/src/bootstrap/nasm_integer_unary.dg",
+        "cursor-works/src/bootstrap/nasm_integer_unary.md",
+        "cursor-works/tests/test_nasm_integer_unary.py",
+        "cursor-works/deliveries/CR16.md"
+      ],
+      "depends_on": [],
+      "status_at_creation": "todo"
+    },
+    {
+      "id": "cursor:CR17",
+      "title": "64位立即数移位发射",
+      "write_paths": [
+        "cursor-works/src/bootstrap/nasm_integer_shift.dg",
+        "cursor-works/src/bootstrap/nasm_integer_shift.md",
+        "cursor-works/tests/test_nasm_integer_shift.py",
+        "cursor-works/deliveries/CR17.md"
+      ],
+      "depends_on": [
+        "cursor:CR4"
+      ],
+      "status_at_creation": "todo"
+    },
+    {
+      "id": "cursor:CR18",
+      "title": "基础块标签与无条件跳转发射",
+      "write_paths": [
+        "cursor-works/src/bootstrap/nasm_block_emit.dg",
+        "cursor-works/src/bootstrap/nasm_block_emit.md",
+        "cursor-works/tests/test_nasm_block_emit.py",
+        "cursor-works/deliveries/CR18.md"
+      ],
+      "depends_on": [
+        "cursor:CR4"
+      ],
+      "status_at_creation": "todo"
+    },
+    {
+      "id": "cursor:CR19",
+      "title": "受控64位整数除法与余数发射",
+      "write_paths": [
+        "cursor-works/src/bootstrap/nasm_integer_divide.dg",
+        "cursor-works/src/bootstrap/nasm_integer_divide.md",
+        "cursor-works/tests/test_nasm_integer_divide.py",
+        "cursor-works/deliveries/CR19.md"
+      ],
+      "depends_on": [],
+      "status_at_creation": "todo"
+    },
+    {
+      "id": "claude:C24",
+      "title": "64位加减溢出分支发射",
+      "write_paths": [
+        "claude-works/src/bootstrap/nasm_checked_add_sub.dg",
+        "claude-works/src/bootstrap/nasm_checked_add_sub.md",
+        "claude-works/tests/test_nasm_checked_add_sub.py",
+        "claude-works/deliveries/C24.md"
+      ],
+      "depends_on": [
+        "cursor:CR4"
+      ],
+      "status_at_creation": "todo"
+    },
+    {
+      "id": "claude:C25",
+      "title": "复用内部符号编码的直接调用发射",
+      "write_paths": [
+        "claude-works/src/bootstrap/nasm_direct_call.dg",
+        "claude-works/src/bootstrap/nasm_direct_call.md",
+        "claude-works/tests/test_nasm_direct_call.py",
+        "claude-works/deliveries/C25.md"
+      ],
+      "depends_on": [
+        "cursor:CR3"
+      ],
+      "status_at_creation": "todo"
+    }
+  ],
+  "documents": [
+    {
+      "id": "cursor:CR16",
+      "path": "cursor-works/tasks/CR16-board.md",
+      "sha256": "3b194551df6996b8bb7721fa9479a110b568fbd35ea7577411ac4364480401ca"
+    },
+    {
+      "id": "cursor:CR17",
+      "path": "cursor-works/tasks/CR17-board.md",
+      "sha256": "92474ba114437a3e96dee74bebfee4c84abaf94ad64806d6f0f98c34975caab4"
+    },
+    {
+      "id": "cursor:CR18",
+      "path": "cursor-works/tasks/CR18-board.md",
+      "sha256": "c3859841255c8d1ee534709ff9fb243fe2fd5cb5390289db6911efe01ed956ee"
+    },
+    {
+      "id": "cursor:CR19",
+      "path": "cursor-works/tasks/CR19-board.md",
+      "sha256": "11896bb215cb18a0b9b9428ca38d53c73b07d647ab02d446f6b9c2807d89288b"
+    },
+    {
+      "id": "claude:C24",
+      "path": "claude-works/tasks/C24-board.md",
+      "sha256": "6d6b62c930d4f3104907f2031a0e25a57f8f0eb7b8433f32a642dcf478507f4b"
+    },
+    {
+      "id": "claude:C25",
+      "path": "claude-works/tasks/C25-board.md",
+      "sha256": "cfc6b618e6939ccbbc46d7931e224d30aa9b547b747decad93538d4523742655"
+    }
+  ],
+  "active_write_conflicts": [],
+  "statuses": [
+    {
+      "id": "claude:C24",
+      "status": "todo",
+      "rev": 1
+    },
+    {
+      "id": "claude:C25",
+      "status": "todo",
+      "rev": 1
+    },
+    {
+      "id": "cursor:CR16",
+      "status": "todo",
+      "rev": 1
+    },
+    {
+      "id": "cursor:CR17",
+      "status": "todo",
+      "rev": 1
+    },
+    {
+      "id": "cursor:CR18",
+      "status": "todo",
+      "rev": 1
+    },
+    {
+      "id": "cursor:CR19",
+      "status": "todo",
+      "rev": 1
+    }
+  ]
+}

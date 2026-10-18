@@ -1,0 +1,42 @@
+[
+  {
+    "id": "deepseek:D20",
+    "status": "integrated",
+    "rev": 12
+  },
+  {
+    "id": "cursor:CR11",
+    "status": "rework",
+    "rev": 11
+  },
+  {
+    "id": "cursor:CR12",
+    "status": "todo",
+    "rev": 2
+  },
+  {
+    "id": "cursor:CR13",
+    "status": "todo",
+    "rev": 2
+  },
+  {
+    "id": "cursor:CR14",
+    "status": "todo",
+    "rev": 2
+  },
+  {
+    "id": "cursor:CR15",
+    "status": "todo",
+    "rev": 2
+  },
+  {
+    "id": "claude:C22",
+    "status": "todo",
+    "rev": 2
+  },
+  {
+    "id": "claude:C23",
+    "status": "todo",
+    "rev": 2
+  }
+]

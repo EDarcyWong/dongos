@@ -1,0 +1,107 @@
+module service_gui_fixture;
+import ipc.cap_notify as capnotify;import user.shared_objects as shared;
+import sched.user_bridge as smp_bridge;import boot.trace as trace;import boot.trace_runtime as boot_trace;
+var SMP_ENABLED:bool=false;var SMP_TEST_SLOTS:u64=0;var USB_DEPARTED:u64=0;
+var CAP_NOTICES:capnotify.Registry=capnotify.EMPTY_REGISTRY;
+var CAP_OFFERS:[16]capnotify.Delivery=[capnotify.EMPTY_DELIVERY;16];
+
+import input.console as console;import boot.power_startup as power;
+import user.abi as abi;import user.memory as memory;import user.processes as procs;
+import ipc.core as ipc;import ipc.handles as handles;import lib.abi as sys;
+import lib.process_abi as proc;import lib.desktop as gui;import user.window_broker as windows;
+import lib.window_broker_abi as window;import user.desktop as desktop;
+import user.devices as devices;import user.device_host as device_host;
+import boot.service_memory as resources;import exec.bundle as bundle;import arch.x86_64 as arch;
+const COUNT:usize=16;const NONE:usize=16;const BOOT_ADDRESS:u64=0x7000_0000;
+const MANAGER_OBJECT:u64=0x500;const DEVICE_MANAGER_OBJECT:u64=0x501;
+var ACTIVE:usize=16;var CURRENT:usize=0;var GRAPHICS:bool=true;var CLOCK_HZ:u64=1000000000;
+var MODEL:procs.Catalog=procs.Catalog{ready:0,count:0,sequence:0,
+ configs:[proc.EMPTY_CONFIG;32],states:[proc.EMPTY_SNAPSHOT;32],slot:[0;32],
+ incarnation:[0;16],configuration:[0;16],events:[proc.EMPTY_EVENT;64]};
+var CATALOG:*procs.Catalog=null;
+struct State{table:handles.Table,reply_pointer:u64,receive_pointer:u64,ticket:u64,waiting:u64,started:u64}
+const EMPTY_STATE:State=State{table:handles.EMPTY_TABLE,reply_pointer:0,receive_pointer:0,ticket:0,waiting:0,started:0};
+var STATES:[16]State=[EMPTY_STATE;16];var ENDPOINTS:[16]ipc.Endpoint=[ipc.EMPTY_ENDPOINT;16];
+const EMPTY_BOOT:sys.Boot=sys.Boot{version:1,process:0,endpoint:0,filesystem:0,block:0,channel:0,
+ channel_address:0,channel_bytes:65536,configuration:0,dma:0,console:0,service_count:3,reserved0:0,reserved1:0,reserved2:0,reserved3:0};
+var BOOTS:[16]sys.Boot=[EMPTY_BOOT;16];var PRELOADED:[16]bool=[false;16];
+var CANCELED:[16]u64=[0;16];var FS_RIGHTS:[16]u64=[0;16];var GUI_DEPARTED:[16]u64=[0;16];
+var DEPARTED:[16]u64=[0;16];var WAIT_POINTER:[16]u64=[0;16];var WAIT_AFTER:[16]u64=[0;16];var WAIT_DEADLINE:[16]u64=[0;16];
+var KEYBOARD:*u64=null;var LAUNCH_FAILED:bool=false;var BUFFER:[4097]u8=[0;4097];
+var SNAPSHOT:proc.Snapshot=proc.EMPTY_SNAPSHOT;
+struct Info{calls:u64,replies:u64,last_syscall:u64,last_pid:u64,last_error:u64}
+var INFO:Info=Info{calls:0,replies:0,last_syscall:0,last_pid:0,last_error:0};
+struct XState{bytes:[1024]u8}var XSTATES:[16]XState=[XState{bytes:[0;1024]};16];var KERNEL_XSTATE:XState=XState{bytes:[0;1024]};
+pub error Protocol=0x050b_0002;pub error InvalidCall=0x050b_0001;
+
+// PRODUCTION_FUNCTIONS
+
+export("gui_setup") fn setup()u64{unsafe{
+ CATALOG=&MODEL;memory.reset();let init=procs.initialize(CATALOG,CLOCK_HZ);match init{ok=>{},err(e)=>{return e;},}
+ let order:[12]usize=[5,6,2,4,1,0,3,14,15,16,17,7];
+ let slots:[12]usize=[5,6,2,4,1,0,3,7,8,9,10,11];var i:usize=0;
+ while i<12{let cfg=order[i];let slot=slots[i];
+  let started=procs.start(CATALOG,cfg,slot,0,&SNAPSHOT);match started{ok=>{},err(e)=>{return e;},}
+  let ready=procs.mark_ready(CATALOG,slot,1);match ready{ok=>{},err(e)=>{return e;},}
+  (*process(slot)).ready=1;(*process(slot)).root=0x100_0000+slot as u64*4096;
+  let installed=install_identity(slot,cfg,1,0);match installed{ok=>{},err(e)=>{return e;},}i+=1;
+ }
+ let epoch=windows.initialize(1);match epoch{ok=>{},err(e)=>{return e;},}
+}return 0;}
+export("gui_cap") fn cap(id:usize,which:u64)u64{unsafe{
+ if which==0{return BOOTS[id].endpoint;}if which==1{return BOOTS[id].console;}
+ if which==2{return BOOTS[id].filesystem;}
+ if which==3{if id==5||id==6{return BOOTS[id].reserved0;}return BOOTS[id].configuration;}
+ return BOOTS[id].configuration;
+}}
+export("gui_invoke") fn invoke(actor:usize,frame:*abi.Frame,next:*u64)u64{unsafe{
+ CURRENT=actor;match perform(frame){ok(value)=>{*next=value as u64;return 0;},err(e)=>{return e;},}
+}}
+export("gui_get") fn get(which:u64,id:usize)u64{unsafe{
+ if which==0{return ENDPOINTS[id].state;}if which==1{return ENDPOINTS[id].token;}
+ if which==2{return STATES[id].waiting;}if which==3{return windows.USED;}
+ if which==4{return GUI_DEPARTED[id];}if which==5{return (*process(id)).ready;}
+ if which==6{return procs.current(CATALOG,id);}if which==7{return (*CATALOG).incarnation[id];}
+ if which==8{return windows.FAILED as u64;}if which==9{return memory.UNSHARE_FAILED as u64;}
+ if which==10{return (*CATALOG).states[id].process;}if which==11{return (*CATALOG).states[id].generation;}
+ if which==12{return STATES[id].table.used;}if which==13{return device_host.XHCI_OWNER;}
+ return LAUNCH_FAILED as u64;
+}}
+export("gui_request") fn request(caller:usize,server:usize)u64{unsafe{
+ var message:[64]u8=[0;64];message[0]=0x51;
+ match ipc.call(&ENDPOINTS[server],caller as u64+1,message[..]){ok(ticket)=>{
+ STATES[caller].ticket=ticket;STATES[caller].waiting=1;return ticket;},err(e)=>{return e;},}
+}}
+export("gui_finish") fn finish(server:usize)u64{unsafe{
+ let caller=(ENDPOINTS[server].caller-1) as usize;let ticket=ENDPOINTS[server].token;
+ var message=ipc.EMPTY_MESSAGE;let replied=ipc.reply(&ENDPOINTS[server],server as u64+1,ticket,BUFFER[..64]);
+ match replied{ok=>{},err(e)=>{return e;},}
+ let taken=ipc.take_reply(&ENDPOINTS[server],caller as u64+1,ticket,&message);match taken{ok=>{},err(e)=>{return e;},}
+ STATES[caller].waiting=0;
+}return 0;}
+export("gui_accept") fn accept_test(server:usize)u64{unsafe{
+ var message=ipc.EMPTY_MESSAGE;var ticket:u64=0;
+ match ipc.accept(&ENDPOINTS[server],server as u64+1,&message,&ticket){ok=>{return ticket;},err(e)=>{return e;},}
+}}
+export("gui_retire") fn retire_test(id:usize)u64{unsafe{CURRENT=5;match retire(id,proc.KILLED,0){ok=>{return 0;},err(e)=>{return e;},}}}
+export("gui_launch") fn launch_test(actor:usize,id:usize)u64{unsafe{
+ CURRENT=actor;match launch(id,(*CATALOG).states[id].generation,0,slice_from_raw_parts(null as *const u8,0)){ok=>{return SNAPSHOT.process;},err(e)=>{return e;},}
+}}
+export("gui_change") fn change(which:u64,id:usize,value:u64)u64{unsafe{
+ if which==0{STATES[id].waiting=value;}if which==1{(*CATALOG).incarnation[id]=value;}
+ if which==2{GUI_DEPARTED[id]=value;}if which==3{windows.EPOCH=value;}
+ if which==4{(*process(id)).ready=value;}
+ if which==5{let initialized=handles.init(&STATES[id].table);match initialized{ok=>{},err(e)=>{return e;},}
+ let cap=handles.install(&STATES[id].table,handles.PROCESS_MANAGER,MANAGER_OBJECT,handles.READ|handles.WRITE|handles.WAIT);
+ match cap{ok(token)=>{BOOTS[id].configuration=token;},err(e)=>{return e;},}}
+}return 0;}
+export("gui_scope") fn scope(actor:usize,id:usize,write:bool)u64{unsafe{
+ CURRENT=actor;var right=handles.READ;if write{right=handles.WRITE;}
+ var token=BOOTs_token(actor);let manager_ok=manager(token,right);match manager_ok{ok=>{},err(e)=>{return e;},}
+ match procs.allowed(CATALOG,actor,id,write){ok=>{return 0;},err(e)=>{return e;},}
+}}
+unsafe fn BOOTs_token(id:usize)u64{unsafe{if id==5||id==6{return BOOTS[id].reserved0;}return BOOTS[id].configuration;}}
+
+export("gui_fatal") fn fatal(code:u64)usize{unsafe{var next=CURRENT;
+// PRODUCTION_FATAL
+return next;}}

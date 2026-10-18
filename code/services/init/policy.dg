@@ -1,0 +1,179 @@
+// Bounded init policy used by the real CPL3 launcher. Kernel operations remain
+// authoritative: a proposed action is committed only after a syscall succeeds.
+module init.policy;
+import lib.process_abi as abi;
+pub const SPAWN:u64=1;
+pub const KILL:u64=2;
+const KILLING:u64=7;
+const MAX:u64=0xffff_ffff_ffff_ffff;
+pub struct Node {
+    pub generation:u64,pub process:u64,pub phase:u64,pub attempts:u64,
+    pub deadline:u64,pub status:u64,
+}
+pub const EMPTY_NODE:Node=Node {generation:0,process:0,phase:0,attempts:0,deadline:0,status:0};
+pub struct Manager {
+    pub initialized:u64,pub count:usize,pub now:u64,
+    pub configs:[32]abi.Config,pub nodes:[32]Node,
+}
+pub const EMPTY:Manager=Manager {initialized:0,count:0,now:0,
+    configs:[abi.EMPTY_CONFIG;32],nodes:[EMPTY_NODE;32]};
+pub struct Action {pub kind:u64,pub id:u64,pub generation:u64,pub process:u64,pub reason:u64}
+pub const EMPTY_ACTION:Action=Action {kind:0,id:0,generation:0,process:0,reason:0};
+fn valid_name(input:*const abi.Config)bool {unsafe {let c=*input;
+    if c.name_length==0||c.name_length>32 {return false;}
+    var i:usize=0;while i<32 {
+        let b=c.name[i];
+        if i<c.name_length as usize {
+            if !((b>=97&&b<=122)||(b>=65&&b<=90)||(b>=48&&b<=57)||b==45||b==95) {return false;}
+        }else if b!=0 {return false;}
+        i+=1;
+    }
+}return true;}
+// Configuration ids are dense indices. The dependency graph is checked with
+// independent Kahn elimination; no recursive walk can exhaust a service stack.
+pub unsafe fn validate(configs:*const abi.Config,count:usize)!void {unsafe {
+    if configs==null||count==0||count>abi.LIMIT {return error.abi.Invalid;}
+    let mask=((1 as u64)<<count as u64)-1;var i:usize=0;
+    while i<count {
+        let c=*(configs+i);
+        if c.version!=abi.VERSION||c.id!=i as u64||c.image==0||!valid_name(configs+i)
+            ||(c.dependencies&~mask)!=0||(c.dependencies&((1 as u64)<<i as u64))!=0
+            ||c.restart_limit>8||c.timeout_ticks==0||(c.flags&~15)!=0
+            ||((c.flags&abi.RESTART)==0&&c.restart_limit!=0) {return error.abi.Invalid;}
+        var n:usize=0;while n<4 {if c.reserved[n]!=0 {return error.abi.Invalid;}n+=1;}
+        n=0;while n<i {
+            let other=*(configs+n);var same=c.name_length==other.name_length;var b:usize=0;
+            while same&&b<c.name_length as usize {same=c.name[b]==other.name[b];b+=1;}
+            if same {return error.abi.Invalid;}n+=1;
+        }
+        // An automatically launched service cannot wait for a manual app.
+        n=0;while n<count {
+            if (c.flags&abi.AUTOSTART)!=0&&(c.dependencies&((1 as u64)<<n as u64))!=0
+                &&((*(configs+n)).flags&abi.AUTOSTART)==0 {return error.abi.Dependency;}
+            n+=1;
+        }
+        i+=1;
+    }
+    var removed:u64=0;var pass:usize=0;
+    while pass<count {
+        var advanced=false;i=0;
+        while i<count {
+            let bit=(1 as u64)<<i as u64;
+            if (removed&bit)==0&&((*(configs+i)).dependencies&~removed)==0 {removed|=bit;advanced=true;}
+            i+=1;
+        }
+        if removed==mask {return;}
+        if !advanced {return error.abi.Cycle;}
+        pass+=1;
+    }
+}return error.abi.Cycle;}
+pub unsafe fn initialize(configs:*const abi.Config,count:usize,out:*Manager)!void {unsafe {
+    if out==null||(*out).initialized!=0 {return error.abi.Invalid;}
+    try validate(configs,count);
+    *out=EMPTY;(*out).count=count;
+    var i:usize=0;while i<count {(*out).configs[i]=*(configs+i);i+=1;}
+    (*out).initialized=1;
+}return;}
+unsafe fn require(m:*const Manager,id:u64)!usize {unsafe {
+    if m==null||(*m).initialized!=1||(*m).count==0||(*m).count>abi.LIMIT||id>=(*m).count as u64 {return error.abi.Invalid;}
+    return id as usize;
+}}
+unsafe fn ready_mask(m:*const Manager)u64 {unsafe {
+    var bits:u64=0;var i:usize=0;while i<(*m).count {
+        if (*m).nodes[i].phase==abi.READY {bits|=(1 as u64)<<i as u64;}i+=1;
+    }return bits;
+}}
+fn deadline(now:u64,timeout:u64)u64 {if timeout>MAX-now {return MAX;}return now+timeout;}
+// Bootstrap adoption uses a kernel-produced snapshot, including its opaque
+// process token. It never manufactures authority from a process id.
+pub unsafe fn adopt(m:*Manager,s:*const abi.Snapshot,now:u64)!void {unsafe {
+    if s==null {return error.abi.Invalid;}let value=*s;let i=try require(m,value.configuration);
+    let old=(*m).nodes[i];
+    if old.generation!=0||old.attempts!=0||old.process!=0||old.phase!=abi.STOPPED
+        ||now<(*m).now||value.version!=abi.VERSION||value.state>abi.KILLED {return error.abi.Invalid;}
+    if value.state==abi.STARTING||value.state==abi.READY {
+        if value.generation==0||value.process==0||value.status!=0 {return error.abi.Invalid;}
+        (*m).nodes[i]=Node {generation:value.generation,process:value.process,phase:value.state,attempts:1,
+            deadline:deadline(now,(*m).configs[i].timeout_ticks),status:0};
+    }else {
+        if value.process!=0 {return error.abi.Invalid;}
+        (*m).nodes[i].generation=value.generation;(*m).nodes[i].status=value.status;
+        if value.generation!=0 {(*m).nodes[i].attempts=1;}
+    }
+    (*m).now=now;
+}return;}
+pub unsafe fn next(m:*Manager,now:u64,out:*Action)!bool {unsafe {
+    let checked=try require(m,0);if out==null||now<(*m).now {return error.abi.Invalid;}
+    (*m).now=now;let bits=ready_mask(m);var i:usize=0;
+    // Stop dependents first. They must not keep authority to a dead generation.
+    while i<(*m).count {
+        let node=(*m).nodes[i];let c=(*m).configs[i];
+        if node.phase==abi.STARTING||node.phase==abi.READY {
+            var reason:u64=0;
+            if (c.dependencies&~bits)!=0 {reason=0x0511_0006;}
+            else if node.phase==abi.STARTING&&now>=node.deadline {reason=0x0511_0007;}
+            if reason!=0 {*out=Action {kind:KILL,id:i as u64,generation:node.generation,process:node.process,reason:reason};return true;}
+        }
+        i+=1;
+    }
+    i=0;while i<(*m).count {
+        let node=(*m).nodes[i];let c=(*m).configs[i];
+        if node.phase==abi.STOPPED&&(c.flags&abi.AUTOSTART)!=0&&(c.dependencies&~bits)==0 {
+            if node.attempts<=c.restart_limit&&(node.attempts==0||(c.flags&abi.RESTART)!=0) {
+                *out=Action {kind:SPAWN,id:i as u64,generation:node.generation,process:0,reason:0};return true;
+            }
+        }
+        i+=1;
+    }
+    return false;
+}}
+pub unsafe fn spawned(m:*Manager,id:u64,s:*const abi.Snapshot,now:u64)!void {unsafe {
+    let i=try require(m,id);if s==null||now<(*m).now {return error.abi.Invalid;}
+    let old=(*m).nodes[i];let value=*s;let c=(*m).configs[i];
+    if old.phase!=abi.STOPPED||old.generation==MAX||old.attempts>c.restart_limit
+        ||value.version!=abi.VERSION||value.configuration!=id||value.process==0
+        ||value.generation!=old.generation+1||value.state!=abi.STARTING||value.status!=0 {return error.abi.Stale;}
+    (*m).nodes[i]=Node {generation:value.generation,process:value.process,phase:abi.STARTING,
+        attempts:old.attempts+1,deadline:deadline(now,c.timeout_ticks),status:0};(*m).now=now;
+}return;}
+pub unsafe fn spawn_failed(m:*Manager,id:u64,status:u64)!void {unsafe {
+    let i=try require(m,id);let n=(*m).nodes[i];let c=(*m).configs[i];
+    if n.phase!=abi.STOPPED||status==0||n.attempts>c.restart_limit {return error.abi.Invalid;}
+    (*m).nodes[i].attempts+=1;(*m).nodes[i].status=status;
+}return;}
+pub unsafe fn killed(m:*Manager,id:u64,generation:u64)!void {unsafe {
+    let i=try require(m,id);let n=(*m).nodes[i];
+    if n.generation!=generation||(n.phase!=abi.STARTING&&n.phase!=abi.READY) {return error.abi.Stale;}
+    (*m).nodes[i].phase=KILLING;
+}return;}
+// Stale or duplicate events cannot acknowledge a new generation. Accepted
+// terminal events release only policy state; the kernel reaps actual resources.
+pub unsafe fn observe(m:*Manager,e:*const abi.Event)!bool {unsafe {
+    if e==null {return error.abi.Invalid;}let value=*e;let i=try require(m,value.configuration);
+    if value.version!=abi.VERSION||value.generation==0||value.process==0||value.flags!=0
+        ||value.sequence==0||value.state<abi.READY||value.state>abi.KILLED {return error.abi.Invalid;}
+    let n=(*m).nodes[i];
+    if value.generation!=n.generation||value.process!=n.process {return false;}
+    if value.state==abi.READY {
+        if value.status!=0 {return error.abi.Invalid;}
+        if n.phase!=abi.STARTING {return false;}
+        (*m).nodes[i].phase=abi.READY;return true;
+    }
+    if n.phase!=abi.READY&&n.phase!=abi.STARTING&&n.phase!=KILLING {return false;}
+    (*m).nodes[i].phase=abi.STOPPED;(*m).nodes[i].process=0;(*m).nodes[i].deadline=0;(*m).nodes[i].status=value.status;
+    return true;
+}}
+pub unsafe fn next_deadline(m:*const Manager)!u64 {unsafe {
+    let checked=try require(m,0);var result:u64=0;var i:usize=0;
+    while i<(*m).count {let n=(*m).nodes[i];
+        if n.phase==abi.STARTING&&(result==0||n.deadline<result) {result=n.deadline;}i+=1;
+    }return result;
+}}
+pub unsafe fn exhausted(m:*const Manager)!bool {unsafe {
+    let checked=try require(m,0);var i:usize=0;
+    while i<(*m).count {let n=(*m).nodes[i];let c=(*m).configs[i];
+        if (c.flags&(abi.AUTOSTART|abi.ESSENTIAL))==(abi.AUTOSTART|abi.ESSENTIAL)
+            &&n.phase==abi.STOPPED&&(n.attempts>c.restart_limit||(n.attempts!=0&&(c.flags&abi.RESTART)==0)) {return true;}
+        i+=1;
+    }return false;
+}}

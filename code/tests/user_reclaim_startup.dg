@@ -1,0 +1,18 @@
+// Appended to a copy of boot.memory_startup, never production boot setup.
+var TEST_TABLES:[64]paging.Table=[paging.Table { entries:[0;512] };64];
+export("reclaim_kernel_setup") fn test_setup(alias:u64)u64 {
+    unsafe {
+        WORK.space=paging.EMPTY_SPACE;WORK.ready=false;
+        match paging.init(&WORK.space,TEST_TABLES[..],0x80_0000,WORK.table_meta[..],48,true) {
+            ok=>{},err(code)=>{return code;},
+        }
+        match paging.map_live(&WORK.space,alias,0x20_0000,0) { ok=>{},err(code)=>{return code;}, }
+        WORK.ready=true;
+    }return 0;
+}
+export("reclaim_kernel_flags") fn test_flags(alias:u64)u64 {
+    unsafe {
+        var m=paging.Mapping { physical:0,flags:0 };
+        match paging.query(&WORK.space,alias,&m) { ok=>{return m.flags;},err(code)=>{return code;}, }
+    }
+}

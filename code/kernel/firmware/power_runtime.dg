@@ -1,0 +1,135 @@
+// Capture under the old HHDM through a trusted stable Reader.
+// Published state contains values/errors only: no firmware pointer is retained.
+module firmware.power_runtime;
+import firmware.acpi as acpi;
+import firmware.power as power;
+pub error InvalidInput=0x0802_0001;
+pub error InvalidRange=0x0802_0002;
+pub error Unreadable=0x0802_0003;
+pub error BadTable=0x0802_0004;
+pub error BadChecksum=0x0802_0005;
+pub error Capacity=0x0802_0006;
+pub error Mismatch=0x0802_0007;
+pub error NotReady=0x0802_0008;
+pub error ExecutionRejected=0x0802_0009;
+pub struct Prepared {
+    pub version:u64,pub aml_tables:u64,pub reset_error:u64,pub shutdown_error:u64,
+    pub reset:power.Write,pub shutdown:power.Shutdown,
+}
+const EMPTY_SLEEP:power.Sleep=power.Sleep {type_a:0,type_b:0,table_index:0,aml_offset:0};
+const EMPTY_SHUTDOWN:power.Shutdown=power.Shutdown {a:power.NO_WRITE,b:power.NO_WRITE,clear_mask:0,enable_mask:0,has_b:0,source:EMPTY_SLEEP};
+pub const EMPTY:Prepared=Prepared {version:1,aml_tables:0,reset_error:0x0802_0008,shutdown_error:0x0802_0008,reset:power.NO_WRITE,shutdown:EMPTY_SHUTDOWN};
+const EMPTY_TABLE:power.Table=power.Table {bytes:""};
+const RESET_ALLOW:power.Policy=power.Policy {io_start:0xcf9,io_end:0xcfa,mmio_start:0,mmio_end:0};
+const SLEEP_ALLOW:power.Policy=power.Policy {io_start:0x604,io_end:0x606,mmio_start:0,mmio_end:0};
+unsafe extern "sysv64" fn pwr_io_reset(value:*const power.Write)u64;
+unsafe extern "sysv64" fn pwr_io_shutdown(value:*const power.Shutdown)u64;
+fn get32(raw:[]const u8,at:usize)u64 {unsafe {return read_unaligned((raw.ptr+at) as *const u32) as u64;}}
+fn get64(raw:[]const u8,at:usize)u64 {unsafe {return read_unaligned((raw.ptr+at) as *const u64);}}
+unsafe fn read(reader:acpi.Reader,context:u64,physical:u64,length:usize,out:*power.Table)!void {
+    unsafe {
+        if physical==0 || physical>=0x1_0000_0000 || length==0 || length>0x10_0000 || length as u64>0x1_0000_0000-physical {return error.InvalidRange;}
+        let raw=reader(context,physical,length);if raw==null {return error.Unreadable;}
+        (*out).bytes=slice_from_raw_parts(raw,length);
+    }return;
+}
+fn checksum(raw:[]const u8)!void {
+    var sum:u64=0;var i:usize=0;while i<raw.len {sum=(sum+raw[i] as u64)&255;i+=1;}
+    if sum!=0 {return error.BadChecksum;}return;
+}
+unsafe fn table(reader:acpi.Reader,context:u64,physical:u64,out:*power.Table)!void {
+    unsafe {
+        var borrowed=EMPTY_TABLE;try read(reader,context,physical,36,&borrowed);let header=borrowed.bytes;var saved:[36]u8=[0;36];var i:usize=0;
+        while i<36 {saved[i]=header[i];i+=1;}
+        let bytes=get32(header,4) as usize;if bytes<36 || bytes>0x10_0000 {return error.BadTable;}
+        try read(reader,context,physical,bytes,&borrowed);let raw=borrowed.bytes;i=0;
+        while i<36 {if raw[i]!=saved[i] {return error.Mismatch;}i+=1;}
+        try checksum(raw);*out=borrowed;
+    }return;
+}
+unsafe fn xsdt(reader:acpi.Reader,context:u64,value:*const acpi.Inventory,out:*power.Table)!void {
+    unsafe {
+        var borrowed=EMPTY_TABLE;try read(reader,context,(*value).rsdp,20,&borrowed);let legacy=borrowed.bytes;
+        if get64(legacy,0)!=0x2052_5450_2044_5352 || legacy[15]<2 {return error.BadTable;}
+        try checksum(legacy);try read(reader,context,(*value).rsdp,36,&borrowed);let first=borrowed.bytes;
+        var header:[36]u8=[0;36];var i:usize=0;while i<36 {header[i]=first[i];i+=1;}
+        let bytes=get32(first,20) as usize;if bytes<36 || bytes>0x10_0000 {return error.BadTable;}
+        try read(reader,context,(*value).rsdp,bytes,&borrowed);let root=borrowed.bytes;try checksum(root);
+        i=0;while i<36 {if root[i]!=header[i] {return error.Mismatch;}i+=1;}
+        try checksum(root[..20]);
+        if get64(root,0)!=0x2052_5450_2044_5352 || root[15]<2 || get32(root,20)!=bytes as u64 || get64(root,24)!=(*value).xsdt {return error.Mismatch;}
+        try table(reader,context,(*value).xsdt,&borrowed);let raw=borrowed.bytes;
+        if get32(raw,0)!=0x5444_5358 || ((raw.len-36)&7)!=0 {return error.BadTable;}
+        let count=(raw.len-36)/8;if count>64 {return error.Capacity;}
+        if count as u64!=(*value).table_count {return error.Mismatch;}
+        *out=borrowed;
+    }return;
+}
+unsafe fn collect(reader:acpi.Reader,context:u64,value:*const acpi.Inventory,fadt:*power.Table,tables:*[16]power.Table,count:*usize)!void {
+    unsafe {
+        var borrowed=EMPTY_TABLE;try xsdt(reader,context,value,&borrowed);let root=borrowed.bytes;let entries=(root.len-36)/8;
+        var found=false;var fixed=EMPTY_TABLE;var used:usize=1;var bytes:usize=0;var i:usize=0;
+        var addresses:[64]u64=[0;64];var lengths:[64]u64=[0;64];
+        while i<entries {
+            let physical=get64(root,36+i*8);
+            if physical==(*value).xsdt || physical==(*value).rsdp {return error.Mismatch;}
+            var j:usize=0;while j<i {if physical==get64(root,36+j*8) {return error.Mismatch;}j+=1;}
+            try table(reader,context,physical,&borrowed);let raw=borrowed.bytes;let signature=get32(raw,0);
+            let size=raw.len as u64;
+            if physical<(*value).xsdt+root.len as u64 && (*value).xsdt<physical+size {return error.Mismatch;}
+            j=0;while j<i {if physical<addresses[j]+lengths[j] && addresses[j]<physical+size {return error.Mismatch;}j+=1;}
+            addresses[i]=physical;lengths[i]=size;
+            if signature==0x5043_4146 {
+                if found || physical!=(*value).fadt {return error.Mismatch;}found=true;fixed.bytes=raw;
+            }else {if physical==(*value).fadt {return error.Mismatch;}}
+            if signature==0x5444_5353 {
+                if used==16 || raw.len>0x10_0000-bytes {return error.Capacity;}
+                (*tables)[used]=power.Table {bytes:raw};used+=1;bytes+=raw.len;
+            }
+            i+=1;
+        }
+        if !found || fixed.bytes.len<116 {return error.BadTable;}
+        let legacy=get32(fixed.bytes,40);var physical=legacy;
+        if fixed.bytes.len>=148 && get64(fixed.bytes,140)!=0 {
+            physical=get64(fixed.bytes,140);if legacy!=0 && legacy!=physical {return error.Mismatch;}
+        }
+        if physical!=(*value).dsdt || physical==(*value).xsdt || physical==(*value).rsdp || physical==(*value).fadt {return error.Mismatch;}
+        try table(reader,context,physical,&borrowed);let raw=borrowed.bytes;
+        if get32(raw,0)!=0x5444_5344 {return error.BadTable;}
+        let size=raw.len as u64;
+        if physical<(*value).xsdt+root.len as u64 && (*value).xsdt<physical+size {return error.Mismatch;}
+        i=0;while i<entries {if physical<addresses[i]+lengths[i] && addresses[i]<physical+size {return error.Mismatch;}i+=1;}
+        if raw.len>0x10_0000-bytes {return error.Capacity;}
+        (*tables)[0]=power.Table {bytes:raw};*count=used;*fadt=fixed;
+    }return;
+}
+// Reader, Inventory and output must be trusted, stable and mutually disjoint.
+// All source collection failures disable both operations. Once source identity
+// succeeds, reset/shutdown policies fail independently (e.g. dynamic AML only
+// disables shutdown). Only this call borrows firmware-backed slices.
+pub unsafe fn capture(reader:acpi.Reader,context:u64,value:*const acpi.Inventory,out:*Prepared)!void {
+    unsafe {
+        if value==null || out==null {return error.InvalidInput;}
+        var result=EMPTY;var fadt=EMPTY_TABLE;var tables:[16]power.Table=[EMPTY_TABLE;16];var count:usize=0;
+        match collect(reader,context,value,&fadt,&tables,&count) {
+            ok=>{},err(code)=>{result.reset_error=code;result.shutdown_error=code;*out=result;return;},
+        }
+        result.aml_tables=count as u64;
+        match power.reset(fadt.bytes,&RESET_ALLOW,&result.reset) {ok=>{result.reset_error=0;},err(code)=>{result.reset_error=code;},}
+        match power.shutdown(fadt.bytes,tables[..count],&SLEEP_ALLOW,&result.shutdown) {ok=>{result.shutdown_error=0;},err(code)=>{result.shutdown_error=code;},}
+        *out=result;
+    }return;
+}
+// Explicit q35-only executor. A returned zero means writes were issued, not
+// proof that the machine actually changed state. Caller must quiesce/flush,
+// hold stable kernel-owned state and authorize the requesting service.
+pub unsafe fn execute_q35(value:*const Prepared,action:u64)!void {
+    unsafe {
+        if value==null {return error.InvalidInput;}
+        if (*value).version!=1 || (*value).aml_tables==0 || (*value).aml_tables>16 {return error.NotReady;}
+        var status:u64=1;
+        if action==1 {if (*value).reset_error!=0 {return error.NotReady;}status=pwr_io_reset(&(*value).reset);}
+        else {if action==2 {if (*value).shutdown_error!=0 {return error.NotReady;}status=pwr_io_shutdown(&(*value).shutdown);}else {return error.InvalidInput;}}
+        if status!=0 {return error.ExecutionRejected;}
+    }return;
+}

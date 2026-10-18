@@ -1,0 +1,167 @@
+module memory_integration_probe;
+
+import mm.memory_map as memory_map;
+import mm.phys_buddy as buddy;
+import mm.paging as paging;
+
+// Scalar C boundaries deliberately hide Dong slices and error-result ABI.
+export("mi_reserved_size") fn reserved_size() usize { return sizeof(memory_map.ReservedRange); }
+export("mi_reserved_align") fn reserved_align() usize { return alignof(memory_map.ReservedRange); }
+export("mi_range_size") fn range_size() usize { return sizeof(memory_map.PageRange); }
+export("mi_range_align") fn range_align() usize { return alignof(memory_map.PageRange); }
+export("mi_buddy_size") fn buddy_size() usize { return sizeof(buddy.Allocator); }
+export("mi_buddy_align") fn buddy_align() usize { return alignof(buddy.Allocator); }
+export("mi_page_meta_size") fn page_meta_size() usize { return sizeof(buddy.PageMeta); }
+export("mi_page_meta_align") fn page_meta_align() usize { return alignof(buddy.PageMeta); }
+export("mi_space_size") fn space_size() usize { return sizeof(paging.Space); }
+export("mi_space_align") fn space_align() usize { return alignof(paging.Space); }
+export("mi_table_size") fn table_size() usize { return sizeof(paging.Table); }
+export("mi_table_align") fn table_align() usize { return alignof(paging.Table); }
+export("mi_mapping_size") fn mapping_size() usize { return sizeof(paging.Mapping); }
+export("mi_mapping_align") fn mapping_align() usize { return alignof(paging.Mapping); }
+
+export("mi_normalize") fn normalize(
+    raw: *const u8, raw_len: usize, descriptor_size: usize,
+    descriptor_version: u64, arena_base: u64, arena_pages: usize,
+    reserved: *const memory_map.ReservedRange, reserved_count: usize,
+    scratch: *u8, scratch_len: usize,
+    output: *memory_map.PageRange, output_count: usize, used: *usize
+) u64 {
+    unsafe {
+        match memory_map.normalize(
+            slice_from_raw_parts(raw, raw_len), descriptor_size,
+            descriptor_version, arena_base, arena_pages,
+            slice_from_raw_parts(reserved, reserved_count),
+            slice_from_raw_parts(scratch, scratch_len),
+            slice_from_raw_parts(output, output_count)
+        ) {
+            ok(value) => { *used = value; return 0; },
+            err(code) => { return code; },
+        }
+    }
+}
+
+export("mi_buddy_reset") fn buddy_reset(state: *buddy.Allocator) void {
+    unsafe { *state = buddy.EMPTY_ALLOCATOR; }
+}
+
+export("mi_buddy_init") fn buddy_init(
+    state: *buddy.Allocator, base: u64, pages: usize,
+    metadata: *buddy.PageMeta, metadata_len: usize
+) u64 {
+    unsafe {
+        match buddy.init(state, base, pages, slice_from_raw_parts(metadata, metadata_len)) {
+            ok => { return 0; },
+            err(code) => { return code; },
+        }
+    }
+}
+
+export("mi_buddy_add") fn buddy_add(state: *buddy.Allocator, start: usize, count: usize) u64 {
+    unsafe {
+        match buddy.add_usable(state, start, count) {
+            ok => { return 0; },
+            err(code) => { return code; },
+        }
+    }
+}
+
+export("mi_buddy_alloc") fn buddy_alloc(state: *buddy.Allocator, order: usize, out: *u64) u64 {
+    unsafe {
+        match buddy.alloc(state, order) {
+            ok(value) => { *out = value; return 0; },
+            err(code) => { return code; },
+        }
+    }
+}
+
+export("mi_buddy_free") fn buddy_free(state: *buddy.Allocator, physical: u64, order: usize) u64 {
+    unsafe {
+        match buddy.free(state, physical, order) {
+            ok => { return 0; },
+            err(code) => { return code; },
+        }
+    }
+}
+
+export("mi_buddy_count") fn buddy_count(state: *const buddy.Allocator, out: *usize) u64 {
+    unsafe {
+        match buddy.free_pages(state) {
+            ok(value) => { *out = value; return 0; },
+            err(code) => { return code; },
+        }
+    }
+}
+
+export("mi_paging_reset") fn paging_reset(state: *paging.Space) void {
+    unsafe { *state = paging.EMPTY_SPACE; }
+}
+
+export("mi_paging_init") fn paging_init(
+    state: *paging.Space, pool: *paging.Table, table_count: usize, physical: u64,
+    metadata: *u8, metadata_len: usize, bits: usize, nx: u64
+) u64 {
+    unsafe {
+        match paging.init(
+            state, slice_from_raw_parts(pool, table_count), physical,
+            slice_from_raw_parts(metadata, metadata_len), bits, nx != 0
+        ) {
+            ok => { return 0; },
+            err(code) => { return code; },
+        }
+    }
+}
+
+export("mi_paging_root") fn paging_root(state: *const paging.Space, out: *u64) u64 {
+    unsafe {
+        match paging.root_physical(state) {
+            ok(value) => { *out = value; return 0; },
+            err(code) => { return code; },
+        }
+    }
+}
+
+export("mi_paging_used") fn paging_used(state: *const paging.Space, out: *usize) u64 {
+    unsafe {
+        match paging.used_tables(state) {
+            ok(value) => { *out = value; return 0; },
+            err(code) => { return code; },
+        }
+    }
+}
+
+export("mi_paging_map") fn paging_map(state: *paging.Space, virtual: u64, physical: u64, flags: u64) u64 {
+    unsafe {
+        match paging.map(state, virtual, physical, flags) {
+            ok => { return 0; },
+            err(code) => { return code; },
+        }
+    }
+}
+
+export("mi_paging_unmap") fn paging_unmap(state: *paging.Space, virtual: u64) u64 {
+    unsafe {
+        match paging.unmap(state, virtual) {
+            ok => { return 0; },
+            err(code) => { return code; },
+        }
+    }
+}
+
+export("mi_paging_protect") fn paging_protect(state: *paging.Space, virtual: u64, flags: u64) u64 {
+    unsafe {
+        match paging.protect(state, virtual, flags) {
+            ok => { return 0; },
+            err(code) => { return code; },
+        }
+    }
+}
+
+export("mi_paging_query") fn paging_query(state: *const paging.Space, virtual: u64, out: *paging.Mapping) u64 {
+    unsafe {
+        match paging.query(state, virtual, out) {
+            ok => { return 0; },
+            err(code) => { return code; },
+        }
+    }
+}

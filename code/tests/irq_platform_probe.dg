@@ -1,0 +1,16 @@
+module irq_platform_probe;
+import irq.platform as irq;
+import firmware.acpi as acpi;
+export("irq_report_size") fn size() usize { return sizeof(irq.Report); }
+export("irq_views_size") fn views_size() usize { return sizeof(irq.Views); }
+export("irq_model_init") fn initialize(topology: *const acpi.Inventory, views: *const irq.Views, out: *irq.Report) u64 {
+    unsafe { match irq.initialize(topology,views,out) { ok => { return 0; }, err(code) => { return code; }, } }
+}
+export("irq_model_arm") fn arm(ns: u64) u64 { unsafe { match irq.arm(ns) { ok => { return 0; }, err(code) => { return code; }, } } }
+export("irq_model_stop") fn stop() u64 { unsafe { match irq.stop() { ok => { return 0; }, err(code) => { return code; }, } } }
+export("irq_model_report") fn report(out: *irq.Report) u64 { unsafe { match irq.describe(out) { ok => { return 0; }, err(code) => { return code; }, } } }
+
+export("irq_clock_accepted") fn accepted()u64 { unsafe { return irq.CALIBRATION_RESULT.accepted; } }
+export("irq_clock_rejected") fn rejected()u64 { unsafe { return irq.CALIBRATION_RESULT.rejected; } }
+export("irq_clock_count") fn count()u64 { unsafe { return irq.CALIBRATION_COUNT; } }
+export("irq_clock_ready") fn ready()u64 { unsafe { if irq.CALIBRATION_READY { return 1; }return 0; } }

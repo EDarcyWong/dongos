@@ -1,0 +1,38 @@
+module declarations_defs;
+
+pub type Byte=u8;
+pub type Short=i16;
+pub type Word=u32;
+pub type Wide=u64;
+pub type Flag=bool;
+pub type Forward=Later;
+pub type Later=u16;
+
+pub const LENGTH:usize=3;
+pub const U8:Byte=255;
+pub const I8:i8=-128;
+pub const U16:Forward=65535;
+pub const I16:Short=-32768;
+pub const U32:Word=4294967295;
+pub const I32:i32=-2147483648;
+pub const U64:Wide=18446744073709551615;
+pub const I64:i64=-9223372036854775808;
+pub const ENABLED:Flag=true;
+pub const DISABLED:Flag=false;
+pub const NEXT:u64=AFTER+1;
+const AFTER:u64=40;
+
+pub struct Packet {pub tag:Byte,pub count:Word,pub values:[LENGTH]Short}
+pub type Record=Packet;
+pub type Array=[LENGTH]Short;
+pub type View=[]Short;
+pub type ReadView=[]const Short;
+pub type Ptr=*Short;
+pub type ConstPtr=*const Short;
+pub type Done=void;
+
+pub const STRIDE:usize=sizeof(Record);
+pub const ALIGNMENT:usize=alignof(Record);
+pub const VALUE_OFFSET:usize=offsetof(Record,values);
+pub const COMBINED:usize=(STRIDE+VALUE_OFFSET)/ALIGNMENT;
+pub const COMPLEX:u16=((U16>>12)&15) as u16;

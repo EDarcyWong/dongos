@@ -1,0 +1,21 @@
+module ahci_runtime_probe;
+import drivers.ahci as ah;
+import drivers.virtio_pci as vp;
+export("ar_reset") fn reset(s:*ah.State)void {unsafe {*s=ah.EMPTY_STATE;}return;}
+export("ar_sizes") fn sizes(out:*u64)void {unsafe {out[0]=sizeof(ah.State) as u64;out[1]=sizeof(ah.Ops) as u64;out[2]=sizeof(ah.Info) as u64;}return;}
+export("ar_init") fn initialize(s:*ah.State,bar:*const vp.Bar,ops:*const ah.Ops,context:u64)u64 {unsafe {
+    match ah.initialize(s,bar,ops,context) {ok=>{return 0;},err(code)=>{return code;},}
+}}
+export("ar_init_policy") fn initialize_policy(s:*ah.State,bar:*const vp.Bar,ops:*const ah.Ops,context:u64,policy:u64)u64 {unsafe {
+    match ah.initialize_with_policy(s,bar,ops,context,policy) {ok=>{return 0;},err(code)=>{return code;},}
+}}
+export("ar_read") fn read(s:*ah.State,lba:u64,count:usize,out:*u8)u64 {unsafe {
+    match ah.read_sectors(s,lba,count,out) {ok=>{return 0;},err(code)=>{return code;},}
+}}
+export("ar_write") fn write(s:*ah.State,lba:u64,count:usize,input:*const u8)u64 {unsafe {
+    match ah.write_sectors(s,lba,count,input) {ok=>{return 0;},err(code)=>{return code;},}
+}}
+export("ar_flush") fn flush(s:*ah.State)u64 {unsafe {
+    match ah.flush(s) {ok=>{return 0;},err(code)=>{return code;},}
+}}
+export("ar_mutant_hits") fn mutant_hits()u64 {return 0;}

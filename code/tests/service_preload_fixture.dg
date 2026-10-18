@@ -1,0 +1,99 @@
+module service_preload_fixture;
+import ipc.cap_notify as capnotify;import user.shared_objects as shared;
+import service_compat_trace as trace;import service_compat_trace as boot_trace;import service_compat_smp as smp_bridge;
+import user.processes as procs;import ipc.core as ipc;import ipc.handles as handles;
+import user.abi as abi;import lib.process_abi as proc;
+import service_preload_adapter as memory;import service_preload_adapter as devices;
+import service_preload_adapter as device_host;import service_preload_adapter as resources;
+import service_preload_adapter as bundle;import service_preload_adapter as windows;
+pub error Protocol=0x050b_0002;
+const COUNT:usize=16;var ACTIVE:usize=16;var CURRENT:usize=5;
+const EMPTY_MODEL:procs.Catalog=procs.Catalog{ready:0,count:0,sequence:0,
+    configs:[proc.EMPTY_CONFIG;32],states:[proc.EMPTY_SNAPSHOT;32],slot:[0;32],
+    incarnation:[0;16],configuration:[0;16],events:[proc.EMPTY_EVENT;64]};
+var MODEL:procs.Catalog=EMPTY_MODEL;var CATALOG:*procs.Catalog=null;
+struct State{table:handles.Table,waiting:u64,started:u64,ticket:u64,reply_pointer:u64,receive_pointer:u64}
+const EMPTY_STATE:State=State{table:handles.EMPTY_TABLE,waiting:0,started:0,ticket:0,reply_pointer:0,receive_pointer:0};
+var STATES:[16]State=[EMPTY_STATE;16];var ENDPOINTS:[16]ipc.Endpoint=[ipc.EMPTY_ENDPOINT;16];
+var PRELOADED:[16]bool=[false;16];var CANCELED:[16]u64=[0;16];var FS_RIGHTS:[16]u64=[0;16];
+var GUI_DEPARTED:[16]u64=[0;16];var DEPARTED:[16]u64=[0;16];var WAIT_POINTER:[16]u64=[0;16];var WAIT_AFTER:[16]u64=[0;16];var WAIT_DEADLINE:[16]u64=[0;16];
+var KEYBOARD:*u8=null;var KEY:u8=0;var OLD:[16]u64=[0;16];var LAUNCH_FAILED:bool=false;
+struct Report{calls:u64,replies:u64}var INFO:Report=Report{calls:0,replies:0};
+var SNAPSHOT:proc.Snapshot=proc.EMPTY_SNAPSHOT;
+unsafe fn process(id:usize)*memory.Process{unsafe{return memory.processes()+id;}}
+unsafe fn image_name(id:usize)[]const u8{return "fixture";}
+unsafe fn channels(id:usize,generation:u64,argument:u64)!void{unsafe{
+    if id==1{memory.PROVIDER=memory.EPOCHS[id];}
+    if id==0||id==3||id>=7{memory.EPOCHS[id]=memory.PROVIDER;}
+    if id==2||id==4{return error.Protocol;}
+}return;}
+unsafe fn install_identity(id:usize,cfg:usize,generation:u64,argument:u64)!void{unsafe{
+    if STATES[id].table.ready==0{try handles.init(&STATES[id].table);}
+    try shared.bind_owner(id,((id as u64+1)<<32)|generation);
+    ENDPOINTS[id]=ipc.EMPTY_ENDPOINT;try ipc.endpoint_init(&ENDPOINTS[id],(generation-1)*16+id as u64+1,id as u64+1);
+    let own=try handles.install(&STATES[id].table,handles.ENDPOINT,id as u64+1,handles.WAIT|handles.REPLY);
+    if id==0||id==3||id>=7{OLD[id]=try handles.install(&STATES[id].table,handles.ENDPOINT,2,handles.CALL);FS_RIGHTS[id]=395;}
+}return;}
+
+const NONE:usize=16;var SMP_ENABLED:bool=false;var SMP_TEST_SLOTS:u64=0;var USB_DEPARTED:u64=0;var GRAPHICS:bool=true;var BUFFER:[64]u8=[0;64];
+var CAP_NOTICES:capnotify.Registry=capnotify.EMPTY_REGISTRY;var CAP_OFFERS:[COUNT]capnotify.Delivery=[capnotify.EMPTY_DELIVERY;COUNT];
+
+
+// PRODUCTION_FUNCTIONS
+unsafe fn activate(id:usize,ready:bool)!void{unsafe{
+    try procs.start(CATALOG,id,id,0,&SNAPSHOT);(*process(id)).ready=1;PRELOADED[id]=false;STATES[id].waiting=0;
+    if ready{try procs.mark_ready(CATALOG,id,(*CATALOG).incarnation[id]);}
+}return;}
+export("preload_setup") fn setup(mode:u64)u64{unsafe{
+    MODEL=EMPTY_MODEL;CATALOG=&MODEL;memory.reset();INFO.replies=0;LAUNCH_FAILED=false;KEYBOARD=&KEY;
+    var id:usize=0;while id<16{STATES[id]=EMPTY_STATE;ENDPOINTS[id]=ipc.EMPTY_ENDPOINT;PRELOADED[id]=false;
+        CANCELED[id]=0;DEPARTED[id]=0;FS_RIGHTS[id]=0;OLD[id]=0;WAIT_POINTER[id]=0;WAIT_AFTER[id]=0;WAIT_DEADLINE[id]=0;id+=1;}
+    let initialized=procs.initialize(CATALOG,1000);match initialized{ok=>{},err(e)=>{return e;},}
+    id=0;while id<7{let installed=install_identity(id,id,1,0);match installed{ok=>{},err(e)=>{return e;},}
+        (*process(id)).ready=1;if id<5{PRELOADED[id]=true;STATES[id].waiting=4;}id+=1;
+    }
+    let init=activate(5,true);match init{ok=>{},err(e)=>{return e;},}
+    let manager=activate(6,mode!=3);match manager{ok=>{},err(e)=>{return e;},}
+    if mode==3{return 0;}
+    let block=activate(2,true);match block{ok=>{},err(e)=>{return e;},}
+    let input=activate(4,true);match input{ok=>{},err(e)=>{return e;},}
+    let fs=activate(1,mode!=0&&mode!=2);match fs{ok=>{},err(e)=>{return e;},}
+    if mode==4{
+        let shell=activate(0,true);match shell{ok=>{},err(e)=>{return e;},}
+        let comp=activate(3,true);match comp{ok=>{},err(e)=>{return e;},}
+        memory.pin(2);memory.pin(4);
+    }
+    if mode==2{memory.pin(4);}
+}return 0;}
+export("preload_retire") fn stop(id:usize)u64{unsafe{match retire(id,proc.FAULTED,0x05080001){ok=>{return 0;},err(e)=>{return e;},}}}
+export("preload_launch") fn start(id:usize)u64{unsafe{
+    CURRENT=5;match launch(id,(*CATALOG).states[id].generation,0,slice_from_raw_parts(null as *const u8,0)){
+        ok=>{return 0;},err(e)=>{return e;},}
+}}
+export("preload_ready") fn ready(id:usize)u64{unsafe{match procs.mark_ready(CATALOG,id,(*CATALOG).incarnation[id]){ok=>{return 0;},err(e)=>{return e;},}}}
+export("preload_get") fn get(which:u64,id:usize)u64{unsafe{
+    if which==0{return PRELOADED[id] as u64;}if which==1{return (*process(id)).ready;}
+    if which==2{return STATES[id].table.used;}if which==3{return DEPARTED[id];}
+    if which==4{return (*CATALOG).sequence;}if which==5{return (*CATALOG).states[id].generation;}
+    if which==6{return (*CATALOG).incarnation[id];}if which==7{return (*CATALOG).states[id].process;}
+    if which==8{return (*CATALOG).states[id].state;}if which==9{return memory.EPOCHS[id];}
+    if which==10{return memory.PROVIDER;}if which==11{return KEYBOARD as u64;}
+    if which==12{return ENDPOINTS[id].live;}return memory.get(which-13,id);
+}}
+export("preload_old_handle") fn old(id:usize)u64{unsafe{
+    var v=handles.EMPTY_VIEW;match handles.lookup(&STATES[id].table,OLD[id],handles.ENDPOINT,handles.CALL,&v){ok=>{return 0;},err(e)=>{return e;},}
+}}
+
+export("compat_cn_smoke") fn compat_cn()u64{unsafe{
+ CAP_NOTICES=capnotify.EMPTY_REGISTRY;STATES[15].table=handles.EMPTY_TABLE;
+ match handles.init(&STATES[15].table){ok=>{},err(e)=>{return e;},}
+ var token:u64=0;match capnotify.create(&CAP_NOTICES,&STATES[15].table,handles.WAIT|handles.SIGNAL|handles.TRANSFER){ok(v)=>{token=v;},err(e)=>{return e;},}
+ match capnotify.signal(&CAP_NOTICES,&STATES[15].table,token,7){ok=>{},err(e)=>{return e;},}
+ match close_table(15){ok=>{},err(e)=>{return e;},}
+ let object=CAP_NOTICES.objects[0];
+ if STATES[15].table.used!=0||object.refs!=0||object.notice.live!=0||object.notice.bits!=0||object.generation!=2{return 0x050b0002;}
+ return 0;
+}}
+export("compat_owner") fn compat_owner(id:usize)u64{return shared.bound_owner(id);}
+export("compat_abort_count") fn compat_aborts(id:usize)u64{return shared.abort_count(id);}
+export("compat_unsupported") fn compat_unsupported()u64{unsafe{return shared.UNSUPPORTED as u64;}}

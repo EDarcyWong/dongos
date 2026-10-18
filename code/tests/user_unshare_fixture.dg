@@ -1,0 +1,70 @@
+var TEST_USER_FRAMES:[1024]Frame=[EMPTY_RAM;1024];
+var TEST_USER_STATES:[1024]u8=[0;1024];
+var TEST_USER_JOURNAL:[1024]u16=[0;1024];
+export("unshare_setup") fn test_setup(alias:u64,count:usize,shared:bool,ro:bool)u64{unsafe{
+    FRAME_COUNT=count;REUSE_FROM=0;EXTENDED=&TEST_USER_FRAMES[0];EXTENDED_LIMIT=1024;
+    EXTENDED_RECYCLED=&TEST_USER_STATES[0];EXTENDED_JOURNAL=&TEST_USER_JOURNAL[0];
+    STAGE_ID=LIMIT;STAGE_COUNT=0;STAGE_ROOT=0;STAGE_BOUND=false;STAGE_TABLES=false;STAGE_FAILED=false;
+    UNSHARE_RECEIPTS=null;UNSHARE_FRAMES=null;UNSHARE_ACTIVE=false;UNSHARE_FAILED=false;UNSHARE_ALLOCATING=false;UNSHARE_COUNT=0;
+    var id:usize=0;while id<LIMIT{PROCESSES[id]=EMPTY_PROCESS;SPACES[id]=paging.EMPTY_SPACE;PINNED[id]=false;id+=1;}
+    id=0;while id<2{
+        let initialized=paging.init(&SPACES[id],TABLES[id][..],0x10_0000+id as u64*0x20_000,META[id][..],48,true);
+        match initialized{ok=>{},err(e)=>{return e;},}PROCESSES[id].ready=1;PROCESSES[id].root=0x10_0000+id as u64*0x20_000;id+=1;
+    }
+    var index:usize=0;while index<count{
+        TEST_USER_FRAMES[index]=Frame{physical:0x20_0000+index as u64*4096,virtual:alias+index as u64*4096,writable:1};
+        TEST_USER_STATES[index]=0;var flags=paging.USER|paging.WRITE;
+        if ro||index==0{flags=paging.USER;TEST_USER_FRAMES[index].writable=0;}
+        let first=paging.map_live(&SPACES[0],0x4400_0000+index as u64*4096,TEST_USER_FRAMES[index].physical,flags);
+        match first{ok=>{},err(e)=>{return e;},}
+        if shared{let second=paging.map_live(&SPACES[1],0x4500_0000+index as u64*4096,TEST_USER_FRAMES[index].physical,flags);
+            match second{ok=>{},err(e)=>{return e;},}}
+        index+=1;
+    }
+}return 0;}
+export("unshare_run") fn test_run(id:usize,base:u64,count:usize)u64{unsafe{match unshare_range(id,base,count){ok=>{return 0;},err(e)=>{return e;},}}}
+export("unshare_get") fn test_get(which:u64,index:usize)u64{unsafe{
+    if which==0{return *recycled(index) as u64;}if which==1{return (*record(index)).writable;}
+    if which==2{return UNSHARE_FAILED as u64;}if which==3{return UNSHARE_ACTIVE as u64;}
+    if which==4{return PROCESSES[index].ready;}if which==5{return PROCESSES[index].root;}
+    if which==6{return paging.native_receipt_pending(UNSHARE_RECEIPTS+index);}
+    return FRAME_COUNT as u64;
+}}
+export("unshare_leaf") fn test_leaf(id:usize,address:u64)u64{unsafe{
+    var m=paging.Mapping{physical:0,flags:0};match paging.query(&SPACES[id],address,&m){ok=>{return m.physical|m.flags;},err(e)=>{return 0;},}
+}}
+export("unshare_change") fn test_change(which:u64)u64{unsafe{
+    var flags=paging.USER|paging.WRITE;var physical=TEST_USER_FRAMES[1].physical;
+    if which==1{flags=paging.USER|paging.EXECUTE;}
+    if which==2{flags=paging.USER|paging.UNCACHED;}
+    if which==3{physical=0x90_0000;}
+    if which==4{TEST_USER_STATES[1]=2;return 0;}
+    if which==5{PINNED[0]=true;return 0;}
+    if which==6{STAGE_ID=7;return 0;}
+    if which==7{flags=paging.USER|paging.WRITE;physical=TEST_USER_FRAMES[0].physical;
+        match paging.replace_live(&SPACES[0],0x4400_0000,physical,flags){ok=>{return 0;},err(e)=>{return e;},}}
+    if which==8{match paging.map_live(&SPACES[0],0x4600_0000,TEST_USER_FRAMES[0].physical,paging.USER){ok=>{return 0;},err(e)=>{return e;},}}
+    if which==9{flags=paging.USER;physical=TEST_USER_FRAMES[0].physical;}
+    match paging.replace_live(&SPACES[0],0x4400_1000,physical,flags){ok=>{return 0;},err(e)=>{return e;},}
+}}
+export("unshare_snapshot") fn test_snapshot(id:usize,out:*u8)usize{unsafe{
+    runtime_copy_bytes(out,(&TABLES[id][0]) as *const u8,32*4096);
+    runtime_copy_bytes(out+32*4096,(&META[id][0]) as *const u8,32);
+    runtime_copy_bytes(out+32*4096+32,(&SPACES[id]) as *const u8,sizeof(paging.Space));
+}return 32*4096+32+sizeof(paging.Space);}
+export("unshare_corrupt_receipt") fn test_corrupt(index:usize)void{unsafe{paging.native_corrupt_receipt(UNSHARE_RECEIPTS+index);}return;}
+export("unshare_stale_receipt") fn test_stale()u64{unsafe{
+    let scratch=unshare_scratch();match scratch{ok=>{},err(e)=>{return e;},}
+    let mapped=paging.map_live(&SPACES[0],0x4600_0000,TEST_USER_FRAMES[0].physical,paging.USER);match mapped{ok=>{},err(e)=>{return e;},}
+    let removed=paging.unmap_live(&SPACES[0],0x4600_0000,UNSHARE_RECEIPTS);match removed{ok=>{},err(e)=>{return e;},}
+}return 0;}
+export("unshare_fresh") fn test_fresh()u64{unsafe{match fresh(){ok(index)=>{return index as u64;},err(e)=>{return e;},}}}
+export("unshare_stage_rejected") fn test_stage_rejected()u64{unsafe{match stage(0,slice_from_raw_parts(null as *const u8,0),0,STACK_TOP){ok=>{return 0;},err(e)=>{return e;},}}}
+
+export("unshare_allocate") fn test_allocate(source:usize,target:usize,source_base:u64,target_base:u64,count:usize)u64{unsafe{match allocate_shared(source,target,source_base,target_base,count){ok=>{return 0;},err(e)=>{return e;},}}}
+export("unshare_reusable") fn test_reusable(count:usize)void{unsafe{REUSE_FROM=0;var i:usize=0;while i<count{*recycled(i)=1;i+=1;}}return;}
+export("unshare_journal_count") fn test_journal_count()usize{unsafe{return UNSHARE_COUNT;}}
+export("unshare_fill_tables") fn test_fill_tables(id:usize)u64{unsafe{
+ var i:usize=0;while i<32{let mapped=paging.map_live(&SPACES[id],0x10_0000_0000+i as u64*0x4000_0000,0xa0_0000+i as u64*4096,paging.USER);
+ match mapped{ok=>{},err(e)=>{return 0;},}i+=1;}
+}return 0;}

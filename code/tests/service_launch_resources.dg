@@ -1,0 +1,11 @@
+module service_launch_resources;
+import service_launch_trace as trace;
+pub struct Contents{pub pointer:*const u8,pub length:usize}
+pub struct Block{pub physical:u64,pub virtual:u64,pub pages:usize}
+pub error Resource=0x051a_0007;
+var IMAGE:[1]u8=[0x7f];
+pub unsafe fn find(name:[]const u8,out:*Contents)!void{unsafe{
+    if trace.launch_adapter_event(7,0,0,0,0)!=0{return error.Resource;}
+    *out=Contents{pointer:&IMAGE[0],length:1};
+}return;}
+pub unsafe fn allocate(pages:usize,alignment:usize,out:*Block)!void{return error.Resource;}

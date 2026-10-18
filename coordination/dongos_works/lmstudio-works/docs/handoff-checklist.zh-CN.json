@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "items": [
+    {
+      "id": "scope",
+      "title": "范围限制",
+      "description": "只修改授权文件，不越界改动其他内容。"
+    },
+    {
+      "id": "claim",
+      "title": "领取版本",
+      "description": "先领取任务，并使用最新版本开始工作。"
+    },
+    {
+      "id": "test",
+      "title": "测试报告",
+      "description": "只报告实际运行的测试，不虚构结果。"
+    },
+    {
+      "id": "delivery",
+      "title": "交付证据",
+      "description": "交付须附证据和限制，说明已知边界。"
+    },
+    {
+      "id": "review",
+      "title": "独立复验",
+      "description": "提交后等待独立复验，不能自行验收。"
+    }
+  ]
+}

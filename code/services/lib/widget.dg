@@ -1,0 +1,60 @@
+module lib.widget;
+import lib.window as window;
+import lib.widget_state as state;
+import gfx.raster as raster;
+import gfx.atlas as atlas;
+import gfx.geometry as geo;
+const BG:u32=0xff182131;
+const LIGHT:u32=0xffeef3fa;
+const FG:u32=0xffeef3fa;
+const DARK:u32=0xff182131;
+const ACCENT:u32=0xff385d91;
+var HEX:[18]u8=[0;18];
+unsafe fn label(dst:*raster.Surface,font:*atlas.Atlas,text:[]const u8,x:i64,y:i64,color:u32)u64{unsafe{
+    var advance:i64=0;match atlas.draw_text(dst,font,text,x,y,color,&advance){ok=>{return 0;},err(e)=>{return e;},}
+}}
+pub unsafe fn paint(session:*window.Session,s:*const state.State,font:*atlas.Atlas)u64{unsafe{
+    if (*session).address==0||(*session).bytes==0{return window.BAD;}
+    var surface=raster.Surface{pixels:slice_from_raw_parts((*session).address as *u32,((*session).bytes/4) as usize),
+        width:(*session).width as usize,height:(*session).height as usize,stride:((*session).stride/4) as usize};
+    var bounds=geo.Rect{left:0,top:0,right:(*session).width as i64,bottom:(*session).height as i64};
+    var background=BG;var foreground=FG;if (*s).light{background=LIGHT;foreground=DARK;}
+    match raster.fill(&surface,&bounds,background){ok=>{},err(e)=>{return e;},}
+    var toolbar=geo.Rect{left:0,top:0,right:(*session).width as i64,bottom:28};
+    match raster.fill(&surface,&toolbar,ACCENT){ok=>{},err(e)=>{return e;},}
+    var title:[]const u8="Terminal | Enter command";
+    if (*s).role==state.FILES{title="Files | touch/mkdir/rm PATH | sync | F5 | PgUp/PgDn";}
+    if (*s).role==state.EDITOR{title="Editor | Tab path/text | Ctrl+O open | Ctrl+S save";}
+    if (*s).role==state.SETTINGS{title="Settings | T theme | -/+ DPI | Ctrl+S save";}
+    var status=label(&surface,font,title,8,21,FG);if status!=0{return status;}
+    if (*s).role!=state.SETTINGS{
+        status=label(&surface,font,(*s).input[0..(*s).input_length],8,48,foreground);if status!=0{return status;}
+        status=label(&surface,font,(*s).cwd.bytes[0..(*s).cwd.length],8,72,foreground);if status!=0{return status;}
+    }
+    let line=(*font).ascent+(*font).descent+4;
+    if (*s).role==state.FILES&&(*s).focus!=3{
+        var row:usize=(*s).scroll;var baseline:i64=104;while row<(*s).count&&baseline<(*session).height as i64-28{
+            if row==(*s).selected{var selected=geo.Rect{left:4,top:baseline-(*font).ascent-1,right:(*session).width as i64-4,bottom:baseline+(*font).descent+1};
+                match raster.fill(&surface,&selected,ACCENT){ok=>{},err(e)=>{return e;},}}
+            status=label(&surface,font,(*s).entries[row].name[0..(*s).entries[row].length],12,baseline,foreground);if status!=0{return status;}
+            if ((*s).entries[row].attributes&16)!=0{status=label(&surface,font,"/",(*session).width as i64-24,baseline,foreground);if status!=0{return status;}}
+            baseline+=line;row+=1;
+        }
+    }else if (*s).role==state.SETTINGS{
+        var theme:[]const u8="Theme: dark";if (*s).light{theme="Theme: light";}
+        status=label(&surface,font,theme,16,72,foreground);if status!=0{return status;}
+        var scale:[]const u8="DPI: 100%";if (*s).scale==320{scale="DPI: 125%";}if (*s).scale==384{scale="DPI: 150%";}if (*s).scale==448{scale="DPI: 175%";}if (*s).scale==512{scale="DPI: 200%";}
+        status=label(&surface,font,scale,16,104,foreground);if status!=0{return status;}
+    }else{
+        var start:usize=0;var skipped:usize=0;while start<(*s).text_length&&skipped<(*s).scroll{if (*s).text[start]==10{skipped+=1;}start+=1;}
+        var end=start;var lines:i64=0;let available=((*session).height as i64-132)/line;
+        while end<(*s).text_length&&end-start<16000&&lines<=available{if (*s).text[end]==10{lines+=1;}end+=1;}
+        while end>(*s).text_length{end-=1;}
+        while end>start&&end<(*s).text_length&&((*s).text[end]&0xc0)==0x80{end-=1;}
+        status=label(&surface,font,(*s).text[start..end],8,104,foreground);if status!=0{return status;}
+    }
+    var footer:[]const u8="Ready";if (*s).dirty{footer="Unsaved changes";}if (*s).saved{footer="Saved / loaded";}
+    if (*s).discard_pending{footer="Press Ctrl+Q again to discard unsaved changes";}
+    if (*s).status!=0&&!(*s).discard_pending{HEX[0]=48;HEX[1]=120;let digits="0123456789abcdef";var i:usize=0;while i<16{HEX[i+2]=digits[(((*s).status>>((15-i)*4))&15) as usize];i+=1;}footer=HEX[..];}
+    return label(&surface,font,footer,8,(*session).height as i64-8,foreground);
+}}

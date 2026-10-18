@@ -1,0 +1,23 @@
+var TEST_FONT_DISPLAY:api.Display=api.Display {version:3,width:800,height:600,stride:800,pixel_format:0,framebuffer:0,bytes:0,back_buffer:0,font:0x7200_0000,font_bytes:0,
+    tsc_hz:1000000000,input_queue:INPUT_QUEUE,background_cache:0,window_cache:0,scale_q8:256,font_pixels:16};
+export("font_desktop_setup") fn font_setup(bytes:*const u8)u64 {unsafe {
+    var alias:u64=0;match memory.readonly_alias(3,api.DESCRIPTOR) {ok(value)=>{alias=value;},err(e)=>{return e;},}
+    PREPARED=true;DESCRIPTOR_ALIAS=alias as *api.Display;*DESCRIPTOR_ALIAS=TEST_FONT_DISPLAY;
+    COMPOSITOR_GENERATION=memory.generation(3);FONT_INDEX=0;FONT_SWITCHES=0;
+    var i:usize=0;while i<5 {FONT_POINTERS[i]=bytes+i*8192;FONT_PHYSICAL[i]=0x400_0000+i as u64*8192;
+        FONT_BYTES[i]=48+(128+i as u64)*33;let checked=validated_font(i);
+        match checked {ok(value)=>{},err(e)=>{return e;},}i+=1;}
+    i=0;while i<16 {CLIENT_FONT_GENERATION[i]=0;CLIENT_FONT_INDEX[i]=0;i+=1;}
+    (*DESCRIPTOR_ALIAS).scale_q8=256;(*DESCRIPTOR_ALIAS).font_pixels=16;(*DESCRIPTOR_ALIAS).font_bytes=FONT_BYTES[0];
+    match memory.resource_aperture(3,0x7200_0000,FONT_PHYSICAL[0],FONT_BYTES[0]) {ok=>{return 0;},err(e)=>{return e;},}
+}}
+export("font_desktop_map") fn font_map(id:usize)u64 {unsafe {match map_client_font(id) {ok=>{return 0;},err(e)=>{return e;},}}}
+export("font_desktop_client") fn font_client(id:usize,owner:u64,epoch:u64,scale:u64,out:*broker.Font)u64 {unsafe {
+    match client_font(id,owner,epoch,scale,out) {ok=>{return 0;},err(e)=>{return e;},}
+}}
+export("font_desktop_select") fn font_select(scale:u64)u64 {unsafe {
+    match select_font(scale) {ok(value)=>{return 0;},err(e)=>{return e;},}
+}}
+export("font_desktop_get") fn font_get(kind:u64,id:usize)u64 {unsafe {
+    if kind==0 {return CLIENT_FONT_GENERATION[id];}if kind==1 {return CLIENT_FONT_INDEX[id] as u64;}return FONT_INDEX as u64;
+}}

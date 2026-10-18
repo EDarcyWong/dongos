@@ -1,0 +1,105 @@
+// Actual isolated CPL3 service manager. The immutable catalog and each spawn
+// are admitted by the kernel; init only orders launches and bounded recovery.
+module init.main;
+import lib.sys as sys;
+import lib.process as process;
+import lib.process_abi as abi;
+import init.policy as policy;
+var CONFIGS:[32]abi.Config=[abi.EMPTY_CONFIG;32];
+var SNAPSHOTS:[32]abi.Snapshot=[abi.EMPTY_SNAPSHOT;32];
+var MANAGER:policy.Manager=policy.EMPTY;
+var ACTION:policy.Action=policy.EMPTY_ACTION;
+var EVENT:abi.Event=abi.EMPTY_EVENT;
+var STARTED:abi.Snapshot=abi.EMPTY_SNAPSHOT;
+var DIAGNOSTIC:[128]u8=[0;128];
+
+// Keep failure identity in the serial record even when no shell can start.
+// Each field is fixed-width hexadecimal; logging never changes retry policy.
+unsafe fn failure(kind:u64,id:u64,generation:u64,status:u64)!void {unsafe {
+    let prefix="DONGOS_INIT_FAILURE ";var at:usize=0;
+    while at<prefix.len {DIAGNOSTIC[at]=prefix[at];at+=1;}
+    let values:[4]u64=[kind,id,generation,status];var field:usize=0;
+    while field<4 {
+        var digit:usize=0;while digit<16 {
+            let nibble=(values[field]>>((15-digit)*4) as u64)&15;
+            var byte:u8=48+nibble as u8;if nibble>=10 {byte=87+nibble as u8;}
+            DIAGNOSTIC[at]=byte;at+=1;digit+=1;
+        }
+        DIAGNOSTIC[at]=32;at+=1;field+=1;
+    }
+    DIAGNOSTIC[at]=13;DIAGNOSTIC[at+1]=10;at+=2;
+    let logged=sys.log(slice_from_raw_parts((&DIAGNOSTIC[0]) as *const u8,at));
+    if logged!=0 {return error.abi.Invalid;}
+}return;}
+
+unsafe fn observe()!void {unsafe {
+    let accepted=try policy.observe(&MANAGER,&EVENT);
+    if accepted&&EVENT.state>=abi.EXITED
+        &&(MANAGER.configs[EVENT.configuration as usize].flags&abi.ESSENTIAL)!=0
+        &&!(EVENT.state==abi.KILLED&&EVENT.status==0) {
+        try failure(3,EVENT.configuration,EVENT.generation,EVENT.status);
+    }
+}return;}
+
+unsafe fn launch(cap:u64)!void {unsafe {
+    let code=process.spawn(cap,ACTION.id,ACTION.generation,0,&STARTED);
+    if code==0 {try policy.spawned(&MANAGER,ACTION.id,&STARTED,process.ticks());}
+    else {try failure(1,ACTION.id,ACTION.generation,code);try policy.spawn_failed(&MANAGER,ACTION.id,code);}
+}return;}
+unsafe fn stop(cap:u64)!void {unsafe {
+    try failure(2,ACTION.id,ACTION.generation,ACTION.reason);
+    let code=process.kill(cap,ACTION.process,ACTION.reason);
+    if code!=0 {return error.abi.Stale;}
+    try policy.killed(&MANAGER,ACTION.id,ACTION.generation);
+}return;}
+
+export("service_main") fn main()u64 {unsafe {
+    let boot=sys.boot();
+    if boot==null||(*boot).version!=1||(*boot).reserved0==0||(*boot).reserved1==0
+        ||(*boot).reserved1>abi.LIMIT as u64||(*boot).reserved2==0||(*boot).reserved3==0 {return 0x0511_0001;}
+    let cap=(*boot).reserved0;let count=(*boot).reserved1 as usize;
+    let ready=process.ready((*boot).endpoint,(*boot).reserved2);if ready!=0 {return ready;}
+    var i:usize=0;var cursor:u64=0;
+    while i<count {
+        let code=process.configuration_state(cap,i as u64,&CONFIGS[i],&SNAPSHOTS[i]);if code!=0 {return code;}
+        if SNAPSHOTS[i].sequence>cursor {cursor=SNAPSHOTS[i].sequence;}i+=1;
+    }
+    match policy.initialize(&CONFIGS[0],count,&MANAGER) {ok=>{},err(e)=>{return e;},}
+    let now=process.ticks();i=0;
+    while i<count {match policy.adopt(&MANAGER,&SNAPSHOTS[i],now) {ok=>{},err(e)=>{return e;},}i+=1;}
+    let logged=sys.log("DONGOS_INIT_READY\r\n");if logged!=0 {return logged;}
+    var warned=false;
+    loop {
+        // Drain lifecycle events before proposing a timeout/dependency kill.
+        // A child may already have exited while init was waking from WAIT.
+        let pending=process.wait(cap,cursor,&EVENT,abi.NONBLOCK,0);
+        if pending==0 {
+            if EVENT.sequence<=cursor {return 0x0511_0003;}cursor=EVENT.sequence;
+            match observe() {ok=>{},err(e)=>{return e;},}
+            continue;
+        }
+        if pending!=0x0511_0005 {return pending;}
+        var actionable=false;
+        match policy.next(&MANAGER,process.ticks(),&ACTION) {ok(value)=>{actionable=value;},err(e)=>{return e;},}
+        if actionable {
+            if ACTION.kind==policy.SPAWN {match launch(cap) {ok=>{},err(e)=>{return e;},}}
+            else if ACTION.kind==policy.KILL {match stop(cap) {ok=>{},err(e)=>{return e;},}}
+            else {return 0x0511_0001;}
+        }else {
+            var expired=false;match policy.exhausted(&MANAGER) {ok(value)=>{expired=value;},err(e)=>{return e;},}
+            if expired&&!warned {
+                let warning=sys.log("DONGOS_INIT_RETRY_EXHAUSTED\r\n");if warning!=0 {return warning;}
+                // Preserve other services and continue consuming lifecycle
+                // events. A failed essential dependency is never forged ready.
+                warned=true;
+            }else if !expired {warned=false;}
+            var deadline:u64=0;match policy.next_deadline(&MANAGER) {ok(value)=>{deadline=value;},err(e)=>{return e;},}
+            let code=process.wait(cap,cursor,&EVENT,abi.BLOCK,deadline);
+            if code==0 {
+                if EVENT.sequence<=cursor {return 0x0511_0003;}
+                cursor=EVENT.sequence;
+                match observe() {ok=>{},err(e)=>{return e;},}
+            }else if code!=0x0511_0005&&code!=0x0511_0007 {return code;}
+        }
+    }
+}}

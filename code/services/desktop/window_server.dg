@@ -1,0 +1,303 @@
+// Compositor bridge. Pixel addresses originate only in authenticated broker
+// results; IPC payloads never authorize a VA/PA. Call from one BSP event loop.
+module desktop.window_server;
+import lib.sys as sys;
+import lib.window_abi as abi;
+import lib.window_broker as broker;
+import lib.window_broker_abi as roles;
+import lib.window as client;
+import desktop.window_authority as authority;
+import gfx.raster as raster;
+pub const BAD:u64=0x0747_0001;
+pub const BUSY:u64=0x0747_0002;
+pub const EXHAUSTED:u64=0x0747_0003;
+pub const WOULD_BLOCK:u64=0x0511_0005;
+pub type Apply=unsafe fn(context:u64,light:bool,scale:u64)u64;
+pub struct Window {
+    pub token:u64,pub role:u64,pub active:broker.Lease,pub pending:broker.Lease,pub retired:broker.Lease,
+    pub desired:abi.Layout,pub events:[32]client.Event,pub head:usize,pub count:usize,pub delivered:u64,
+    pub damage:abi.Rectangle,pub dirty:bool,pub copied_serial:u64,pub copied_sequence:u64,
+    pub closing:bool,pub configured:bool,pub theme_pending:bool,pub last_error:u64,
+}
+pub const EMPTY_WINDOW:Window=Window{token:0,role:0,active:broker.EMPTY_LEASE,pending:broker.EMPTY_LEASE,retired:broker.EMPTY_LEASE,
+    desired:abi.EMPTY_LAYOUT,events:[client.EMPTY_EVENT;32],head:0,count:0,delivered:0,damage:abi.EMPTY_RECT,dirty:false,
+    copied_serial:0,copied_sequence:0,closing:false,configured:false,theme_pending:false,last_error:0};
+pub struct Server {
+    pub ready:u64,pub endpoint:u64,pub epoch:u64,pub scale:u64,pub light:bool,pub revision:u64,pub poisoned:bool,pub policy:authority.State,
+    pub windows:[16]Window,pub owners:[17]u64,pub apply_context:u64,pub apply:?Apply,
+}
+pub const EMPTY:Server=Server{ready:0,endpoint:0,epoch:0,scale:256,light:false,revision:1,poisoned:false,policy:authority.EMPTY,
+    windows:[EMPTY_WINDOW;16],owners:[0;17],apply_context:0,apply:null};
+pub struct View {pub token:u64,pub owner:u64,pub role:u64,pub lease:u64,pub address:u64,pub bytes:u64,
+    pub width:u64,pub height:u64,pub stride:u64,pub serial:u64,pub sequence:u64,pub damage:abi.Rectangle}
+pub const EMPTY_VIEW:View=View{token:0,owner:0,role:0,lease:0,address:0,bytes:0,width:0,height:0,stride:0,serial:0,sequence:0,damage:abi.EMPTY_RECT};
+pub unsafe fn initialize(s:*Server,endpoint:u64,epoch:u64,scale:u64,context:u64,apply:Apply)u64{unsafe{
+    if s==null||(*s).ready!=0||endpoint==0||epoch==0||epoch>0xffff_ffff||!broker.scale(scale){return BAD;}*s=EMPTY;
+    match authority.initialize(&(*s).policy,epoch){ok=>{},err(e)=>{return e;},}
+    (*s).ready=1;(*s).endpoint=endpoint;(*s).epoch=epoch;(*s).scale=scale;(*s).apply_context=context;(*s).apply=apply;return 0;
+}}
+unsafe fn poison(s:*Server)u64{unsafe{(*s).poisoned=true;return BAD;}}
+unsafe fn live(s:*const Server,token:u64,out:*usize)u64{unsafe{
+    if s==null||out==null||(*s).ready!=1||(*s).poisoned{return BAD;}let slot=token&255;
+    if token>>32!=(*s).epoch||slot==0||slot>16{return 0x0741_0002;}let i=(slot-1) as usize;
+    if (*s).windows[i].token!=token||(*s).policy.slots[i].status==authority.FREE{return 0x0741_0002;}*out=i;return 0;
+}}
+unsafe fn owned(s:*const Server,owner:u64,token:u64,rights:u64,out:*usize)u64{unsafe{
+    var i:usize=0;let status=live(s,token,&i);if status!=0{return status;}
+    match authority.lookup(&(*s).policy,owner,token,rights){ok(found)=>{if found!=i{return BAD;}},err(e)=>{return e;},}
+    if (*s).windows[i].closing{return BUSY;}*out=i;return 0;
+}}
+unsafe fn close_window(s:*Server,index:usize)u64{unsafe{
+    let w=&(*s).windows[index];let token=(*w).token;if token==0{return 0;}(*w).closing=true;
+    if (*w).pending.lease!=0 {let released=broker.revoke((*s).endpoint,(*w).pending.lease);if released!=0{(*w).last_error=released;return released;}(*w).pending=broker.EMPTY_LEASE;}
+    if (*s).policy.slots[index].status!=authority.CLOSING {
+        match authority.close(&(*s).policy,(*w).active.owner,token){ok=>{},err(e)=>{return e;},}
+    }
+    let a=(*w).active.lease;let r=(*w).retired.lease;
+    if a!=0 {let released=broker.revoke((*s).endpoint,a);if released!=0{(*w).last_error=released;return released;}}
+    if r!=0 {let released=broker.revoke((*s).endpoint,r);if released!=0{(*w).last_error=released;return released;}}
+    match authority.closed(&(*s).policy,token,a,r){ok=>{},err(e)=>{return poison(s);},}
+    *w=EMPTY_WINDOW;return 0;
+}}
+unsafe fn reap_retired(s:*Server,index:usize)u64{unsafe{
+    let w=&(*s).windows[index];let item=&(*s).policy.slots[index];
+    if (*w).retired.lease==0||(*item).release_ready!=1{return 0;}
+    let released=broker.revoke((*s).endpoint,(*w).retired.lease);if released!=0{(*w).last_error=released;return released;}
+    match authority.retired_complete(&(*s).policy,(*w).token,(*w).retired.lease){ok=>{},err(e)=>{return poison(s);},}
+    (*w).retired=broker.EMPTY_LEASE;return 0;
+}}
+pub unsafe fn departed(s:*Server,through:u64)u64{unsafe{
+    let pid=through>>32;let generation=through&0xffff_ffff;if pid==0||pid>16||generation==0{return BAD;}
+    var i:usize=0;while i<16 {
+        let owner=(*s).windows[i].active.owner;
+        if (*s).windows[i].token!=0&&owner>>32==pid&&(owner&0xffff_ffff)<=generation {
+            let closed=close_window(s,i);if closed!=0{(*s).windows[i].last_error=closed;}
+        }i+=1;
+    }return 0;
+}}
+pub unsafe fn maintain(s:*Server)u64{unsafe{
+    if (*s).ready!=1||(*s).poisoned{return BAD;}var n:usize=0;
+    while n<16 {
+        var event=broker.EMPTY_PEER;let status=broker.departed((*s).endpoint,&event);if status!=0{return status;}
+        if event.epoch!=(*s).epoch{return poison(s);}if event.owner==0{break;}
+        let cleaned=departed(s,event.owner);if cleaned!=0{return poison(s);}n+=1;
+    }
+    var i:usize=0;while i<16 {
+        if (*s).windows[i].token!=0 {
+            if (*s).windows[i].closing {let retried=close_window(s,i);}
+            else {let retired=reap_retired(s,i);}
+        }i+=1;
+    }return 0;
+}}
+// Input producers must retain/retry an event on BUSY. Only consecutive motion
+// with identical buttons and no wheel is coalesced; key/button edges never drop.
+pub unsafe fn push(s:*Server,token:u64,kind:u64,a:u64,b:u64,c:u64,d:u64)u64{unsafe{
+    var i:usize=0;let checked=live(s,token,&i);if checked!=0{return checked;}let w=&(*s).windows[i];
+    if (*w).closing||kind!=abi.KEY&&kind!=abi.POINTER&&kind!=abi.EXIT&&kind!=abi.FOCUS{return BAD;}
+    var event=client.Event{sequence:0,kind:kind,a:a,b:b,c:c,d:d};
+    if kind==abi.POINTER&&c==0&&(*w).count!=0 {
+        let last=((*w).head+(*w).count-1)%32;let previous=&(*w).events[last];
+        if (*previous).kind==abi.POINTER&&(*previous).b==b&&(*previous).c==0 {(*w).events[last]=event;return 0;}
+    }
+    if (*w).count==32{return BUSY;}let at=((*w).head+(*w).count)%32;(*w).events[at]=event;(*w).count+=1;return 0;
+}}
+pub unsafe fn configure(s:*Server,token:u64,width:u64,height:u64,stride:u64)u64{unsafe{
+    var i:usize=0;let checked=live(s,token,&i);if checked!=0{return checked;}if (*s).windows[i].closing{return BUSY;}
+    var desired=abi.EMPTY_LAYOUT;match abi.layout(width,height,stride,&desired){ok=>{},err(e)=>{return e;},}
+    (*s).windows[i].desired=desired;return 0;
+}}
+unsafe fn prepare_configuration(s:*Server,index:usize,ticket:u64)u64{unsafe{
+    let w=&(*s).windows[index];let item=&(*s).policy.slots[index];
+    if (*w).desired.bytes==0||(*item).status!=authority.LIVE||(*item).retired!=0{return 0;}
+    var serial:u64=0;match authority.configure(&(*s).policy,(*w).token,(*w).desired.width,(*w).desired.height,(*w).desired.stride){
+        ok(value)=>{serial=value;},err(e)=>{(*w).last_error=e;return 0;},}
+    var allocation=broker.EMPTY_LEASE;
+    let status=broker.allocate((*s).endpoint,ticket,(*w).token,(*w).desired.width,(*w).desired.height,(*w).desired.stride,&allocation);
+    if status!=0 {
+        if status==broker.BAD{return poison(s);}
+        match authority.abort_unpublished(&(*s).policy,(*w).token,serial){ok=>{},err(e)=>{return poison(s);},}
+        (*w).last_error=status;return 0;
+    }
+    if allocation.owner!=(*w).active.owner||allocation.epoch!=(*s).epoch{return poison(s);}
+    (*w).pending=allocation;(*w).desired=abi.EMPTY_LAYOUT;return 0;
+}}
+unsafe fn surface(s:*const Server,index:usize,out:*sys.Message)void{unsafe{
+    let w=&(*s).windows[index];let lease=&(*w).active;(*out).words[1]=(*w).token;(*out).words[2]=(*lease).lease;
+    (*out).words[3]=(*lease).client_address;(*out).words[4]=(*lease).bytes;(*out).words[5]=(*lease).stride;
+    (*out).words[6]=((*lease).height<<32)|(*lease).width;(*out).words[7]=(*s).epoch;
+}return;}
+unsafe fn response_event(s:*Server,index:usize,event:*const client.Event,out:*sys.Message)u64{unsafe{
+    let w=&(*s).windows[index];if (*w).delivered==0xffff_ffff_ffff_ffff{return EXHAUSTED;}(*w).delivered+=1;
+    (*out).words[1]=(*w).delivered;(*out).words[2]=(*event).kind;(*out).words[3]=(*event).a;
+    (*out).words[4]=(*event).b;(*out).words[5]=(*event).c;(*out).words[6]=(*event).d;(*out).words[7]=(*s).epoch;return 0;
+}}
+unsafe fn dispatch(s:*Server,ticket:u64,message:*const sys.Message,out:*sys.Message)u64{unsafe{
+    var identity=broker.EMPTY_PEER;let authenticated=broker.peer((*s).endpoint,ticket,&identity);if authenticated!=0{return authenticated;}
+    if identity.epoch!=(*s).epoch{return poison(s);}if identity.role==roles.NONE{return 0x0741_0003;}
+    let pid=identity.owner>>32;let generation=identity.owner&0xffff_ffff;if pid==0||pid>16{return poison(s);}
+    if generation<(*s).owners[pid as usize]{return poison(s);}
+    if generation>(*s).owners[pid as usize] {
+        if generation>1 {let cleaned=departed(s,(pid<<32)|(generation-1));if cleaned!=0{return cleaned;}}
+        (*s).owners[pid as usize]=generation;
+    }
+    var request=abi.EMPTY_REQUEST;match abi.decode(message as *const abi.Message,(*s).epoch,&request){ok=>{},err(e)=>{return e;},}
+    if request.operation==abi.HELLO {
+        (*out).words[1]=(*s).epoch;(*out).words[2]=abi.VERSION;(*out).words[3]=abi.MAX_TOTAL_BYTES;(*out).words[4]=abi.MAX_LEASE_BYTES;return 0;
+    }
+    if request.operation==abi.CREATE {
+        // This desktop has one independent application per fixed GUI role.
+        // Reject duplicate windows before reserving policy or physical budget.
+        var existing:usize=0;while existing<16{if (*s).windows[existing].token!=0&&(*s).windows[existing].role==identity.role{return 0x0741_0004;}existing+=1;}
+        var token:u64=0;match authority.reserve(&(*s).policy,identity.owner,abi.ALL,request.layout.width,request.layout.height,request.layout.stride){ok(value)=>{token=value;},err(e)=>{return e;},}
+        let index=((token&255)-1) as usize;var allocation=broker.EMPTY_LEASE;
+        let status=broker.allocate((*s).endpoint,ticket,token,request.layout.width,request.layout.height,request.layout.stride,&allocation);
+        if status!=0 {
+            if status==broker.BAD{return poison(s);}match authority.cancel(&(*s).policy,identity.owner,token){ok=>{},err(e)=>{return poison(s);},}return status;
+        }
+        if allocation.owner!=identity.owner||allocation.epoch!=(*s).epoch{return poison(s);}
+        let w=&(*s).windows[index];*w=EMPTY_WINDOW;(*w).token=token;(*w).role=identity.role;(*w).active=allocation;(*w).theme_pending=true;
+        match authority.activate(&(*s).policy,identity.owner,token,allocation.lease){ok=>{},err(e)=>{return poison(s);},}surface(s,index,out);return 0;
+    }
+    var index:usize=0;let checked=owned(s,identity.owner,request.window,0,&index);if checked!=0{return checked;}
+    let w=&(*s).windows[index];let item=&(*s).policy.slots[index];
+    if identity.role!=(*w).role{return 0x0741_0003;}
+    if request.operation==abi.DESTROY {return close_window(s,index);}
+    if request.operation==abi.GET_FONT {
+        var font=broker.EMPTY_FONT;let status=broker.font((*s).endpoint,ticket,(*s).scale,&font);if status!=0{return status;}
+        if font.owner!=identity.owner||font.epoch!=(*s).epoch{return poison(s);}
+        (*out).words[1]=font.client_address;(*out).words[2]=font.bytes;(*out).words[3]=font.pixels;
+        (*out).words[4]=font.scale;(*out).words[5]=1;(*out).words[6]=font.glyphs;(*out).words[7]=(*s).epoch;return 0;
+    }
+    if request.operation==abi.APPLY_SETTINGS {
+        if identity.role!=roles.SETTINGS{return 0x0741_0003;}if (*s).revision==0xffff_ffff_ffff_ffff{return EXHAUSTED;}
+        var applied:u64=0x0741_0003;
+        match (*s).apply {null=>{return 0x0741_0003;},some(callback)=>{applied=callback((*s).apply_context,request.sequence==1,request.layout.width);},}
+        if applied!=0{return applied;}
+        (*s).scale=request.layout.width;(*s).light=request.sequence==1;(*s).revision+=1;var i:usize=0;while i<16 {
+            if (*s).windows[i].token!=0&&!(*s).windows[i].closing {(*s).windows[i].desired=(*s).policy.slots[i].layout;(*s).windows[i].theme_pending=true;}i+=1;
+        }(*out).words[7]=(*s).epoch;return 0;
+    }
+    if request.operation==abi.POLL {
+        if request.sequence!=(*w).delivered{return 0x0741_0002;}if (*w).delivered==0xffff_ffff_ffff_ffff{return EXHAUSTED;}
+        let prepared=prepare_configuration(s,index,ticket);if prepared!=0{return prepared;}
+        if (*w).pending.lease!=0 {
+            var event=client.Event{sequence:0,kind:abi.CONFIGURE,a:(*item).serial,
+                b:((*w).pending.height<<32)|(*w).pending.width,c:(*w).pending.stride,d:(*w).pending.lease};
+            // The next accepted call must ACK or close; repeated POLL is stale.
+            if (*w).configured{return 0x0741_0002;}
+            (*w).configured=true;return response_event(s,index,&event,out);
+        }
+        // Reliable state lane coalesces continuous toggles to the newest
+        // theme, independently of the bounded key/button edge queue. A pending
+        // CONFIGURE/ACK is delivered first, so font mapping follows global DPI.
+        if (*w).theme_pending{
+            var light:u64=0;if (*s).light{light=1;}var event=client.Event{sequence:0,kind:abi.THEME,a:light,b:(*s).scale,c:(*s).revision,d:0};
+            let status=response_event(s,index,&event,out);if status==0{(*w).theme_pending=false;}return status;
+        }
+        if (*w).count==0{return client.NO_EVENT;}let event=(*w).events[(*w).head];
+        let status=response_event(s,index,&event,out);if status!=0{return status;}
+        (*w).head=((*w).head+1)%32;(*w).count-=1;return 0;
+    }
+    if request.operation==abi.ACK_CONFIGURE {
+        if !(*w).configured||(*w).pending.lease==0||request.lease!=(*w).pending.lease{return 0x0741_0002;}
+        match authority.acknowledge(&(*s).policy,identity.owner,request.window,request.serial,request.lease){ok=>{},err(e)=>{return e;},}
+        (*w).retired=(*w).active;(*w).active=(*w).pending;(*w).pending=broker.EMPTY_LEASE;
+        (*w).configured=false;(*w).copied_serial=0;(*w).copied_sequence=0;(*w).dirty=false;surface(s,index,out);return 0;
+    }
+    if request.operation==abi.COMMIT {
+        let first=(*item).committed_serial!=request.serial;
+        match authority.commit(&(*s).policy,identity.owner,request.window,request.lease,request.serial,request.sequence,&request.damage){ok=>{},err(e)=>{return e;},}
+        if first {(*w).damage=abi.Rectangle{x:0,y:0,width:(*item).layout.width,height:(*item).layout.height};}
+        else if !(*w).dirty {(*w).damage=request.damage;}
+        else {
+            let old=(*w).damage;var left=old.x;var top=old.y;var right=old.x+old.width;var bottom=old.y+old.height;
+            if request.damage.x<left{left=request.damage.x;}if request.damage.y<top{top=request.damage.y;}
+            if request.damage.x+request.damage.width>right{right=request.damage.x+request.damage.width;}
+            if request.damage.y+request.damage.height>bottom{bottom=request.damage.y+request.damage.height;}
+            (*w).damage=abi.Rectangle{x:left,y:top,width:right-left,height:bottom-top};
+        }(*w).dirty=true;(*out).words[7]=(*s).epoch;return 0;
+    }return BAD;
+}}
+pub unsafe fn operate(s:*Server,ticket:u64,message:*const sys.Message,out:*sys.Message)u64{unsafe{
+    if out==null{return BAD;}*out=sys.EMPTY_MESSAGE;if s==null||message==null||ticket==0{(*out).words[0]=BAD;return BAD;}
+    let maintained=maintain(s);if maintained!=0{(*out).words[0]=maintained;return maintained;}
+    let status=dispatch(s,ticket,message,out);if status!=0{*out=sys.EMPTY_MESSAGE;}(*out).words[0]=status;return status;
+}}
+pub unsafe fn view(s:*const Server,token:u64,out:*View)u64{unsafe{
+    if out==null{return BAD;}var i:usize=0;let checked=live(s,token,&i);if checked!=0{return checked;}let w=&(*s).windows[i];let item=&(*s).policy.slots[i];
+    if (*w).closing||(*item).status!=authority.LIVE||!(*w).dirty||(*item).committed_serial!=(*item).serial{return BUSY;}
+    *out=View{token:token,owner:(*w).active.owner,role:(*w).role,lease:(*w).active.lease,address:(*w).active.server_address,
+        bytes:(*w).active.bytes,width:(*w).active.width,height:(*w).active.height,stride:(*w).active.stride,
+        serial:(*item).serial,sequence:(*item).committed,damage:(*w).damage};return 0;
+}}
+pub unsafe fn copy(s:*Server,token:u64,destination:*raster.Surface,out:*View)u64{unsafe{
+    if out==null||destination==null{return BAD;}var current=EMPTY_VIEW;let checked=view(s,token,&current);if checked!=0{return checked;}
+    match raster.validate(destination){ok=>{},err(e)=>{return e;},}
+    if (*destination).width as u64!=current.width||(*destination).height as u64!=current.height{return BAD;}
+    let begin=(*destination).pixels.ptr as u64;let length=(*destination).pixels.len as u64*4;
+    if begin<current.address+current.bytes&&current.address<begin+length{return BAD;}
+    sys.svc_fence();var y=current.damage.y;while y<current.damage.y+current.damage.height {
+        var x=current.damage.x;while x<current.damage.x+current.damage.width {
+            let pixel=volatile_load((current.address+y*current.stride+x*4) as *const u32)|0xff00_0000;
+            (*destination).pixels[y as usize*(*destination).stride+x as usize]=pixel;x+=1;
+        }y+=1;
+    }
+    let i=((token&255)-1) as usize;(*s).windows[i].copied_serial=current.serial;(*s).windows[i].copied_sequence=current.sequence;*out=current;return 0;
+}}
+pub unsafe fn presented(s:*Server,token:u64,serial:u64,sequence:u64)u64{unsafe{
+    var i:usize=0;let checked=live(s,token,&i);if checked!=0{return checked;}let w=&(*s).windows[i];
+    if (*w).copied_serial!=serial||(*w).copied_sequence!=sequence{return BAD;}
+    match authority.presented(&(*s).policy,token,serial,sequence){ok(retired)=>{},err(e)=>{return e;},}
+    (*w).dirty=false;return reap_retired(s,i);
+}}
+// Existing REPLY0x24 does not wait. TRY_RECEIVE0x25 must leave outputs and
+// waiting state untouched on WouldBlock; the main compositor keeps rendering.
+pub unsafe fn pump(s:*Server,limit:usize,out_count:*usize)u64{unsafe{
+    if s==null||out_count==null||limit==0||limit>32{return BAD;}*out_count=0;let maintained=maintain(s);if maintained!=0{return maintained;}
+    while *out_count<limit {
+        var request=sys.EMPTY_MESSAGE;var response=sys.EMPTY_MESSAGE;var ticket:u64=0;
+        let received=sys.svc_call(0x25,(*s).endpoint,(&request) as u64,(&ticket) as u64,0,0,0);
+        if received==WOULD_BLOCK{return 0;}if received!=0{return received;}if ticket==0{return poison(s);}
+        let handled=operate(s,ticket,&request,&response);
+        let replied=sys.svc_call(0x24,(*s).endpoint,ticket,(&response) as u64,0,0,0);if replied!=0{return replied;}
+        *out_count+=1;if (*s).poisoned{return BAD;}
+    }return 0;
+}}
+
+// A private cache rebuild may need the last committed pixels even if they have
+// already been presented. During CONFIGURE/ACK keep reading the retained old
+// lease until the new active serial commits; it is still mapped by the broker.
+pub unsafe fn snapshot(s:*const Server,token:u64,out:*View)u64{unsafe{
+    if out==null{return BAD;}var i:usize=0;let checked=live(s,token,&i);if checked!=0{return checked;}
+    let w=&(*s).windows[i];let item=&(*s).policy.slots[i];
+    if (*w).closing||(*item).committed==0||(*item).committed_serial==0{return BUSY;}
+    var lease=(*w).active;
+    if (*item).status==authority.LIVE&&(*item).committed_serial!=(*item).serial{
+        if (*w).retired.lease==0{return BUSY;}lease=(*w).retired;
+    }else if (*item).status!=authority.LIVE&&(*item).status!=authority.RESIZING{return BUSY;}
+    *out=View{token:token,owner:lease.owner,role:(*w).role,lease:lease.lease,address:lease.server_address,
+        bytes:lease.bytes,width:lease.width,height:lease.height,stride:lease.stride,
+        serial:(*item).committed_serial,sequence:(*item).committed,
+        damage:abi.Rectangle{x:0,y:0,width:lease.width,height:lease.height}};return 0;
+}}
+// Trusted compositor-owned RAM target. Scaling writes only the checked content
+// rectangle and needs no extra per-client pixel allocation. All source pixels
+// are read through broker mappings with volatile_load and forced opaque alpha.
+pub unsafe fn copy_scaled(s:*Server,token:u64,destination:*raster.Surface,area:*const abi.Rectangle,out:*View)u64{unsafe{
+    if destination==null||area==null||out==null{return BAD;}var current=EMPTY_VIEW;
+    let checked=snapshot(s,token,&current);if checked!=0{return checked;}
+    match raster.validate(destination){ok=>{},err(e)=>{return e;},}
+    let a=*area;if a.width==0||a.height==0||a.x>=(*destination).width as u64||a.y>=(*destination).height as u64
+        ||a.width>(*destination).width as u64-a.x||a.height>(*destination).height as u64-a.y{return BAD;}
+    let begin=(*destination).pixels.ptr as u64;let length=(*destination).pixels.len as u64*4;
+    if begin<current.address+current.bytes&&current.address<begin+length{return BAD;}
+    sys.svc_fence();var y:u64=0;while y<a.height{
+        let sy=y*current.height/a.height;var x:u64=0;while x<a.width{
+            let sx=x*current.width/a.width;let pixel=volatile_load((current.address+sy*current.stride+sx*4) as *const u32)|0xff00_0000;
+            (*destination).pixels[(a.y+y) as usize*(*destination).stride+(a.x+x) as usize]=pixel;x+=1;
+        }y+=1;
+    }
+    let i=((token&255)-1) as usize;if current.serial==(*s).policy.slots[i].serial&&current.lease==(*s).windows[i].active.lease{
+        (*s).windows[i].copied_serial=current.serial;(*s).windows[i].copied_sequence=current.sequence;
+    }*out=current;return 0;
+}}

@@ -1,0 +1,9 @@
+module ahci_authority_probe;
+import drivers.ahci_authority as policy;
+export("authority_permit") fn permit(h:*const policy.Header,p:*const policy.Port,n:usize,out:*u64)u64 {
+    unsafe {
+        match policy.permit(h,slice_from_raw_parts(p,n)) {
+            ok(value)=>{*out=value as u64;return 0;},err(code)=>{return code;},
+        }
+    }
+}

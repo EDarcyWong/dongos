@@ -1,0 +1,241 @@
+// mm.phys_buddy — single-arena buddy allocator (4 KiB..4 MiB, order 0..10).
+// Metadata is caller-provided; physical addresses are plain u64 values. No
+// allocation, no large stack arrays, no locking. Single-threaded or caller-held
+// lock only.
+
+module mm.phys_buddy;
+
+import mm.errors as errors;
+
+pub const PAGE_SIZE: usize = 4096;
+pub const MAX_ORDER: usize = 10;
+
+const U64_MAX: u64 = 0xffff_ffff_ffff_ffff;
+const LIST_END: usize = 0xffff_ffff_ffff_ffff;
+
+pub struct PageMeta {
+    state: u8,   // 0 Reserved, 1 Free head, 2 Allocated head, 3 Tail
+    order: u8,   // block order for head pages
+    next: usize, // free-list link for Free head pages
+}
+
+pub struct Allocator {
+    initialized: u8,
+    base: u64,
+    page_count: usize,
+    metadata: *PageMeta,
+    free_head: [MAX_ORDER + 1]usize,
+    free_total: usize,
+}
+
+pub const EMPTY_META: PageMeta = PageMeta { state: 0, order: 0, next: LIST_END };
+pub const EMPTY_ALLOCATOR: Allocator = Allocator {
+    initialized: 0,
+    base: 0,
+    page_count: 0,
+    metadata: null,
+    free_head: [LIST_END; MAX_ORDER + 1],
+    free_total: 0,
+};
+
+fn is_initialized(state: *const Allocator) bool {
+    unsafe { return (*state).initialized != 0; }
+}
+
+fn meta_ptr(state: *Allocator, page: usize) *PageMeta {
+    unsafe { return (*state).metadata + page; }
+}
+
+fn buddy_of(page: usize, order: usize) usize {
+    return page ^ (1 << order);
+}
+
+fn list_remove(state: *Allocator, order: usize, page: usize) void {
+    unsafe {
+        var prev: usize = LIST_END;
+        var cur: usize = (*state).free_head[order];
+        while cur != page {
+            prev = cur;
+            cur = (*meta_ptr(state, cur)).next;
+        }
+        if prev == LIST_END {
+            (*state).free_head[order] = (*meta_ptr(state, page)).next;
+        } else {
+            (*meta_ptr(state, prev)).next = (*meta_ptr(state, page)).next;
+        }
+        (*meta_ptr(state, page)).next = LIST_END;
+    }
+}
+
+// The block [page, page+2^order) is already marked free (head state 1, tails
+// state 3). Merge upward with free buddies and push the final block onto its
+// order's free list.
+fn merge_up(state: *Allocator, page: usize, order: usize) void {
+    unsafe {
+        var cur: usize = page;
+        var o: usize = order;
+        while o < MAX_ORDER {
+            let buddy: usize = buddy_of(cur, o);
+            if buddy < (*state).page_count {
+                let bm = meta_ptr(state, buddy);
+                if (*bm).state == 1 && (*bm).order == (o as u8) {
+                    list_remove(state, o, buddy);
+                    var lower: usize = cur;
+                    var upper: usize = buddy;
+                    if buddy < cur {
+                        lower = buddy;
+                        upper = cur;
+                    }
+                    (*meta_ptr(state, upper)).state = 3;
+                    (*meta_ptr(state, upper)).order = 0;
+                    (*meta_ptr(state, upper)).next = LIST_END;
+                    cur = lower;
+                    o += 1;
+                    (*meta_ptr(state, cur)).state = 1;
+                    (*meta_ptr(state, cur)).order = o as u8;
+                    continue;
+                }
+            }
+            break;
+        }
+        (*meta_ptr(state, cur)).next = (*state).free_head[o];
+        (*state).free_head[o] = cur;
+    }
+}
+
+pub unsafe fn init(state: *Allocator, base: u64, page_count: usize, metadata: []PageMeta) !void {
+    unsafe {
+        if (*state).initialized != 0 { return error.errors.AlreadyInitialized; }
+    }
+    if page_count == 0 || page_count > (1 << 20) { return error.errors.InvalidArgument; }
+    if (page_count & (page_count - 1)) != 0 { return error.errors.InvalidArgument; }
+    let bytes: u64 = (page_count as u64) * (PAGE_SIZE as u64);
+    if (base % bytes) != 0 { return error.errors.InvalidArgument; }
+    if base > U64_MAX - bytes { return error.errors.InvalidArgument; }
+    if metadata.len < page_count { return error.errors.MetadataTooSmall; }
+    unsafe {
+        (*state).initialized = 1;
+        (*state).base = base;
+        (*state).page_count = page_count;
+        (*state).metadata = metadata.ptr;
+        var i: usize = 0;
+        while i <= MAX_ORDER {
+            (*state).free_head[i] = LIST_END;
+            i += 1;
+        }
+        (*state).free_total = 0;
+        var j: usize = 0;
+        while j < page_count {
+            let m = meta_ptr(state, j);
+            (*m).state = 0;
+            (*m).order = 0;
+            (*m).next = LIST_END;
+            j += 1;
+        }
+    }
+    return;
+}
+
+pub unsafe fn add_usable(state: *Allocator, start_page: usize, count: usize) !void {
+    if !is_initialized(state) { return error.errors.NotInitialized; }
+    unsafe {
+        let page_count: usize = (*state).page_count;
+        if start_page > page_count { return error.errors.InvalidArgument; }
+        if count > page_count - start_page { return error.errors.InvalidArgument; }
+        var i: usize = 0;
+        while i < count {
+            if (*meta_ptr(state, start_page + i)).state != 0 { return error.errors.RangeUnavailable; }
+            i += 1;
+        }
+        var offset: usize = start_page;
+        var remaining: usize = count;
+        while remaining > 0 {
+            var k: usize = 0;
+            var size: usize = 1;
+            while k < MAX_ORDER {
+                let next_size: usize = size * 2;
+                if next_size > remaining { break; }
+                if (offset & (next_size - 1)) != 0 { break; }
+                k += 1;
+                size = next_size;
+            }
+            let head = meta_ptr(state, offset);
+            (*head).state = 1;
+            (*head).order = k as u8;
+            (*head).next = LIST_END;
+            var t: usize = 1;
+            while t < size {
+                let tm = meta_ptr(state, offset + t);
+                (*tm).state = 3;
+                (*tm).order = 0;
+                (*tm).next = LIST_END;
+                t += 1;
+            }
+            merge_up(state, offset, k);
+            offset += size;
+            remaining -= size;
+        }
+        (*state).free_total += count;
+    }
+    return;
+}
+
+pub unsafe fn alloc(state: *Allocator, order: usize) !u64 {
+    if !is_initialized(state) { return error.errors.NotInitialized; }
+    if order > MAX_ORDER { return error.errors.InvalidOrder; }
+    unsafe {
+        var k: usize = order;
+        while k <= MAX_ORDER {
+            if (*state).free_head[k] != LIST_END { break; }
+            k += 1;
+        }
+        if k > MAX_ORDER { return error.errors.OutOfMemory; }
+        let block: usize = (*state).free_head[k];
+        let bm = meta_ptr(state, block);
+        (*state).free_head[k] = (*bm).next;
+        (*bm).next = LIST_END;
+        while k > order {
+            k -= 1;
+            let buddy: usize = block + (1 << k);
+            let ub = meta_ptr(state, buddy);
+            (*ub).state = 1;
+            (*ub).order = k as u8;
+            (*ub).next = (*state).free_head[k];
+            (*state).free_head[k] = buddy;
+            (*bm).order = k as u8;
+        }
+        (*bm).state = 2;
+        (*bm).order = order as u8;
+        (*bm).next = LIST_END;
+        (*state).free_total -= (1 << order);
+        return (*state).base + ((block as u64) * (PAGE_SIZE as u64));
+    }
+}
+
+pub unsafe fn free(state: *Allocator, address: u64, order: usize) !void {
+    if !is_initialized(state) { return error.errors.NotInitialized; }
+    if order > MAX_ORDER { return error.errors.InvalidFree; }
+    unsafe {
+        let base: u64 = (*state).base;
+        let page_count: usize = (*state).page_count;
+        if address < base { return error.errors.InvalidFree; }
+        let offset: u64 = address - base;
+        if (offset % (PAGE_SIZE as u64)) != 0 { return error.errors.InvalidFree; }
+        let page: usize = (offset / (PAGE_SIZE as u64)) as usize;
+        if page >= page_count { return error.errors.InvalidFree; }
+        if (page & ((1 << order) - 1)) != 0 { return error.errors.InvalidFree; }
+        let m = meta_ptr(state, page);
+        if (*m).state != 2 || (*m).order != (order as u8) { return error.errors.InvalidFree; }
+        (*m).state = 1;
+        (*m).order = order as u8;
+        (*m).next = LIST_END;
+        merge_up(state, page, order);
+        (*state).free_total += (1 << order);
+    }
+    return;
+}
+
+pub unsafe fn free_pages(state: *const Allocator) !usize {
+    if !is_initialized(state) { return error.errors.NotInitialized; }
+    unsafe { return (*state).free_total; }
+}

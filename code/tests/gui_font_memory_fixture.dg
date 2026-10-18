@@ -1,0 +1,49 @@
+// Private native fixture only: real paging and aperture/abort logic execute.
+var TEST_FONT_TABLES:[16][32]paging.Table=[[EMPTY_TABLE;32];16];
+export("font_memory_setup") fn font_setup(id:usize,alias:u64)u64 {unsafe {
+    FRAME_COUNT=1;REUSE_FROM=0;EXTENDED=null;EXTENDED_LIMIT=0;EXTENDED_RECYCLED=null;EXTENDED_JOURNAL=null;
+    FRAMES[0]=Frame {physical:0x20_0000,virtual:alias,writable:1};RECYCLED[0]=0;KERNEL_PHYSICAL=0x10_0000;
+    STAGE_ID=id;STAGE_COUNT=0;STAGE_ROOT=0x10_0000+id as u64*0x20_000;STAGE_BOUND=true;STAGE_TABLES=true;STAGE_FAILED=false;
+    UNSHARE_FAILED=false;UNSHARE_ACTIVE=false;UNSHARE_ALLOCATING=false;UNSHARE_COUNT=0;RESOURCE_FAILED=false;
+    var n:usize=0;while n<LIMIT {PROCESSES[n]=EMPTY_PROCESS;SPACES[n]=paging.EMPTY_SPACE;PINNED[n]=false;GENERATIONS[n]=0;
+        DYNAMIC_TABLES[n]=&TEST_FONT_TABLES[n][0];DYNAMIC_PHYSICAL[n]=0x10_0000+n as u64*0x20_000;n+=1;}
+    var initialized=paging.init(&SPACES[3],slice_from_raw_parts(table_at(3,0),pool_pages(3)),0x16_0000,META[3][..],48,true);
+    match initialized {ok=>{},err(e)=>{return e;},}PROCESSES[3].ready=1;PROCESSES[3].root=0x16_0000;GENERATIONS[3]=17;
+    match paging.map_live(&SPACES[3],0x7000_1000,0x20_0000,paging.USER) {ok=>{},err(e)=>{return e;},}
+    initialized=paging.init(&SPACES[id],TEST_FONT_TABLES[id][..],STAGE_ROOT,META[id][..],48,true);
+    match initialized {ok=>{},err(e)=>{return e;},}PROCESSES[id].ready=1;PROCESSES[id].root=STAGE_ROOT;GENERATIONS[id]=101;
+}return 0;}
+export("font_memory_leaf") fn font_leaf(id:usize,at:u64)u64 {unsafe {
+    var m=paging.Mapping {physical:0,flags:0};match paging.query(&SPACES[id],at,&m) {ok=>{return m.physical|m.flags;},err(e)=>{return 0;},}
+}}
+export("font_memory_mutate") fn font_mutate(id:usize,kind:u64)u64 {unsafe {
+    if kind==1 {GENERATIONS[id]+=1;return 0;}if kind==2 {PINNED[id]=true;return 0;}
+    let at:u64=0x727f_f000;var flags=paging.USER;var physical:u64=0x4001_000;
+    if kind==3 {flags|=paging.WRITE;}
+    if kind==4 {flags|=paging.EXECUTE;}
+    if kind==5 {physical+=4096;}
+    if kind==6 {match paging.map_live(&SPACES[id],at,physical,flags) {ok=>{return 0;},err(e)=>{return e;},}}
+    match paging.replace_live(&SPACES[id],at,physical,flags) {ok=>{return 0;},err(e)=>{return e;},}
+}}
+export("font_memory_snapshot") fn font_snapshot(id:usize,out:*u8)usize {unsafe {
+    runtime_copy_bytes(out,(&TEST_FONT_TABLES[id][0]) as *const u8,32*4096);
+    runtime_copy_bytes(out+32*4096,(&META[id][0]) as *const u8,32);
+}return 32*4096+32;}
+export("font_memory_commit") fn font_commit(id:usize)u64 {unsafe {match stage_commit(id) {ok=>{return 0;},err(e)=>{return e;},}}}
+export("font_memory_abort") fn font_abort(id:usize)u64 {unsafe {match stage_abort(id) {ok=>{return 0;},err(e)=>{return e;},}}}
+export("font_memory_get") fn font_get(kind:u64,id:usize)u64 {unsafe {
+    if kind==0 {return RESOURCE_FAILED as u64;}if kind==1 {return PROCESSES[id].ready;}
+    if kind==2 {return (*table_at(id,0)).entries[0];}if kind==3 {return GENERATIONS[id];}
+    if kind==4 {return STAGE_ID as u64;}if kind==5 {return FRAME_COUNT as u64;}return STAGE_FAILED as u64;
+}}
+export("font_memory_map") fn font_map(id:usize,old:u64,old_bytes:u64,physical:u64,bytes:u64)u64 {unsafe {
+    match gui_resource_aperture(id,old,old_bytes,physical,bytes) {ok=>{return 0;},err(e)=>{return e;},}
+}}
+export("font_memory_copy") fn font_copy(id:usize,out:*u8,write:bool)u64 {unsafe {
+    if write {match copy_out(id,0x7200_0000,slice_from_raw_parts(out,16)) {ok=>{return 0;},err(e)=>{return e;},}}
+    match copy_in(id,0x7200_0000,slice_from_raw_parts(out,16)) {ok=>{return 0;},err(e)=>{return e;},}
+}}
+export("font_memory_legacy") fn font_legacy(id:usize,replace:bool)u64 {unsafe {
+    if replace {match replace_resource_aperture(id,0x7200_0000,0x400_0000,4272,0x400_2000,4305) {ok=>{return 0;},err(e)=>{return e;},}}
+    match resource_aperture(id,0x7200_0000,0x400_0000,4272) {ok=>{return 0;},err(e)=>{return e;},}
+}}

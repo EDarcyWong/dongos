@@ -1,0 +1,153 @@
+// Untranslated PS/2 Set 2 bytes and negotiated mouse ID 0/3/4 packets.
+// The bridge must separate command replies and keyboard/mouse channels.
+module input.ps2;
+import input.events as ev;
+
+pub struct Keyboard { pub keys: ev.Keys, pub prefix: u64, pub pause: usize }
+pub const EMPTY_KEYBOARD: Keyboard = Keyboard { keys: ev.EMPTY_KEYS, prefix: 0, pause: 0 };
+const PAUSE: [7]u8 = [0x14,0x77,0xe1,0xf0,0x14,0xf0,0x77];
+const BASE: [133]u16 = [
+    0,67,0,63,61,59,60,88,0,68,66,64,62,15,41,0,
+    0,56,42,0,29,16,2,0,0,0,44,31,30,17,3,0,
+    0,46,45,32,18,5,4,0,0,57,47,33,20,19,6,0,
+    0,49,48,35,34,21,7,0,0,0,50,36,22,8,9,0,
+    0,51,37,23,24,11,10,0,0,52,53,38,39,25,12,0,
+    0,0,40,0,26,13,0,0,58,54,28,27,0,43,0,0,
+    0,86,0,0,0,0,14,0,0,79,0,75,71,0,0,0,
+    82,83,80,76,77,72,1,69,87,78,81,74,55,73,70,0,
+    0,0,0,65,99,
+];
+fn extended(byte: u8) u64 {
+    if byte == 0x11 { return 100; } if byte == 0x14 { return 97; }
+    if byte == 0x1f { return 125; } if byte == 0x27 { return 126; } if byte == 0x2f { return 127; }
+    if byte == 0x4a { return 98; } if byte == 0x5a { return 96; }
+    if byte == 0x69 { return 107; } if byte == 0x6b { return 105; } if byte == 0x6c { return 102; }
+    if byte == 0x70 { return 110; } if byte == 0x71 { return 111; } if byte == 0x72 { return 108; }
+    if byte == 0x74 { return 106; } if byte == 0x75 { return 103; } if byte == 0x7a { return 109; }
+    if byte == 0x7c { return 99; } if byte == 0x7d { return 104; } if byte == 0x7e { return 119; }
+    if byte == 0x37 { return 116; } if byte == 0x3f { return 142; } if byte == 0x5e { return 143; }
+    return 0;
+}
+pub unsafe fn reset_keyboard(state: *Keyboard, q: *ev.Queue, reason: u64) !void {
+    unsafe { try ev.validate(q); if state == null { return error.ev.InvalidState; } *state = EMPTY_KEYBOARD; ev.loss(q,reason); }
+    return;
+}
+pub unsafe fn keyboard(state: *Keyboard, q: *ev.Queue, byte: u8) !void {
+    unsafe {
+        try ev.validate(q);
+        if state == null || (*state).prefix > 3 || (*state).pause > 7 { return error.ev.InvalidState; }
+        if byte == 0xaa || byte == 0x00 || byte == 0xff {
+            try reset_keyboard(state,q,ev.DEVICE_RESET); return;
+        }
+        if (*state).pause != 0 {
+            if byte != PAUSE[(*state).pause - 1] {
+                try reset_keyboard(state,q,ev.BAD_SEQUENCE); return;
+            }
+            (*state).pause += 1;
+            if (*state).pause == 8 {
+                (*state).pause = 0;
+                if (*q).count > 62 { try reset_keyboard(state,q,ev.QUEUE_FULL); return; }
+                var event = ev.EMPTY_EVENT;
+                let made = try ev.key(&(*state).keys,119,1,&event);
+                if made { ev.append(q,event.kind,event.code,event.a,event.b); }
+                let released = try ev.key(&(*state).keys,119,0,&event);
+                if released { ev.append(q,event.kind,event.code,event.a,event.b); }
+            }
+            return;
+        }
+        if byte == 0xe1 {
+            if (*state).prefix != 0 { try reset_keyboard(state,q,ev.BAD_SEQUENCE); return; }
+            (*state).pause = 1; return;
+        }
+        if byte == 0xe0 {
+            if (*state).prefix != 0 { try reset_keyboard(state,q,ev.BAD_SEQUENCE); return; }
+            (*state).prefix = 1; return;
+        }
+        if byte == 0xf0 {
+            if (*state).prefix >= 2 { try reset_keyboard(state,q,ev.BAD_SEQUENCE); return; }
+            (*state).prefix |= 2; return;
+        }
+        let prefix = (*state).prefix; (*state).prefix = 0;
+        // Fake E0 shift wrappers for PrintScreen/navigation are not modifiers.
+        if (prefix & 1) != 0 && (byte == 0x12 || byte == 0x59) { return; }
+        var code: u64 = 0;
+        if (prefix & 1) != 0 { code = extended(byte); }
+        else { if (byte as usize) < 133 { code = BASE[byte as usize] as u64; } }
+        if code == 0 { return; }
+        if (*q).count == 64 { try reset_keyboard(state,q,ev.QUEUE_FULL); return; }
+        var event = ev.EMPTY_EVENT; var value: i64 = 1;
+        if (prefix & 2) != 0 { value = 0; }
+        let changed = try ev.key(&(*state).keys,code,value,&event);
+        if changed { ev.append(q,event.kind,event.code,event.a,event.b); }
+    }
+    return;
+}
+
+pub struct Mouse { pub id: u64, pub count: usize, pub bytes: [4]u8, pub buttons: u64 }
+pub const EMPTY_MOUSE: Mouse = Mouse { id: 0, count: 0, bytes: [0; 4], buttons: 0 };
+pub unsafe fn init_mouse(out: *Mouse, id: u64) !void {
+    if id != 0 && id != 3 && id != 4 { return error.ev.InvalidInput; }
+    unsafe { *out = EMPTY_MOUSE; (*out).id = id; }
+    return;
+}
+pub unsafe fn reset_mouse(state: *Mouse, q: *ev.Queue, reason: u64) !void {
+    unsafe {
+        try ev.validate(q);
+        if state == null || ((*state).id != 0 && (*state).id != 3 && (*state).id != 4) { return error.ev.InvalidState; }
+        let id = (*state).id; *state = EMPTY_MOUSE; (*state).id = id; ev.loss(q,reason);
+    }
+    return;
+}
+pub unsafe fn mouse(state: *Mouse, q: *ev.Queue, byte: u8) !void {
+    unsafe {
+        try ev.validate(q);
+        if state == null || ((*state).id != 0 && (*state).id != 3 && (*state).id != 4)
+            || (*state).count > 3 || (*state).buttons > 31 { return error.ev.InvalidState; }
+        if (*state).count == 0 && (byte & 8) == 0 { return; }
+        (*state).bytes[(*state).count] = byte; (*state).count += 1;
+        var length: usize = 4; if (*state).id == 0 { length = 3; }
+        if (*state).count != length { return; }
+        (*state).count = 0;
+        let head = (*state).bytes[0]; let last = (*state).bytes[3];
+        var buttons = (head & 7) as u64;
+        var vertical: i64 = 0; var horizontal: i64 = 0;
+        if (*state).id == 3 { vertical = -(last as i8 as i64); }
+        if (*state).id == 4 {
+            if (last & 0xc0) == 0 {
+                buttons |= ((last as u64) & 0x30) >> 1;
+                vertical = (last & 15) as i64;
+                if vertical >= 8 { vertical -= 16; }
+                vertical = -vertical;
+            } else {
+                if (last & 0xc0) != 0x40 { try reset_mouse(state,q,ev.BAD_SEQUENCE); return; }
+                horizontal = (last & 63) as i64;
+                if horizontal >= 32 { horizontal -= 64; }
+                horizontal = -horizontal;
+                buttons |= (*state).buttons & 24;
+            }
+        }
+        // At most loss/motion + scroll + five button transitions, atomically.
+        if (*q).count > 57 { try reset_mouse(state,q,ev.QUEUE_FULL); return; }
+        if (head & 0xc0) != 0 {
+            ev.loss(q,ev.MOUSE_OVERFLOW); (*state).buttons = 0;
+        } else {
+            var x = (*state).bytes[1] as i64; var y = (*state).bytes[2] as i64;
+            if (head & 16) != 0 { x -= 256; } if (head & 32) != 0 { y -= 256; }
+            y = -y;
+            if x != 0 || y != 0 { ev.append(q,ev.RELATIVE,0,x,y); }
+        }
+        if vertical != 0 || horizontal != 0 { ev.append(q,ev.SCROLL,0,horizontal,vertical); }
+        var i: u64 = 0;
+        while i < 5 {
+            let bit: u64 = 1 << i;
+            if ((buttons ^ (*state).buttons) & bit) != 0 {
+                var code: u64 = 272 + i;
+                // PS/2 bit order is left,right,middle,side,extra (evdev too).
+                ev.append(q,ev.KEY,code,((buttons >> i) & 1) as i64,0);
+            }
+            i += 1;
+        }
+        (*state).buttons = buttons;
+    }
+    return;
+}

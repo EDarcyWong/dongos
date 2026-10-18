@@ -1,0 +1,13 @@
+module p8_power_runtime_probe;
+import firmware.acpi as acpi;
+import firmware.power_runtime as runtime;
+unsafe extern "sysv64" ("pwr_reader") fn reader(context:u64,physical:u64,length:usize)*const u8;
+export("pwr_runtime_sizes") fn sizes(out:*u64)void {
+    unsafe {out[0]=sizeof(runtime.Prepared) as u64;out[1]=sizeof(acpi.Inventory) as u64;}return;
+}
+export("pwr_capture") fn capture(context:u64,value:*const acpi.Inventory,out:*runtime.Prepared)u64 {
+    unsafe {match runtime.capture(reader,context,value,out) {ok=>{return 0;},err(code)=>{return code;},}}
+}
+export("pwr_execute") fn execute(value:*const runtime.Prepared,action:u64)u64 {
+    unsafe {match runtime.execute_q35(value,action) {ok=>{return 0;},err(code)=>{return code;},}}
+}

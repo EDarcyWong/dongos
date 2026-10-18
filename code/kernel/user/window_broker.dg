@@ -1,0 +1,118 @@
+// BSP/IF=0 kernel half of the shared-window contract. The dispatcher supplies
+// authenticated owner/incarnation and current compositor epoch, never user PAs.
+module user.window_broker;
+import lib.window_broker_abi as abi;
+import lib.window_abi as wire;
+import user.memory as memory;
+pub error Invalid=0x0743_0001;
+pub error Stale=0x0743_0002;
+pub error Capacity=0x0743_0003;
+pub error Invariant=0x0743_0004;
+const COUNT:usize=32;
+const MAX_GENERATION:u64=0xff_ffff;
+const CLIENT:u64=0x7400_0000;
+const SERVER:u64=0x7800_0000;
+const APERTURE:u64=0x40_0000;
+pub struct Entry {pub generation:u64,pub live:u64,pub window:u64,pub pages:u64,pub value:abi.Lease}
+pub const EMPTY_ENTRY:Entry=Entry{generation:1,live:0,window:0,pages:0,value:abi.EMPTY_LEASE};
+var ENTRIES:[COUNT]Entry=[EMPTY_ENTRY;COUNT];
+var TOMBSTONES:[64]u64=[0;64];
+var TOMBSTONE_AT:usize=0;
+pub var EPOCH:u64=0;
+pub var USED:u64=0;
+pub var FAILED:bool=false;
+
+pub unsafe fn initialize(epoch:u64)!void {unsafe {
+    if FAILED||epoch==0||epoch>0xffff_ffff||epoch<=EPOCH||USED!=0 {return error.Invalid;}
+    var i:usize=0;while i<COUNT {if ENTRIES[i].live!=0 {return error.Invariant;}i+=1;}
+    i=0;while i<COUNT {ENTRIES[i]=EMPTY_ENTRY;i+=1;}
+    i=0;while i<64 {TOMBSTONES[i]=0;i+=1;}
+    TOMBSTONE_AT=0;EPOCH=epoch;
+}return;}
+unsafe fn owner_slot(owner:u64)!usize {unsafe {
+    let pid=owner>>32;let incarnation=owner&0xffff_ffff;
+    if pid<8||pid>16||pid==14||incarnation==0||incarnation>0x0fff_ffff {return error.Invalid;}
+    return (pid-1) as usize;
+}}
+unsafe fn find(epoch:u64,lease:u64)!usize {unsafe {
+    if FAILED||epoch==0||epoch!=EPOCH||lease>>32!=epoch {return error.Stale;}
+    let slot=lease&255;if slot==0||slot>COUNT as u64 {return error.Stale;}
+    let id=(slot-1) as usize;
+    if (ENTRIES[id].live!=1&&ENTRIES[id].live!=2)||ENTRIES[id].value.lease!=lease {return error.Stale;}
+    return id;
+}}
+pub unsafe fn allocate(owner:u64,epoch:u64,window:u64,width:u64,height:u64,stride:u64,out:*abi.Lease)!void {unsafe {
+    if FAILED||out==null||EPOCH==0||epoch!=EPOCH||window>>32!=epoch
+        ||window&255==0||window&255>16||((window>>8)&MAX_GENERATION)==0 {return error.Invalid;}
+    let source=try owner_slot(owner);var dimensions=wire.EMPTY_LAYOUT;
+    try wire.layout(width,height,stride,&dimensions);
+    let pages=(dimensions.bytes+4095)/4096;let charge=pages*4096;
+    if USED>abi.MAX_TOTAL_BYTES||charge>abi.MAX_TOTAL_BYTES-USED {return error.Capacity;}
+    var existing:u64=0;var available=COUNT;var i:usize=0;
+    while i<COUNT {
+        let item=&ENTRIES[i];
+        if (*item).live!=0&&(*item).window==window {
+            if (*item).value.owner!=owner {return error.Stale;}
+            existing+=(*item).pages*4096;
+        }
+        if available==COUNT&&(*item).live==0&&(*item).generation<MAX_GENERATION {available=i;}
+        i+=1;
+    }
+    if existing>abi.MAX_WINDOW_BYTES||charge>abi.MAX_WINDOW_BYTES-existing||available==COUNT {return error.Capacity;}
+    let client=CLIENT+available as u64*APERTURE;let server=SERVER+available as u64*APERTURE;
+    // Both roots are inactive on the BSP. This API journals fresh RAM before
+    // either publication and rolls back both roots, including unmapped orphans.
+    try memory.allocate_shared(source,3,client,server,pages as usize);
+    let token=(epoch<<32)|(ENTRIES[available].generation<<8)|(available as u64+1);
+    let result=abi.Lease{version:1,lease:token,owner:owner,epoch:epoch,
+        client_address:client,server_address:server,bytes:dimensions.bytes,
+        width:width,height:height,stride:stride};
+    ENTRIES[available].live=1;ENTRIES[available].window=window;
+    ENTRIES[available].pages=pages;ENTRIES[available].value=result;USED+=charge;
+    *out=result;
+}return;}
+unsafe fn revoke_index(id:usize)!void {unsafe {
+    let item=ENTRIES[id];let source=try owner_slot(item.value.owner);
+    // The first withdrawal cannot recycle a page still referenced by the
+    // other root. Budget is released only after both barriers complete.
+    // Orphans retain only the reader alias; their former physical process
+    // slot may already hold an unrelated incarnation. Never touch it again.
+    if item.live==1{
+        let first=memory.unshare_range(source,item.value.client_address,item.pages as usize);
+        match first {ok=>{},err(e)=>{FAILED=true;return error.Invariant;},}
+    }
+    let second=memory.unshare_range(3,item.value.server_address,item.pages as usize);
+    match second {ok=>{},err(e)=>{FAILED=true;return error.Invariant;},}
+    TOMBSTONES[TOMBSTONE_AT]=item.value.lease;TOMBSTONE_AT=(TOMBSTONE_AT+1)%64;
+    USED-=item.pages*4096;ENTRIES[id]=EMPTY_ENTRY;ENTRIES[id].generation=item.generation+1;
+}return;}
+// Idempotence is bounded to the last 64 completed withdrawals in this epoch.
+// Unknown, future and prior-epoch IDs never mean "already revoked".
+pub unsafe fn revoke(epoch:u64,lease:u64)!void {unsafe {
+    if FAILED||epoch==0||epoch!=EPOCH||lease==0||lease>>32!=epoch {return error.Stale;}
+    var i:usize=0;while i<64 {if TOMBSTONES[i]==lease {return;}i+=1;}
+    let slot=try find(epoch,lease);try revoke_index(slot);
+}return;}
+// Called before either process root is destroyed. No user report triggers it.
+pub unsafe fn owner_gone(owner:u64)!void {unsafe {
+    if FAILED {return error.Invariant;}
+    var i:usize=0;while i<COUNT {if ENTRIES[i].live==1&&ENTRIES[i].value.owner==owner {
+        let item=ENTRIES[i];let source=try owner_slot(owner);
+        let first=memory.unshare_range(source,item.value.client_address,item.pages as usize);
+        match first {ok=>{},err(e)=>{FAILED=true;return error.Invariant;},}
+        // Preserve the compositor reader until its own explicit A1 boundary.
+        // USED and this aperture remain charged; only the client has departed.
+        ENTRIES[i].live=2;
+    }i+=1;}
+}return;}
+pub unsafe fn compositor_gone(epoch:u64)!void {unsafe {
+    if FAILED||epoch!=EPOCH {return error.Stale;}
+    var i:usize=0;while i<COUNT {if ENTRIES[i].live!=0 {try revoke_index(i);}i+=1;}
+}return;}
+// Lookup checks caller identity and exact geometry for a server-side COMMIT;
+// a lease ID is never treated as an address supplied by the application.
+pub unsafe fn describe(owner:u64,epoch:u64,window:u64,lease:u64,out:*abi.Lease)!void {unsafe {
+    if out==null {return error.Invalid;}let id=try find(epoch,lease);
+    if ENTRIES[id].live!=1||ENTRIES[id].value.owner!=owner||ENTRIES[id].window!=window {return error.Stale;}
+    *out=ENTRIES[id].value;
+}return;}

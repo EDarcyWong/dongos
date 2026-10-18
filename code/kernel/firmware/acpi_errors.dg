@@ -1,0 +1,12 @@
+module firmware.acpi_errors;
+
+pub error InvalidRange = 0x0301_0001;
+pub error Unreadable = 0x0301_0002;
+pub error BadSignature = 0x0301_0003;
+pub error BadLength = 0x0301_0004;
+pub error BadChecksum = 0x0301_0005;
+pub error Unsupported = 0x0301_0006;
+pub error Duplicate = 0x0301_0007;
+pub error Capacity = 0x0301_0008;
+pub error Malformed = 0x0301_0009;
+pub error MissingRequired = 0x0301_000a;

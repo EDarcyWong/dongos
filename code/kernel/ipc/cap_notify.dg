@@ -1,0 +1,100 @@
+// BSP/IF=0 object policy. The service bridge supplies real tables and peers.
+module ipc.cap_notify;
+import ipc.handles as handles;
+import ipc.core as ipc;
+import user.shared_objects as shared;
+import lib.cap_notify_abi as abi;
+pub const LIMIT:usize=32;
+pub struct Object{pub generation:u64,pub refs:u64,pub notice:ipc.Notification}
+pub const EMPTY_OBJECT:Object=Object{generation:1,refs:0,notice:ipc.EMPTY_NOTIFICATION};
+pub struct Registry{pub objects:[32]Object}
+pub const EMPTY_REGISTRY:Registry=Registry{objects:[EMPTY_OBJECT;32]};
+pub struct Delivery{pub live:u64,pub caller:u64,pub receiver:u64,pub ticket:u64,pub offer:abi.Offer}
+pub const EMPTY_DELIVERY:Delivery=Delivery{live:0,caller:0,receiver:0,ticket:0,offer:abi.EMPTY_OFFER};
+
+pub unsafe fn view(table:*const handles.Table,token:u64,out:*handles.View)!void{unsafe{
+    let slot=token&255;if slot==0||slot>32{return error.handles.InvalidHandle;}
+    let kind=(*table).entries[(slot-1) as usize].kind;
+    try handles.lookup(table,token,kind,0,out);
+}return;}
+unsafe fn object(reg:*Registry,identity:u64)!usize{unsafe{
+    let slot=identity&255;let generation=identity>>8;
+    if slot==0||slot>32||generation==0{return error.handles.InvalidHandle;}
+    let value=(*reg).objects[(slot-1) as usize];
+    if value.generation!=generation||value.refs==0||value.notice.live!=1{return error.handles.InvalidHandle;}
+    return (slot-1) as usize;
+}}
+pub unsafe fn create(reg:*Registry,table:*handles.Table,rights:u64)!u64{unsafe{
+    if rights==0||(rights&~(handles.WAIT|handles.SIGNAL|handles.TRANSFER))!=0
+        ||(rights&(handles.WAIT|handles.SIGNAL))==0{return error.handles.InvalidArgument;}
+    var i:usize=0;while i<32{
+        let old=(*reg).objects[i];
+        if old.refs==0&&old.generation>0&&old.generation<handles.MAX_GENERATION{
+            let identity=(old.generation<<8)|(i as u64+1);
+            let token=try handles.install(table,handles.NOTIFICATION,identity,rights);
+            (*reg).objects[i]=Object{generation:old.generation,refs:1,
+                notice:ipc.Notification{initialized:1,live:1,bits:0}};
+            return token;
+        }i+=1;
+    }
+}return error.handles.NoSpace;}
+pub unsafe fn validate(reg:*Registry,table:*const handles.Table,offer:*const abi.Offer,out:*handles.View)!void{unsafe{
+    if (*offer).version!=1||((*offer).mode!=abi.COPY&&(*offer).mode!=abi.MOVE)||(*offer).rights==0{return error.handles.InvalidArgument;}
+    var value=handles.EMPTY_VIEW;try view(table,(*offer).source,&value);
+    if (value.rights&handles.TRANSFER)==0||((*offer).rights&~value.rights)!=0{return error.handles.Denied;}
+    if value.kind==handles.NOTIFICATION{
+        let index=try object(reg,value.object);
+        if (*offer).mode==abi.COPY&&(*reg).objects[index].refs==0xffff_ffff_ffff_ffff{return error.ipc.Exhausted;}
+    }else if value.kind==handles.SHARED{
+        try shared.check_ref(value.object,(*offer).mode==abi.COPY);
+    }else if value.kind==handles.ENDPOINT{
+        if ((*offer).rights&handles.CALL)==0||((*offer).rights&~(handles.CALL|handles.TRANSFER))!=0{return error.handles.Denied;}
+    }else{return error.handles.Denied;}
+    *out=value;
+}return;}
+pub unsafe fn deliver(reg:*Registry,source:*handles.Table,target:*handles.Table,offer:*const abi.Offer,out:*abi.Received)!void{unsafe{
+    if source==target{return error.handles.InvalidArgument;}
+    var value=handles.EMPTY_VIEW;try validate(reg,source,offer,&value);var index:usize=32;
+    if value.kind==handles.NOTIFICATION{index=try object(reg,value.object);}
+    var token:u64=0;
+    if (*offer).mode==abi.COPY{token=try handles.duplicate(source,target,(*offer).source,(*offer).rights);}
+    else{token=try handles.transfer(source,target,(*offer).source,(*offer).rights);}
+    // No fallible operation follows the table commit. MOVE preserves refcount.
+    if index<32&&(*offer).mode==abi.COPY{(*reg).objects[index].refs+=1;}
+    if value.kind==handles.SHARED&&(*offer).mode==abi.COPY{shared.retain(value.object);}
+    *out=abi.Received{version:1,token:token,kind:value.kind,rights:(*offer).rights};
+}return;}
+pub unsafe fn duplicate(reg:*Registry,table:*handles.Table,token:u64,rights:u64)!u64{unsafe{
+    var value=handles.EMPTY_VIEW;try view(table,token,&value);var index:usize=32;
+    if value.kind==handles.NOTIFICATION{
+        index=try object(reg,value.object);
+        if (*reg).objects[index].refs==0xffff_ffff_ffff_ffff{return error.ipc.Exhausted;}
+    }
+    let dynamic=value.kind==handles.SHARED&&shared.tagged(value.object);
+    if dynamic{try shared.check_ref(value.object,true);}
+    let result=try handles.duplicate(table,table,token,rights);
+    if index<32{(*reg).objects[index].refs+=1;}if dynamic{shared.retain(value.object);}return result;
+}}
+pub unsafe fn close(reg:*Registry,table:*handles.Table,token:u64)!void{unsafe{
+    var value=handles.EMPTY_VIEW;try view(table,token,&value);var index:usize=32;
+    if value.kind==handles.NOTIFICATION{index=try object(reg,value.object);}
+    let dynamic=value.kind==handles.SHARED&&shared.tagged(value.object);
+    if dynamic{try shared.check_ref(value.object,false);}
+    try handles.close(table,token);
+    if dynamic{shared.drop(value.object);}
+    if index<32{
+        (*reg).objects[index].refs-=1;
+        if (*reg).objects[index].refs==0{
+            (*reg).objects[index].notice=ipc.EMPTY_NOTIFICATION;
+            if (*reg).objects[index].generation<handles.MAX_GENERATION{(*reg).objects[index].generation+=1;}
+        }
+    }
+}return;}
+pub unsafe fn signal(reg:*Registry,table:*const handles.Table,token:u64,bits:u64)!void{unsafe{
+    var value=handles.EMPTY_VIEW;try handles.lookup(table,token,handles.NOTIFICATION,handles.SIGNAL,&value);
+    let index=try object(reg,value.object);try ipc.signal(&(*reg).objects[index].notice,bits);
+}return;}
+pub unsafe fn take(reg:*Registry,table:*const handles.Table,token:u64,mask:u64,out:*u64)!void{unsafe{
+    var value=handles.EMPTY_VIEW;try handles.lookup(table,token,handles.NOTIFICATION,handles.WAIT,&value);
+    let index=try object(reg,value.object);try ipc.take_bits(&(*reg).objects[index].notice,mask,out);
+}return;}

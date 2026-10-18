@@ -1,0 +1,123 @@
+// Caller-owned bounded capability table. All mutation requires external IRQ
+// serialization; object creation is privileged policy, never a user syscall.
+module ipc.handles;
+pub const READ: u64 = 1;
+pub const WRITE: u64 = 2;
+pub const TRANSFER: u64 = 4;
+pub const WAIT: u64 = 8;
+pub const SIGNAL: u64 = 16;
+pub const CALL: u64 = 32;
+pub const REPLY: u64 = 64;
+pub const MAP: u64 = 128;
+pub const ENDPOINT: u64 = 1;
+pub const NOTIFICATION: u64 = 2;
+pub const SHARED: u64 = 3;
+pub const CONFIGURATION: u64 = 4;
+pub const DEVICE: u64 = 5;
+pub const DMA: u64 = 6;
+pub const CONSOLE: u64 = 7;
+pub const INTERRUPT: u64 = 8;
+pub const PROCESS_MANAGER:u64=9;
+pub const DEVICE_MANAGER:u64=10;
+pub const MAX_GENERATION: u64 = 0x00ff_ffff_ffff_ffff;
+pub error InvalidArgument = 0x0401_0001;
+pub error InvalidHandle = 0x0401_0002;
+pub error Denied = 0x0401_0003;
+pub error NoSpace = 0x0401_0004;
+pub error AlreadyInitialized = 0x0401_0005;
+pub error NotInitialized = 0x0401_0006;
+pub struct Entry { pub generation: u64, pub kind: u64, pub object: u64, pub rights: u64, pub live: u64 }
+pub struct Table { pub ready: u64, pub used: u64, pub entries: [32]Entry }
+pub struct View { pub kind: u64, pub object: u64, pub rights: u64 }
+pub const EMPTY_ENTRY: Entry = Entry { generation: 1, kind: 0, object: 0, rights: 0, live: 0 };
+pub const EMPTY_TABLE: Table = Table { ready: 0, used: 0, entries: [EMPTY_ENTRY; 32] };
+pub const EMPTY_VIEW: View = View { kind: 0, object: 0, rights: 0 };
+
+fn allowed(kind: u64) u64 {
+    if kind == ENDPOINT { return READ | WRITE | TRANSFER | WAIT | CALL | REPLY; }
+    if kind == NOTIFICATION { return TRANSFER | WAIT | SIGNAL; }
+    if kind == SHARED { return READ | WRITE | TRANSFER | MAP; }
+    if kind == CONFIGURATION { return READ | WRITE; }
+    if kind == DEVICE || kind == DMA { return READ | WRITE | MAP; }
+    if kind == CONSOLE { return READ | WRITE; }
+    if kind == INTERRUPT { return WAIT | SIGNAL; }
+    if kind==PROCESS_MANAGER {return READ|WRITE|WAIT;}
+    if kind==DEVICE_MANAGER {return READ|WRITE;}
+    return 0;
+}
+pub unsafe fn init(table: *Table) !void {
+    unsafe {
+        if (*table).ready != 0 { return error.AlreadyInitialized; }
+        *table = EMPTY_TABLE;
+        (*table).ready = 1;
+    }
+    return;
+}
+unsafe fn index(table: *const Table, handle: u64) !usize {
+    unsafe {
+        if (*table).ready != 1 { return error.NotInitialized; }
+        let slot = handle & 255;
+        let generation = handle >> 8;
+        if slot == 0 || slot > 32 || generation == 0 { return error.InvalidHandle; }
+        let item = (*table).entries[(slot - 1) as usize];
+        if item.live != 1 || item.generation != generation { return error.InvalidHandle; }
+        return (slot - 1) as usize;
+    }
+}
+pub unsafe fn install(table: *Table, kind: u64, object: u64, rights: u64) !u64 {
+    if object == 0 || rights == 0 || (rights & ~allowed(kind)) != 0 { return error.InvalidArgument; }
+    unsafe {
+        if (*table).ready != 1 { return error.NotInitialized; }
+        var slot: usize = 0;
+        while slot < 32 {
+            let item = (*table).entries[slot];
+            if item.live == 0 && item.generation > 0 && item.generation < MAX_GENERATION {
+                (*table).entries[slot] = Entry { generation: item.generation, kind: kind, object: object, rights: rights, live: 1 };
+                (*table).used += 1;
+                return (item.generation << 8) | (slot as u64 + 1);
+            }
+            slot += 1;
+        }
+    }
+    return error.NoSpace;
+}
+pub unsafe fn lookup(table: *const Table, handle: u64, kind: u64, required: u64, out: *View) !void {
+    unsafe {
+        let slot = try index(table, handle);
+        let item = (*table).entries[slot];
+        if kind != item.kind || (required & ~item.rights) != 0 { return error.Denied; }
+        *out = View { kind: item.kind, object: item.object, rights: item.rights };
+    }
+    return;
+}
+pub unsafe fn close(table: *Table, handle: u64) !void {
+    unsafe {
+        let slot = try index(table, handle);
+        let generation = (*table).entries[slot].generation;
+        // A slot reaching MAX is permanently retired; generations never wrap.
+        (*table).entries[slot] = Entry { generation: generation + 1, kind: 0, object: 0, rights: 0, live: 0 };
+        (*table).used -= 1;
+    }
+    return;
+}
+pub unsafe fn duplicate(source: *const Table, target: *Table, handle: u64, rights: u64) !u64 {
+    unsafe {
+        let slot = try index(source, handle);
+        let item = (*source).entries[slot];
+        if rights == 0 || (item.rights & TRANSFER) == 0 || (rights & ~item.rights) != 0 { return error.Denied; }
+        return install(target, item.kind, item.object, rights);
+    }
+}
+pub unsafe fn transfer(source: *Table, target: *Table, handle: u64, rights: u64) !u64 {
+    unsafe {
+        let slot = try index(source, handle);
+        let item = (*source).entries[slot];
+        if rights == 0 || (item.rights & TRANSFER) == 0 || (rights & ~item.rights) != 0 { return error.Denied; }
+        // Install is the only fallible mutation. Failure preserves both tables;
+        // success retains enough source metadata to revoke without another call.
+        let moved = try install(target, item.kind, item.object, rights);
+        (*source).entries[slot] = Entry { generation: item.generation + 1, kind: 0, object: 0, rights: 0, live: 0 };
+        (*source).used -= 1;
+        return moved;
+    }
+}

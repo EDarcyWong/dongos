@@ -1,0 +1,502 @@
+// Real CPL3 compositor. Rasterization targets owned WB RAM; presentation uses
+// an exclusive UC GOP grant. All dimensions come from a read-only descriptor.
+module desktop.service;
+import lib.sys as sys;
+import lib.boot_trace as boot_trace;
+import lib.desktop as api;
+import gfx.geometry as geo;
+import gfx.raster as raster;
+import gfx.atlas as atlas;
+import desktop.render as render;
+import desktop.chrome as chrome;
+import desktop.theme as theme;
+import desktop.windows as windows;
+import desktop.preference_store as store;
+import desktop.client_host as host;
+import desktop.window_server as bridge;
+import lib.window_abi as wire;
+import desktop.preferences as preferences;
+import desktop.layout as layout;
+import desktop.transition as transition;
+import desktop.transform as transform;
+import desktop.occlusion as occlusion;
+import input.events as events;
+var WINDOWS:windows.State=windows.EMPTY_STATE;
+var HANDLES:[4]u64=[0;4];
+var FONT:atlas.Atlas=atlas.Atlas { bytes:"",count:0,pixel_size:0,records:0,bitmap:0,bitmap_size:0,ascent:0,descent:0 };
+pub var STYLE:theme.Theme=theme.DEFAULT;
+pub var STYLE_REVISION:u64=0;
+pub var SETTINGS_DIRTY:bool=false;
+const LIGHT:theme.Theme=theme.Theme { background:0xffe7edf6,surface:0xfff9fbff,text:0xff172c48,muted:0xff465a75,
+    accent:0xff1f65b8,border:0xffb7c8dd,shadow:0x40000000,selection:0xffb2d2f4,danger:0xffae2b36,
+    radius:7,shadow_size:8,scale_q8:256,duration_ms:140 };
+pub var IPC:bridge.Server=bridge.EMPTY;
+pub var CLIENTS:host.State=host.EMPTY;
+pub var CLIENT_ERROR:u64=0;
+pub var CLIENTS_LOGGED:bool=false;
+var ACTIVE_INFO:*const api.Display=null;
+var ACTIVE_DAMAGE:*geo.Damage=null;
+var FRAME_COUNT:u64=0;
+var EVENT_COUNT:u64=0;
+var CACHES_DIRTY:bool=true;
+var BACKGROUND_DIRTY:bool=true;
+var CACHE_MASK:u64=15;
+var FRAME_TIMES:[256]u64=[0;256];
+// A completed ring entry keeps cache latency separate from render/present,
+// and records the exact sampled motion phase used by this published frame.
+pub var FRAME_CACHE_TIMES:[256]u64=[0;256];
+pub var FRAME_COMPOSE_TIMES:[256]u64=[0;256];
+pub var FRAME_PRESENT_TIMES:[256]u64=[0;256];
+pub var FRAME_MOTION_MASKS:[256]u64=[0;256];
+pub var FRAME_STARTED_MASKS:[256]u64=[0;256];
+pub var FRAME_SAMPLE_TSC:[256]u64=[0;256];
+pub var FRAME_STYLE_REVISIONS:[256]u64=[0;256];
+pub var ANIMATION_FRAMES:u64=0;
+pub var ANIMATION_SAMPLES:[64]u64=[0;64];
+pub var FRAME_BUSY:u64=0;
+pub var PRESENTED_ALPHA:[4]u64=[0;4];
+pub var ALPHA:[4]u64=[0;4];
+var ANIMATIONS:[4]theme.Animation=[theme.STILL;4];
+pub var VISUAL_RECTS:[4]geo.Rect=[geo.EMPTY;4];
+pub var PRESENTED_RECTS:[4]geo.Rect=[geo.EMPTY;4];
+pub var PRESENTED_STYLE_REVISION:u64=0;
+pub var TRANSITIONS:[4]transition.Track=[transition.EMPTY;4];
+pub var MOTION_ACTIVE:u64=0;
+pub var MOTION_FRAMES:u64=0;
+var NEXT_ANIMATION_TICK:u64=0;
+var LAST_ANIMATION_TICK:u64=0;
+var FRAME_COMPLETED:[256]u64=[0;256];
+// Only this single-threaded compositor writes the plan; compose never yields
+// or reenters. Keep the bounded 3248-byte scratch off the private user stack.
+var COMPOSITION_PLAN:occlusion.Plan=occlusion.EMPTY_PLAN;
+pub error Invalid=0x0732_0001;
+pub error InvalidFont=0x0732_0002;
+unsafe extern "sysv64" fn svc_present_rows(src:*const u32,dst:*u32,stride:usize,width:usize,height:usize,format:u64)void;
+unsafe extern "sysv64" fn svc_vector_probe()u64;
+unsafe extern "sysv64" fn svc_composite_rows(src:*const u32,dst:*u32,source_stride:usize,destination_stride:usize,width:usize,height:usize)void;
+unsafe extern "sysv64" fn svc_copy_rows(src:*const u32,dst:*u32,source_stride:usize,destination_stride:usize,width:usize,height:usize)void;
+unsafe extern "sysv64" fn svc_ticks()u64;
+fn px(logical:i64)i64 { unsafe { return (logical*STYLE.scale_q8 as i64+128)/256; } }
+fn milliseconds(ticks:u64,hz:u64)u64 { return (ticks/hz)*1000+(ticks%hz)*1000/hz; }
+unsafe fn same_rect(a:*const geo.Rect,b:*const geo.Rect)bool {
+    unsafe { return (*a).left==(*b).left && (*a).top==(*b).top && (*a).right==(*b).right && (*a).bottom==(*b).bottom; }
+}
+// VISUAL/PRESENTED store the body. Texture borders follow the same independent
+// horizontal/vertical ratio; stable geometry is exactly the old cache mapping.
+unsafe fn visual_full(index:usize,body:*const geo.Rect,out:*geo.Rect)void {
+    unsafe {
+        let target=WINDOWS.slots[index].rect;
+        let mx=px(12)*((*body).right-(*body).left)/(target.right-target.left);
+        let my=px(12)*((*body).bottom-(*body).top)/(target.bottom-target.top);
+        *out=geo.Rect { left:(*body).left-mx,top:(*body).top-my,right:(*body).right+mx,bottom:(*body).bottom+my };
+    }return;
+}
+unsafe fn visual_damage(index:usize,body:*const geo.Rect,damage:*geo.Damage)!void {
+    unsafe { var full=geo.EMPTY;visual_full(index,body,&full);try geo.damage_add(damage,&full); }return;
+}
+unsafe fn animate(index:usize,show:bool,info:*const api.Display)!void {
+    unsafe {
+        let target=WINDOWS.slots[index].rect;var small=geo.EMPTY;
+        try transition.zoom(&target,&WINDOWS.screen,&small);
+        var end:i64=0;var endpoint=small;
+        if show { end=256;endpoint=target;if ALPHA[index]==0 { VISUAL_RECTS[index]=small; } }
+        ANIMATIONS[index]=theme.Animation { from:ALPHA[index] as i64,to:end,start_ms:0xffff_ffff_ffff_ffff,duration_ms:STYLE.duration_ms };
+        try transition.begin(&TRANSITIONS[index],&WINDOWS.screen,&VISUAL_RECTS[index],&endpoint,0xffff_ffff_ffff_ffff,STYLE.duration_ms);
+        MOTION_ACTIVE|=1<<index;NEXT_ANIMATION_TICK=0;
+    }return;
+}
+// Presentation moves, not logical hit-testing or cache ownership. Start only
+// after the final-size source cache has completed its rebuild.
+unsafe fn animation_damage(info:*const api.Display,damage:*geo.Damage)!void {
+    unsafe {
+        let ticks=svc_ticks();if ticks<NEXT_ANIMATION_TICK { return; }LAST_ANIMATION_TICK=ticks;
+        NEXT_ANIMATION_TICK=ticks+(*info).tsc_hz/60;
+        let now=milliseconds(ticks,(*info).tsc_hz);var i:usize=0;var changed:bool=false;var moved:bool=false;
+        while i<4 {
+            if ANIMATIONS[i].start_ms==0xffff_ffff_ffff_ffff {
+                if CACHES_DIRTY { i+=1;continue; }
+                ANIMATIONS[i].start_ms=now;TRANSITIONS[i].start_ms=now;
+            }
+            let value=try theme.sample(&ANIMATIONS[i],now);let prior=VISUAL_RECTS[i];var next=geo.EMPTY;
+            let active=try transition.sample(&TRANSITIONS[i],&WINDOWS.screen,now,&next);
+            if active { MOTION_ACTIVE|=1<<i; }else { MOTION_ACTIVE&=~(1<<i); }
+            if value as u64!=ALPHA[i] || !same_rect(&prior,&next) {
+                try visual_damage(i,&prior,damage);try visual_damage(i,&next,damage);
+                if !same_rect(&prior,&next) { moved=true; }
+                ALPHA[i]=value as u64;VISUAL_RECTS[i]=next;changed=true;
+            }i+=1;
+        }
+        if changed { ANIMATION_SAMPLES[(ANIMATION_FRAMES%64) as usize]=ALPHA[2];ANIMATION_FRAMES+=1; }
+        if moved { MOTION_FRAMES+=1; }
+    }return;
+}
+unsafe fn snap_visible_motion(damage:*geo.Damage)!void {
+    unsafe {
+        var i:usize=0;while i<4 {
+            if (MOTION_ACTIVE&(1<<i))!=0 && (WINDOWS.slots[i].flags&windows.VISIBLE)!=0 {
+                let prior=VISUAL_RECTS[i];let target=WINDOWS.slots[i].rect;
+                try visual_damage(i,&prior,damage);try visual_damage(i,&target,damage);
+                VISUAL_RECTS[i]=target;try transition.begin(&TRANSITIONS[i],&WINDOWS.screen,&target,&target,0,0);
+                MOTION_ACTIVE&=~(1<<i);
+            }i+=1;
+        }
+    }return;
+}
+unsafe fn follow_input_geometry(damage:*geo.Damage)!void {
+    unsafe {
+        var i:usize=0;while i<4 {
+            let target=WINDOWS.slots[i].rect;
+            if (MOTION_ACTIVE&(1<<i))==0 && (WINDOWS.slots[i].flags&windows.VISIBLE)!=0 && !same_rect(&VISUAL_RECTS[i],&target) {
+                let prior=VISUAL_RECTS[i];try visual_damage(i,&prior,damage);try visual_damage(i,&target,damage);
+                VISUAL_RECTS[i]=target;try transition.begin(&TRANSITIONS[i],&WINDOWS.screen,&target,&target,0,0);
+            }i+=1;
+        }
+    }return;
+}
+unsafe fn install_font(info:*const api.Display,scale:u64)!void {
+    unsafe {
+        let bytes=sys.svc_call(0x77,(*sys.boot()).console,scale,0,0,0,0);
+        if bytes<48 || bytes>0x80_0000 { return error.Invalid; }
+        var font=FONT;
+        match atlas.open(slice_from_raw_parts((*info).font as *const u8,bytes as usize),&font) {
+            ok=>{},err(code)=>{return error.InvalidFont;},
+        }
+        if font.pixel_size as u64!=scale/16 || (*info).scale_q8!=scale || (*info).font_bytes!=bytes { return error.InvalidFont; }
+        FONT=font;
+    }return;
+}
+unsafe fn apply_style(info:*const api.Display,value:*const theme.Theme,damage:*geo.Damage)!void {
+    unsafe {
+        var validated:[128]u8=[0;128];try preferences.encode(value,1,validated[..]);
+        var next=WINDOWS;let rescaled=(*value).scale_q8!=STYLE.scale_q8;
+        if rescaled {
+            try layout.rescale(&next,STYLE.scale_q8,(*value).scale_q8);
+            try install_font(info,(*value).scale_q8);
+        }
+        STYLE=*value;WINDOWS=next;
+        var i:usize=0;while i<4 {
+            var alpha:u64=0;if (WINDOWS.slots[i].flags&windows.VISIBLE)!=0 { alpha=256; }
+            ALPHA[i]=alpha;let target=WINDOWS.slots[i].rect;
+            if rescaled && alpha!=0 {
+                try transition.begin(&TRANSITIONS[i],&WINDOWS.screen,&VISUAL_RECTS[i],&target,0xffff_ffff_ffff_ffff,STYLE.duration_ms);
+                ANIMATIONS[i]=theme.Animation { from:alpha as i64,to:alpha as i64,start_ms:0xffff_ffff_ffff_ffff,duration_ms:0 };
+                MOTION_ACTIVE|=1<<i;
+            } else {
+                VISUAL_RECTS[i]=target;try transition.begin(&TRANSITIONS[i],&WINDOWS.screen,&target,&target,0,0);
+                ANIMATIONS[i]=theme.Animation { from:alpha as i64,to:alpha as i64,start_ms:0,duration_ms:0 };MOTION_ACTIVE&=~(1<<i);
+            }i+=1;
+        }
+        STYLE_REVISION+=1;CACHES_DIRTY=true;BACKGROUND_DIRTY=true;CACHE_MASK=15;NEXT_ANIMATION_TICK=0;
+        try geo.init_damage(&WINDOWS.screen,damage);try geo.damage_add(damage,&WINDOWS.screen);
+        let logged=sys.log("DONGOS_P7_STYLE_APPLIED\r\n");
+    }return;
+}
+fn next_scale(scale:u64,up:bool)u64 {
+    if up { if scale==256 { return 320; }if scale==320 { return 384; }if scale==384 { return 448; }if scale==448 { return 512; }return 256; }
+    if scale==512 { return 448; }if scale==448 { return 384; }if scale==384 { return 320; }if scale==320 { return 256; }return 512;
+}
+unsafe fn label(dst:*raster.Surface,text:[]const u8,x:i64,y:i64,color:u32,clip:*const geo.Rect)!void {
+    unsafe { try render.text(dst,&FONT,text,x,y,color,clip); }return;
+}
+unsafe fn rectangle(dst:*raster.Surface,left:i64,top:i64,right:i64,bottom:i64,color:u32,clip:*const geo.Rect)!void {
+    unsafe { let r=geo.Rect { left:left,top:top,right:right,bottom:bottom };var visible=geo.EMPTY;
+        if try geo.intersect(&r,clip,&visible) { try raster.fill(dst,&visible,color); }
+    }return;
+}
+unsafe fn draw_window(dst:*raster.Surface,clip:*const geo.Rect,index:usize,rect:*const geo.Rect)!void {unsafe{
+    let r=*rect;let shadow=geo.Rect{left:r.left-px(6),top:r.top-px(4),right:r.right+px(9),bottom:r.bottom+px(10)};
+    try chrome.rounded(dst,&shadow,clip,px(12),STYLE.shadow,true);try chrome.rounded(dst,&r,clip,px(8),STYLE.surface,false);
+    try rectangle(dst,r.left+px(1),r.top+px(32),r.right-px(1),r.top+px(33),STYLE.border,clip);
+    var title:[]const u8="Terminal / 终端";if index==1{title="Files / 文件";}if index==2{title="Editor / 编辑器";}if index==3{title="Settings / 设置";}
+    try label(dst,title,r.left+px(14),r.top+px(22),STYLE.text,clip);try label(dst,"x",r.right-px(25),r.top+px(22),STYLE.muted,clip);
+    let body=wire.Rectangle{x:(r.left+px(12)) as u64,y:(r.top+px(43)) as u64,
+        width:(r.right-r.left-px(24)) as u64,height:(r.bottom-r.top-px(53)) as u64};
+    let status=host.copy(&CLIENTS,index,dst,&body);
+    if status==bridge.BUSY{try label(dst,"Application starting...",r.left+px(16),r.top+px(65),STYLE.muted,clip);}
+    else if status!=0{CLIENT_ERROR=status;return error.Invalid;}
+}return;}
+unsafe fn draw(dst:*raster.Surface,clip:*const geo.Rect,background_only:bool)!void {
+    unsafe {
+        let background=STYLE.background;
+        try raster.fill(dst,clip,background);
+        let panel=geo.Rect { left:0,top:0,right:(*dst).width as i64,bottom:px(52) };
+        try rectangle(dst,0,0,(*dst).width as i64,px(52),STYLE.surface,clip);
+        try label(dst,"D",px(24),px(34),STYLE.accent,clip);try label(dst,"DongOS",px(55),px(33),STYLE.text,clip);
+        try label(dst,"桌面  /  工作区 01",px(180),px(33),STYLE.muted,clip);
+        try label(dst,"4 CPU  /  用户态合成",(*dst).width as i64-px(240),px(33),STYLE.accent,clip);
+        try label(dst,"让每一帧都清晰",px(40),px(103),STYLE.text,clip);
+        try label(dst,"Terminal   Files   Editor   Settings",px(40),px(134),STYLE.muted,clip);
+        var n:usize=0;
+        while !background_only && n<WINDOWS.count {
+            let index=((WINDOWS.order[n]&255)-1) as usize;let slot=WINDOWS.slots[index];let r=slot.rect;
+            try draw_window(dst,clip,index,&r);
+            n+=1;
+        }
+        let bar=geo.Rect { left:px(18),top:(*dst).height as i64-px(63),right:(*dst).width as i64-px(18),bottom:(*dst).height as i64-px(15) };
+        try chrome.rounded(dst,&bar,clip,px(12),STYLE.surface,false);
+        try label(dst,"D  DongOS",px(40),(*dst).height as i64-px(32),STYLE.accent,clip);
+        var task:usize=0;while task<4 {
+            let x=px(195)+task as i64*px(100);
+            if WINDOWS.focus==HANDLES[task] {
+                let active=geo.Rect { left:x,top:(*dst).height as i64-px(56),right:x+px(94),bottom:(*dst).height as i64-px(22) };
+                try chrome.rounded(dst,&active,clip,px(7),STYLE.selection,false);
+            }
+            var text:[]const u8="终端";if task==1 { text="文件"; }if task==2 { text="编辑器"; }if task==3 { text="设置"; }
+            try label(dst,text,x+px(15),(*dst).height as i64-px(32),STYLE.text,clip);task+=1;
+        }
+        // Cursor is composed into the same damage transaction as windows.
+        var y:i64=0;while !background_only && y<px(17) {
+            var x:i64=0;while x<=y/2 {
+                let xx=WINDOWS.pointer_x+x;let yy=WINDOWS.pointer_y+y;
+                if xx>=(*clip).left && xx<(*clip).right && yy>=(*clip).top && yy<(*clip).bottom {
+                    (*dst).pixels[(yy as usize)*(*dst).stride+xx as usize]=STYLE.text;
+                }x+=1;
+            }y+=1;
+        }
+    }return;
+}
+fn ascii(code:u64,modifiers:u64)u8 {
+    let plain="\0\x1b1234567890-=\x08\tqwertyuiop[]\n\0asdfghjkl;'`\0\\zxcvbnm,./\0*\0 ";
+    if code>=plain.len as u64 { return 0; }
+    var c=plain[code as usize];
+    if ((modifiers&3)!=0 || (modifiers&256)!=0) && c>=97 && c<=122 { c-=32; }
+    return c;
+}
+unsafe fn caches(info:*const api.Display)!void {
+    unsafe {
+        var background=raster.Surface { pixels:slice_from_raw_parts((*info).background_cache as *u32,((*info).bytes/4) as usize),
+            width:(*info).width as usize,height:(*info).height as usize,stride:(*info).stride as usize };
+        if BACKGROUND_DIRTY { try draw(&background,&WINDOWS.screen,true);BACKGROUND_DIRTY=false; }
+        var i:usize=0;while i<4 {
+            if (CACHE_MASK&(1<<i))==0 { i+=1;continue; }
+            let r=WINDOWS.slots[i].rect;let width=(r.right-r.left+px(24)) as usize;let height=(r.bottom-r.top+px(24)) as usize;
+            if width*height>524288 { return error.Invalid; }
+            var image=raster.Surface { pixels:slice_from_raw_parts(((*info).window_cache+i as u64*0x20_0000) as *u32,width*height),width:width,height:height,stride:width };
+            let bounds=geo.Rect { left:0,top:0,right:width as i64,bottom:height as i64 };
+            try raster.fill(&image,&bounds,0);
+            let local=geo.Rect { left:px(12),top:px(12),right:width as i64-px(12),bottom:height as i64-px(12) };
+            try draw_window(&image,&bounds,i,&local);i+=1;
+        }
+        CACHE_MASK=0;CACHES_DIRTY=false;
+    }return;
+}
+unsafe fn compose_part(dst:*raster.Surface,info:*const api.Display,clip:*const geo.Rect,first:usize,opaque:bool)!void {
+    unsafe {
+        let offset=(*clip).top as usize*(*dst).stride+(*clip).left as usize;
+        if !opaque { svc_copy_rows(((*info).background_cache as *const u32)+offset,(*dst).pixels.ptr+offset,(*dst).stride,(*dst).stride,
+            ((*clip).right-(*clip).left) as usize,((*clip).bottom-(*clip).top) as usize); }
+        var n=first;while n<WINDOWS.count {
+            let index=((WINDOWS.order[n]&255)-1) as usize;let r=WINDOWS.slots[index].rect;
+            if ALPHA[index]!=0 {
+                let full=geo.Rect { left:r.left-px(12),top:r.top-px(12),right:r.right+px(12),bottom:r.bottom+px(12) };
+                if !same_rect(&VISUAL_RECTS[index],&r) {
+                    let width=(full.right-full.left) as usize;let height=(full.bottom-full.top) as usize;
+                    var source=raster.Surface { pixels:slice_from_raw_parts(((*info).window_cache+index as u64*0x20_0000) as *u32,width*height),width:width,height:height,stride:width };
+                    var visual=geo.EMPTY;visual_full(index,&VISUAL_RECTS[index],&visual);
+                    try transform.scaled(dst,&source,&visual,clip,ALPHA[index]);
+                } else {
+                var visible=geo.EMPTY;if try geo.intersect(&full,clip,&visible) {
+                    let stride=(full.right-full.left) as usize;
+                    let from=(visible.top-full.top) as usize*stride+(visible.left-full.left) as usize;
+                    let to=visible.top as usize*(*dst).stride+visible.left as usize;
+                    if opaque && n==first {
+                        svc_copy_rows((((*info).window_cache+index as u64*0x20_0000) as *const u32)+from,
+                            (*dst).pixels.ptr+to,stride,(*dst).stride,(visible.right-visible.left) as usize,(visible.bottom-visible.top) as usize);
+                    } else {
+                        transform.svc_composite_opacity_rows((((*info).window_cache+index as u64*0x20_0000) as *const u32)+from,
+                            (*dst).pixels.ptr+to,stride,(*dst).stride,(visible.right-visible.left) as usize,(visible.bottom-visible.top) as usize,ALPHA[index]);
+                    }
+                }
+                }
+            }n+=1;
+        }
+    }return;
+}
+unsafe fn compose(dst:*raster.Surface,info:*const api.Display,clip:*const geo.Rect)!void {
+    unsafe {
+        var interiors:[4]geo.Rect=[geo.EMPTY;4];var n:usize=0;
+        while n<WINDOWS.count {
+            let index=((WINDOWS.order[n]&255)-1) as usize;let r=WINDOWS.slots[index].rect;
+            // Only the exact nearest-sampled preimage of the opaque cache
+            // interior may hide lower layers. Rounded edges, shadows and
+            // partial-opacity windows retain source-over throughout motion.
+            if ALPHA[index]==256 && (STYLE.surface>>24)==255 && (STYLE.border>>24)==255 {
+                let width=r.right-r.left+px(24);let height=r.bottom-r.top+px(24);
+                let inset=px(12)+px(8);
+                let inner=geo.Rect { left:inset,top:inset,right:width-inset,bottom:height-inset };
+                var visual=geo.EMPTY;visual_full(index,&VISUAL_RECTS[index],&visual);
+                try occlusion.opaque_interior(width as u64,height as u64,&inner,&visual,&interiors[n]);
+            }n+=1;
+        }
+        try occlusion.partition(clip,&interiors,WINDOWS.count as u64,&COMPOSITION_PLAN);
+        n=0;while n<COMPOSITION_PLAN.count as usize {
+            let first=COMPOSITION_PLAN.parts[n].first;var start:usize=0;if first!=0 { start=(first-1) as usize; }
+            try compose_part(dst,info,&COMPOSITION_PLAN.parts[n].rect,start,first!=0);n+=1;
+        }
+        var y:i64=0;while y<px(17) { var x:i64=0;while x<=y/2 {
+            let xx=WINDOWS.pointer_x+x;let yy=WINDOWS.pointer_y+y;
+            if xx>=(*clip).left && xx<(*clip).right && yy>=(*clip).top && yy<(*clip).bottom {
+                (*dst).pixels[yy as usize*(*dst).stride+xx as usize]=STYLE.text;
+            }x+=1;
+        }y+=1; }
+    }return;
+}
+unsafe fn clients_visible()bool{unsafe{if MOTION_ACTIVE!=0{return false;}var i:usize=0;while i<4{if ALPHA[i]!=256||(WINDOWS.slots[i].flags&windows.VISIBLE)==0{return false;}i+=1;}return true;}}
+unsafe fn client_style(context:u64,light:bool,scale:u64)u64{unsafe{
+    if ACTIVE_INFO==null||ACTIVE_DAMAGE==null{return 0x0732_0001;}var desired=theme.DEFAULT;if light{desired=LIGHT;}desired.scale_q8=scale;
+    match apply_style(ACTIVE_INFO,&desired,ACTIVE_DAMAGE){ok=>{return 0;},err(e)=>{return e;},}
+}}
+unsafe fn synchronize_clients(info:*const api.Display,damage:*geo.Damage)!void{unsafe{
+    // Bound private chrome geometry before proposing a shared reconfiguration.
+    var i:usize=0;while i<4{
+        let slot=&WINDOWS.slots[i];let requested=(*slot).requested;var width=requested.right-requested.left;var height=requested.bottom-requested.top;let border=px(24);
+        var limit=524288/(width+border)-border;
+        if limit<(*slot).min_height{width=524288/((*slot).min_height+border)-border;limit=(*slot).min_height;}
+        if height>limit{height=limit;}
+        if width<(*slot).min_width||height<(*slot).min_height{return error.Invalid;}
+        (*slot).requested.right=(*slot).requested.left+width;(*slot).requested.bottom=(*slot).requested.top+height;i+=1;
+    }
+    var change=host.EMPTY_CHANGE;let status=host.synchronize(&CLIENTS,STYLE.scale_q8,&change);if status!=0{CLIENT_ERROR=status;return error.Invalid;}
+    i=0;while i<4{
+        let bit:u64=1<<i;if (change.removed&bit)!=0{try windows.visible(&WINDOWS,i as u64+1,HANDLES[i],false);try animate(i,false,info);BACKGROUND_DIRTY=true;CACHES_DIRTY=true;try geo.damage_add(damage,&WINDOWS.screen);}
+        if (change.created&bit)!=0{try windows.visible(&WINDOWS,i as u64+1,HANDLES[i],true);try animate(i,true,info);BACKGROUND_DIRTY=true;try geo.damage_add(damage,&WINDOWS.screen);}
+        if (change.dirty&bit)!=0||(change.created&bit)!=0||(change.geometry&bit)!=0{
+            CACHE_MASK|=bit;CACHES_DIRTY=true;try visual_damage(i,&WINDOWS.slots[i].rect,damage);
+        }i+=1;
+    }
+}return;}
+unsafe fn run()!void {
+    unsafe {
+        let boot=sys.boot();let info=(*boot).reserved0 as *const api.Display;
+        if (*boot).process!=4 || (*boot).service_count<5 || (*boot).reserved0!=api.DESCRIPTOR || (*info).version!=3
+            || (*info).width>1920 || (*info).height>1080 || (*info).width<800 || (*info).height<600
+            || ((*info).scale_q8!=256 && (*info).scale_q8!=320 && (*info).scale_q8!=384 && (*info).scale_q8!=448 && (*info).scale_q8!=512)
+            || (*info).tsc_hz==0 || (*info).font_pixels!=(*info).scale_q8/16 || (*info).stride<(*info).width || (*info).bytes!=(*info).stride*(*info).height*4 { return error.Invalid; }
+        try atlas.open(slice_from_raw_parts((*info).font as *const u8,(*info).font_bytes as usize),&FONT);
+        if FONT.pixel_size as u64!=(*info).font_pixels { return error.Invalid; }STYLE.scale_q8=(*info).scale_q8;
+        var restored=STYLE;var found:bool=false;let preference_status=store.load((*boot).filesystem,(*boot).channel_address,&restored,&found);
+        if preference_status==0&&found{
+            if restored.scale_q8!=STYLE.scale_q8{try install_font(info,restored.scale_q8);}STYLE=restored;
+            let loaded=sys.log("DONGOS_P7_SETTINGS_LOADED\r\n");
+        }else if preference_status==0{let defaults=sys.log("DONGOS_P7_SETTINGS_DEFAULT\r\n");}
+        else{let failed=sys.log("DONGOS_P7_SETTINGS_READ_FAILED\r\n");}
+        let vector=svc_vector_probe();
+        if vector==2 { let failed=sys.log("DONGOS_P7_AVX_FAILED\r\n");return error.Invalid; }
+        if vector==1 { let passed=sys.log("DONGOS_P7_AVX_CONTEXT_READY\r\n"); }
+        if vector==0 { let passed=sys.log("DONGOS_P7_SSE2_CONTEXT_READY\r\n"); }
+        try windows.init(&WINDOWS,(*info).width as usize,(*info).height as usize);
+        WINDOWS.pointer_x=(*info).width as i64/2;WINDOWS.pointer_y=(*info).height as i64/2;
+        var i:usize=0;
+        while i<4 {
+            var width=((*info).width as i64-px(110))/2;if width>px(720) { width=px(720); }
+            if i==2 && width>px(640) { width=px(640); }
+            var x:i64=px(40);if (i%2)!=0 { x=(*info).width as i64-px(40)-width; }
+            let y=px(175)+(i/2) as i64*px(300);
+            var h:i64=px(260);if (*info).height<850 { h=px(180); }
+            let limit=300000/(width+px(24))-px(24);if h>limit { h=limit; }
+            let available=(*info).height as i64-px(142);if h>available { h=available; }
+            var yy=y;let last=(*info).height as i64-h-px(90);
+            if i>=2 || yy>last { yy=last; }
+            let r=geo.Rect { left:x,top:yy,right:x+width,bottom:yy+h };
+            try windows.create(&WINDOWS,i as u64+1,i as u64+1,&r,200,120,windows.VISIBLE|windows.RESIZABLE,&HANDLES[i]);try animate(i,true,info);i+=1;
+        }
+        var dst=raster.Surface { pixels:slice_from_raw_parts((*info).back_buffer as *u32,((*info).bytes/4) as usize),
+            width:(*info).width as usize,height:(*info).height as usize,stride:(*info).stride as usize };
+        var damage=geo.EMPTY_DAMAGE;try geo.init_damage(&WINDOWS.screen,&damage);try geo.damage_add(&damage,&WINDOWS.screen);
+        ACTIVE_INFO=info;ACTIVE_DAMAGE=&damage;
+        let incarnation=sys.incarnation((*boot).endpoint);let initialized=bridge.initialize(&IPC,(*boot).endpoint,incarnation,STYLE.scale_q8,0,client_style);
+        if initialized!=0{CLIENT_ERROR=initialized;return error.Invalid;}IPC.light=STYLE.background==LIGHT.background;
+        let hosted=host.initialize(&CLIENTS,&IPC,&WINDOWS,(*boot).configuration,(*boot).reserved1);if hosted!=0{CLIENT_ERROR=hosted;return error.Invalid;}
+        let queue=(*info).input_queue as *events.Queue;
+        var first:bool=true;
+        loop {
+            var handled:usize=0;let pumped=bridge.pump(&IPC,16,&handled);if pumped!=0{CLIENT_ERROR=pumped;return error.Invalid;}
+            try synchronize_clients(info,&damage);let forwarded=host.flush(&CLIENTS);if forwarded!=0&&forwarded!=bridge.BUSY{CLIENT_ERROR=forwarded;return error.Invalid;}
+            var event=events.EMPTY_EVENT;
+            while CLIENTS.pending_count==0&&try events.pop(queue,&event) {
+                let old=geo.Rect { left:WINDOWS.pointer_x,top:WINDOWS.pointer_y,right:WINDOWS.pointer_x+px(10),bottom:WINDOWS.pointer_y+px(18) };
+                let focus=WINDOWS.focus;let previous_mode=WINDOWS.mode;var title_action:bool=false;
+                if (event.kind==events.KEY && event.code==272 && event.a==1)
+                    || ((event.kind==events.RELATIVE || event.kind==events.ABSOLUTE) && WINDOWS.grab!=0) { try snap_visible_motion(&damage); }
+                var target:u64=0;try windows.input_metrics(&WINDOWS,&event,&target,px(32),px(8));EVENT_COUNT+=1;
+                try follow_input_geometry(&damage);
+                if event.kind==events.KEY && event.code==272 && event.a==1 {
+                    if WINDOWS.pointer_y>=dst.height as i64-px(63) && WINDOWS.pointer_x>=px(195) && WINDOWS.pointer_x<px(595) {
+                        let selected=((WINDOWS.pointer_x-px(195))/px(100)) as usize;title_action=true;
+                        let launched=host.launch(&CLIENTS,selected as u64+1);if launched!=0{CLIENT_ERROR=launched;}
+                        try windows.visible(&WINDOWS,selected as u64+1,HANDLES[selected],true);try animate(selected,true,info);
+                        try windows.raise(&WINDOWS,selected as u64+1,HANDLES[selected]);CACHES_DIRTY=true;BACKGROUND_DIRTY=true;
+                        try geo.damage_add(&damage,&WINDOWS.screen);
+                    } else { if target!=0 {
+                        let selected=((target&255)-1) as usize;let r=WINDOWS.slots[selected].rect;
+                        if WINDOWS.pointer_y<r.top+px(32) && WINDOWS.pointer_x>=r.right-px(32) {
+                            title_action=true;let requested=host.close(&CLIENTS,selected);if requested!=0{CLIENT_ERROR=requested;return error.Invalid;}
+                            if WINDOWS.grab==target{try windows.capture(&WINDOWS,selected as u64+1,target,false);}
+                        }
+                    } }
+                }
+                var clipped=geo.EMPTY;if try geo.intersect(&old,&WINDOWS.screen,&clipped) { try geo.damage_add(&damage,&clipped); }
+                let cursor=geo.Rect { left:WINDOWS.pointer_x,top:WINDOWS.pointer_y,right:WINDOWS.pointer_x+px(10),bottom:WINDOWS.pointer_y+px(18) };
+                if try geo.intersect(&cursor,&WINDOWS.screen,&clipped) { try geo.damage_add(&damage,&clipped); }
+                let focused=host.focus(&CLIENTS,focus,WINDOWS.focus);if focused!=0{CLIENT_ERROR=focused;return error.Invalid;}
+                var routed:u64=0;
+                if event.kind==events.KEY&&event.code<272{routed=host.key(&CLIENTS,target,&event);}
+                else if event.kind==events.SCROLL{routed=host.pointer(&CLIENTS,target,STYLE.scale_q8,event.b);}
+                else if event.kind==events.LOST{
+                    var k:usize=0;while k<4{let released=host.pointer(&CLIENTS,HANDLES[k],STYLE.scale_q8,0);if released!=0{routed=released;break;}k+=1;}
+                }else if !title_action&&(WINDOWS.mode==windows.CAPTURE||previous_mode==windows.CAPTURE||WINDOWS.mode==0){
+                    routed=host.pointer(&CLIENTS,target,STYLE.scale_q8,0);
+                }
+                if routed!=0{CLIENT_ERROR=routed;return error.Invalid;}
+                let flushed=host.flush(&CLIENTS);if flushed!=0&&flushed!=bridge.BUSY{CLIENT_ERROR=flushed;return error.Invalid;}
+                if focus!=WINDOWS.focus {
+                    CACHES_DIRTY=true;BACKGROUND_DIRTY=true;
+                    let bar=geo.Rect { left:0,top:dst.height as i64-px(63),right:dst.width as i64,bottom:dst.height as i64 };
+                    try geo.damage_add(&damage,&bar);
+                }
+            }
+            try synchronize_clients(info,&damage);
+            var moved=geo.EMPTY_DAMAGE;try windows.take_damage(&WINDOWS,&moved);
+            i=0;while i<moved.count {
+                let r=moved.rects[i];let expanded=geo.Rect { left:r.left-px(12),top:r.top-px(12),right:r.right+px(12),bottom:r.bottom+px(12) };
+                try geo.damage_add(&damage,&expanded);i+=1;
+            }
+            try animation_damage(info,&damage);
+            if damage.count!=0 {
+                FRAME_BUSY=1;var cache_ticks:u64=0;
+                if CACHES_DIRTY { let started=svc_ticks();try caches(info);cache_ticks=svc_ticks()-started; }
+                let begin=svc_ticks();
+                var compose_ticks:u64=0;var present_ticks:u64=0;
+                i=0;while i<damage.count {
+                    let clip=damage.rects[i];let compose_started=svc_ticks();try compose(&dst,info,&clip);
+                    compose_ticks+=svc_ticks()-compose_started;
+                    let offset=(clip.top as usize)*dst.stride+clip.left as usize;
+                    let present_started=svc_ticks();
+                    svc_present_rows(dst.pixels.ptr+offset,((*info).framebuffer as *u32)+offset,dst.stride,
+                        (clip.right-clip.left) as usize,(clip.bottom-clip.top) as usize,(*info).pixel_format);
+                    present_ticks+=svc_ticks()-present_started;i+=1;
+                }
+                let status=sys.svc_call(0x74,(*boot).console,0,0,0,0,0);if status!=0 { return error.Invalid; }
+                var visible:u64=0;var layer:usize=0;while layer<4{if ALPHA[layer]>0&&(WINDOWS.slots[layer].flags&windows.VISIBLE)!=0{visible|=1<<layer;}layer+=1;}let displayed=host.presented(&CLIENTS,visible);if displayed!=0{CLIENT_ERROR=displayed;return error.Invalid;}
+                let finished=svc_ticks();FRAME_TIMES[(FRAME_COUNT%256) as usize]=finished-begin;
+                FRAME_COMPLETED[(FRAME_COUNT%256) as usize]=finished;
+                let ring=(FRAME_COUNT%256) as usize;var started_mask:u64=0;i=0;
+                while i<4 {
+                    if (MOTION_ACTIVE&(1<<i))!=0 && ANIMATIONS[i].start_ms!=0xffff_ffff_ffff_ffff { started_mask|=1<<i; }i+=1;
+                }
+                FRAME_CACHE_TIMES[ring]=cache_ticks;FRAME_COMPOSE_TIMES[ring]=compose_ticks;FRAME_PRESENT_TIMES[ring]=present_ticks;
+                FRAME_MOTION_MASKS[ring]=MOTION_ACTIVE;FRAME_STARTED_MASKS[ring]=started_mask;
+                FRAME_SAMPLE_TSC[ring]=LAST_ANIMATION_TICK;FRAME_STYLE_REVISIONS[ring]=STYLE_REVISION;
+                PRESENTED_ALPHA=ALPHA;PRESENTED_RECTS=VISUAL_RECTS;PRESENTED_STYLE_REVISION=STYLE_REVISION;FRAME_COUNT+=1;FRAME_BUSY=0;
+                if first {let trace_status=boot_trace.mark(2);let ready=sys.ready_boot(boot);if ready!=0{return error.Invalid;}let log=sys.log("DONGOS_P7_DESKTOP_READY\r\n");first=false;
+                    let launched=host.launch_all(&CLIENTS);if launched!=0{CLIENT_ERROR=launched;return error.Invalid;}}
+                try geo.init_damage(&WINDOWS.screen,&damage);
+            }
+            if !CLIENTS_LOGGED&&clients_visible()&&host.ready(&CLIENTS){let trace_status=boot_trace.mark(3);let logged=sys.log("DONGOS_P7_CLIENTS_READY\r\n");if logged!=0{return error.Invalid;}CLIENTS_LOGGED=true;}
+            sys.svc_fence();let y=sys.yield_now();
+        }
+    }
+}
+export("service_main") fn main()u64 {
+    unsafe { match run() { ok=>{return 0;},err(code)=>{return code;}, } }
+}

@@ -1,0 +1,63 @@
+// Per-application state only. These globals are instantiated in each distinct
+// GUI ELF process; no application model is hosted by the compositor.
+module lib.widget_state;
+import fs.path as path;
+pub const TERMINAL:u64=1;
+pub const FILES:u64=2;
+pub const EDITOR:u64=3;
+pub const SETTINGS:u64=4;
+pub struct Entry {pub length:usize,pub attributes:u64,pub size:u64,pub name:[1020]u8}
+pub const EMPTY_ENTRY:Entry=Entry{length:0,attributes:0,size:0,name:[0;1020]};
+pub struct State {
+    pub role:u64,pub cwd:path.Path,pub target:path.Path,pub input_length:usize,pub input:[8192]u8,
+    pub text_length:usize,pub cursor:usize,pub text:[65536]u8,pub dirty:bool,pub saved:bool,
+    pub focus:u64,pub selected:usize,pub count:usize,pub base:u64,pub generation:u64,pub entries:[64]Entry,
+    pub status:u64,pub light:bool,pub scale:u64,pub preference_sequence:u64,pub preference_slot:u64,
+    pub buttons:u64,pub scroll:usize,pub discard_pending:bool,
+}
+pub const EMPTY:State=State{role:0,cwd:path.EMPTY,target:path.EMPTY,input_length:0,input:[0;8192],text_length:0,cursor:0,text:[0;65536],dirty:false,saved:false,
+    focus:0,selected:0,count:0,base:0,generation:0,entries:[EMPTY_ENTRY;64],status:0,light:false,scale:256,preference_sequence:0,preference_slot:1,buttons:0,scroll:0,discard_pending:false};
+pub error Invalid=0x0743_0001;
+pub error Capacity=0x0743_0002;
+pub error Dirty=0x0743_0003;
+pub unsafe fn utf8(bytes:[]const u8)!void{unsafe{
+    var at:usize=0;while at<bytes.len{let first=bytes[at] as u32;var cp=first;var n:usize=1;var minimum:u32=0;
+        if first>=128{if first>=0xc2&&first<=0xdf{n=2;minimum=128;cp=first&31;}else if first>=0xe0&&first<=0xef{n=3;minimum=2048;cp=first&15;}else if first>=0xf0&&first<=0xf4{n=4;minimum=65536;cp=first&7;}else{return error.Invalid;}}
+        if n>bytes.len-at{return error.Invalid;}var i:usize=1;while i<n{let b=bytes[at+i] as u32;if (b&0xc0)!=0x80{return error.Invalid;}cp=(cp<<6)|(b&63);i+=1;}
+        if cp<minimum||cp>0x10ffff||(cp>=0xd800&&cp<=0xdfff)||(cp<32&&cp!=9&&cp!=10)||cp==127{return error.Invalid;}at+=n;
+    }
+}return;}
+pub unsafe fn initialize(state:*State,role:u64)!void{unsafe{
+    if role<1||role>4{return error.Invalid;}*state=EMPTY;(*state).role=role;
+    (*state).cwd.length=1;(*state).cwd.bytes[0]=47;(*state).cwd.directory_hint=1;
+    (*state).target=(*state).cwd;
+}return;}
+pub unsafe fn scalar(cp:u64,out:*u8)!usize{unsafe{
+    if cp<32||cp==127||cp>0x10ffff||(cp>=0xd800&&cp<=0xdfff){return error.Invalid;}
+    if cp<128{*out=cp as u8;return 1;}
+    if cp<2048{*out=(0xc0|(cp>>6)) as u8;*(out+1)=(0x80|(cp&63)) as u8;return 2;}
+    if cp<65536{*out=(0xe0|(cp>>12)) as u8;*(out+1)=(0x80|((cp>>6)&63)) as u8;*(out+2)=(0x80|(cp&63)) as u8;return 3;}
+    *out=(0xf0|(cp>>18)) as u8;*(out+1)=(0x80|((cp>>12)&63)) as u8;*(out+2)=(0x80|((cp>>6)&63)) as u8;*(out+3)=(0x80|(cp&63)) as u8;return 4;
+}}
+pub unsafe fn insert(state:*State,cp:u64,body:bool)!void{unsafe{
+    var raw:[4]u8=[0;4];var n:usize=0;
+    if body&&(cp==10||cp==9){raw[0]=cp as u8;n=1;}else{n=try scalar(cp,&raw[0]);}
+    if body{
+        if (*state).text_length>65536-n||(*state).cursor>(*state).text_length{return error.Capacity;}
+        var i=(*state).text_length;while i>(*state).cursor{(*state).text[i+n-1]=(*state).text[i-1];i-=1;}
+        i=0;while i<n{(*state).text[(*state).cursor+i]=raw[i];i+=1;}(*state).text_length+=n;(*state).cursor+=n;(*state).dirty=true;(*state).saved=false;
+    }else{
+        if (*state).input_length>8192-n{return error.Capacity;}var i:usize=0;while i<n{(*state).input[(*state).input_length+i]=raw[i];i+=1;}(*state).input_length+=n;
+    }
+}return;}
+pub unsafe fn backspace(state:*State,body:bool)void{unsafe{
+    if body{
+        if (*state).cursor==0{return;}var at=(*state).cursor-1;while at>0&&((*state).text[at]&0xc0)==0x80{at-=1;}
+        let removed=(*state).cursor-at;var i=at;while i+removed<(*state).text_length{(*state).text[i]=(*state).text[i+removed];i+=1;}
+        (*state).text_length-=removed;(*state).cursor=at;(*state).dirty=true;(*state).saved=false;
+    }else{if (*state).input_length==0{return;}(*state).input_length-=1;while (*state).input_length>0&&((*state).input[(*state).input_length]&0xc0)==0x80{(*state).input_length-=1;}}
+}return;}
+pub unsafe fn move(state:*State,right:bool)void{unsafe{
+    if right{if (*state).cursor<(*state).text_length{(*state).cursor+=1;while (*state).cursor<(*state).text_length&&((*state).text[(*state).cursor]&0xc0)==0x80{(*state).cursor+=1;}}}
+    else{if (*state).cursor>0{(*state).cursor-=1;while (*state).cursor>0&&((*state).text[(*state).cursor]&0xc0)==0x80{(*state).cursor-=1;}}}
+}return;}

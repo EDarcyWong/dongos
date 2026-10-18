@@ -1,0 +1,98 @@
+// BSP-local data mapping policy and readbacks for the owned scratch window.
+module boot.live_memory;
+import boot.memory_policy as policy;
+
+import boot.memory_startup as startup;
+import boot.preflight as preflight;
+import mm.paging as paging;
+import mm.active_paging as active;
+
+pub const WINDOW: u64 = 0xffff_a000_0000_1000;
+pub error InvalidMutation = 0x020b_0001;
+pub struct Report {
+    pub root: u64, pub virtual: u64, pub physical_a: u64, pub physical_b: u64,
+    pub read_a: u64, pub read_b: u64, pub write_value: u64, pub reuse_value: u64,
+    pub tables_before: u64, pub tables_peak: u64, pub tables_after: u64,
+    pub invlpg_count: u64, pub reload_count: u64, pub retired_tables: u64,
+    pub first_branch: u64, pub reused_branch: u64, pub cr3_after: u64, pub steps: u64,
+}
+
+var CONTEXT: active.Context = active.EMPTY_CONTEXT;
+var ROOT: u64 = 0;
+var FRAME_A: u64 = 0;
+var FRAME_B: u64 = 0;
+var BASE_TABLES: u64 = 0;
+
+unsafe extern "sysv64" ("memory_live_flush") fn flush(kind: u64, virtual: u64) void;
+
+// Caller supplies actual fresh controls and the two consecutive, page-aligned
+// BSS scratch frames it owns. They retain WB/RW/NX kernel aliases; live views
+// are always NX, so there is no writable/executable physical alias.
+pub unsafe fn init(state: *const preflight.State, a: u64, b: u64) !void {
+    unsafe {
+        if a == 0 || (a & 4095) != 0 || a > 0x1_0000_0000 - 8192 || b != a + 4096 {
+            return error.InvalidMutation;
+        }
+        let space = startup.space_pointer();
+        if space == null { return error.InvalidMutation; }
+        let root = try paging.root_physical(space);
+        let used = try paging.used_tables(space);
+        try active.bind(&CONTEXT,space,state,WINDOW,1,a,2,flush);
+        ROOT = root;
+        FRAME_A = a;
+        FRAME_B = b;
+        BASE_TABLES = used as u64;
+    }
+    return;
+}
+
+pub unsafe fn map(state: *const preflight.State, virtual: u64, physical: u64, flags: u64) !void {
+    unsafe { return active.map(&CONTEXT,state,virtual,physical,flags); }
+}
+pub unsafe fn protect(state: *const preflight.State, virtual: u64, flags: u64) !void {
+    unsafe { return active.protect(&CONTEXT,state,virtual,flags); }
+}
+pub unsafe fn replace(state: *const preflight.State, virtual: u64, physical: u64, flags: u64) !void {
+    unsafe { return active.replace(&CONTEXT,state,virtual,physical,flags); }
+}
+pub unsafe fn unmap(state: *const preflight.State, virtual: u64) !void {
+    unsafe { return active.unmap(&CONTEXT,state,virtual); }
+}
+pub unsafe fn counts(out: *active.Stats) !void {
+    unsafe { return active.stats(&CONTEXT,out); }
+}
+pub unsafe fn used(out: *u64) !void {
+    unsafe { *out = (try paging.used_tables(startup.space_pointer())) as u64; }
+    return;
+}
+
+// Called only after final window removal and active raw allow-list audit.
+pub unsafe fn verify(report: *const Report) !void {
+    unsafe {
+        let r = *report;
+        var stats = active.Stats { invlpg: 0, full_flush: 0, retired_tables: 0 };
+        try active.stats(&CONTEXT,&stats);
+        if ROOT == 0 || r.root != ROOT || r.cr3_after != ROOT || r.virtual != WINDOW
+            || r.physical_a != FRAME_A || r.physical_b != FRAME_B
+            || r.read_a != 0x1122_3344_5566_7788 || r.read_b != 0x8877_6655_4433_2211
+            || r.write_value != 0x55aa_33cc_77ee_9900 || r.reuse_value != r.read_a
+            || r.tables_before != BASE_TABLES || r.tables_peak != BASE_TABLES + 3
+            || r.tables_after != BASE_TABLES || r.invlpg_count != 5 || r.reload_count != 2
+            || r.retired_tables != 6 || r.steps != 1023 {
+            return error.InvalidMutation;
+        }
+        if r.invlpg_count != stats.invlpg || r.reload_count != stats.full_flush
+            || r.retired_tables != stats.retired_tables || r.first_branch <= ROOT
+            || r.first_branch >= ROOT + policy.POOL_BYTES || (r.first_branch & 4095) != 0
+            || r.reused_branch != r.first_branch {
+            return error.InvalidMutation;
+        }
+        var mapping = paging.Mapping { physical: 0, flags: 0 };
+        match paging.query(startup.space_pointer(),WINDOW,&mapping) {
+            ok => { return error.InvalidMutation; },
+            // Error payloads are u64; NotMapped's public numeric ABI.
+            err(code) => { if code != 0x0203_0002 { return error.InvalidMutation; } },
+        }
+    }
+    return;
+}

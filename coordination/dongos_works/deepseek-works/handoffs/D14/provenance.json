@@ -1,0 +1,34 @@
+{
+  "from_task": "claude:C16",
+  "to_task": "deepseek:D14",
+  "candidate": "c1d58703304046b88f48074c205cc5ba",
+  "fingerprint": {
+    "claude-works/src/bootstrap/rel32_patch.dg": "956f021bb6d81e3ff95814c23f20931b31f138e9ff0cad2d2b8c91fbe547b501",
+    "claude-works/src/bootstrap/rel32_patch.md": "60ee933b3b3239eef68016be8c2f703a0e1f196a81e6e5fcf4641f7759cd7b50",
+    "claude-works/tests/test_rel32_patch.py": "54028f43360f012f80460ebbccc49081852e6317ba5d720bec90cdb3f899d46b",
+    "claude-works/deliveries/C16.md": "cc318481618c1a8d8ea780a36be73603a9a65efc2edc9c9a638e589590ec138e"
+  },
+  "copies": [
+    {
+      "source": "claude-works/src/bootstrap/rel32_patch.dg",
+      "source_sha256": "956f021bb6d81e3ff95814c23f20931b31f138e9ff0cad2d2b8c91fbe547b501",
+      "target": "deepseek-works/src/bootstrap/rel32_patch.dg",
+      "target_sha256": "956f021bb6d81e3ff95814c23f20931b31f138e9ff0cad2d2b8c91fbe547b501"
+    },
+    {
+      "source": "claude-works/src/bootstrap/rel32_patch.md",
+      "source_sha256": "60ee933b3b3239eef68016be8c2f703a0e1f196a81e6e5fcf4641f7759cd7b50",
+      "target": "deepseek-works/src/bootstrap/rel32_patch.md",
+      "target_sha256": "60ee933b3b3239eef68016be8c2f703a0e1f196a81e6e5fcf4641f7759cd7b50"
+    },
+    {
+      "source": "claude-works/tests/test_rel32_patch.py",
+      "source_sha256": "54028f43360f012f80460ebbccc49081852e6317ba5d720bec90cdb3f899d46b",
+      "target": "deepseek-works/tests/test_rel32_patch.py",
+      "target_sha256": "7755888ef2fb6642b25f7e617d2265904f0ed0ac4f5dbd0e32cf77b5522548bd"
+    }
+  ],
+  "prior_verification": null,
+  "repairs": "原C16生产源码未发现算法缺陷；原测试case(b'\\xa5'*16,[(4,0)],status=INVALID)期望错误，合法位移为0-(4+4)=-8。只将该既有案例修为OK，验证[4:8]恰为f8 ff ff ff且其它字节不变，保留全部原案例和三类负控，不通过删除/换无效输入绕过。原3项测试必须零skip通过。原R1及Codex私有修正57个边界案例两模式证据见claude-works/reviews/2026-10-18-C16-R1.md。",
+  "transfer_is_not_delivery": true
+}

@@ -1,0 +1,159 @@
+// Serial USB mass-storage Bulk-Only Transport. LUN0; no UAS or command queue.
+module usb.bot;
+import usb.transport as io;
+import usb.xhci_trb as wire;
+import usb.xhci_ring as ring;
+pub error Invalid=0x0816_0001;
+pub error Busy=0x0816_0002;
+pub error Faulted=0x0816_0003;
+pub error Protocol=0x0816_0004;
+pub error Short=0x0816_0005;
+pub error CommandFailed=0x0816_0006;
+pub error Phase=0x0816_0007;
+pub error Unsupported=0x0816_0008;
+pub error Exhausted=0x0816_0009;
+pub struct Setup {pub region:wire.Region,pub slot:u64,pub interface:u64,pub in_address:u64,pub out_address:u64,pub ep0:*ring.Producer,pub input:*ring.Producer,pub output:*ring.Producer,pub scratch:io.Buffer,pub hz:u64,pub timeout_ms:u64}
+pub struct State {pub held:u64,pub ready:u64,pub fault:u64,pub busy:u64,pub recoverable:u64,pub tag:u64,pub blocks:u64,pub block_bytes:u64,pub last_tsc:u64,pub actual:u64,pub residue:u64,pub status:u64,pub ops:*const io.Ops,pub context:u64,pub setup:Setup}
+unsafe fn deadline(s:*State)!u64 {unsafe {return io.deadline((*s).ops,(*s).context,(*s).setup.hz,(*s).setup.timeout_ms,&(*s).last_tsc);}}
+unsafe fn part(s:*State,offset:u64,bytes:u64,out:*io.Buffer)void {unsafe {*out=io.Buffer {physical:(*s).setup.scratch.physical+offset,pointer:(*s).setup.scratch.pointer+offset as usize,bytes:bytes};}return;}
+fn le32(p:[]const u8,offset:usize)u64 {return p[offset] as u64|((p[offset+1] as u64)<<8)|((p[offset+2] as u64)<<16)|((p[offset+3] as u64)<<24);}
+fn be32(p:[]const u8,offset:usize)u64 {return ((p[offset] as u64)<<24)|((p[offset+1] as u64)<<16)|((p[offset+2] as u64)<<8)|p[offset+3] as u64;}
+unsafe fn put_be32(p:*u8,value:u64)void {unsafe {*p=(value>>24) as u8;*(p+1)=(value>>16) as u8;*(p+2)=(value>>8) as u8;*(p+3)=value as u8;}return;}
+unsafe fn bulk(s:*State,address:u64,b:*const io.Buffer,out:*u64)!void {unsafe {
+    var producer=(*s).setup.output;if address&128!=0 {producer=(*s).setup.input;}
+    let end=try deadline(s);try io.bulk((*s).ops,(*s).context,(*s).setup.slot,address,producer,&(*s).setup.region,b,end,out);
+}return;}
+unsafe fn control(s:*State,request_type:u64,request:u64,index:u64,b:*const io.Buffer,out:*u64)!void {unsafe {
+    let r=wire.Control {request_type:request_type,request:request,value:0,index:index,bytes:(*b).bytes,data:(*b).physical};let end=try deadline(s);
+    try io.control((*s).ops,(*s).context,(*s).setup.slot,(*s).setup.ep0,&(*s).setup.region,&r,b,end,out);
+}return;}
+unsafe fn mark(s:*State,code:u64)void {unsafe {
+    if code==0x0816_0005||code==0x0816_0006 {return;}
+    (*s).fault=1;(*s).ready=0;(*s).recoverable=1;
+    if code==0x0813_0001||code==0x0813_0003||code==0x0813_0004||code==0x0813_0005||code==0x0813_0007||code==0x0816_0009 {(*s).recoverable=0;}
+}return;}
+unsafe fn transaction(s:*State,cdb:*const u8,cdb_bytes:usize,inward:bool,data:*const io.Buffer)!void {unsafe {
+    if cdb==null||cdb_bytes==0||cdb_bytes>16||data==null {return error.Invalid;}
+    if (*s).tag>=0xffff_ffff {return error.Exhausted;}(*s).tag+=1;(*s).actual=0;(*s).residue=0;(*s).status=0;
+    var cbw=io.EMPTY;part(s,0,31,&cbw);var i:usize=0;while i<31 {*(cbw.pointer+i)=0;i+=1;}
+    write_unaligned(cbw.pointer as *u32,0x4342_5355);write_unaligned((cbw.pointer+4) as *u32,(*s).tag as u32);
+    write_unaligned((cbw.pointer+8) as *u32,(*data).bytes as u32);if inward {*(cbw.pointer+12)=128;}
+    *(cbw.pointer+14)=cdb_bytes as u8;i=0;while i<cdb_bytes {*(cbw.pointer+15+i)=*(cdb+i);i+=1;}
+    try io.fence((*s).ops,(*s).context);var actual:u64=0;try bulk(s,(*s).setup.out_address,&cbw,&actual);if actual!=31 {return error.Protocol;}
+    if (*data).bytes!=0 {var address=(*s).setup.out_address;if inward {address=(*s).setup.in_address;}
+        try bulk(s,address,data,&actual);(*s).actual=actual;}
+    var csw=io.EMPTY;part(s,64,13,&csw);try bulk(s,(*s).setup.in_address,&csw,&actual);if actual!=13 {return error.Protocol;}
+    try io.fence((*s).ops,(*s).context);let bytes=slice_from_raw_parts(csw.pointer,13);let signature=le32(bytes,0);let tag=le32(bytes,4);let residue=le32(bytes,8);let status=bytes[12] as u64;
+    (*s).residue=residue;(*s).status=status;
+    if signature!=0x5342_5355||tag!=(*s).tag||status>2||residue>(*data).bytes {return error.Protocol;}
+    if status==2 {return error.Phase;}
+    // Residue counts processed/relevant bytes, not USB bus bytes. Padding
+    // and partially processed DATA-OUT can make actual larger than relevant.
+    if (*s).actual>(*data).bytes||(*data).bytes-residue>(*s).actual {return error.Protocol;}
+    if status==1 {return error.CommandFailed;}
+    if residue!=0||(*s).actual!=(*data).bytes {return error.Short;}
+}return;}
+unsafe fn capacity_inner(s:*State)!void {unsafe {
+    var cdb:[16]u8=[0;16];cdb[0]=0x25;var data=io.EMPTY;part(s,128,8,&data);try transaction(s,&cdb[0],10,true,&data);
+    let bytes=slice_from_raw_parts(data.pointer,8);let last=be32(bytes,0);let block=be32(bytes,4);
+    if last==0xffff_ffff {return error.Unsupported;}
+    if block<512||block>4096||(block&(block-1))!=0 {return error.Unsupported;}
+    (*s).blocks=last+1;(*s).block_bytes=block;(*s).ready=1;
+}return;}
+// Discovery only: an exact completed CommandFailed CSW permits a new SCSI
+// REQUEST SENSE. It does not imply a USB phase error or authorize data retry.
+unsafe fn startup_attention(s:*State)!void {unsafe {
+    var cdb:[16]u8=[0;16];cdb[0]=3;cdb[4]=18;
+    var data=io.EMPTY;part(s,128,18,&data);var i:usize=0;
+    while i<18 {*(data.pointer+i)=0;i+=1;}
+    try transaction(s,&cdb[0],6,true,&data);
+    let bytes=slice_from_raw_parts(data.pointer,18);
+    // Current fixed format, complete 18-byte record. Deferred/descriptor or
+    // truncated sense is outside this deliberately small startup contract.
+    if (bytes[0]&127)!=0x70||bytes[7]!=10 {return error.Protocol;}
+    // Only power/device reset or SCSI bus reset UA can reissue discovery.
+    // NoMedium, media/capacity change, errors and all other qualifiers fail.
+    if bytes[2]!=6||bytes[12]!=0x29||(bytes[13]!=0&&bytes[13]!=2) {return error.CommandFailed;}
+}return;}
+unsafe fn initial_capacity(s:*State)!void {unsafe {
+    var retries:usize=0;
+    loop {
+        let result=capacity_inner(s);
+        match result {ok=>{return;},err(e)=>{
+            if e!=0x0816_0006||(*s).status!=1||retries==2 {return result;}
+            try startup_attention(s);retries+=1;
+        },}
+    }
+}}
+unsafe fn inner(s:*State)!void {unsafe {
+    var lun=io.EMPTY;part(s,128,1,&lun);var actual:u64=0;
+    let result=control(s,0xa1,0xfe,(*s).setup.interface,&lun,&actual);
+    match result {ok=>{if actual!=1||*lun.pointer>15 {return error.Protocol;}},err(e)=>{
+        if e!=0x0813_0002 {return result;}
+        // GET_MAX_LUN may STALL for a single-LUN function. Restore the xHCI
+        // EP0 after its completed STALL before adopting the LUN0 fallback.
+        let end=try deadline(s);try io.status((*(*s).ops).recover_endpoint((*s).context,(*s).setup.slot,0,(*s).setup.ep0,end));
+        try check_ring(&(*s).setup.region,(*s).setup.ep0,(*s).setup.slot,1);
+    },}
+    try initial_capacity(s);
+}return;}
+unsafe fn check_ring(region:*const wire.Region,r:*const ring.Producer,slot:u64,id:u64)!void {unsafe {
+    if r==null||(*r).ready!=1||(*r).held!=1||(*r).fault!=0||(*r).pending!=0||(*r).slot!=slot||(*r).endpoint!=id||(*r).kind!=ring.TRANSFER||(*r).entries<16||(*r).entries>256||(*r).pointer==null {return error.Invalid;}
+    match wire.span(region,(*r).physical,(*r).entries*16,64) {ok=>{},err(e)=>{return error.Invalid;},}
+}return;}
+unsafe fn disjoint(scratch:*const io.Buffer,r:*const ring.Producer)!void {unsafe {
+    let bytes=(*r).entries*16;let a=(*scratch).physical;let b=(*r).physical;
+    let av=(*scratch).pointer as u64;let bv=(*r).pointer as u64;
+    if bv>0xffff_ffff_ffff_ffff-bytes {return error.Invalid;}
+    if (a<b+bytes&&b<a+(*scratch).bytes)||(av<bv+bytes&&bv<av+(*scratch).bytes) {return error.Invalid;}
+}return;}
+pub unsafe fn initialize(s:*State,ops:*const io.Ops,context:u64,input:*const Setup)!void {unsafe {
+    if s==null||ops==null||input==null||(*s).held!=0||(*s).busy!=0 {return error.Invalid;}let setup=*input;
+    if setup.slot==0||setup.slot>255||setup.interface>255||setup.in_address<129||setup.in_address>143||setup.out_address==0||setup.out_address>15
+        ||setup.scratch.bytes!=512||setup.hz<1000000||setup.hz>16000000000||setup.timeout_ms==0||setup.timeout_ms>5000 {return error.Invalid;}
+    try io.span(&setup.region,&setup.scratch,false);try check_ring(&setup.region,setup.ep0,setup.slot,1);
+    try check_ring(&setup.region,setup.input,setup.slot,(setup.in_address&15)*2+1);try check_ring(&setup.region,setup.output,setup.slot,setup.out_address*2);
+    try disjoint(&setup.scratch,setup.ep0);try disjoint(&setup.scratch,setup.input);try disjoint(&setup.scratch,setup.output);
+    (*s).held=1;(*s).ready=0;(*s).fault=0;(*s).busy=1;(*s).recoverable=0;(*s).tag=0;(*s).blocks=0;(*s).block_bytes=0;(*s).last_tsc=0;(*s).ops=ops;(*s).context=context;(*s).setup=setup;
+    let result=inner(s);(*s).busy=0;match result {ok=>{return;},err(e)=>{mark(s,e);if (*s).fault==0 {(*s).fault=1;(*s).recoverable=1;}return result;},}
+}}
+unsafe fn available(s:*State,capacity:bool)!void {unsafe {
+    if s==null||(*s).held!=1 {return error.Invalid;}if (*s).busy!=0 {return error.Busy;}if (*s).fault!=0 {return error.Faulted;}
+    if !capacity&&(*s).ready!=1 {return error.Invalid;}
+}return;}
+pub unsafe fn capacity(s:*State)!void {unsafe {
+    try available(s,true);(*s).busy=1;let result=capacity_inner(s);(*s).busy=0;match result {ok=>{return;},err(e)=>{mark(s,e);return result;},}
+}}
+unsafe fn data_span(s:*State,b:*const io.Buffer)!void {unsafe {
+    try io.span(&(*s).setup.region,b,false);try disjoint(b,(*s).setup.ep0);try disjoint(b,(*s).setup.input);try disjoint(b,(*s).setup.output);
+    let a=(*b).physical;let c=(*s).setup.scratch.physical;let av=(*b).pointer as u64;let cv=(*s).setup.scratch.pointer as u64;
+    if (a<c+512&&c<a+(*b).bytes)||(av<cv+512&&cv<av+(*b).bytes) {return error.Invalid;}
+}return;}
+unsafe fn rw_inner(s:*State,lba:u64,count:u64,b:*const io.Buffer,inward:bool)!void {unsafe {
+    var cdb:[16]u8=[0;16];cdb[0]=0x2a;if inward {cdb[0]=0x28;}put_be32(&cdb[2],lba);cdb[7]=(count>>8) as u8;cdb[8]=count as u8;
+    try transaction(s,&cdb[0],10,inward,b);
+}return;}
+pub unsafe fn read_write(s:*State,lba:u64,count:u64,b:*const io.Buffer,inward:bool)!void {unsafe {
+    try available(s,false);if b==null||count==0||count>8||lba>0xffff_ffff||lba>=(*s).blocks||count>(*s).blocks-lba||(*b).bytes!=count*(*s).block_bytes {return error.Invalid;}
+    try data_span(s,b);(*s).busy=1;let result=rw_inner(s,lba,count,b,inward);(*s).busy=0;match result {ok=>{return;},err(e)=>{mark(s,e);return result;},}
+}}
+pub unsafe fn synchronize(s:*State)!void {unsafe {
+    try available(s,false);var cdb:[16]u8=[0;16];cdb[0]=0x35;let data=io.EMPTY;(*s).busy=1;
+    let result=transaction(s,&cdb[0],10,false,&data);(*s).busy=0;match result {ok=>{return;},err(e)=>{mark(s,e);return result;},}
+}}
+unsafe fn recover_inner(s:*State)!void {unsafe {
+    let empty=io.EMPTY;var actual:u64=0;try control(s,0x21,0xff,(*s).setup.interface,&empty,&actual);
+    if actual!=0 {return error.Protocol;}try control(s,2,1,(*s).setup.in_address,&empty,&actual);if actual!=0 {return error.Protocol;}
+    let in_end=try deadline(s);try io.status((*(*s).ops).recover_endpoint((*s).context,(*s).setup.slot,(*s).setup.in_address,(*s).setup.input,in_end));
+    try control(s,2,1,(*s).setup.out_address,&empty,&actual);if actual!=0 {return error.Protocol;}
+    let out_end=try deadline(s);try io.status((*(*s).ops).recover_endpoint((*s).context,(*s).setup.slot,(*s).setup.out_address,(*s).setup.output,out_end));
+    // Callback confirms controller ResetEndpoint/SetTRDequeue, not just a USB
+    // CLEAR_FEATURE response. Timeout requires outer controller isolation.
+    try check_ring(&(*s).setup.region,(*s).setup.input,(*s).setup.slot,((*s).setup.in_address&15)*2+1);
+    try check_ring(&(*s).setup.region,(*s).setup.output,(*s).setup.slot,(*s).setup.out_address*2);
+    (*s).fault=0;(*s).recoverable=0;if (*s).blocks!=0 {(*s).ready=1;}
+}return;}
+pub unsafe fn recover(s:*State)!void {unsafe {
+    if s==null||(*s).held!=1||(*s).fault!=1||(*s).recoverable!=1 {return error.Faulted;}if (*s).busy!=0 {return error.Busy;}
+    (*s).busy=1;let result=recover_inner(s);(*s).busy=0;match result {ok=>{return;},err(e)=>{mark(s,e);return result;},}
+}}

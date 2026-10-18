@@ -1,0 +1,63 @@
+// Emit fixed-register 64-bit divide/remainder kernel text.
+// Caller must already gate divide-by-zero and signed i64min/-1.
+// No external deps. INVALID precedes CAPACITY.
+module bootstrap.nasm_integer_divide;
+pub const OK:u64=0;pub const INVALID:u64=1;pub const CAPACITY:u64=2;
+const MAX:u64=0xffff_ffff_ffff_ffff;
+fn span(p:u64,n:u64)bool{return n==0||(p!=0&&n<=MAX-p);}
+fn overlap(a:u64,n:u64,b:u64,m:u64)bool{return n!=0&&m!=0&&a<b+m&&b<a+n;}
+fn need(signed:bool,remainder:bool)usize{
+ // setup26 + (cqo/idiv13 | xor/div21) + optional rem13
+ var n:usize=26;
+ if signed{n+=13;}else{n+=21;}
+ if remainder{n+=13;}
+ return n;
+}
+fn write_setup(out:[]u8,at:usize)usize{
+ // "mov rax, rdi\n"
+ out[at]=109;out[at+1]=111;out[at+2]=118;out[at+3]=32;
+ out[at+4]=114;out[at+5]=97;out[at+6]=120;out[at+7]=44;out[at+8]=32;
+ out[at+9]=114;out[at+10]=100;out[at+11]=105;out[at+12]=10;
+ // "mov rcx, rsi\n"
+ out[at+13]=109;out[at+14]=111;out[at+15]=118;out[at+16]=32;
+ out[at+17]=114;out[at+18]=99;out[at+19]=120;out[at+20]=44;out[at+21]=32;
+ out[at+22]=114;out[at+23]=115;out[at+24]=105;out[at+25]=10;
+ return at+26;
+}
+fn write_signed_div(out:[]u8,at:usize)usize{
+ // "cqo\n"
+ out[at]=99;out[at+1]=113;out[at+2]=111;out[at+3]=10;
+ // "idiv rcx\n"
+ out[at+4]=105;out[at+5]=100;out[at+6]=105;out[at+7]=118;out[at+8]=32;
+ out[at+9]=114;out[at+10]=99;out[at+11]=120;out[at+12]=10;
+ return at+13;
+}
+fn write_unsigned_div(out:[]u8,at:usize)usize{
+ // "xor edx, edx\n"
+ out[at]=120;out[at+1]=111;out[at+2]=114;out[at+3]=32;
+ out[at+4]=101;out[at+5]=100;out[at+6]=120;out[at+7]=44;out[at+8]=32;
+ out[at+9]=101;out[at+10]=100;out[at+11]=120;out[at+12]=10;
+ // "div rcx\n"
+ out[at+13]=100;out[at+14]=105;out[at+15]=118;out[at+16]=32;
+ out[at+17]=114;out[at+18]=99;out[at+19]=120;out[at+20]=10;
+ return at+21;
+}
+fn write_rem(out:[]u8,at:usize)usize{
+ // "mov rax, rdx\n"
+ out[at]=109;out[at+1]=111;out[at+2]=118;out[at+3]=32;
+ out[at+4]=114;out[at+5]=97;out[at+6]=120;out[at+7]=44;out[at+8]=32;
+ out[at+9]=114;out[at+10]=100;out[at+11]=120;out[at+12]=10;
+ return at+13;
+}
+pub unsafe fn emit(signed:bool,remainder:bool,out:[]u8,written:*usize)u64{unsafe{
+ let wp=written as u64;let op=out.ptr as u64;
+ if written==null||(wp&7)!=0||!span(wp,8){return INVALID;}
+ if !span(op,out.len){return INVALID;}
+ if overlap(wp,8,op,out.len){return INVALID;}
+ let total=need(signed,remainder);
+ if total>out.len{return CAPACITY;}
+ var at=write_setup(out,0);
+ if signed{at=write_signed_div(out,at);}else{at=write_unsigned_div(out,at);}
+ if remainder{at=write_rem(out,at);}
+ *written=total;return OK;
+}}

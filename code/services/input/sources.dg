@@ -1,0 +1,38 @@
+// Input4 is the sole writer. Source0=i8042/tablet, source1..3=USB producers.
+// Device loss releases only transitions no other source still contributes.
+module input.sources;
+import input.events as ev;
+pub error Invalid=0x081e_0001;
+pub error Busy=0x081e_0002;
+pub struct State {pub keys:[4]ev.Keys,pub combined:ev.Keys}
+pub const EMPTY:State=State{keys:[ev.EMPTY_KEYS;4],combined:ev.EMPTY_KEYS};
+fn held(s:*const ev.Keys,code:u64)bool{unsafe{return ((*s).down[(code/64) as usize]&(1<<(code%64)))!=0;}}
+unsafe fn other(s:*const State,source:usize,code:u64)bool{unsafe{
+ var i:usize=0;while i<4{if i!=source&&held(&(*s).keys[i],code){return true;}i+=1;}return false;
+}}
+pub unsafe fn event(s:*State,source:usize,input:*const ev.Event,out:*ev.Queue)!void{unsafe{
+ try ev.validate(out);if s==null||source>=4||input==null{return error.Invalid;}
+ let e=*input;if e.kind==ev.LOST{try lost(s,source,out);return;}
+ if e.kind!=ev.KEY{if e.kind!=ev.RELATIVE&&e.kind!=ev.ABSOLUTE&&e.kind!=ev.SCROLL{return error.Invalid;}
+  if (*out).count==64{return error.Busy;}try ev.push(out,&e);return;
+ }
+ if e.code==0||e.code>=768||e.a<0||e.a>2{return error.Invalid;}
+ var local=(*s).keys[source];var ignored=ev.EMPTY_EVENT;let made=try ev.key(&local,e.code,e.a,&ignored);
+ if !made{return;}let was=held(&(*s).combined,e.code);var emit=false;var value=e.a;
+ if e.a==0{emit=was&&!other(s,source,e.code);}
+ else if !was{emit=true;value=1;}
+ else if e.a==2&&held(&(*s).keys[source],e.code){emit=true;value=2;}
+ if emit&&(*out).count==64{return error.Busy;}
+ if emit{var combined=ev.EMPTY_EVENT;let produced=try ev.key(&(*s).combined,e.code,value,&combined);
+  if !produced{return error.Invalid;}try ev.push(out,&combined);
+ }(*s).keys[source]=local;
+}return;}
+pub unsafe fn lost(s:*State,source:usize,out:*ev.Queue)!void{unsafe{
+ try ev.validate(out);if s==null||source>=4{return error.Invalid;}
+ var need:usize=0;var code:u64=1;while code<768{if held(&(*s).keys[source],code)&&!other(s,source,code){need+=1;}code+=1;}
+ if need>64-(*out).count{return error.Busy;}
+ code=1;while code<768{
+  if held(&(*s).keys[source],code)&&!other(s,source,code){var released=ev.EMPTY_EVENT;let made=try ev.key(&(*s).combined,code,0,&released);if !made{return error.Invalid;}try ev.push(out,&released);}
+  code+=1;
+ }(*s).keys[source]=ev.EMPTY_KEYS;
+}return;}

@@ -1,0 +1,9 @@
+module nvme_authority_probe;
+import drivers.nvme_authority as policy;
+export("nvme_authority_permit") fn permit(h:*const policy.Header,out:*u64)u64 {
+    unsafe {
+        match policy.permit(h) {
+            ok(value)=>{*out=value as u64;return 0;},err(code)=>{return code;},
+        }
+    }
+}

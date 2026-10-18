@@ -1,0 +1,292 @@
+// Pure bounded plans only. Borrowed tables must be stable trusted ACPI
+// table bytes; checksum validity is integrity, not authority to read/write PA.
+module firmware.power;
+pub error InvalidInput=0x0801_0001;
+pub error BadTable=0x0801_0002;
+pub error BadChecksum=0x0801_0003;
+pub error Unsupported=0x0801_0004;
+pub error Denied=0x0801_0005;
+pub error MalformedAml=0x0801_0006;
+pub error DuplicateS5=0x0801_0007;
+pub error MissingS5=0x0801_0008;
+pub struct Policy {pub io_start:u64,pub io_end:u64,pub mmio_start:u64,pub mmio_end:u64}
+pub struct Write {pub space:u64,pub address:u64,pub width:u64,pub value:u64}
+pub const NO_WRITE:Write=Write {space:0,address:0,width:0,value:0};
+pub struct Table {pub bytes:[]const u8}
+pub struct Sleep {pub type_a:u64,pub type_b:u64,pub table_index:u64,pub aml_offset:u64}
+pub struct Shutdown {pub a:Write,pub b:Write,pub clear_mask:u64,pub enable_mask:u64,pub has_b:u64,pub source:Sleep}
+struct Path {depth:usize,segments:usize,end:usize,root_s5:bool}
+const EMPTY_PATH:Path=Path {depth:0,segments:0,end:0,root_s5:false};
+struct Package {payload:usize,end:usize}
+struct Frame {end:usize,depth:usize}
+struct DataFrame {end:usize,remaining:usize}
+struct Data {end:usize,count:usize,first:u64,second:u64,kind:u64}
+const EMPTY_DATA:Data=Data {end:0,count:0,first:0,second:0,kind:0};
+fn byte(raw:[]const u8,at:usize)u64 {return raw[at] as u64;}
+fn word(raw:[]const u8,at:usize)u64 {unsafe {return read_unaligned((raw.ptr+at) as *const u16) as u64;}}
+fn dword(raw:[]const u8,at:usize)u64 {unsafe {return read_unaligned((raw.ptr+at) as *const u32) as u64;}}
+fn qword(raw:[]const u8,at:usize)u64 {unsafe {return read_unaligned((raw.ptr+at) as *const u64);}}
+unsafe fn table(raw:[]const u8,signature:u64)!void {
+    if raw.ptr==null || raw.len<36 || raw.len>0x10_0000 {return error.BadTable;}
+    if dword(raw,0)!=signature || dword(raw,4)!=raw.len as u64 || raw[8]==0 {return error.BadTable;}
+    var checksum:u64=0;var i:usize=0;
+    while i<raw.len {checksum=(checksum+raw[i] as u64)&255;i+=1;}
+    if checksum!=0 {return error.BadChecksum;}
+    return;
+}
+unsafe fn policy(value:*const Policy)!void {
+    unsafe {
+        if value==null || (*value).io_start>(*value).io_end || (*value).io_end>65536
+            || (*value).mmio_start>(*value).mmio_end || (*value).mmio_end>0x10_0000_0000_0000 {return error.InvalidInput;}
+    }return;
+}
+unsafe fn gas(raw:[]const u8,at:usize,width:u64,value:u64,allowed:*const Policy,out:*Write)!void {
+    unsafe {
+        if at>raw.len || raw.len-at<12 {return error.BadTable;}
+        let space=byte(raw,at);let access=byte(raw,at+3);let address=qword(raw,at+4);let bytes=width/8;
+        if width!=8 && width!=16 {return error.InvalidInput;}
+        if space>1 || byte(raw,at+1)!=width || byte(raw,at+2)!=0 || (access!=0 && access!=(width/8)) {return error.Unsupported;}
+        if address==0 || (width==16 && (address&1)!=0) {return error.Denied;}
+        var low=(*allowed).mmio_start;var high=(*allowed).mmio_end;
+        if space==1 {low=(*allowed).io_start;high=(*allowed).io_end;}
+        if address<low || address>=high || bytes>high-address {return error.Denied;}
+        *out=Write {space:space,address:address,width:width,value:value};
+    }return;
+}
+pub unsafe fn reset(fadt:[]const u8,allowed:*const Policy,out:*Write)!void {
+    unsafe {
+        if out==null {return error.InvalidInput;}try policy(allowed);try table(fadt,0x5043_4146);
+        if fadt.len<129 || fadt[8]<2 || (dword(fadt,112)&1024)==0 {return error.Unsupported;}
+        var value=NO_WRITE;try gas(fadt,116,8,byte(fadt,128),allowed,&value);*out=value;
+    }return;
+}
+fn name_start(value:u8)bool {return value==95 || (value>=65 && value<=90);}
+fn name_char(value:u8)bool {return name_start(value) || (value>=48 && value<=57);}
+unsafe fn name(raw:[]const u8,start:usize,end:usize,depth:usize,out:*Path)!void {
+    unsafe {
+        var at=start;var base=depth;if at>=end {return error.MalformedAml;}
+        if raw[at]==92 {base=0;at+=1;}else {while at<end && raw[at]==94 {if base==0 {return error.MalformedAml;}base-=1;at+=1;}}
+        if at>=end {return error.MalformedAml;}var count:usize=1;
+        if raw[at]==0 {count=0;at+=1;}else {
+            if raw[at]==46 {count=2;at+=1;}else {if raw[at]==47 {at+=1;if at>=end {return error.MalformedAml;}count=raw[at] as usize;at+=1;if count==0 {return error.MalformedAml;}}}
+        }
+        if count>16 || base>16-count || count>(end-at)/4 {return error.MalformedAml;}
+        var i:usize=0;var last:usize=0;
+        while i<count {
+            if !name_start(raw[at]) || !name_char(raw[at+1]) || !name_char(raw[at+2]) || !name_char(raw[at+3]) {return error.MalformedAml;}
+            last=at;at+=4;i+=1;
+        }
+        *out=Path {depth:base+count,segments:count,end:at,root_s5:count!=0 && base+count==1
+            && raw[last]==95 && raw[last+1]==83 && raw[last+2]==53 && raw[last+3]==95};
+    }return;
+}
+// Field bit lengths use the same encoding, but are values rather than package
+// extents. Keep decoding separate so a 65536-bit field is never confused with
+// 65536 bytes to skip in the enclosing AML TermList.
+unsafe fn length(raw:[]const u8,at:usize,end:usize,out:*Package)!void {
+    unsafe {
+        if at>=end {return error.MalformedAml;}let lead=raw[at];let count=(lead>>6) as usize;
+        if count>end-at-1 || (count!=0 && (lead&48)!=0) {return error.MalformedAml;}
+        var length=(lead&63) as usize;
+        if count!=0 {
+            length=(lead&15) as usize;var i:usize=0;
+            while i<count {length|=(raw[at+i+1] as usize)<<(4+8*i);i+=1;}
+        }
+        *out=Package {payload:at+count+1,end:length};
+    }return;
+}
+unsafe fn pkg(raw:[]const u8,at:usize,end:usize,out:*Package)!void {
+    unsafe {
+        var value=Package {payload:0,end:0};try length(raw,at,end,&value);
+        if value.end<value.payload-at || value.end>end-at {return error.MalformedAml;}
+        *out=Package {payload:value.payload,end:at+value.end};
+    }return;
+}
+unsafe fn integer(raw:[]const u8,start:usize,end:usize,out:*Data)!void {
+    unsafe {
+        if start>=end {return error.MalformedAml;}let op=raw[start];var value:u64=0;var size:usize=1;
+        if op==0 {value=0;}else {if op==1 {value=1;}else {if op==255 {value=0xffff_ffff_ffff_ffff;}
+        else {if op==10 {size=2;}else {if op==11 {size=3;}else {if op==12 {size=5;}else {if op==14 {size=9;}else {return error.Unsupported;}}}}
+            if size>end-start {return error.MalformedAml;}
+            if size==2 {value=byte(raw,start+1);}if size==3 {value=word(raw,start+1);}
+            if size==5 {value=dword(raw,start+1);}if size==9 {value=qword(raw,start+1);}
+        }}}
+        *out=Data {end:start+size,count:1,first:value,second:0,kind:1};
+    }return;
+}
+// Constant objects only. PackageElement NameString is an inert reference, not
+// a module-level invocation; never resolve it or infer argument counts. Nested
+// containers are walked on an explicit bounded stack and cannot define names.
+// kind=4 is reserved for a flat integer-only package, the sole S5 candidate.
+unsafe fn data(raw:[]const u8,start:usize,end:usize,depth:usize,out:*Data)!void {
+    unsafe {
+        var frames:[16]DataFrame=[DataFrame {end:0,remaining:0};16];var level:usize=0;
+        var at=start;var limit=end;var count:usize=0;var value=EMPTY_DATA;var flat=true;
+        loop {
+            if level!=0 && frames[level-1].remaining==0 {
+                if at!=limit {return error.MalformedAml;}level-=1;
+                if level==0 {break;}limit=frames[level-1].end;continue;
+            }
+            if at>=limit || count>=65536 {return error.MalformedAml;}count+=1;
+            let op=raw[at];let root=level==0;var position:usize=0;
+            if level==1 {position=value.count-frames[0].remaining;}
+            if op==18 {
+                var block=Package {payload:0,end:0};try pkg(raw,at+1,limit,&block);
+                if block.payload>=block.end {return error.MalformedAml;}
+                let members=raw[block.payload] as usize;
+                if root {value.kind=4;value.count=members;}else {if level==1 {flat=false;}frames[level-1].remaining-=1;}
+                if level==16 {return error.Unsupported;}
+                frames[level]=DataFrame {end:block.end,remaining:members};level+=1;
+                at=block.payload+1;limit=block.end;continue;
+            }
+            var member=EMPTY_DATA;
+            if op==13 {
+                var stop=at+1;while stop<limit && raw[stop]!=0 {if raw[stop]>127 {return error.Unsupported;}stop+=1;}
+                if stop==limit {return error.MalformedAml;}member.end=stop+1;member.kind=2;
+            }else {if op==17 {
+                var block=Package {payload:0,end:0};try pkg(raw,at+1,limit,&block);
+                var size=EMPTY_DATA;try integer(raw,block.payload,block.end,&size);
+                if size.first>65536 || size.first<(block.end-size.end) as u64 {return error.Unsupported;}
+                member.end=block.end;member.kind=3;
+            }else {if !root && (op==92 || op==94 || op==46 || op==47 || name_start(op)) {
+                var reference=EMPTY_PATH;try name(raw,at,limit,depth,&reference);
+                if reference.segments==0 {return error.MalformedAml;}member.end=reference.end;member.kind=6;
+            }else {try integer(raw,at,limit,&member);}}}
+            if root {value=member;at=member.end;break;}
+            if level==1 {
+                if member.kind!=1 {flat=false;}else {if position==0 {value.first=member.first;}if position==1 {value.second=member.first;}}
+            }
+            frames[level-1].remaining-=1;at=member.end;
+        }
+        if value.kind==4 && !flat {value.kind=5;}value.end=at;*out=value;
+    }return;
+}
+unsafe fn field(raw:[]const u8,start:usize,end:usize,depth:usize,code:u8,out:*usize)!void {
+    unsafe {
+        var block=Package {payload:0,end:0};try pkg(raw,start+2,end,&block);
+        var path=EMPTY_PATH;try name(raw,block.payload,block.end,depth,&path);
+        if path.segments==0 {return error.MalformedAml;}var at=path.end;
+        if code==134 || code==135 {try name(raw,at,block.end,depth,&path);if path.segments==0 {return error.MalformedAml;}at=path.end;}
+        if code==135 {var bank=EMPTY_DATA;try integer(raw,at,block.end,&bank);at=bank.end;}
+        if at>=block.end {return error.MalformedAml;}let flags=raw[at];at+=1;
+        if (flags&128)!=0 || (flags&15)>5 || ((flags>>5)&3)>2 {return error.Unsupported;}
+        var count:usize=0;
+        while at<block.end {
+            if count>=65536 {return error.MalformedAml;}count+=1;let op=raw[at];
+            if op==0 {
+                var bits=Package {payload:0,end:0};try length(raw,at+1,block.end,&bits);at=bits.payload;
+            }else {if op==1 || op==3 {
+                var size:usize=3;if op==3 {size=4;}
+                if size>block.end-at {return error.MalformedAml;}if raw[at+1]>5 {return error.Unsupported;}at+=size;
+            }else {if op==2 {
+                if block.end-at<2 {return error.MalformedAml;}
+                if raw[at+1]==17 {var buffer=EMPTY_DATA;try data(raw,at+1,block.end,depth,&buffer);at=buffer.end;}
+                else {try name(raw,at+1,block.end,depth,&path);if path.segments==0 {return error.MalformedAml;}at=path.end;}
+            }else {
+                // NamedField is exactly one NameSeg, never a prefixed path.
+                // A root field named _S5_ occupies that namespace and cannot
+                // be silently skipped in favour of a later fake Package.
+                if block.end-at<4 || !name_start(raw[at]) || !name_char(raw[at+1]) || !name_char(raw[at+2]) || !name_char(raw[at+3]) {return error.MalformedAml;}
+                if depth==0 && raw[at]==95 && raw[at+1]==83 && raw[at+2]==53 && raw[at+3]==95 {return error.Unsupported;}
+                var bits=Package {payload:0,end:0};try length(raw,at+4,block.end,&bits);at=bits.payload;
+            }}}
+        }
+        *out=block.end;
+    }return;
+}
+unsafe fn aml(raw:[]const u8,table_index:u64,seen:*bool,result:*Sleep)!void {
+    unsafe {
+        var frames:[16]Frame=[Frame {end:0,depth:0};16];var level:usize=0;
+        var depth:usize=0;var end=raw.len;var at:usize=36;var terms:usize=0;
+        loop {
+            if at==end {if level==0 {break;}level-=1;end=frames[level].end;depth=frames[level].depth;continue;}
+            if at>end || terms>=65536 {return error.MalformedAml;}terms+=1;
+            let origin=at;let op=raw[at];
+            if op==8 {
+                var path=EMPTY_PATH;try name(raw,at+1,end,depth,&path);if path.segments==0 {return error.MalformedAml;}
+                var value=EMPTY_DATA;try data(raw,path.end,end,depth,&value);
+                if path.root_s5 {
+                    if *seen {return error.DuplicateS5;}
+                    if value.kind!=4 || value.count<2 || value.count>32 || value.first>7 || value.second>7 {return error.Unsupported;}
+                    *seen=true;*result=Sleep {type_a:value.first,type_b:value.second,table_index:table_index,aml_offset:origin as u64};
+                }at=value.end;
+            }else {if op==16 || op==20 || op==91 {
+                var code=op;var length_at=at+1;
+                if op==91 {
+                    if end-at<2 {return error.MalformedAml;}code=raw[at+1];length_at=at+2;
+                    if code==128 || code==1 || code==2 {
+                        var named=EMPTY_PATH;try name(raw,at+2,end,depth,&named);
+                        if named.segments==0 {return error.MalformedAml;}if named.root_s5 {return error.Unsupported;}
+                        if code==128 {
+                            if named.end>=end {return error.MalformedAml;}let space=raw[named.end];
+                            if space>10 && space<128 {return error.Unsupported;}
+                            // RegionOffset/Len are TermArgs in full AML. Only
+                            // integer literals are inert in this subset;
+                            // reject references/method calls/expressions.
+                            var offset=EMPTY_DATA;var size=EMPTY_DATA;
+                            try integer(raw,named.end+1,end,&offset);try integer(raw,offset.end,end,&size);at=size.end;
+                        }else {at=named.end;if code==1 {if at>=end {return error.MalformedAml;}if (raw[at]&240)!=0 {return error.Unsupported;}at+=1;}}
+                        continue;
+                    }
+                    if code==129 || code==134 || code==135 {var next:usize=0;try field(raw,at,end,depth,code,&next);at=next;continue;}
+                    if code!=130 && code!=131 && code!=132 && code!=133 {return error.Unsupported;}
+                }
+                var block=Package {payload:0,end:0};try pkg(raw,length_at,end,&block);
+                var path=EMPTY_PATH;try name(raw,block.payload,block.end,depth,&path);
+                if path.root_s5 {return error.Unsupported;}
+                if op!=16 && path.segments==0 {return error.MalformedAml;}
+                if op==20 {
+                    if path.segments==0 || path.end>=block.end {return error.MalformedAml;}
+                    // Method bodies are not module-level TermLists. They are
+                    // never executed or searched for a static _S5 definition.
+                    at=block.end;
+                }else {
+                    if level==16 {return error.MalformedAml;}
+                    var first=path.end;
+                    if op==91 && code==131 {if block.end-first<6 {return error.MalformedAml;}first+=6;}
+                    if op==91 && code==132 {if block.end-first<3 {return error.MalformedAml;}first+=3;}
+                    frames[level]=Frame {end:end,depth:depth};level+=1;
+                    at=first;end=block.end;depth=path.depth;
+                }
+            }else {if op==163 {at+=1;}else {return error.Unsupported;}}}
+        }
+    }return;
+}
+pub unsafe fn s5(tables:[]const Table,out:*Sleep)!void {
+    unsafe {
+        if out==null || tables.ptr==null || tables.len<1 || tables.len>16 {return error.InvalidInput;}
+        var value=Sleep {type_a:0,type_b:0,table_index:0,aml_offset:0};var seen=false;var i:usize=0;
+        while i<tables.len {
+            var signature:u64=0x5444_5353;if i==0 {signature=0x5444_5344;}
+            try table(tables[i].bytes,signature);try aml(tables[i].bytes,i as u64,&seen,&value);i+=1;
+        }
+        if !seen {return error.MissingS5;}*out=value;
+    }return;
+}
+unsafe fn control(fadt:[]const u8,legacy:usize,extended:usize,kind:u64,allowed:*const Policy,out:*Write)!void {
+    unsafe {
+        let address=dword(fadt,legacy);
+        if fadt.len>=extended+12 && qword(fadt,extended+4)!=0 {
+            var value=NO_WRITE;try gas(fadt,extended,16,kind<<10,allowed,&value);
+            if address!=0 && (value.space!=1 || value.address!=address) {return error.Unsupported;}
+            *out=value;return;
+        }
+        if address==0 {*out=NO_WRITE;return;}
+        if (address&1)!=0 || address<(*allowed).io_start || address>=(*allowed).io_end || 2>(*allowed).io_end-address {return error.Denied;}
+        *out=Write {space:1,address:address,width:16,value:kind<<10};
+    }return;
+}
+// Executor must first verify SCI_EN/ACPI mode and quiesce services. It reads
+// each control, preserves bits outside clear_mask, writes both type values,
+// then asserts enable_mask in PM1a and PM1b. This function performs no I/O.
+pub unsafe fn shutdown(fadt:[]const u8,tables:[]const Table,allowed:*const Policy,out:*Shutdown)!void {
+    unsafe {
+        if out==null {return error.InvalidInput;}try policy(allowed);try table(fadt,0x5043_4146);
+        if fadt.len<116 || (dword(fadt,112)&0x10_0000)!=0 || byte(fadt,89)!=2 {return error.Unsupported;}
+        var sleep=Sleep {type_a:0,type_b:0,table_index:0,aml_offset:0};try s5(tables,&sleep);
+        var a=NO_WRITE;var b=NO_WRITE;try control(fadt,64,172,sleep.type_a,allowed,&a);try control(fadt,68,184,sleep.type_b,allowed,&b);
+        if a.address==0 || (b.address!=0 && b.space==a.space && b.address==a.address) {return error.Denied;}
+        var has_b:u64=0;if b.address!=0 {has_b=1;}
+        *out=Shutdown {a:a,b:b,clear_mask:0x3c00,enable_mask:0x2000,has_b:has_b,source:sleep};
+    }return;
+}

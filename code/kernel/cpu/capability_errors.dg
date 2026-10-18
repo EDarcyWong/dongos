@@ -1,0 +1,4 @@
+module cpu.capability_errors;
+
+pub error MissingExtendedLeaf = 0x0204_0001;
+pub error InvalidPhysicalBits = 0x0204_0002;

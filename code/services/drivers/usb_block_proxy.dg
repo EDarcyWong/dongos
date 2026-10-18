@@ -1,0 +1,61 @@
+// Kernel grants this endpoint only to the fixed block service. Data stays in
+// its existing FS channel; xHCI owns separate private DMA buffers and rings.
+module drivers.usb_block_proxy;
+import lib.sys as sys;
+import fs.protocol as protocol;
+pub error Invalid=0x081d_0001;
+pub error Readback=0x081d_0002;
+pub struct State {pub ready:u64,pub endpoint:u64,pub capacity:u64,pub readonly:u64,pub completed:u64}
+pub const EMPTY:State=State {ready:0,endpoint:0,capacity:0,readonly:0,completed:0};
+// Catalog permits block2 to run immediately after devmgr publishes READY.
+// Its one-shot xHCI launch can still be pending. Only this first READY query
+// tolerates an endpoint not published yet; no request has been accepted.
+unsafe fn initialize_exchange(endpoint:u64,request:*const sys.Message,response:*sys.Message)u64 {unsafe {
+    var attempts:usize=0;
+    loop {
+        *response=sys.EMPTY_MESSAGE;let status=sys.call(endpoint,request,response);
+        if status!=0x0402_0003&&status!=0x0511_0008 {return status;}
+        if attempts==256 {return status;}attempts+=1;
+        let yielded=sys.yield_now();if yielded!=0 {return yielded;}
+    }
+}}
+unsafe fn exchange(endpoint:u64,request:*const sys.Message,response:*sys.Message)u64 {unsafe {
+    var attempts:usize=0;
+    loop {
+        *response=sys.EMPTY_MESSAGE;let status=sys.call(endpoint,request,response);
+        // Only an IPC request that was never accepted may be retried. A
+        // response carrying this value is a device error, never a retry.
+        if status!=0x0402_0003 {return status;}
+        if attempts==256 {return status;}attempts+=1;
+        let yielded=sys.yield_now();if yielded!=0 {return yielded;}
+    }
+}}
+pub unsafe fn initialize(s:*State,endpoint:u64)u64 {unsafe {
+    if s==null||(*s).ready!=0||endpoint==0 {return 0x081d_0001;}
+    var request=sys.EMPTY_MESSAGE;var response=sys.EMPTY_MESSAGE;request.words[0]=protocol.READY;
+    let status=initialize_exchange(endpoint,&request,&response);if status!=0 {return status;}
+    if response.words[0]!=0 {return response.words[0];}
+    if response.words[1]!=0||response.words[2]==0||response.words[2]>0xffff_ffff
+        ||response.words[3]>1||response.words[5]!=0||response.words[6]!=0||response.words[7]!=0 {return 0x081d_0002;}
+    *s=State {ready:1,endpoint:endpoint,capacity:response.words[2],readonly:response.words[3],completed:response.words[4]};
+}return 0;}
+pub unsafe fn execute(s:*State,request:*const sys.Message,response:*sys.Message)u64 {unsafe {
+    if s==null||request==null||response==null||(*s).ready!=1||(*s).endpoint==0 {return 0x081d_0001;}
+    let r=*request;let op=r.words[0];let lba=r.words[1];let count=r.words[2];let offset=r.words[4];
+    if r.words[3]!=0||r.words[5]!=0||r.words[6]!=0||r.words[7]!=0 {return 0x081d_0001;}
+    if op==protocol.READY||op==protocol.FLUSH {
+        if lba!=0||count!=0||offset!=0 {return 0x081d_0001;}
+    }else {
+        if (op!=protocol.READ&&op!=protocol.WRITE)||count==0||count>128||lba>=(*s).capacity
+            ||count>(*s).capacity-lba||offset>protocol.CHANNEL_BYTES||count*512>protocol.CHANNEL_BYTES-offset
+            ||(op==protocol.WRITE&&(*s).readonly!=0) {return 0x081d_0001;}
+    }
+    var out=sys.EMPTY_MESSAGE;let status=exchange((*s).endpoint,&r,&out);if status!=0 {return status;}
+    // Preserve accepted I/O errors; never resubmit a write or FLUSH. Successful
+    // replies must retain the exact selected medium identity and monotonic IO.
+    if out.words[0]!=0 {return out.words[0];}
+    var expected:u64=0;if op==protocol.READ||op==protocol.WRITE {expected=count;}
+    if out.words[1]!=expected||out.words[2]!=(*s).capacity||out.words[3]!=(*s).readonly
+        ||out.words[4]<(*s).completed||out.words[5]!=0||out.words[6]!=0||out.words[7]!=0 {return 0x081d_0002;}
+    (*s).completed=out.words[4];*response=out;
+}return 0;}

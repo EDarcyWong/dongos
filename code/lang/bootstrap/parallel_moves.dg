@@ -1,0 +1,54 @@
+// Sequentialize a parallel copy {dst <- src} (all sources read old values)
+// using one temporary location, id slot_count. Deterministic: always emit the
+// lowest-index pending move whose destination no pending move still reads; when
+// only cycles remain, save the lowest-index pending move's destination in the
+// temporary and redirect its readers to it.
+module bootstrap.parallel_moves;
+pub const OK:u64=0;pub const INVALID:u64=1;pub const CAPACITY:u64=2;pub const WORKSPACE:u64=3;
+pub struct Move{pub dst:usize,pub src:usize}
+const MAX:u64=0xffff_ffff_ffff_ffff;
+// work[i]: PENDING, DONE, or PENDING|TEMP when move i now reads the temporary.
+const PENDING:u8=1;const TEMP:u8=2;const DONE:u8=0;
+fn span(p:u64,n:u64)bool{return n==0||(p!=0&&n<=MAX-p);}
+fn overlap(a:u64,n:u64,b:u64,m:u64)bool{return n!=0&&m!=0&&a<b+m&&b<a+n;}
+unsafe fn valid(moves:[]const Move,out:[]Move,work:[]u8,used:*usize)bool{unsafe{
+ if used==null||moves.len>MAX/sizeof(Move)||out.len>MAX/sizeof(Move){return false;}
+ let mp=moves.ptr as u64;let op=out.ptr as u64;let wp=work.ptr as u64;let up=used as u64;
+ let mn=moves.len*sizeof(Move);let on=out.len*sizeof(Move);let wn=work.len;
+ if !span(mp,mn)||!span(op,on)||!span(wp,wn)||!span(up,8){return false;}
+ if (mn!=0&&(mp&7)!=0)||(on!=0&&(op&7)!=0)||(up&7)!=0{return false;}
+ if overlap(op,on,mp,mn)||overlap(wp,wn,mp,mn)||overlap(up,8,mp,mn)
+  ||overlap(op,on,wp,wn)||overlap(op,on,up,8)||overlap(wp,wn,up,8){return false;}
+ return true;
+}}
+// True when some pending move still reads location d (directly, not via TEMP).
+fn needed(moves:[]const Move,work:[]u8,d:usize)bool{
+ var j:usize=0;while j<moves.len{if work[j]==PENDING&&moves[j].src==d{return true;}j+=1;}return false;
+}
+pub unsafe fn schedule(moves:[]const Move,slot_count:usize,out:[]Move,work:[]u8,used:*usize)u64{unsafe{
+ if !valid(moves,out,work,used)||slot_count==0||slot_count==MAX{return INVALID;}
+ let n=moves.len;var i:usize=0;
+ while i<n{if moves[i].dst>=slot_count||moves[i].src>=slot_count{return INVALID;}i+=1;}
+ // Duplicate destinations: O(n^2) without scratch, so INVALID needs no workspace.
+ i=0;while i<n{var j=i+1;while j<n{if moves[i].dst==moves[j].dst{return INVALID;}j+=1;}i+=1;}
+ if n>MAX/2||out.len<2*n{return CAPACITY;}
+ if work.len<n{return WORKSPACE;}
+ // Nothing below can fail.
+ var pending:usize=0;i=0;
+ while i<n{if moves[i].dst==moves[i].src{work[i]=DONE;}else{work[i]=PENDING;pending+=1;}i+=1;}
+ let temp=slot_count;var count:usize=0;
+ while pending!=0{
+  var pick=n;i=0;
+  while i<n{if work[i]!=DONE&&!needed(moves,work,moves[i].dst){pick=i;break;}i+=1;}
+  if pick==n{
+   // Only cycles remain: break the one through the lowest pending index.
+   i=0;while work[i]==DONE{i+=1;}
+   let d=moves[i].dst;out[count]=Move{dst:temp,src:d};count+=1;
+   var j:usize=0;while j<n{if work[j]==PENDING&&moves[j].src==d{work[j]=(PENDING|TEMP);}j+=1;}
+   continue;
+  }
+  var src=moves[pick].src;if work[pick]==(PENDING|TEMP){src=temp;}
+  out[count]=Move{dst:moves[pick].dst,src:src};count+=1;work[pick]=DONE;pending-=1;
+ }
+ *used=count;return OK;
+}}

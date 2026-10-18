@@ -1,0 +1,41 @@
+// Encode borrowed bytes as NASM `db 0xHH,...` lines (at most 16 bytes per line).
+// Descriptors, aliasing, and need-length arithmetic are checked before any input
+// byte is read. INVALID and CAPACITY leave out and *written untouched.
+module bootstrap.nasm_bytes;
+pub const OK:u64=0;pub const INVALID:u64=1;pub const CAPACITY:u64=2;
+const MAX:u64=0xffff_ffff_ffff_ffff;
+const WIDTH:usize=16;
+fn span(p:u64,n:u64)bool{return n==0||(p!=0&&n<=MAX-p);}
+fn overlap(a:u64,n:u64,b:u64,m:u64)bool{return n!=0&&m!=0&&a<b+m&&b<a+n;}
+fn hex_digit(n:u8)u8{
+ let v=n as u64;
+ if v<10{return (48+v)as u8;}
+ return (55+v)as u8;
+}
+pub unsafe fn encode(source:[]const u8,out:[]u8,written:*usize)u64{unsafe{
+ let wp=written as u64;let sp=source.ptr as u64;let op=out.ptr as u64;
+ if written==null||(wp&7)!=0||!span(wp,8){return INVALID;}
+ if !span(sp,source.len)||!span(op,out.len){return INVALID;}
+ if overlap(op,out.len,sp,source.len)||overlap(wp,8,sp,source.len)||overlap(wp,8,op,out.len){return INVALID;}
+ let n=source.len;
+ if n==0{*written=0;return OK;}
+ let full=n/WIDTH;let rem=n%WIDTH;
+ var lines:usize=full;if rem!=0{lines=full+1;}
+ if n>MAX/5{return INVALID;}let body=5*n;
+ if lines>MAX/3{return INVALID;}let overhead=3*lines;
+ if body>MAX-overhead{return INVALID;}let total=body+overhead;
+ if total>out.len{return CAPACITY;}
+ var at:usize=0;var i:usize=0;
+ while i<n{
+  out[at]=100;out[at+1]=98;out[at+2]=32;at+=3;
+  var j:usize=0;
+  while j<WIDTH&&i<n{
+   if j!=0{out[at]=44;at+=1;}
+   let b=source[i];
+   out[at]=48;out[at+1]=120;out[at+2]=hex_digit(b/16);out[at+3]=hex_digit(b%16);
+   at+=4;i+=1;j+=1;
+  }
+  out[at]=10;at+=1;
+ }
+ *written=total;return OK;
+}}

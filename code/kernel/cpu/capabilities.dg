@@ -1,0 +1,51 @@
+// CPUID enumeration only: does not enable EFER.NXE or change CPU state.
+// Sources: Intel SDM, CPUID and paging feature enumeration:
+// https://cdrdv2-public.intel.com/835781/325462-sdm-vol-1-2abcd-3abcd-4.pdf
+// AMD CPUID Specification #25481, sections 1.4 / Fn8000_0001_EDX /
+// Fn8000_0008_EAX (pages 9, 21, 27):
+// https://www.amd.com/content/dam/amd/en/documents/archived-tech-docs/design-guides/25481.pdf
+module cpu.capabilities;
+
+import arch.x86_64 as arch;
+import cpu.capability_errors as errors;
+
+pub struct Capabilities {
+    // Raw CPUID physical-address width; excludes configuration-specific
+    // restrictions such as memory-encryption key bits reserved through MSRs.
+    pub physical_bits: usize,
+    pub nx: bool,
+}
+
+pub const EMPTY_CAPABILITIES: Capabilities = Capabilities {
+    physical_bits: 0,
+    nx: false,
+};
+
+// Caller provides a valid, writable out. All failures preserve its full value.
+// No fallback width is inferred when the address-size leaf is absent.
+pub fn decode(max_extended: u32, ext1_edx: u32, ext8_eax: u32, out: *Capabilities) !void {
+    if max_extended < 0x8000_0008 { return error.errors.MissingExtendedLeaf; }
+    let physical_bits: usize = (ext8_eax & 0xff) as usize;
+    if physical_bits < 32 || physical_bits > 52 { return error.errors.InvalidPhysicalBits; }
+    let value: Capabilities = Capabilities {
+        physical_bits: physical_bits,
+        nx: (ext1_edx & (1 << 20)) != 0,
+    };
+    unsafe { *out = value; }
+    return;
+}
+
+// CPUID is the only external operation. Its availability in the caller's
+// execution environment and a writable out pointer are caller obligations.
+pub unsafe fn detect(out: *Capabilities) !void {
+    var maximum: arch.CpuId = arch.CpuId { eax: 0, ebx: 0, ecx: 0, edx: 0 };
+    unsafe { arch.cpuid(0x8000_0000, 0, &maximum); }
+    if maximum.eax < 0x8000_0008 { return error.errors.MissingExtendedLeaf; }
+    var features: arch.CpuId = arch.CpuId { eax: 0, ebx: 0, ecx: 0, edx: 0 };
+    var addresses: arch.CpuId = arch.CpuId { eax: 0, ebx: 0, ecx: 0, edx: 0 };
+    unsafe {
+        arch.cpuid(0x8000_0001, 0, &features);
+        arch.cpuid(0x8000_0008, 0, &addresses);
+    }
+    return decode(maximum.eax, features.edx, addresses.eax, out);
+}

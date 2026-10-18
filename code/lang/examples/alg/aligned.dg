@@ -1,0 +1,25 @@
+module alg.aligned;
+
+import boot.calls as calls;
+
+const STORAGE_ALIGN: usize = 64;
+align(STORAGE_ALIGN) struct Scratch { tag: u64, words: [3]u64 }
+
+pub fn probe(a:u64,b:u64,c:u64,d:u64,e:u64,f:u64,g:u64,h:u64)u64 {
+    var state = Scratch { tag: a, words: [b,c,d] };
+    let copied = state;
+    unsafe {
+        if ((&state as usize) & (STORAGE_ALIGN-1)) != 0 { return 0; }
+        if ((&copied as usize) & (STORAGE_ALIGN-1)) != 0 { return 0; }
+    }
+    state.words[1] += e;
+    unsafe {
+        return calls.sysv_mix(a,b,c,d,e,f,g,h) + calls.win_mix(a,b,c,d,e,f,g,h)
+            + copied.tag + copied.words[0] + copied.words[1] + copied.words[2]
+            + state.words[1] + f + g + h;
+    }
+}
+
+pub fn temporary()u64 {
+    return Scratch { tag: 9, words: [10,11,12] }.words[1];
+}

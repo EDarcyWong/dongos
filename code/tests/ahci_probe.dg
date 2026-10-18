@@ -1,0 +1,33 @@
+module ahci_probe;
+import drivers.ahci_core as core;
+export("ah_sizes") fn sizes(out:*u64)void {unsafe {
+    out[0]=sizeof(core.Lease) as u64;out[1]=sizeof(core.Caps) as u64;out[2]=sizeof(core.Info) as u64;
+    out[3]=sizeof(core.Request) as u64;out[4]=sizeof(core.Command) as u64;out[5]=sizeof(core.State) as u64;
+    out[6]=sizeof(core.Sample) as u64;out[7]=sizeof(core.EngineInput) as u64;out[8]=sizeof(core.Action) as u64;
+}return;}
+export("ah_identify") fn identify(raw:*const u8,bytes:usize,out:*core.Info)u64 {unsafe {
+    match core.identify(slice_from_raw_parts(raw,bytes),out) {ok=>{return 0;},err(code)=>{return code;},}
+}}
+export("ah_build") fn build(lease:*const core.Lease,caps:*const core.Caps,info:*const core.Info,r:*const core.Request,out:*core.Command)u64 {unsafe {
+    match core.build(lease,caps,info,r,out) {ok=>{return 0;},err(code)=>{return code;},}
+}}
+export("ah_arm") fn arm(state:*core.State,opcode:u64,bytes:u64,now:u64,timeout:u64)u64 {unsafe {
+    match core.arm(state,opcode,bytes,now,timeout) {ok=>{return 0;},err(code)=>{return code;},}
+}}
+export("ah_poll") fn poll(state:*core.State,sample:*const core.Sample,out:*u64)u64 {unsafe {
+    match core.poll(state,sample) {ok(value)=>{if value {*out=1;}else{*out=0;}return 0;},err(code)=>{return code;},}
+}}
+export("ah_poll_with_policy") fn poll_with_policy(state:*core.State,sample:*const core.Sample,policy:u64,out:*u64)u64 {unsafe {
+    match core.poll_with_policy(state,sample,policy) {ok(value)=>{if value {*out=1;}else{*out=0;}return 0;},err(code)=>{return code;},}
+}}
+export("ah_completion_policy") fn completion_policy(vendor:u64,device:u64,class:u64,subclass:u64,interface:u64,header:u64)u64 {
+    return core.completion_policy(vendor,device,class,subclass,interface,header);
+}
+export("ah_policy_constants") fn policy_constants(out:*u64)void {unsafe {
+    out[0]=core.STRICT;out[1]=core.IDENTIFY_DRQ0;
+}return;}
+export("ah_engine") fn engine(input:*const core.EngineInput,out:*core.Action)u64 {unsafe {
+    match core.engine(input,out) {ok=>{return 0;},err(code)=>{return code;},}
+}}
+export("ah_mutant_hits") fn mutant_hits()u64 {return 0;}
+export("ah_completion_mutant_hits") fn completion_mutant_hits()u64 {return 0;}

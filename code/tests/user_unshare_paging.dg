@@ -1,0 +1,10 @@
+// Transparent observer around the actual reclaim body, plus private malformed
+// receipt fixtures. None of these helpers enter the production paging source.
+var TEST_RECLAIMS:u64=0;var TEST_ZERO_RECLAIMS:u64=0;
+unsafe extern "sysv64" fn unshare_reclaim_event(pending:u64,count:u64,root:u64)void;
+pub unsafe fn reclaim(space:*Space,retired:*Retired)!void{unsafe{
+    unshare_reclaim_event((*retired).pending as u64,(*retired).count,(*retired).root);
+    let done=reclaim_impl(space,retired);match done{ok=>{TEST_RECLAIMS+=1;if (*retired).pending{return error.InvalidRetirement;}},err(e)=>{return done;},}
+}return;}
+pub unsafe fn native_receipt_pending(receipt:*const Retired)u64{unsafe{return (*receipt).pending as u64;}}
+pub unsafe fn native_corrupt_receipt(receipt:*Retired)void{unsafe{(*receipt).root=0;}return;}

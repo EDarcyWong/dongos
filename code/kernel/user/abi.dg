@@ -1,0 +1,21 @@
+// Exact 25-qword counterpart of include/user_context.inc UserFrame. Syscall
+// bridges pass a pointer, never an aggregate value. RCX/R11 are SYSCALL clobbers.
+module user.abi;
+pub const USER_MIN: u64 = 0x10000;
+pub const USER_TOP: u64 = 0x0000_0080_0000_0000;
+pub struct Frame {
+    pub r15: u64, pub r14: u64, pub r13: u64, pub r12: u64,
+    pub r11: u64, pub r10: u64, pub r9: u64, pub r8: u64,
+    pub rdi: u64, pub rsi: u64, pub rbp: u64, pub rdx: u64,
+    pub rcx: u64, pub rbx: u64, pub rax: u64,
+    pub rip: u64, pub rflags: u64, pub rsp: u64, pub cr3: u64,
+    pub fs_base: u64, pub gs_base: u64, pub status: u64,
+    pub syscalls: u64, pub exit_code: u64, pub reserved: u64,
+}
+pub const EMPTY: Frame = Frame {
+    r15: 0, r14: 0, r13: 0, r12: 0, r11: 0, r10: 0, r9: 0, r8: 0,
+    rdi: 0, rsi: 0, rbp: 0, rdx: 0, rcx: 0, rbx: 0, rax: 0,
+    rip: 0, rflags: 0x202, rsp: 0, cr3: 0, fs_base: 0, gs_base: 0,
+    status: 0, syscalls: 0, exit_code: 0, reserved: 0,
+};
+pub const EMPTY_FRAME: Frame = EMPTY;

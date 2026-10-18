@@ -1,0 +1,97 @@
+module drivers.tablet_service;
+import lib.sys as sys;
+import lib.desktop as api;
+import drivers.pci as pci;
+import drivers.pci_inventory as pci_inventory;
+import lib.pci_inventory_abi as pci_inventory_abi;
+import drivers.virtio_pci as vp;
+import drivers.virtio_blk as blk;
+import drivers.virtio_tablet as tablet;
+import input.events as events;
+pub error Setup=0x0734_0001;
+pub var STATE:tablet.State=tablet.EMPTY_STATE;
+var TRANSPORT:vp.Transport=vp.EMPTY_TRANSPORT;
+var BARS:[6]vp.Bar=[vp.Bar { physical:0,length:0,handle:0 };6];
+var VIRTUAL:[6]u64=[0;6];
+var BOOT:*const sys.Boot=null;
+var OPS:blk.Ops=blk.Ops { read:mmio_read,write:mmio_write,fence:fence,acquire:acquire,release:release };
+unsafe fn configuration(context: u64, physical: u64, out: *u32) u64 {
+    unsafe { return sys.svc_call(0x60,context,physical,out as u64,0,0,0); }
+}
+unsafe fn mmio_read(context: u64, handle: u64, offset: u64, width: u64, out: *u64) u64 {
+    unsafe {
+        var i: usize = 0;
+        while i < 6 {
+            if BARS[i].handle == handle && handle != 0 && offset <= BARS[i].length && width <= BARS[i].length - offset {
+                let p = VIRTUAL[i] + offset;
+                if width == 1 { *out = volatile_load(p as *const u8) as u64; }
+                else if width == 2 { *out = volatile_load(p as *const u16) as u64; }
+                else if width == 4 { *out = volatile_load(p as *const u32) as u64; }
+                else if width == 8 { *out = volatile_load(p as *const u64); }
+                else { return 1; }
+                return 0;
+            }
+            i += 1;
+        }
+    }
+    return 1;
+}
+unsafe fn mmio_write(context: u64, handle: u64, offset: u64, width: u64, value: u64) u64 {
+    unsafe {
+        var i: usize = 0;
+        while i < 6 {
+            if BARS[i].handle == handle && handle != 0 && offset <= BARS[i].length && width <= BARS[i].length - offset {
+                let p = VIRTUAL[i] + offset;
+                if width == 1 { volatile_store(p as *u8,value as u8); }
+                else if width == 2 { volatile_store(p as *u16,value as u16); }
+                else if width == 4 { volatile_store(p as *u32,value as u32); }
+                else if width == 8 { volatile_store(p as *u64,value); }
+                else { return 1; }
+                return 0;
+            }
+            i += 1;
+        }
+    }
+    return 1;
+}
+unsafe fn fence(context: u64, kind: u64) u64 {
+    unsafe { compiler_fence(); sys.svc_fence(); compiler_fence(); }
+    return 0;
+}
+unsafe fn acquire(context: u64, bytes: usize, alignment: usize, out: *blk.Lease) u64 {
+    unsafe { return sys.svc_call(0x63,(*BOOT).dma,bytes as u64,alignment as u64,out as u64,0,0); }
+}
+unsafe fn release(context: u64, lease: *const blk.Lease) u64 {
+    unsafe { return sys.svc_call(0x64,(*BOOT).dma,lease as u64,0,0,0,0); }
+}
+
+pub unsafe fn setup()!bool {
+    unsafe {
+        BOOT=sys.boot();let display=(*BOOT).reserved3 as *const api.Display;
+        var regions:[1]pci.Region=[pci.Region { base:(*BOOT).reserved0,segment:0,start_bus:(*BOOT).reserved1,end_bus:(*BOOT).reserved2 }];
+        var cursor=pci.EMPTY_CURSOR;var function=pci.EMPTY_FUNCTION;var found:bool=false;
+        while try next_configuration(regions[..],&cursor,&function) {
+            if function.vendor==0x1af4 && function.device_id==0x1052 { found=true;break; }
+        }
+        if !found { return false; }
+        if sys.svc_call(0x61,(*BOOT).configuration,function.ecam,&BARS[0] as u64,0,0,0)!=0 { return error.Setup; }
+        var i:usize=0;while i<6 {
+            if BARS[i].length!=0 {
+                VIRTUAL[i]=sys.svc_call(0x62,BARS[i].handle,0,0,0,0,0);
+                if VIRTUAL[i]<0x6000_0000 || VIRTUAL[i]>=0x6800_0000 { return error.Setup; }
+            }i+=1;
+        }
+        try vp.discover_device(0x1052,configuration,(*BOOT).configuration,&function,BARS[..],&TRANSPORT);
+        if (*BOOT).reserved3!=api.DESCRIPTOR || (*display).version!=3 { return error.Setup; }
+        try tablet.initialize(&STATE,&TRANSPORT,&OPS,(*display).width as i64,(*display).height as i64);return true;
+    }
+}
+pub unsafe fn poll(q:*events.Queue)!void { unsafe { try tablet.poll(&STATE,q); }return; }
+
+unsafe fn inventory_read(context:u64,cursor:u64,out:*pci_inventory_abi.Entry)u64{unsafe{
+ return sys.svc_call(pci_inventory_abi.ENUMERATE,context,cursor,out as u64,0,0,0);
+}}
+unsafe fn next_configuration(regions:[]const pci.Region,cursor:*pci.Cursor,out:*pci.Function)!bool{unsafe{
+ if (*BOOT).service_count>=7{return try pci_inventory.next(inventory_read,(*BOOT).configuration,regions,cursor,out);}
+ return try pci.next(configuration,(*BOOT).configuration,regions,cursor,out);
+}}

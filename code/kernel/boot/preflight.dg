@@ -1,0 +1,59 @@
+// Read-only preparation policy for a future four-level, non-PCID handoff.
+// Intel SDM vol.3A ch.4: CR0.WP, CR4.PAE/LA57/PGE/PCIDE, EFER.LME/LMA/NXE.
+// https://cdrdv2-public.intel.com/825758/253668-sdm-vol-3a.pdf
+// No register/MSR writes occur here. CPUID.NX is checked by startup first.
+module boot.preflight;
+
+pub struct State {
+    pub cr0: u64, pub cr3: u64, pub cr4: u64,
+    pub efer: u64, pub rflags: u64, pub pat: u64,
+}
+pub struct Plan { pub cr0: u64, pub efer: u64, pub actions: u64 }
+pub const EMPTY_STATE: State = State { cr0: 0, cr3: 0, cr4: 0, efer: 0, rflags: 0, pat: 0 };
+pub const EMPTY_PLAN: Plan = Plan { cr0: 0, efer: 0, actions: 0 };
+pub error InvalidControls = 0x0208_0001;
+pub error ControlsChanged = 0x0208_0002;
+
+// actions bits: 1=set NXE, 2=set WP, 4=cache writeback/invalidation before
+// switching away from P1's framebuffer cache policy. This is a plan, not a
+// claim that NXE/WP/cache transitions have already taken place.
+pub unsafe fn plan(state: *const State, old_root: u64, output: *Plan) !void {
+    unsafe {
+        let s = *state;
+        if old_root == 0 || old_root >= 0x1_0000_0000 || (old_root & 4095) != 0 || s.cr3 != old_root {
+            return error.InvalidControls;
+        }
+        if (s.cr0 & 0x8000_0001) != 0x8000_0001 || (s.cr0 & 0x6000_0000) != 0 {
+            return error.InvalidControls;
+        }
+        // Reject global translations, five-level paging, PCID and CET. The
+        // planned MOV CR3 then flushes the old non-global translations; stack
+        // pivots cannot silently inherit shadow-stack state.
+        if (s.cr4 & 32) == 0 || (s.cr4 & 0x0082_1080) != 0 {
+            return error.InvalidControls;
+        }
+        if (s.efer & 0x500) != 0x500 || (s.rflags & 0x60600) != 0 || (s.rflags & 2) == 0 {
+            return error.InvalidControls;
+        }
+        if (s.pat & 255) != 6 || ((s.pat >> 24) & 255) != 0 { return error.InvalidControls; }
+        var actions: u64 = 4;
+        if (s.efer & 0x800) == 0 { actions |= 1; }
+        if (s.cr0 & 0x10000) == 0 { actions |= 2; }
+        *output = Plan { cr0: s.cr0 | 0x10000, efer: s.efer | 0x800, actions: actions };
+    }
+    return;
+}
+
+// Arithmetic flags may vary across normal calls; paging/cache configuration
+// and interrupt/direction/VM control flags must stay unchanged.
+pub unsafe fn unchanged(before: *const State, after: *const State) !void {
+    unsafe {
+        let a = *before;
+        let b = *after;
+        if a.cr0 != b.cr0 || a.cr3 != b.cr3 || a.cr4 != b.cr4 || a.efer != b.efer
+            || a.pat != b.pat || ((a.rflags ^ b.rflags) & 0x60600) != 0 {
+            return error.ControlsChanged;
+        }
+    }
+    return;
+}

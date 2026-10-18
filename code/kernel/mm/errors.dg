@@ -1,0 +1,13 @@
+// mm.errors — P2 memory-manager error codes, shared by kernel/mm modules.
+// Other kernel modules import and reuse these instead of declaring duplicates.
+
+module mm.errors;
+
+pub error NotInitialized = 0x0200_0001;
+pub error AlreadyInitialized = 0x0200_0002;
+pub error InvalidArgument = 0x0200_0003;
+pub error MetadataTooSmall = 0x0200_0004;
+pub error RangeUnavailable = 0x0200_0005;
+pub error InvalidOrder = 0x0200_0006;
+pub error OutOfMemory = 0x0200_0007;
+pub error InvalidFree = 0x0200_0008;

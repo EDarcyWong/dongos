@@ -1,0 +1,8 @@
+module boot.resource_errors;
+
+pub error InvalidBootInfo = 0x0205_0001;
+pub error InvalidPhysicalRange = 0x0205_0002;
+pub error InvalidMemoryMap = 0x0205_0003;
+pub error MissingAllocation = 0x0205_0004;
+pub error InvalidLayout = 0x0205_0005;
+pub error OutputTooSmall = 0x0205_0006;

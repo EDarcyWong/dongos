@@ -1,0 +1,35 @@
+// Appended to the current memory owner only for the native reader oracle.
+var READER_FRAMES:[16]Frame=[EMPTY_RAM;16];
+var READER_STATES:[16]u8=[0;16];
+var READER_JOURNAL:[16]u16=[0;16];
+var READER_DYNAMIC:[POOL_PAGES]paging.Table=[EMPTY_TABLE;POOL_PAGES];
+unsafe fn reader_open(id:usize)!void{unsafe{
+    let physical=0x10_0000+id as u64*0x20_000;
+    if id==7{DYNAMIC_TABLES[id]=&READER_DYNAMIC[0];DYNAMIC_PHYSICAL[id]=physical;}
+    try paging.init(&SPACES[id],slice_from_raw_parts(table_at(id,0),POOL_PAGES),physical,META[id][..],48,true);
+    PROCESSES[id]=EMPTY_PROCESS;PROCESSES[id].ready=1;PROCESSES[id].root=physical;GENERATIONS[id]+=1;
+}return;}
+export("reader_setup") fn reader_setup(alias:u64)u64{unsafe{
+    FRAME_COUNT=12;REUSE_FROM=0;EXTENDED=&READER_FRAMES[0];EXTENDED_LIMIT=16;
+    EXTENDED_RECYCLED=&READER_STATES[0];EXTENDED_JOURNAL=&READER_JOURNAL[0];
+    STAGE_ID=LIMIT;STAGE_COUNT=0;STAGE_ROOT=0;STAGE_BOUND=false;STAGE_TABLES=false;STAGE_FAILED=false;
+    UNSHARE_RECEIPTS=null;UNSHARE_FRAMES=null;UNSHARE_ACTIVE=false;UNSHARE_FAILED=false;UNSHARE_ALLOCATING=false;UNSHARE_COUNT=0;
+    var id:usize=0;while id<LIMIT{PROCESSES[id]=EMPTY_PROCESS;SPACES[id]=paging.EMPTY_SPACE;PINNED[id]=false;GENERATIONS[id]=0;id+=1;}
+    var i:usize=0;while i<3{var root:usize=0;if i==1{root=3;}if i==2{root=7;}
+        match reader_open(root){ok=>{},err(e)=>{return e;},}i+=1;}
+    i=0;while i<12{
+        READER_FRAMES[i]=Frame{physical:0x20_0000+i as u64*4096,virtual:alias+i as u64*4096,writable:1};READER_STATES[i]=0;
+        match paging.map_live(&SPACES[0],0x4400_0000+i as u64*4096,READER_FRAMES[i].physical,paging.USER|paging.WRITE){ok=>{},err(e)=>{return e;},}i+=1;
+    }
+}return 0;}
+export("reader_reopen") fn reader_reopen()u64{unsafe{match reader_open(7){ok=>{return 0;},err(e)=>{return e;},}}}
+export("reader_destroy") fn reader_destroy()u64{unsafe{match destroy(7){ok=>{return 0;},err(e)=>{return e;},}}}
+export("reader_unshare_seed") fn reader_unshare_seed()u64{unsafe{match unshare_range(0,0x4400_0000,12){ok=>{return 0;},err(e)=>{return e;},}}}
+export("reader_leaf") fn reader_leaf(id:usize,address:u64)u64{unsafe{
+    var m=paging.Mapping{physical:0,flags:0};match paging.query(&SPACES[id],address,&m){ok=>{return m.physical|m.flags;},err(e)=>{return 0;},}
+}}
+export("reader_alias") fn reader_alias(id:usize,address:u64)u64{unsafe{match owned_alias(id,address,true){ok(a)=>{return a;},err(e)=>{return 0;},}}}
+export("reader_anonymous") fn reader_anonymous(address:u64)u64{unsafe{match anonymous(7,address){ok(a)=>{return a;},err(e)=>{return 0;},}}}
+export("reader_state") fn reader_state(index:usize)u64{unsafe{return *recycled(index) as u64;}}
+export("reader_failed") fn reader_failed()u64{unsafe{return UNSHARE_FAILED as u64;}}
+export("reader_fresh") fn reader_fresh()u64{unsafe{match fresh(){ok(index)=>{return index as u64;},err(e)=>{return e;},}}}

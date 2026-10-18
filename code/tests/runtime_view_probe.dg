@@ -1,0 +1,22 @@
+module runtime_view_probe;
+
+import boot.abi as abi;
+import boot.runtime_view as runtime;
+
+export("rv_display") fn display(info: abi.BootInfoPtr, out: *runtime.Display) u64 {
+    unsafe {
+        match runtime.display(info, out) { ok => { return 0; }, err(code) => { return code; }, }
+    }
+}
+export("rv_make") fn make(info: abi.BootInfoPtr, physical: u64, rsdp_size: u64,
+                          pool: u64, stack: u64, out: *runtime.View) u64 {
+    unsafe {
+        match runtime.make(info, physical, rsdp_size, pool, stack, out) {
+            ok => { return 0; }, err(code) => { return code; },
+        }
+    }
+}
+export("rv_display_size") fn display_size() usize { return sizeof(runtime.Display); }
+export("rv_view_size") fn view_size() usize { return sizeof(runtime.View); }
+export("rv_view_align") fn view_align() usize { return alignof(runtime.View); }
+export("rv_empty") fn empty(out: *runtime.View) void { unsafe { *out = runtime.EMPTY_VIEW; } }

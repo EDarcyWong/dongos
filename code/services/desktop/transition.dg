@@ -1,0 +1,87 @@
+// Bounded, allocation-free presentation geometry. Half-open body rectangles stay
+// inside the physical display; logical window state remains owned by windows.
+module desktop.transition;
+import gfx.geometry as geo;
+pub error InvalidScreen=0x0726_0001;
+pub error InvalidRect=0x0726_0002;
+pub error InvalidDuration=0x0726_0003;
+pub error InvalidTransition=0x0726_0004;
+pub struct Track { pub from:geo.Rect,pub to:geo.Rect,pub start_ms:u64,pub duration_ms:u64 }
+pub const EMPTY:Track=Track { from:geo.EMPTY,to:geo.EMPTY,start_ms:0,duration_ms:0 };
+const MAX_SIDE:i64=8192;
+const MAX_DURATION:u64=60000;
+unsafe fn screen_valid(screen:*const geo.Rect)bool {
+    unsafe { return screen!=null && (*screen).left==0 && (*screen).top==0
+        && (*screen).right>0 && (*screen).right<=MAX_SIDE
+        && (*screen).bottom>0 && (*screen).bottom<=MAX_SIDE; }
+}
+unsafe fn rect_valid(rect:*const geo.Rect,screen:*const geo.Rect)bool {
+    unsafe { return rect!=null && (*rect).left>=0 && (*rect).top>=0
+        && (*rect).left<(*rect).right && (*rect).top<(*rect).bottom
+        && (*rect).right<=(*screen).right && (*rect).bottom<=(*screen).bottom; }
+}
+// Every failure leaves the destination untouched, including aliased inputs.
+pub unsafe fn begin(track:*Track,screen:*const geo.Rect,from:*const geo.Rect,to:*const geo.Rect,now_ms:u64,duration_ms:u64)!void {
+    unsafe {
+        if track==null { return error.InvalidTransition; }
+        if !screen_valid(screen) { return error.InvalidScreen; }
+        if !rect_valid(from,screen) || !rect_valid(to,screen) { return error.InvalidRect; }
+        if duration_ms>MAX_DURATION { return error.InvalidDuration; }
+        let value=Track { from:*from,to:*to,start_ms:now_ms,duration_ms:duration_ms };
+        *track=value;
+    }return;
+}
+fn coordinate(a:i64,b:i64,q:i64)i64 {
+    // Non-negative weighted endpoints avoid signed rounding asymmetry. The
+    // largest numerator is 8192*65536, well inside i64 even in checked builds.
+    return (a*(65536-q)+b*q)/65536;
+}
+pub unsafe fn sample(track:*const Track,screen:*const geo.Rect,now_ms:u64,out:*geo.Rect)!bool {
+    unsafe {
+        if track==null || out==null { return error.InvalidTransition; }
+        if !screen_valid(screen) { return error.InvalidScreen; }
+        if !rect_valid(&(*track).from,screen) || !rect_valid(&(*track).to,screen) { return error.InvalidRect; }
+        if (*track).duration_ms>MAX_DURATION { return error.InvalidDuration; }
+        var value=(*track).to;var active=false;
+        if (*track).duration_ms!=0 {
+            if now_ms<(*track).start_ms { value=(*track).from;active=true; }
+            else {
+                // Never add duration to start: a valid interval may straddle
+                // UINT64_MAX without making the elapsed-time comparison wrap.
+                let elapsed=now_ms-(*track).start_ms;
+                if elapsed<(*track).duration_ms {
+                    let q=(elapsed*65536/(*track).duration_ms) as i64;
+                    let ease=(q*q/65536)*(196608-2*q)/65536;
+                    value=geo.Rect {
+                        left:coordinate((*track).from.left,(*track).to.left,ease),
+                        top:coordinate((*track).from.top,(*track).to.top,ease),
+                        right:coordinate((*track).from.right,(*track).to.right,ease),
+                        bottom:coordinate((*track).from.bottom,(*track).to.bottom,ease) };
+                    active=true;
+                }
+            }
+        }
+        // All edges share the same non-negative weights. Consequently a width
+        // or height >=1 at both ends remains >=1 after flooring each edge.
+        *out=value;return active;
+    }
+}
+pub unsafe fn retarget(track:*Track,screen:*const geo.Rect,to:*const geo.Rect,now_ms:u64,duration_ms:u64)!void {
+    unsafe {
+        var current=geo.EMPTY;
+        let active=try sample(track,screen,now_ms,&current);
+        try begin(track,screen,&current,to,now_ms,duration_ms);
+    }return;
+}
+pub unsafe fn zoom(target:*const geo.Rect,screen:*const geo.Rect,out:*geo.Rect)!void {
+    unsafe {
+        if out==null { return error.InvalidTransition; }
+        if !screen_valid(screen) { return error.InvalidScreen; }
+        if !rect_valid(target,screen) { return error.InvalidRect; }
+        let width=(*target).right-(*target).left;let height=(*target).bottom-(*target).top;
+        var w=width*240/256;var h=height*240/256;
+        if w<1 { w=1; }if h<1 { h=1; }
+        let x=(*target).left+(width-w)/2;let y=(*target).top+(height-h)/2;
+        *out=geo.Rect { left:x,top:y,right:x+w,bottom:y+h };
+    }return;
+}

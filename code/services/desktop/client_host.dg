@@ -1,0 +1,153 @@
+// Four ordinary GUI processes. This module contains only display/input glue;
+// document, directory, terminal and settings application state stays in clients.
+module desktop.client_host;
+import desktop.window_server as bridge;
+import desktop.window_authority as authority;
+import desktop.windows as windows;
+import lib.window_abi as abi;
+import lib.process as process;
+import lib.process_abi as proc;
+import input.events as input;
+import gfx.geometry as geo;
+import gfx.raster as raster;
+pub const BAD:u64=0x074a_0001;
+pub struct Forward {pub token:u64,pub kind:u64,pub a:u64,pub b:u64,pub c:u64,pub d:u64}
+pub const EMPTY_FORWARD:Forward=Forward{token:0,kind:0,a:0,b:0,c:0,d:0};
+pub struct Change {pub dirty:u64,pub created:u64,pub removed:u64,pub geometry:u64}
+pub const EMPTY_CHANGE:Change=Change{dirty:0,created:0,removed:0,geometry:0};
+pub struct State {
+ pub server:*bridge.Server,pub windows:*windows.State,pub manager:u64,pub count:u64,
+ pub bindings:[4]u64,pub copied:[4]bridge.View,pub presented:[4]u64,
+ pub pending:[8]Forward,pub pending_count:usize,pub next_buffer:u64,
+ pub config:proc.Config,pub snapshot:proc.Snapshot,pub last_error:u64,
+}
+pub const EMPTY:State=State{server:null,windows:null,manager:0,count:0,bindings:[0;4],copied:[bridge.EMPTY_VIEW;4],
+ presented:[0;4],pending:[EMPTY_FORWARD;8],pending_count:0,next_buffer:256,
+ config:proc.EMPTY_CONFIG,snapshot:proc.EMPTY_SNAPSHOT,last_error:0};
+fn px(value:i64,scale:u64)i64{return (value*scale as i64+128)/256;}
+unsafe fn configuration(s:*State,index:u64)u64{unsafe{
+ let status=process.configuration_state((*s).manager,index,&(*s).config,&(*s).snapshot);if status!=0{return status;}
+ if (*s).config.version!=1||(*s).config.id!=index||(*s).snapshot.version!=1
+  ||(*s).snapshot.configuration!=index||(*s).snapshot.state>5{return BAD;}return 0;
+}}
+pub unsafe fn initialize(s:*State,server:*bridge.Server,state:*windows.State,manager:u64,count:u64)u64{unsafe{
+ if s==null||server==null||state==null||manager==0||count<18||count>32{return BAD;}
+ *s=EMPTY;(*s).server=server;(*s).windows=state;(*s).manager=manager;(*s).count=count;return 0;
+}}
+pub unsafe fn launch(s:*State,role:u64)u64{unsafe{
+ if role==0||role>4{return BAD;}let id=13+role;let status=configuration(s,id);if status!=0{return status;}
+ if (*s).snapshot.state==proc.STARTING||(*s).snapshot.state==proc.READY{return 0;}
+ return process.spawn((*s).manager,id,(*s).snapshot.generation,0,&(*s).snapshot);
+}}
+pub unsafe fn launch_all(s:*State)u64{unsafe{
+ // Initial AUTOSTART clients belong to init's DAG. A restarted
+ // compositor keeps the established explicit recovery of all four clients.
+ let server=configuration(s,3);if server!=0{return server;}
+ if (*s).snapshot.process==0||(*s).snapshot.generation==0||(*s).snapshot.status!=0
+  ||((*s).snapshot.state!=proc.STARTING&&(*s).snapshot.state!=proc.READY){return BAD;}
+ let first=(*s).snapshot.generation==1;
+ var role:u64=1;while role<=4{
+  let status=configuration(s,13+role);if status!=0{return status;}
+  if !first||((*s).config.flags&proc.AUTOSTART)==0{
+   let launched=launch(s,role);if launched!=0{return launched;}
+  }role+=1;
+ }return 0;
+}}
+pub unsafe fn ready(s:*State)bool{unsafe{
+ var i:usize=0;while i<4{
+  let token=(*s).bindings[i];if token==0||(*s).presented[i]!=token{return false;}
+  let status=configuration(s,14+i as u64);if status!=0||(*s).snapshot.state!=proc.READY{return false;}
+  let process=(*s).snapshot.process;let owner=((process&255)<<32)|(process>>8);
+  let slot=((token&255)-1) as usize;if process==0||(*(*s).server).windows[slot].active.owner!=owner{return false;}i+=1;
+ }return true;
+}}
+// Called after the IPC pump, before touching any shared source, and after each
+// yield. Kernel-held compositor aliases remain live through this copy segment.
+pub unsafe fn synchronize(s:*State,scale:u64,out:*Change)u64{unsafe{
+ if out==null{return BAD;}*out=EMPTY_CHANGE;let server=(*s).server;let state=(*s).windows;
+ let maintained=bridge.maintain(server);if maintained!=0{return maintained;}
+ var role:usize=0;while role<4{
+  var token:u64=0;var j:usize=0;while j<16{if (*server).windows[j].token!=0&&(*server).windows[j].role==role as u64+1&&!(*server).windows[j].closing{token=(*server).windows[j].token;break;}j+=1;}
+  if token!=(*s).bindings[role]{
+   if (*s).bindings[role]!=0{(*out).removed|=1<<role;}if token!=0{(*out).created|=1<<role;}
+   (*s).bindings[role]=token;(*s).presented[role]=0;(*s).copied[role]=bridge.EMPTY_VIEW;
+  }
+  if token!=0{
+   let index=((token&255)-1) as usize;let slot=&(*server).policy.slots[index];let w=&(*server).windows[index];let chrome=&(*state).slots[role];
+   let r=(*chrome).requested;let width=r.right-r.left-px(24,scale);let height=r.bottom-r.top-px(53,scale);
+   if width>0&&height>0&&width<=1920&&height<=1080{
+    if (*w).active.width!=width as u64||(*w).active.height!=height as u64{
+     let configured=bridge.configure(server,token,width as u64,height as u64,width as u64*4);if configured!=0{return configured;}
+    }else if (*slot).status==authority.LIVE&&(*slot).committed_serial==(*slot).serial
+      &&((*chrome).rect.right-(*chrome).rect.left!=r.right-r.left||(*chrome).rect.bottom-(*chrome).rect.top!=r.bottom-r.top)
+      &&(*chrome).retired_buffer==0{
+     if (*s).next_buffer==0xffff_ffff_ffff_ffff{return BAD;}(*s).next_buffer+=1;
+     match windows.acknowledge(state,role as u64+1,((*chrome).generation<<8)|(role as u64+1),(*chrome).serial,(*s).next_buffer){ok=>{},err(e)=>{return e;},}
+     (*out).geometry|=1<<role;(*out).dirty|=1<<role;
+    }
+   }
+   let copied=(*s).copied[role];if (*w).dirty&&(copied.token!=token||copied.serial!=(*slot).committed_serial||copied.sequence!=(*slot).committed){(*out).dirty|=1<<role;}
+  }role+=1;
+ }return 0;
+}}
+pub unsafe fn copy(s:*State,index:usize,dst:*raster.Surface,area:*const abi.Rectangle)u64{unsafe{
+ if index>=4||(*s).bindings[index]==0{return bridge.BUSY;}var view=bridge.EMPTY_VIEW;
+ let status=bridge.copy_scaled((*s).server,(*s).bindings[index],dst,area,&view);if status!=0{return status;}
+ (*s).copied[index]=view;return 0;
+}}
+pub unsafe fn presented(s:*State,visible:u64)u64{unsafe{
+ var i:usize=0;while i<4{
+  let view=(*s).copied[i];let token=(*s).bindings[i];if (visible&(1<<i))!=0&&token!=0&&view.token==token{
+   let slot=((token&255)-1) as usize;let policy=&(*(*s).server).policy.slots[slot];
+   if view.serial==(*policy).serial&&view.sequence==(*policy).committed&&view.sequence>(*policy).presented{
+    let status=bridge.presented((*s).server,token,view.serial,view.sequence);if status!=0{return status;}(*s).presented[i]=token;
+   }
+  }
+  let chrome=&(*(*s).windows).slots[i];if (*chrome).retired_buffer!=0{
+   match windows.released((*s).windows,((*chrome).generation<<8)|(i as u64+1),(*chrome).retired_buffer){ok=>{},err(e)=>{return e;},}
+  }i+=1;
+ }return 0;
+}}
+unsafe fn append(s:*State,token:u64,kind:u64,a:u64,b:u64,c:u64,d:u64)u64{unsafe{
+ if token==0{return 0;}if (*s).pending_count==8{return BAD;}
+ (*s).pending[(*s).pending_count]=Forward{token:token,kind:kind,a:a,b:b,c:c,d:d};(*s).pending_count+=1;return 0;
+}}
+pub unsafe fn flush(s:*State)u64{unsafe{
+ while (*s).pending_count!=0{
+  let e=(*s).pending[0];let status=bridge.push((*s).server,e.token,e.kind,e.a,e.b,e.c,e.d);
+  if status==bridge.BUSY{return status;}if status!=0&&status!=0x0741_0002{return status;}
+  var i:usize=1;while i<(*s).pending_count{(*s).pending[i-1]=(*s).pending[i];i+=1;}(*s).pending_count-=1;
+ }return 0;
+}}
+pub unsafe fn focus(s:*State,before:u64,after:u64)u64{unsafe{
+ if before==after{return 0;}if before!=0{let i=((before&255)-1) as usize;if i>=4{return BAD;}let status=append(s,(*s).bindings[i],abi.FOCUS,0,0,0,0);if status!=0{return status;}}
+ if after!=0{let i=((after&255)-1) as usize;if i>=4{return BAD;}return append(s,(*s).bindings[i],abi.FOCUS,1,0,0,0);}return 0;
+}}
+pub unsafe fn close(s:*State,index:usize)u64{unsafe{
+ if index>=4{return BAD;}return append(s,(*s).bindings[index],abi.EXIT,0,0,0,0);
+}}
+fn character(code:u64,modifiers:u64)u64{
+ let plain="\0\x1b1234567890-=\x08\tqwertyuiop[]\n\0asdfghjkl;'`\0\\zxcvbnm,./\0*\0 ";
+ let shifted="\0\x1b!@#$%^&*()_+\x08\tQWERTYUIOP{}\n\0ASDFGHJKL:\"~\0|ZXCVBNM<>?\0*\0 ";
+ if code>=plain.len as u64{return 0;}let c=plain[code as usize];let shift=(modifiers&3)!=0;let caps=(modifiers&256)!=0;
+ if c>=97&&c<=122{if shift!=caps{return (c-32) as u64;}return c as u64;}if shift{return shifted[code as usize] as u64;}return c as u64;
+}
+pub unsafe fn key(s:*State,target:u64,event:*const input.Event)u64{unsafe{
+ if target==0||(*event).a==0{return 0;}let index=((target&255)-1) as usize;if index>=4{return BAD;}
+ let code=(*event).code;var translated:u64=0;
+ if code==14{translated=8;}if code==15{translated=9;}if code==28{translated=13;}if code==1{translated=27;}
+ if code==105{translated=256;}if code==106{translated=257;}if code==103{translated=258;}if code==108{translated=259;}
+ if code==104{translated=260;}if code==109{translated=261;}if code==63{translated=0x120;}
+ let cp=character(code,(*event).b as u64);if cp==0&&translated==0{return 0;}var mods:u64=0;
+ if ((*event).b as u64&12)!=0{mods|=1;}if ((*event).b as u64&3)!=0{mods|=2;}if ((*event).b as u64&48)!=0{mods|=4;}
+ return append(s,(*s).bindings[index],abi.KEY,cp,translated,mods,0);
+}}
+pub unsafe fn pointer(s:*State,target:u64,scale:u64,wheel:i64)u64{unsafe{
+ if target==0{return 0;}let index=((target&255)-1) as usize;if index>=4{return BAD;}let token=(*s).bindings[index];if token==0{return 0;}
+ let state=(*s).windows;let r=(*state).slots[index].rect;let left=r.left+px(12,scale);let top=r.top+px(43,scale);
+ let width=r.right-r.left-px(24,scale);let height=r.bottom-r.top-px(53,scale);if width<=0||height<=0{return BAD;}
+ let slot=((token&255)-1) as usize;let w=&(*(*s).server).windows[slot].active;
+ var x=(*state).pointer_x-left;var y=(*state).pointer_y-top;if x<0{x=0;}if y<0{y=0;}if x>=width{x=width-1;}if y>=height{y=height-1;}
+ let xx=x as u64*(*w).width/width as u64;let yy=y as u64*(*w).height/height as u64;
+ return append(s,token,abi.POINTER,(yy<<32)|xx,(*state).buttons,wheel as u64,0);
+}}

@@ -1,0 +1,92 @@
+// Optional mount-only read-through adapter. FAT remains the mount authority.
+// Source Device, adapter and State must remain private/live until finish().
+module fs.mount_cache;
+import fs.fat32 as fat;
+pub error Invalid=0x0508_0010;
+pub struct Line{pub valid:u64,pub first:u64,pub sectors:u64,pub bytes:[16384]u8}
+pub struct State{
+ pub source:*const fat.Device,pub enabled:u64,pub phase:u64,pub recent:usize,
+ pub first:u64,pub fat_sectors:u64,pub total:u64,pub backup:u64,pub fsinfo:u64,
+ pub lines:[2]Line,
+}
+pub const EMPTY:State=State{source:null,enabled:0,phase:0,recent:0,first:0,fat_sectors:0,total:0,backup:0,fsinfo:0,
+ lines:[Line{valid:0,first:0,sectors:0,bytes:[0;16384]};2]};
+unsafe fn u16(p:*const u8,n:usize)u64{unsafe{return (*(p+n) as u64)|((*(p+n+1) as u64)<<8);}}
+unsafe fn u32(p:*const u8,n:usize)u64{unsafe{return u16(p,n)|(u16(p,n+2)<<16);}}
+pub unsafe fn finish(s:*State)void{unsafe{
+ if s==null{return;}(*s).enabled=0;(*s).phase=0;(*s).recent=0;
+ (*s).first=0;(*s).fat_sectors=0;(*s).total=0;(*s).backup=0;(*s).fsinfo=0;
+ var i:usize=0;while i<2{let line=&(*s).lines[i];(*line).valid=0;(*line).first=0;(*line).sectors=0;
+  var n:usize=0;while n<16384{(*line).bytes[n]=0;n+=1;}i+=1;}
+}return;}
+pub unsafe fn begin(s:*State,source:*const fat.Device,out:*fat.Device)!void{unsafe{
+ if s==null||source==null||out==null||source as u64==out as u64{return error.Invalid;}
+ finish(s);(*s).source=source;(*s).enabled=1;
+ *out=fat.Device{context:s as u64,capacity_sectors:(*source).capacity_sectors,max_transfer_sectors:(*source).max_transfer_sectors,
+  read:read,write:write,flush:flush};
+}return;}
+// These bounded geometry hints never make a volume ready. Only the original
+// auditor can do that. Its four metadata reads precede the first FAT read;
+// unexpected shapes/order disable prefetch and preserve original exact I/O.
+unsafe fn bpb(s:*State,p:*const u8)bool{unsafe{
+ let d=*(*s).source;
+ if d.capacity_sectors<65536||d.capacity_sectors>0xffff_ffff||d.max_transfer_sectors==0||d.max_transfer_sectors>128{return false;}
+ if u16(p,510)!=0xaa55||u16(p,11)!=512||u16(p,17)!=0||u16(p,19)!=0||u16(p,22)!=0||u16(p,42)!=0{return false;}
+ let spc=*(p+13) as u64;let reserved=u16(p,14);let sectors=u32(p,36);let total=u32(p,32);let root=u32(p,44);
+ if spc==0||spc>128||(spc&(spc-1))!=0||reserved<8||*(p+16)!=2||sectors==0
+  ||total>d.capacity_sectors||total<65536||u16(p,40)!=0||*(p+21)!=0xf8{return false;}
+ let data=reserved+2*sectors;if data>=total{return false;}
+ let clusters=(total-data)/spc;
+ if clusters<65525||(clusters+2)*4>sectors*512||root<2||root>=clusters+2||clusters+2>262144{return false;}
+ let info=u16(p,48);let backup=u16(p,50);
+ if info==0||info>=reserved||backup==0||backup>=reserved||backup+info>=reserved{return false;}
+ (*s).first=reserved;(*s).fat_sectors=sectors;(*s).total=total;(*s).backup=backup;(*s).fsinfo=info;return true;
+}}
+unsafe fn observe(s:*State,lba:u64,out:*const u8)void{unsafe{
+ let phase=(*s).phase;
+ if phase==0&&lba==0{if bpb(s,out){(*s).phase=1;}else{(*s).phase=255;}return;}
+ if phase==1&&lba==(*s).backup{(*s).phase=2;return;}
+ if phase==2&&lba==(*s).fsinfo{(*s).phase=3;return;}
+ if phase==3&&lba==(*s).backup+(*s).fsinfo{(*s).phase=4;return;}
+ (*s).phase=255;
+}return;}
+unsafe fn direct(s:*State,lba:u64,count:usize,out:*u8)u64{unsafe{
+ let d=*(*s).source;let status=d.read(d.context,lba,count,out);
+ if status!=0{finish(s);}return status;
+}}
+pub unsafe fn read(context:u64,lba:u64,count:usize,out:*u8)u64{unsafe{
+ let s=context as *State;if s==null||(*s).source==null{return 0x0508_0010;}
+ if (*s).enabled==0{return direct(s,lba,count,out);}
+ if count!=1||out==null{(*s).phase=255;return direct(s,lba,count,out);}
+ if (*s).phase!=4{let status=direct(s,lba,count,out);if status==0&&(*s).enabled==1&&(*s).phase!=255{observe(s,lba,out);}return status;}
+ let d=*(*s).source;
+ if lba>=d.capacity_sectors||d.max_transfer_sectors<32{return direct(s,lba,count,out);}
+ var start=(*s).first;var end=start+(*s).fat_sectors;
+ if lba<start||lba>=end{start=end;end=start+(*s).fat_sectors;if lba<start||lba>=end{return direct(s,lba,count,out);}}
+ var index:usize=0;while index<2{let line=&(*s).lines[index];
+  if (*line).valid==1&&lba>=(*line).first&&lba-(*line).first<(*line).sectors{
+   var i:usize=0;let offset=((lba-(*line).first)*512) as usize;
+   while i<512{*(out+i)=(*line).bytes[offset+i];i+=1;}(*s).recent=index;return 0;
+  }index+=1;
+ }
+ var victim:usize=1-(*s).recent;if (*s).lines[0].valid==0{victim=0;}else if (*s).lines[1].valid==0{victim=1;}
+ let line=&(*s).lines[victim];(*line).valid=0;(*line).first=0;(*line).sectors=0;
+ let first=start+((lba-start)/32)*32;var sectors:u64=32;
+ if sectors>end-first{sectors=end-first;}if sectors>d.capacity_sectors-first{sectors=d.capacity_sectors-first;}
+ if sectors==0||lba-first>=sectors{return direct(s,lba,count,out);}
+ let status=d.read(d.context,first,sectors as usize,&(*line).bytes[0]);
+ // Accepted READ errors may poison the real controller: no retry, no reset,
+ // no publish of partially filled cache data, and never a synthetic success.
+ if status!=0{finish(s);return status;}
+ (*line).first=first;(*line).sectors=sectors;compiler_fence();(*line).valid=1;(*s).recent=victim;
+ var i:usize=0;let offset=((lba-first)*512) as usize;
+ while i<512{*(out+i)=(*line).bytes[offset+i];i+=1;}return 0;
+}}
+pub unsafe fn write(context:u64,lba:u64,count:usize,input:*const u8)u64{unsafe{
+ let s=context as *State;if s==null||(*s).source==null{return 0x0508_0010;}
+ let d=*(*s).source;finish(s);return d.write(d.context,lba,count,input);
+}}
+pub unsafe fn flush(context:u64)u64{unsafe{
+ let s=context as *State;if s==null||(*s).source==null{return 0x0508_0010;}
+ let d=*(*s).source;finish(s);return d.flush(d.context);
+}}

@@ -1,0 +1,185 @@
+// DGFONT01: bounded, immutable, little-endian grayscale glyph atlas.
+// An opened Atlas and its byte backing remain stable for every draw operation.
+module gfx.atlas;
+import gfx.geometry as geo;
+import gfx.raster as raster;
+import gfx.errors as errors;
+
+pub struct Atlas {
+    pub bytes: []const u8, pub count: usize, pub pixel_size: usize,
+    pub records: usize, pub bitmap: usize, pub bitmap_size: usize,
+    pub ascent: i64, pub descent: i64,
+}
+pub struct Glyph {
+    pub width: usize, pub height: usize, pub bearing_x: i64, pub bearing_y: i64,
+    pub advance_q6: i64, pub coverage: []const u8, pub stride: usize,
+}
+const MAX: u64 = 0xffff_ffff_ffff_ffff;
+unsafe fn u16_at(p: *const u8, offset: usize) u64 { unsafe { return read_unaligned((p + offset) as *const u16) as u64; } }
+unsafe fn u32_at(p: *const u8, offset: usize) u64 { unsafe { return read_unaligned((p + offset) as *const u32) as u64; } }
+unsafe fn i16_at(p: *const u8, offset: usize) i64 { unsafe { return read_unaligned((p + offset) as *const i16) as i64; } }
+unsafe fn i32_at(p: *const u8, offset: usize) i64 { unsafe { return read_unaligned((p + offset) as *const i32) as i64; } }
+unsafe fn check_record(bytes: []const u8, at: usize, bitmap_size: usize) !void {
+    unsafe {
+        let p = bytes.ptr + at;
+        let cp = u32_at(p,0);
+        let width = u16_at(p,4); let height = u16_at(p,6);
+        let offset = u32_at(p,16); let stride = u16_at(p,20);
+        let advance = i32_at(p,12);
+        if cp > 0x10ffff || (cp >= 0xd800 && cp <= 0xdfff) || width > 256 || height > 256
+            || stride > 256 || stride < width || ((width == 0 || height == 0) && (width != 0 || height != 0 || stride != 0))
+            || advance < -65536 || advance > 65536 || offset > bitmap_size as u64
+            || stride * height > (bitmap_size as u64) - offset
+            || u16_at(p,22) != 0 || read_unaligned((p + 24) as *const u64) != 0 { return error.errors.InvalidAtlas; }
+    }
+    return;
+}
+pub unsafe fn open(bytes: []const u8, out: *Atlas) !void {
+    unsafe {
+        if bytes.ptr == null || bytes.len < 48 || bytes.len > 0x400_0000 || (bytes.ptr as u64) > MAX - bytes.len as u64 {
+            return error.errors.InvalidAtlas;
+        }
+        let p = bytes.ptr;
+        if read_unaligned(p as *const u64) != 0x3130_544e_4f46_4744 || u32_at(p,8) != 1 || u32_at(p,12) != 48 {
+            return error.errors.InvalidAtlas;
+        }
+        let count = u32_at(p,16) as usize;
+        let pixels = u32_at(p,20) as usize;
+        let records = u32_at(p,24) as usize;
+        let bitmap = u32_at(p,28) as usize;
+        let size = u32_at(p,32) as usize;
+        let ascent = i32_at(p,36); let descent = i32_at(p,40);
+        if count == 0 || count > 65536 || pixels == 0 || pixels > 128 || records != 48
+            || bitmap != 48 + count * 32 || bitmap > bytes.len || size != bytes.len - bitmap
+            || ascent < 0 || descent < 0 || ascent > 512 || descent > 512 || ascent + descent == 0 || u32_at(p,44) != 0 {
+            return error.errors.InvalidAtlas;
+        }
+        let ob = out as u64; let sb = p as u64;
+        if ob > MAX - sizeof(Atlas) as u64 || (ob < sb + bytes.len as u64 && sb < ob + sizeof(Atlas) as u64) {
+            return error.errors.Aliased;
+        }
+        var i: usize = 0; var previous: u64 = 0;
+        while i < count {
+            let at = records + i * 32;
+            try check_record(bytes,at,size);
+            let cp = u32_at(p,at);
+            if i != 0 && cp <= previous { return error.errors.InvalidAtlas; }
+            previous = cp; i += 1;
+        }
+        *out = Atlas { bytes: bytes, count: count, pixel_size: pixels, records: records,
+            bitmap: bitmap, bitmap_size: size, ascent: ascent, descent: descent };
+    }
+    return;
+}
+unsafe fn view(value: *const Atlas) !void {
+    unsafe {
+        if value == null { return error.errors.InvalidAtlas; }
+        if (*value).bytes.ptr == null || (*value).bytes.len < 48 || (*value).bytes.len > 0x400_0000
+            || ((*value).bytes.ptr as u64) > MAX - (*value).bytes.len as u64
+            || (*value).count == 0 || (*value).count > 65536 || (*value).records != 48
+            || (*value).bitmap != 48 + (*value).count * 32 || (*value).bitmap > (*value).bytes.len
+            || (*value).bitmap_size != (*value).bytes.len - (*value).bitmap
+            || (*value).ascent < 0 || (*value).descent < 0 || (*value).ascent > 512 || (*value).descent > 512 {
+            return error.errors.InvalidAtlas;
+        }
+    }
+    return;
+}
+pub unsafe fn lookup(value: *const Atlas, codepoint: u32, out: *Glyph) !bool {
+    unsafe {
+        try view(value);
+        var low: usize = 0; var high = (*value).count;
+        while low < high {
+            let middle = low + (high - low) / 2;
+            let at = (*value).records + middle * 32;
+            let cp = u32_at((*value).bytes.ptr,at);
+            if cp < codepoint as u64 { low = middle + 1; } else { high = middle; }
+        }
+        if low == (*value).count { return false; }
+        let at = (*value).records + low * 32;
+        if u32_at((*value).bytes.ptr,at) != codepoint as u64 { return false; }
+        try check_record((*value).bytes,at,(*value).bitmap_size);
+        let p = (*value).bytes.ptr + at;
+        let offset = u32_at(p,16) as usize;
+        let stride = u16_at(p,20) as usize; let height = u16_at(p,6) as usize;
+        let begin = (*value).bitmap + offset;
+        *out = Glyph { width: u16_at(p,4) as usize, height: height, bearing_x: i16_at(p,8),
+            bearing_y: i16_at(p,10), advance_q6: i32_at(p,12),
+            coverage: (*value).bytes[begin..begin + stride * height], stride: stride };
+    }
+    return true;
+}
+struct Decoded { cp: u32, next: usize }
+unsafe fn decode(text: []const u8, at: usize, out: *Decoded) !void {
+    unsafe {
+        if at >= text.len { return error.errors.InvalidText; }
+        let b = text[at] as u32;
+        var cp = b; var length: usize = 1; var minimum: u32 = 0;
+        if b >= 128 {
+            if b >= 0xc2 && b <= 0xdf { length = 2; cp = b & 31; minimum = 0x80; }
+            else if b >= 0xe0 && b <= 0xef { length = 3; cp = b & 15; minimum = 0x800; }
+            else if b >= 0xf0 && b <= 0xf4 { length = 4; cp = b & 7; minimum = 0x10000; }
+            else { return error.errors.InvalidText; }
+        }
+        if length > text.len - at { return error.errors.InvalidText; }
+        var i: usize = 1;
+        while i < length {
+            let part = text[at + i] as u32;
+            if (part & 0xc0) != 0x80 { return error.errors.InvalidText; }
+            cp = (cp << 6) | (part & 63); i += 1;
+        }
+        if cp < minimum || cp > 0x10ffff || (cp >= 0xd800 && cp <= 0xdfff) { return error.errors.InvalidText; }
+        *out = Decoded { cp: cp, next: at + length };
+    }
+    return;
+}
+unsafe fn walk(dst: *raster.Surface, atlas: *const Atlas, text: []const u8,
+               x: i64, baseline: i64, color: u32, draw: bool, advance: *i64) !void {
+    unsafe {
+        var at: usize = 0; var pen: i64 = 0; var line = baseline;
+        var decoded = Decoded { cp: 0, next: 0 };
+        var glyph = Glyph { width: 0, height: 0, bearing_x: 0, bearing_y: 0, advance_q6: 0,
+            coverage: (*atlas).bytes[0..0], stride: 0 };
+        while at < text.len {
+            try decode(text,at,&decoded); at = decoded.next;
+            if decoded.cp == 10 { pen = 0; line = try geo.add(line,(*atlas).ascent + (*atlas).descent); }
+            else {
+                let found = try lookup(atlas,decoded.cp,&glyph);
+                if !found {
+                    let fallback = try lookup(atlas,0xfffd,&glyph);
+                    if !fallback { return error.errors.MissingGlyph; }
+                }
+                let gx = try geo.add(try geo.add(x,pen / 64),glyph.bearing_x);
+                let gy = try geo.add(line,-glyph.bearing_y);
+                var area = geo.EMPTY;
+                try geo.from_xywh(gx,gy,glyph.width,glyph.height,&area);
+                if draw && glyph.width != 0 && glyph.height != 0 {
+                    try raster.mask(dst,gx,gy,glyph.coverage,glyph.width,glyph.height,glyph.stride,color);
+                }
+                pen += glyph.advance_q6;
+            }
+        }
+        *advance = pen / 64;
+    }
+    return;
+}
+// Validate the entire string/atlas/coordinates before any output pixel. A
+// missing codepoint uses U+FFFD, which must itself be present in the atlas.
+pub unsafe fn draw_text(dst: *raster.Surface, atlas: *const Atlas, text: []const u8,
+                        x: i64, baseline: i64, color: u32, advance: *i64) !void {
+    unsafe {
+        try raster.validate(dst); try view(atlas);
+        if text.len > 65536 || (text.len != 0 && text.ptr == null) || (text.ptr as u64) > MAX - text.len as u64 {
+            return error.errors.InvalidText;
+        }
+        let db = (*dst).pixels.ptr as u64; let de = db + ((*dst).pixels.len as u64) * 4;
+        let ab = (*atlas).bytes.ptr as u64; let tb = text.ptr as u64;
+        if (db < ab + (*atlas).bytes.len as u64 && ab < de)
+            || (text.len != 0 && db < tb + text.len as u64 && tb < de) { return error.errors.Aliased; }
+        var measured: i64 = 0;
+        try walk(dst,atlas,text,x,baseline,color,false,&measured);
+        try walk(dst,atlas,text,x,baseline,color,true,&measured);
+        *advance = measured;
+    }
+    return;
+}

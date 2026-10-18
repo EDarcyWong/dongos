@@ -1,0 +1,133 @@
+// Emit one NASM integer memory-load line. Address text comes from
+// CR8 nasm_memory_operand.encode into stack scratch first so failures
+// never leave a half-written instruction. INVALID precedes CAPACITY.
+module bootstrap.nasm_integer_memory_load;
+import bootstrap.nasm_memory_operand as mem;
+pub const OK:u64=0;pub const INVALID:u64=1;pub const CAPACITY:u64=2;
+const MAX:u64=0xffff_ffff_ffff_ffff;
+const I32_MIN:i64=-2147483648;
+const I32_MAX:i64=2147483647;
+fn span(p:u64,n:u64)bool{return n==0||(p!=0&&n<=MAX-p);}
+fn overlap(a:u64,n:u64,b:u64,m:u64)bool{return n!=0&&m!=0&&a<b+m&&b<a+n;}
+fn width_ok(width:u64)bool{return width==8||width==16||width==32||width==64;}
+fn reg64_len(r:u64)usize{
+ if r<=7{return 3;}
+ if r<=9{return 2;}
+ return 3;
+}
+fn reg32_len(r:u64)usize{
+ if r<=9{return 3;}
+ return 4;
+}
+fn write_reg64(out:[]u8,at:usize,r:u64)usize{
+ if r==0{out[at]=114;out[at+1]=97;out[at+2]=120;return at+3;}
+ if r==1{out[at]=114;out[at+1]=99;out[at+2]=120;return at+3;}
+ if r==2{out[at]=114;out[at+1]=100;out[at+2]=120;return at+3;}
+ if r==3{out[at]=114;out[at+1]=98;out[at+2]=120;return at+3;}
+ if r==4{out[at]=114;out[at+1]=115;out[at+2]=112;return at+3;}
+ if r==5{out[at]=114;out[at+1]=98;out[at+2]=112;return at+3;}
+ if r==6{out[at]=114;out[at+1]=115;out[at+2]=105;return at+3;}
+ if r==7{out[at]=114;out[at+1]=100;out[at+2]=105;return at+3;}
+ if r==8{out[at]=114;out[at+1]=56;return at+2;}
+ if r==9{out[at]=114;out[at+1]=57;return at+2;}
+ if r==10{out[at]=114;out[at+1]=49;out[at+2]=48;return at+3;}
+ if r==11{out[at]=114;out[at+1]=49;out[at+2]=49;return at+3;}
+ if r==12{out[at]=114;out[at+1]=49;out[at+2]=50;return at+3;}
+ if r==13{out[at]=114;out[at+1]=49;out[at+2]=51;return at+3;}
+ if r==14{out[at]=114;out[at+1]=49;out[at+2]=52;return at+3;}
+ out[at]=114;out[at+1]=49;out[at+2]=53;return at+3;
+}
+fn write_reg32(out:[]u8,at:usize,r:u64)usize{
+ if r==0{out[at]=101;out[at+1]=97;out[at+2]=120;return at+3;}
+ if r==1{out[at]=101;out[at+1]=99;out[at+2]=120;return at+3;}
+ if r==2{out[at]=101;out[at+1]=100;out[at+2]=120;return at+3;}
+ if r==3{out[at]=101;out[at+1]=98;out[at+2]=120;return at+3;}
+ if r==4{out[at]=101;out[at+1]=115;out[at+2]=112;return at+3;}
+ if r==5{out[at]=101;out[at+1]=98;out[at+2]=112;return at+3;}
+ if r==6{out[at]=101;out[at+1]=115;out[at+2]=105;return at+3;}
+ if r==7{out[at]=101;out[at+1]=100;out[at+2]=105;return at+3;}
+ if r==8{out[at]=114;out[at+1]=56;out[at+2]=100;return at+3;}
+ if r==9{out[at]=114;out[at+1]=57;out[at+2]=100;return at+3;}
+ if r==10{out[at]=114;out[at+1]=49;out[at+2]=48;out[at+3]=100;return at+4;}
+ if r==11{out[at]=114;out[at+1]=49;out[at+2]=49;out[at+3]=100;return at+4;}
+ if r==12{out[at]=114;out[at+1]=49;out[at+2]=50;out[at+3]=100;return at+4;}
+ if r==13{out[at]=114;out[at+1]=49;out[at+2]=51;out[at+3]=100;return at+4;}
+ if r==14{out[at]=114;out[at+1]=49;out[at+2]=52;out[at+3]=100;return at+4;}
+ out[at]=114;out[at+1]=49;out[at+2]=53;out[at+3]=100;return at+4;
+}
+fn copy(out:[]u8,at:usize,text:[]const u8)usize{
+ var i:usize=0;while i<text.len{out[at+i]=text[i];i+=1;}return at+text.len;
+}
+// kind: 0 movsx+byte, 1 movzx+byte, 2 movsx+word, 3 movzx+word,
+//       4 movsxd+dword, 5 mov+dest32+dword, 6 mov+dest64+qword
+fn kind_of(width:u64,signed:bool)u64{
+ if width==8{if signed{return 0;}return 1;}
+ if width==16{if signed{return 2;}return 3;}
+ if width==32{if signed{return 4;}return 5;}
+ return 6;
+}
+fn mnem_len(kind:u64)usize{
+ if kind==4{return 7;}
+ if kind==5||kind==6{return 4;}
+ return 6;
+}
+fn size_len(kind:u64)usize{
+ if kind==0||kind==1||kind==2||kind==3{return 5;}
+ return 6;
+}
+fn dest_len(kind:u64,dest:u64)usize{
+ if kind==5{return reg32_len(dest);}
+ return reg64_len(dest);
+}
+fn write_mnem(out:[]u8,kind:u64)usize{
+ if kind==0||kind==2{
+  out[0]=109;out[1]=111;out[2]=118;out[3]=115;out[4]=120;out[5]=32;return 6;
+ }
+ if kind==1||kind==3{
+  out[0]=109;out[1]=111;out[2]=118;out[3]=122;out[4]=120;out[5]=32;return 6;
+ }
+ if kind==4{
+  out[0]=109;out[1]=111;out[2]=118;out[3]=115;out[4]=120;out[5]=100;out[6]=32;return 7;
+ }
+ out[0]=109;out[1]=111;out[2]=118;out[3]=32;return 4;
+}
+fn write_size(out:[]u8,at:usize,kind:u64)usize{
+ if kind==0||kind==1{
+  out[at]=98;out[at+1]=121;out[at+2]=116;out[at+3]=101;out[at+4]=32;return at+5;
+ }
+ if kind==2||kind==3{
+  out[at]=119;out[at+1]=111;out[at+2]=114;out[at+3]=100;out[at+4]=32;return at+5;
+ }
+ if kind==4||kind==5{
+  out[at]=100;out[at+1]=119;out[at+2]=111;out[at+3]=114;out[at+4]=100;out[at+5]=32;return at+6;
+ }
+ out[at]=113;out[at+1]=119;out[at+2]=111;out[at+3]=114;out[at+4]=100;out[at+5]=32;return at+6;
+}
+pub unsafe fn emit(destination:u64,base:u64,displacement:i64,width:u64,signed:bool,out:[]u8,written:*usize)u64{unsafe{
+ let wp=written as u64;let op=out.ptr as u64;
+ if written==null||(wp&7)!=0||!span(wp,8){return INVALID;}
+ if !span(op,out.len){return INVALID;}
+ if overlap(wp,8,op,out.len){return INVALID;}
+ if destination>15||base>15{return INVALID;}
+ if !width_ok(width){return INVALID;}
+ if displacement<I32_MIN||displacement>I32_MAX{return INVALID;}
+ var ob:[64]u8=[0;64];var ow:usize=0;
+ let osl=slice_from_raw_parts(&ob[0],64);
+ let ms=mem.encode(base,displacement,osl,&ow);
+ if ms!=OK{return ms;}
+ let kind=kind_of(width,signed);
+ let ml=mnem_len(kind);let dl=dest_len(kind,destination);let sl=size_len(kind);
+ if ml>MAX-dl{return INVALID;}let a1=ml+dl;
+ if 2>MAX-a1{return INVALID;}let a2=a1+2;
+ if sl>MAX-a2{return INVALID;}let a3=a2+sl;
+ if ow>MAX-a3{return INVALID;}let a4=a3+ow;
+ if 1>MAX-a4{return INVALID;}let total=a4+1;
+ if total>out.len{return CAPACITY;}
+ var at=write_mnem(out,kind);
+ if kind==5{at=write_reg32(out,at,destination);}else{at=write_reg64(out,at,destination);}
+ out[at]=44;out[at+1]=32;at+=2;
+ at=write_size(out,at,kind);
+ at=copy(out,at,slice_from_raw_parts(&ob[0],ow));
+ out[at]=10;
+ *written=total;return OK;
+}}

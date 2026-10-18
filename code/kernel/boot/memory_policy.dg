@@ -1,0 +1,6 @@
+// One source for the retained BSP kernel page-table pool. These are compile
+// time ownership bounds, never runtime guesses or a moving active root.
+module boot.memory_policy;
+pub const POOL_ORDER:usize=7;
+pub const POOL_PAGES:usize=1<<POOL_ORDER;
+pub const POOL_BYTES:u64=(POOL_PAGES as u64)*4096;

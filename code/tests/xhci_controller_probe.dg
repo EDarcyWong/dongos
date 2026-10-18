@@ -1,0 +1,5 @@
+module xhci_controller_probe;
+import usb.xhci_controller as c;
+import xhci_core_probe as core;
+export("xhc_initialize") fn initialize(s:*c.State,o:*const c.Ops,context:u64,input:*const c.Setup)u64 {unsafe {match c.initialize(s,o,context,input) {ok=>{return 0;},err(e)=>{return e;},}}}
+export("xhc_noop") fn noop(s:*c.State)u64 {unsafe {match c.noop(s) {ok=>{return 0;},err(e)=>{return e;},}}}

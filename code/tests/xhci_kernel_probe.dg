@@ -1,0 +1,18 @@
+module xhci_kernel_probe;
+import user.devices as devices;
+import user.device_host as host;
+import ipc.handles as handles;
+import lib.device_abi as abi;
+export("xk_host_init") fn initialize()u64 {unsafe {match host.initialize(){ok=>{return 0;},err(e)=>{return e;},}}}
+export("xk_enum") fn enumerate(cursor:u64,out:*abi.Device)u64 {unsafe {match host.enumerate(cursor){ok=>{*out=host.VIEW;return 0;},err(e)=>{return e;},}}}
+export("xk_bind") fn bind(token:u64,role:u64,out:*abi.Binding)u64 {unsafe {match host.bind(token,role){ok=>{*out=host.BINDING;return 0;},err(e)=>{return e;},}}}
+export("xk_attach") fn attach(slot:u64,owner:u64,incarnation:u64)u64 {unsafe {match host.xhci_attach(slot as usize,owner,incarnation){ok=>{return 0;},err(e)=>{return e;},}}}
+export("xk_grant") fn grant(slot:u64,table:*handles.Table,ecam:u64)u64 {unsafe {match devices.grant(slot as usize,table,ecam){ok=>{return 0;},err(e)=>{return e;},}}}
+export("xk_dma") fn dma(slot:u64,bytes:u64,alignment:u64)u64 {unsafe {match devices.dma_acquire(slot as usize,bytes,alignment){ok=>{return 0;},err(e)=>{return e;},}}}
+export("xk_bars") fn bars(slot:u64)u64 {unsafe{return devices.granted_bars(slot as usize) as u64;}}
+export("xk_lease") fn lease(slot:u64)u64 {unsafe{return devices.dma_lease(slot as usize) as u64;}}
+export("xk_mapped") fn mapped(slot:u64,object:u64)u64 {unsafe {match devices.mapped(slot as usize,object){ok(value)=>{return value;},err(e)=>{return e;},}}}
+export("xk_enable") fn enable(slot:u64,owner:u64,incarnation:u64)u64 {unsafe {match devices.xhci_enable(slot as usize,owner,incarnation){ok=>{return 0;},err(e)=>{return e;},}}}
+export("xk_quarantine") fn quarantine(slot:u64)u64 {unsafe {match devices.quarantine(slot as usize){ok=>{return 0;},err(e)=>{return e;},}}}
+export("xk_revoke_owner") fn revoke_owner(owner:u64)u64 {unsafe {match host.revoke_owner(owner){ok=>{return 0;},err(e)=>{return e;},}}}
+export("xk_revoke") fn revoke(token:u64,generation:u64)u64 {unsafe {match host.revoke(token,generation){ok(value)=>{return value;},err(e)=>{return e;},}}}

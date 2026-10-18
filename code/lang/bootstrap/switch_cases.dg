@@ -1,0 +1,45 @@
+// Order constant switch cases by signed i64 value and reject duplicate values.
+// The cases are copied to work and heapsorted there (in place, non-recursive,
+// O(N log N)); out and used are written only when no duplicate exists.
+module bootstrap.switch_cases;
+pub const OK:u64=0;pub const INVALID:u64=1;pub const CAPACITY:u64=2;pub const WORKSPACE:u64=3;
+pub struct Case{pub value:i64,pub label:usize}
+const MAX:u64=0xffff_ffff_ffff_ffff;
+fn span(p:u64,n:u64)bool{return n==0||(p!=0&&n<=MAX-p);}
+fn overlap(a:u64,n:u64,b:u64,m:u64)bool{return n!=0&&m!=0&&a<b+m&&b<a+n;}
+unsafe fn valid(input:[]const Case,out:[]Case,work:[]Case,used:*usize)bool{unsafe{
+ if used==null||input.len>MAX/sizeof(Case)||out.len>MAX/sizeof(Case)||work.len>MAX/sizeof(Case){return false;}
+ let ip=input.ptr as u64;let op=out.ptr as u64;let wp=work.ptr as u64;let up=used as u64;
+ let size=sizeof(Case);let inn=input.len*size;let on=out.len*size;let wn=work.len*size;
+ if !span(ip,inn)||!span(op,on)||!span(wp,wn)||!span(up,8){return false;}
+ if (inn!=0&&(ip&7)!=0)||(on!=0&&(op&7)!=0)||(wn!=0&&(wp&7)!=0)||(up&7)!=0{return false;}
+ if overlap(op,on,ip,inn)||overlap(wp,wn,ip,inn)||overlap(up,8,ip,inn)
+  ||overlap(op,on,wp,wn)||overlap(op,on,up,8)||overlap(wp,wn,up,8){return false;}
+ return true;
+}}
+fn less(a:i64,b:i64)bool{return a<b;}
+// Restore the max-heap property below root within work[0..end).
+fn sift(work:[]Case,root:usize,end:usize)void{
+ var parent=root;
+ while true{
+  // parent<end<=MAX/16, so 2*parent+1 cannot wrap.
+  let left=2*parent+1;if left>=end{break;}
+  var child=left;if left+1<end&&less(work[left].value,work[left+1].value){child=left+1;}
+  if !less(work[parent].value,work[child].value){break;}
+  let t=work[parent];work[parent]=work[child];work[child]=t;parent=child;
+ }
+}
+pub unsafe fn order(input:[]const Case,out:[]Case,work:[]Case,used:*usize)u64{unsafe{
+ if !valid(input,out,work,used){return INVALID;}
+ let n=input.len;
+ if out.len<n{return CAPACITY;}
+ if work.len<n{return WORKSPACE;}
+ var i:usize=0;while i<n{work[i]=input[i];i+=1;}
+ // Heapsort: build a max-heap, then repeatedly move the maximum to the end.
+ i=n/2;while i!=0{i-=1;sift(work,i,n);}
+ var end=n;while end>1{end-=1;let t=work[0];work[0]=work[end];work[end]=t;sift(work,0,end);}
+ // After sorting, any duplicate value is adjacent.
+ i=1;while i<n{if work[i].value==work[i-1].value{return INVALID;}i+=1;}
+ i=0;while i<n{out[i]=work[i];i+=1;}
+ *used=n;return OK;
+}}

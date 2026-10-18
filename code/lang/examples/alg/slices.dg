@@ -1,0 +1,21 @@
+module alg.slices;
+
+pub fn window(data: []u64, begin: usize, end: usize) []u64 {
+    return data[begin..end];
+}
+
+pub fn fold(data: []const u64) u64 {
+    var result: u64 = 0;
+    var index: usize = 0;
+    while index < data.len {
+        result += data[index];
+        index += 1;
+    }
+    return result;
+}
+
+// Five scalars leave one GP register: the whole slice goes on the stack,
+// tail uses that last register, and extra follows the slice on the stack.
+pub fn rollback(a:u64,b:u64,c:u64,d:u64,e:u64,data:[]const u64,tail:u64,extra:u64) u64 {
+    return a+b+c+d+e+fold(data)+tail+extra;
+}

@@ -1,0 +1,73 @@
+// xHCI 32/64-byte input contexts for direct root-port USB functions.
+// Hubs, streams, isochronous endpoints and SuperSpeed bursts stay unsupported.
+module usb.xhci_context;
+import usb.xhci_trb as wire;
+pub struct Slot {pub speed:u64,pub root_port:u64,pub entries:u64}
+pub struct Endpoint {
+    pub address:u64,pub transfer_type:u64,pub packet:u64,pub interval:u64,
+    pub ring:u64,pub ring_entries:u64,pub cycle:u64,pub average:u64,
+}
+pub unsafe fn endpoint_id(address:u64)!u64 {
+    if address>255||(address&0x70)!=0 {return error.wire.Invalid;}
+    let number=address&15;if number==0 {if address!=0 {return error.wire.Invalid;}return 1;}
+    return number*2+((address>>7)&1);
+}
+pub fn interval(speed:u64,usb_interval:u64)!u64 {
+    if speed<1||speed>4||usb_interval==0 {return error.wire.Invalid;}
+    if speed==1||speed==2 {
+        if usb_interval>255 {return error.wire.Invalid;}
+        var value=usb_interval;var result:u64=3;while value>=2 {value>>=1;result+=1;}return result;
+    }
+    if usb_interval>16 {return error.wire.Invalid;}return usb_interval-1;
+}
+unsafe fn validate_endpoint(region:*const wire.Region,slot:*const Slot,e:*const Endpoint)!u64 {unsafe {
+    if slot==null||e==null {return error.wire.Invalid;}let s=*slot;let endpoint=*e;
+    if s.speed<1||s.speed>4||s.root_port==0||s.root_port>255||s.entries==0||s.entries>31 {return error.wire.Invalid;}
+    let id=try endpoint_id(endpoint.address);
+    if id>s.entries||endpoint.packet==0||endpoint.packet>1024||endpoint.cycle>1
+        ||endpoint.average==0||endpoint.average>65535||endpoint.ring_entries<16||endpoint.ring_entries>256 {return error.wire.Invalid;}
+    try wire.span(region,endpoint.ring,endpoint.ring_entries*16,64);
+    if endpoint.ring_entries*16>4096-(endpoint.ring&4095) {return error.wire.Bounds;}
+    if id==1 {
+        if endpoint.transfer_type!=0||endpoint.interval!=0 {return error.wire.Invalid;}
+        if s.speed==2 {if endpoint.packet!=8 {return error.wire.Unsupported;}}
+        else if s.speed==1 {if endpoint.packet!=8&&endpoint.packet!=16&&endpoint.packet!=32&&endpoint.packet!=64 {return error.wire.Unsupported;}}
+        else if s.speed==3 {if endpoint.packet!=64 {return error.wire.Unsupported;}}
+        else if endpoint.packet!=512 {return error.wire.Unsupported;}
+    }else if endpoint.transfer_type==2 {
+        if s.speed==2||endpoint.interval!=0 {return error.wire.Unsupported;}
+        if s.speed==1 {if endpoint.packet!=8&&endpoint.packet!=16&&endpoint.packet!=32&&endpoint.packet!=64 {return error.wire.Unsupported;}}
+        else if s.speed==3 {if endpoint.packet!=512 {return error.wire.Unsupported;}}
+        else if endpoint.packet!=1024 {return error.wire.Unsupported;}
+    }else if endpoint.transfer_type==3 {
+        if s.speed==2&&endpoint.packet>8 {return error.wire.Unsupported;}
+        if (s.speed==1||s.speed==2)&&(endpoint.interval<3||endpoint.interval>10) {return error.wire.Unsupported;}
+        if s.speed==1&&endpoint.packet>64 {return error.wire.Unsupported;}
+        if s.speed>=3&&endpoint.interval>15 {return error.wire.Unsupported;}
+    }else {return error.wire.Unsupported;}
+    return id;
+}}
+unsafe fn put32(out:*u8,offset:usize,value:u64)void {unsafe {write_unaligned((out+offset) as *u32,value as u32);}return;}
+pub unsafe fn encode(region:*const wire.Region,physical:u64,context_bytes:u64,slot:*const Slot,endpoint:*const Endpoint,address_device:bool,out:[]u8)!void {unsafe {
+    if context_bytes!=32&&context_bytes!=64 {return error.wire.Unsupported;}
+    if out.ptr==null||out.len!=33*context_bytes as usize {return error.wire.Invalid;}
+    if (out.ptr as u64)>0xffff_ffff_ffff_ffff-out.len as u64 {return error.wire.Bounds;}
+    let id=try validate_endpoint(region,slot,endpoint);
+    if address_device {if id!=1||(*slot).entries!=1 {return error.wire.Invalid;}}
+    else if id==1 {return error.wire.Unsupported;}
+    let bytes=33*context_bytes;try wire.span(region,physical,bytes,64);
+    if bytes>4096-(physical&4095) {return error.wire.Bounds;}
+    let ring=(*endpoint).ring;let ring_bytes=(*endpoint).ring_entries*16;
+    if physical<ring+ring_bytes&&ring<physical+bytes {return error.wire.Bounds;}
+    var i:usize=0;while i<out.len {out[i]=0;i+=1;}
+    // Input Control Context: add the slot and selected Endpoint Context.
+    put32(out.ptr,4,(1 as u64)|(1<<id));
+    let s=out.ptr+context_bytes as usize;
+    put32(s,0,((*slot).speed<<20)|((*slot).entries<<27));put32(s,4,(*slot).root_port<<16);
+    let e=out.ptr+((id+1)*context_bytes) as usize;
+    var kind:u64=4;if id!=1 {kind=(*endpoint).transfer_type;if ((*endpoint).address&128)!=0 {kind+=4;}}
+    put32(e,0,(*endpoint).interval<<16);put32(e,4,(3<<1)|(kind<<3)|((*endpoint).packet<<16));
+    write_unaligned((e+8) as *u64,ring|(*endpoint).cycle);
+    var payload:u64=0;if (*endpoint).transfer_type==3 {payload=(*endpoint).packet;}
+    put32(e,16,(*endpoint).average|(payload<<16));
+}return;}

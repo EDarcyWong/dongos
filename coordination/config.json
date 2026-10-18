@@ -1,0 +1,9 @@
+{
+  "schema_version": 1,
+  "port": 8765,
+  "parallel_jobs": 2,
+  "job_timeout_seconds": 1800,
+  "providers": {
+    "lmstudio": {"base_url": "http://127.0.0.1:1234/v1", "model": "qwen/qwen3.8-27b"}
+  }
+}

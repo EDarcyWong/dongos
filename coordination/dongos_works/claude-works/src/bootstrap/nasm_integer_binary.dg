@@ -1,0 +1,39 @@
+// One NASM line for an explicitly wrapping 64-bit integer binary operation:
+// "<add|sub|and|or|xor|imul> <dest64>, <source64>\n". The result is modulo
+// 2^64; only dest and flags change. The line is built in a local buffer and
+// copied to out in one final step after every check has passed.
+module bootstrap.nasm_integer_binary;
+pub const OK:u64=0;pub const INVALID:u64=1;pub const CAPACITY:u64=2;
+pub const ADD:u64=0;pub const SUB:u64=1;pub const AND:u64=2;pub const OR:u64=3;pub const XOR:u64=4;pub const IMUL:u64=5;
+const MAX:u64=0xffff_ffff_ffff_ffff;
+fn span(p:u64,n:u64)bool{return n==0||(p!=0&&n<=MAX-p);}
+fn overlap(a:u64,n:u64,b:u64,m:u64)bool{return n!=0&&m!=0&&a<b+m&&b<a+n;}
+fn copy(out:[]u8,at:usize,text:[]const u8)usize{
+ var i:usize=0;while i<text.len{out[at+i]=text[i];i+=1;}return at+text.len;
+}
+fn mnemonic(operation:u64)[]const u8{
+ if operation==ADD{return "add";}if operation==SUB{return "sub";}if operation==AND{return "and";}
+ if operation==OR{return "or";}if operation==XOR{return "xor";}return "imul";
+}
+// 64-bit register names in encoding order 0..15.
+fn register(r:u64)[]const u8{
+ if r==0{return "rax";}if r==1{return "rcx";}if r==2{return "rdx";}if r==3{return "rbx";}
+ if r==4{return "rsp";}if r==5{return "rbp";}if r==6{return "rsi";}if r==7{return "rdi";}
+ if r==8{return "r8";}if r==9{return "r9";}if r==10{return "r10";}if r==11{return "r11";}
+ if r==12{return "r12";}if r==13{return "r13";}if r==14{return "r14";}return "r15";
+}
+pub unsafe fn emit(operation:u64,destination:u64,source:u64,out:[]u8,written:*usize)u64{unsafe{
+ let wp=written as u64;let op=out.ptr as u64;
+ if written==null||(wp&7)!=0||!span(wp,8){return INVALID;}
+ if !span(op,out.len){return INVALID;}
+ if overlap(wp,8,op,out.len){return INVALID;}
+ if operation>IMUL||destination>15||source>15{return INVALID;}
+ // At most "imul r15, r15\n" = 15 bytes: no length arithmetic can overflow.
+ var line:[16]u8=[0;16];let buffer=slice_from_raw_parts(&line[0],16);
+ var at=copy(buffer,0,mnemonic(operation));buffer[at]=32;
+ at=copy(buffer,at+1,register(destination));buffer[at]=44;buffer[at+1]=32;
+ at=copy(buffer,at+2,register(source));buffer[at]=10;at+=1;
+ if at>out.len{return CAPACITY;}
+ var i:usize=0;while i<at{out[i]=buffer[i];i+=1;}
+ *written=at;return OK;
+}}

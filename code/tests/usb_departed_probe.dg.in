@@ -1,0 +1,62 @@
+module usb_departed_fixture;
+import user.abi as abi;import user.processes as procs;import lib.process_abi as proc;
+import ipc.handles as handles;import usb_departed_windows as windows;
+pub error Protocol=0x050b_0002;pub error InvalidCall=0x050b_0001;
+const COUNT:usize=16;var ACTIVE:usize=16;var CURRENT:usize=4;var GRAPHICS:bool=true;
+struct Process {ready:u64}var PROCESSES:[16]Process=[Process{ready:0};16];
+struct State {table:handles.Table}var STATES:[16]State=[State{table:handles.EMPTY_TABLE};16];
+var CAPS:[16][6]u64=[[0;6];16];var GUI_DEPARTED:[16]u64=[0;16];var USB_DEPARTED:u64=0;
+var MODEL:procs.Catalog=procs.Catalog{ready:0,count:0,sequence:0,configs:[proc.EMPTY_CONFIG;32],
+ states:[proc.EMPTY_SNAPSHOT;32],slot:[0;32],incarnation:[0;16],configuration:[0;16],events:[proc.EMPTY_EVENT;64]};
+var CATALOG:*procs.Catalog=null;var SNAPSHOT:proc.Snapshot=proc.EMPTY_SNAPSHOT;
+unsafe extern "sysv64" fn ud_boundary(kind:u64,id:u64,inc:u64,logical:u64)u64;
+unsafe fn process(id:usize)*Process {unsafe{return &PROCESSES[id];}}
+unsafe fn revoke_loaded(id:usize,inc:u64)!void {unsafe{
+ if ud_boundary(1,id as u64,inc,procs.current(CATALOG,id))!=0 {return error.Protocol;}
+ (*process(id)).ready=0;
+}return;}
+// EXACT_PRODUCTION_FUNCTIONS
+export("ud_setup") fn setup()u64 {unsafe{
+ CATALOG=&MODEL;match procs.initialize(CATALOG,1000000000){ok=>{},err(e)=>{return e;},}
+ let order:[4]usize=[5,6,4,13];var i:usize=0;while i<4 {let id=order[i];
+  match procs.start(CATALOG,id,id,0,&SNAPSHOT){ok=>{},err(e)=>{return e;},}
+  match procs.mark_ready(CATALOG,id,1){ok=>{},err(e)=>{return e;},}PROCESSES[id].ready=1;i+=1;
+ }
+ i=0;while i<16 {try_init(i);i+=1;}
+}return 0;}
+unsafe fn try_init(id:usize)void {unsafe{
+ match handles.init(&STATES[id].table){ok=>{},err(e)=>{},}
+ match handles.install(&STATES[id].table,handles.ENDPOINT,id as u64+1,handles.WAIT|handles.REPLY){ok(t)=>{CAPS[id][0]=t;},err(e)=>{},}
+ match handles.install(&STATES[id].table,handles.ENDPOINT,5,handles.WAIT|handles.REPLY){ok(t)=>{CAPS[id][1]=t;},err(e)=>{},}
+ match handles.install(&STATES[id].table,handles.ENDPOINT,5,handles.CALL){ok(t)=>{CAPS[id][2]=t;},err(e)=>{},}
+ match handles.install(&STATES[id].table,handles.DEVICE,5,handles.READ){ok(t)=>{CAPS[id][3]=t;},err(e)=>{},}
+ match handles.install(&STATES[id].table,handles.ENDPOINT,5,handles.WAIT|handles.REPLY){ok(t)=>{
+  CAPS[id][4]=t;let ignored=handles.close(&STATES[id].table,t);
+ },err(e)=>{},}
+ match handles.install(&STATES[id].table,handles.ENDPOINT,6,handles.WAIT|handles.REPLY){ok(t)=>{CAPS[id][5]=t;},err(e)=>{},}
+}return;}
+export("ud_cap") fn cap(id:usize,kind:usize)u64 {unsafe{return CAPS[id][kind];}}
+export("ud_query") unsafe fn query(actor:usize,frame:*abi.Frame)u64 {unsafe{
+ CURRENT=actor;match perform(frame){ok(n)=>{if n!=actor{return 0xdead;}return 0;},err(e)=>{return e;},}
+}}
+export("ud_retire") fn retire_test(id:usize,state:u64)u64 {unsafe{
+ match retire_one(id,state,0){ok=>{return 0;},err(e)=>{return e;},}
+}}
+export("ud_restart") fn restart()u64 {unsafe{
+ match procs.start(CATALOG,13,13,0,&SNAPSHOT){ok=>{},err(e)=>{return e;},}
+ let inc=(*CATALOG).incarnation[13];PROCESSES[13].ready=1;
+ match procs.mark_ready(CATALOG,13,inc){ok=>{return 0;},err(e)=>{return e;},}
+}}
+export("ud_pending") fn pending()u64 {unsafe{return USB_DEPARTED;}}
+export("ud_current") fn current(id:usize)u64 {unsafe{return procs.current(CATALOG,id);}}
+export("ud_change") fn change(kind:u64,value:u64)void {unsafe{
+ if kind==0 {GRAPHICS=value!=0;}else if kind==1 {CATALOG=null;if value!=0{CATALOG=&MODEL;}}
+ else if kind==2 {PROCESSES[4].ready=value;}else if kind==3 {MODEL.configuration[4]=value;}
+ else if kind==4 {USB_DEPARTED=value;}else if kind==5 {MODEL.incarnation[13]=value;}
+ else if kind==6 {ACTIVE=value as usize;}else if kind==7 {
+  // Construct a coherent alternative configuration in physical slot13 so the
+  // actual role check is exercised independently of the slot check.
+  MODEL.configuration[13]=value;MODEL.states[value as usize]=MODEL.states[13];
+  MODEL.states[value as usize].configuration=value;MODEL.slot[value as usize]=13;
+ }else if kind==8 {MODEL.sequence=value;}
+}return;}

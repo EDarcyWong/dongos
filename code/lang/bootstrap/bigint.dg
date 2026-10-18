@@ -1,0 +1,115 @@
+// Compiler-internal signed magnitude arithmetic; no host/runtime allocation.
+// Limbs are little-endian u32; zero is the empty nonnegative slice.
+// Inputs, output, scratch and Result must be disjoint (inputs may overlap).
+// INVALID leaves every buffer unchanged. Other failures may change scratch,
+// but never output/Result. Success writes only used output limbs and Result.
+module bootstrap.bigint;
+pub const OK:u64=0;pub const INVALID:u64=1;pub const CAPACITY:u64=2;
+pub const WORKSPACE:u64=3;pub const LITERAL:u64=4;
+pub const ADD:u64=1;pub const SUB:u64=2;pub const MUL:u64=3;pub const CMP:u64=4;
+pub struct Result{pub negative:bool,pub used:usize}
+const MAX:u64=0xffff_ffff_ffff_ffff;
+fn span(p:u64,n:u64)bool{return n==0||(p!=0&&n<=MAX-p);}
+fn overlap(a:u64,n:u64,b:u64,m:u64)bool{return n!=0&&m!=0&&a<b+m&&b<a+n;}
+unsafe fn valid(a:[]const u32,b:[]const u32,out:[]u32,work:[]u32,result:*Result)bool{unsafe{
+ if result==null||a.len>MAX/4||b.len>MAX/4||out.len>MAX/4||work.len>MAX/4{return false;}
+ let ap=a.ptr as u64;let bp=b.ptr as u64;let op=out.ptr as u64;let wp=work.ptr as u64;let rp=result as u64;
+ let an=a.len*4;let bn=b.len*4;let on=out.len*4;let wn=work.len*4;
+ if !span(ap,an)||!span(bp,bn)||!span(op,on)||!span(wp,wn)||!span(rp,sizeof(Result)){return false;}
+ if (an!=0&&(ap&3)!=0)||(bn!=0&&(bp&3)!=0)||(on!=0&&(op&3)!=0)||(wn!=0&&(wp&3)!=0)||(rp&7)!=0{return false;}
+ if overlap(ap,an,op,on)||overlap(bp,bn,op,on)||overlap(ap,an,wp,wn)||overlap(bp,bn,wp,wn)
+  ||overlap(ap,an,rp,sizeof(Result))||overlap(bp,bn,rp,sizeof(Result))
+  ||overlap(op,on,wp,wn)||overlap(op,on,rp,sizeof(Result))||overlap(wp,wn,rp,sizeof(Result)){return false;}
+ return true;
+}}
+fn canonical(negative:bool,a:[]const u32)bool{
+ if a.len==0{return !negative;}return a[a.len-1]!=0;
+}
+fn magnitude(a:[]const u32,b:[]const u32)i64{
+ if a.len<b.len{return -1;}if a.len>b.len{return 1;}var i=a.len;
+ while i!=0{i-=1;if a[i]<b[i]{return -1;}if a[i]>b[i]{return 1;}}return 0;
+}
+fn trimmed(a:[]const u32,n:usize)usize{var used=n;while used!=0&&a[used-1]==0{used-=1;}return used;}
+unsafe fn publish(negative:bool,used:usize,out:[]u32,work:[]u32,result:*Result)u64{unsafe{
+ if used>out.len{return CAPACITY;}var i:usize=0;while i<used{out[i]=work[i];i+=1;}
+ *result=Result{negative:negative&&used!=0,used:used};return OK;
+}}
+fn add_abs(a:[]const u32,b:[]const u32,work:[]u32,n:usize)usize{
+ var carry:u64=0;var i:usize=0;
+ while i<n{var x:u64=0;var y:u64=0;if i<a.len{x=a[i]as u64;}if i<b.len{y=b[i]as u64;}
+  let value=x+y+carry;work[i]=value as u32;carry=value>>32;i+=1;
+ }
+ if carry!=0{work[n]=carry as u32;return n+1;}return n;
+}
+fn sub_abs(a:[]const u32,b:[]const u32,work:[]u32)usize{
+ var borrow:u64=0;var i:usize=0;
+ while i<a.len{let x=a[i]as u64;var y:u64=borrow;if i<b.len{y+=b[i]as u64;}
+  work[i]=wrapping_sub(x,y)as u32;borrow=0;if x<y{borrow=1;}i+=1;
+ }return trimmed(work,a.len);
+}
+// No operation assumes an output width of 64 bits. The caller supplies its
+// compiler budget; insufficient scratch and insufficient output are distinct.
+pub unsafe fn calculate(operation:u64,negative_a:bool,a:[]const u32,negative_b:bool,b:[]const u32,
+ out:[]u32,work:[]u32,result:*Result)u64{unsafe{
+ if operation<ADD||operation>CMP||!valid(a,b,out,work,result){return INVALID;}
+ if !canonical(negative_a,a)||!canonical(negative_b,b){return INVALID;}
+ var nb=negative_b;if operation==SUB&&b.len!=0{nb=!nb;}
+ var n=a.len;if b.len>n{n=b.len;}
+ if operation==CMP{
+  var relation=magnitude(a,b);if negative_a!=negative_b{relation=1;if negative_a{relation=-1;}}
+  else if negative_a{relation=-relation;}
+  if relation==0{return publish(false,0,out,work,result);}
+  if work.len==0{return WORKSPACE;}work[0]=1;return publish(relation<0,1,out,work,result);
+ }
+ if operation==MUL{
+  if a.len==0||b.len==0{return publish(false,0,out,work,result);}
+  if a.len>MAX-b.len{return WORKSPACE;}n=a.len+b.len;if work.len<n{return WORKSPACE;}
+  var i:usize=0;while i<n{work[i]=0;i+=1;}i=0;
+  while i<a.len{var carry:u64=0;var j:usize=0;
+   while j<b.len{let value=(a[i]as u64)*(b[j]as u64)+(work[i+j]as u64)+carry;
+    work[i+j]=value as u32;carry=value>>32;j+=1;
+   }work[i+b.len]=carry as u32;i+=1;
+  }return publish(negative_a!=negative_b,trimmed(work,n),out,work,result);
+ }
+ if n==0{return publish(false,0,out,work,result);}
+ if negative_a==nb{
+  if n==MAX||work.len<n+1{return WORKSPACE;}
+  let used=add_abs(a,b,work,n);return publish(negative_a,used,out,work,result);
+ }
+ let comparison=magnitude(a,b);if comparison==0{return publish(false,0,out,work,result);}
+ if work.len<n{return WORKSPACE;}
+ if comparison>0{return publish(negative_a,sub_abs(a,b,work),out,work,result);}
+ return publish(nb,sub_abs(b,a,work),out,work,result);
+}}
+fn digit(c:u8)u64{
+ if c>=48&&c<=57{return (c-48)as u64;}if c>=65&&c<=70{return (c-65+10)as u64;}
+ if c>=97&&c<=102{return (c-97+10)as u64;}return 16;
+}
+pub unsafe fn parse(text:[]const u8,out:[]u32,work:[]u32,result:*Result)u64{unsafe{
+ let empty:[]const u32=slice_from_raw_parts(null as *const u32,0);
+ if !valid(empty,empty,out,work,result){return INVALID;}
+ let tp=text.ptr as u64;let op=out.ptr as u64;let wp=work.ptr as u64;let rp=result as u64;
+ if !span(tp,text.len)||overlap(tp,text.len,op,out.len*4)||overlap(tp,text.len,wp,work.len*4)
+  ||overlap(tp,text.len,rp,sizeof(Result)){return INVALID;}
+ if text.len==0{return LITERAL;}
+ var base:u64=10;var at:usize=0;
+ if text.len>=2&&text[0]==48{if text[1]==120{base=16;at=2;}else if text[1]==98{base=2;at=2;}}
+ var used:usize=0;var seen=false;var separator=false;
+ while at<text.len{let c=text[at];
+  if c==95{if !seen||separator{return LITERAL;}separator=true;at+=1;continue;}
+  let value=digit(c);if value>=base{return LITERAL;}var carry=value;var i:usize=0;
+  while i<used{let product=(work[i]as u64)*base+carry;work[i]=product as u32;carry=product>>32;i+=1;}
+  if carry!=0{if used==work.len{return WORKSPACE;}work[used]=carry as u32;used+=1;}
+  seen=true;separator=false;at+=1;
+ }
+ if !seen||separator{return LITERAL;}return publish(false,used,out,work,result);
+}}
+export("dong_big_parse") pub unsafe fn parse_raw(text:*const u8,length:usize,out:*u32,capacity:usize,
+ work:*u32,workspace:usize,result:*Result)u64{unsafe{
+ return parse(slice_from_raw_parts(text,length),slice_from_raw_parts(out,capacity),slice_from_raw_parts(work,workspace),result);
+}}
+export("dong_big_calculate") pub unsafe fn calculate_raw(operation:u64,negative_a:bool,a:*const u32,na:usize,
+ negative_b:bool,b:*const u32,nb:usize,out:*u32,capacity:usize,work:*u32,workspace:usize,result:*Result)u64{unsafe{
+ return calculate(operation,negative_a,slice_from_raw_parts(a,na),negative_b,slice_from_raw_parts(b,nb),
+  slice_from_raw_parts(out,capacity),slice_from_raw_parts(work,workspace),result);
+}}

@@ -1,0 +1,211 @@
+// Staged CPL0 AP adapter. Every public mutation requires local IF=0. The
+// caller allocates all metadata/stacks/xstate from held arena RAM. A CPU must
+// switch onto its private scheduler stack before dispatch releases a thread.
+// User services/CURRENT, ring3, PCID and user-root reclamation are not enabled.
+module sched.parallel;
+import sched.multicore as q;
+pub const TIMER:u64=1;pub const RESCHEDULE:u64=2;
+pub const CONTINUE:u64=0;pub const BLOCK:u64=1;pub const EXIT:u64=2;
+pub error Invalid=0x0607_0001;pub error State=0x0607_0002;
+pub error Hardware=0x0607_0003;pub error Held=0x0607_0004;
+const MAX:u64=0xffff_ffff_ffff_ffff;
+pub struct Frame{pub words:[23]u64}
+pub struct Thread{pub token:u64,pub bottom:u64,pub top:u64,pub xstate:u64}
+pub struct Cpu{pub ready:u64,pub idle_bottom:u64,pub idle_top:u64,pub scheduler_bottom:u64,pub scheduler_top:u64,
+ pub idle_frame:u64,pub current:u64,pub depth:u64,pub request:u64,pub mode:u64,pub tsc_hz:u64,pub lapic_hz:u64,
+ pub quantum_ns:u64,pub apic:u64,pub lapic:u64,pub tss:u64,pub ticks:u64,pub switches:u64,pub timer_armed:u64,pub timer_need:u64}
+pub struct Domain{pub ready:u64,pub failed:u64,pub lock:u64,pub started:u64,
+ pub engine:*q.Engine,pub cpus:*Cpu,pub threads:*Thread,pub root:u64,
+ pub text_begin:u64,pub text_end:u64,pub entry:u64,pub arena:u64,pub bytes:u64,pub template:u64}
+pub const EMPTY_THREAD:Thread=Thread{token:0,bottom:0,top:0,xstate:0};
+pub const EMPTY_CPU:Cpu=Cpu{ready:0,idle_bottom:0,idle_top:0,scheduler_bottom:0,scheduler_top:0,
+ idle_frame:0,current:0,depth:0,request:0,mode:0,tsc_hz:0,lapic_hz:0,quantum_ns:0,apic:0,lapic:0,tss:0,ticks:0,switches:0,timer_armed:2,timer_need:0};
+var DOMAIN:*Domain=null;
+unsafe extern "sysv64" fn parallel_arch_if0()u64;
+unsafe extern "sysv64" fn parallel_live_retire(cpu:usize,id:usize,frame:u64)void;
+unsafe extern "sysv64" fn parallel_arch_lock(lock:*u64)void;
+unsafe extern "sysv64" fn parallel_arch_unlock(lock:*u64)void;
+unsafe extern "sysv64" fn parallel_arch_on_scheduler(bottom:u64,top:u64)u64;
+unsafe extern "sysv64" fn parallel_arch_root()u64;
+unsafe extern "sysv64" fn parallel_arch_save(pointer:u64)void;
+unsafe extern "sysv64" fn parallel_arch_restore(pointer:u64)void;
+unsafe extern "sysv64" fn parallel_arch_copy(dst:u64,src:u64,bytes:u64)void;
+unsafe extern "sysv64" fn parallel_arch_register(cpu:u64,top:u64)void;
+unsafe extern "sysv64" fn parallel_arch_install(root:u64,tss:u64,top:u64)u64;
+unsafe extern "sysv64" fn parallel_arch_timer(lapic:u64,mode:u64,value:u64)u64;
+unsafe extern "sysv64" fn parallel_arch_clock()u64;
+unsafe extern "sysv64" fn parallel_arch_eoi(lapic:u64)void;
+unsafe extern "sysv64" fn parallel_arch_kick(lapic:u64,apic:u64)u64;
+fn aligned(value:u64,alignment:u64)bool{return value!=0&&(value&(alignment-1))==0;}
+fn overlap(a:u64,b:u64,c:u64,d:u64)bool{return a<d&&c<b;}
+fn span(bottom:u64,top:u64)bool{return aligned(bottom,4096)&&aligned(top,4096)&&top>bottom&&top-bottom>=16384&&top-bottom<=65536;}
+fn round64(value:u64)u64{return (value+63)&~63;}
+pub fn required_bytes()u64{return round64(sizeof(Domain) as u64)+round64(sizeof(q.Engine) as u64)+round64(16*sizeof(Cpu) as u64)+round64(64*sizeof(Thread) as u64)+64*1024;}
+unsafe fn domain()!*Domain{unsafe{if DOMAIN==null||(*DOMAIN).ready!=1||parallel_arch_if0()!=1{return error.State;}
+ if atomic_load(&(*DOMAIN).failed)!=0{return error.Held;}return DOMAIN;}}
+unsafe fn cpu_at(d:*Domain,id:usize)!*Cpu{unsafe{
+ if id>=16||((*(*d).engine).online&(1<<id as u64))==0||(*((*d).cpus+id)).ready!=1{return error.Invalid;}
+ return (*d).cpus+id;
+}}
+unsafe fn hold(d:*Domain)void{unsafe{atomic_store(&(*d).failed,1);}return;}
+unsafe fn token_id(d:*Domain,value:u64)!usize{unsafe{
+ let low=value&255;if low==0||low>64{return error.Invalid;}let id=(low-1) as usize;
+ if (*((*d).threads+id)).token!=value{return error.State;}return id;
+}}
+pub unsafe fn initialize(arena:u64,bytes:u64,mask:u64,root:u64,text_begin:u64,text_end:u64,entry:u64,template:u64)!void{unsafe{
+ if DOMAIN!=null||parallel_arch_if0()!=1||!aligned(arena,64)||bytes<required_bytes()||bytes>MAX-arena
+  ||!aligned(root,4096)||root>=0x1_0000_0000||text_begin==0||text_begin>=text_end||entry<text_begin||entry>=text_end
+  ||!aligned(template,64)||mask==0||(mask&1)!=0||(mask&~0xffff)!=0{return error.Invalid;}
+ let d=arena as *Domain;let engine=(arena+round64(sizeof(Domain) as u64)) as *q.Engine;
+ let cpus=((engine as u64)+round64(sizeof(q.Engine) as u64)) as *Cpu;
+ let threads=((cpus as u64)+round64(16*sizeof(Cpu) as u64)) as *Thread;
+ let xstates=(threads as u64)+round64(64*sizeof(Thread) as u64);
+ (*d).ready=0;(*d).failed=0;(*d).lock=0;(*d).started=0;(*d).engine=engine;(*d).cpus=cpus;(*d).threads=threads;
+ (*d).root=root;(*d).text_begin=text_begin;(*d).text_end=text_end;(*d).entry=entry;(*d).arena=arena;(*d).bytes=bytes;(*d).template=template;
+ (*engine).ready=0;try q.initialize(engine,mask);var i:usize=0;while i<16{*(cpus+i)=EMPTY_CPU;i+=1;}
+ i=0;while i<64{*(threads+i)=EMPTY_THREAD;(*(threads+i)).xstate=xstates+i as u64*1024;i+=1;}
+ compiler_fence();(*d).ready=1;DOMAIN=d;
+}return;}
+unsafe fn available(d:*Domain,bottom:u64,top:u64)bool{unsafe{
+ if !span(bottom,top)||overlap(bottom,top,(*d).arena,(*d).arena+(*d).bytes){return false;}
+ var i:usize=0;while i<16{let c=(*d).cpus+i;
+  if (*c).ready!=0&&(overlap(bottom,top,(*c).idle_bottom,(*c).idle_top)||overlap(bottom,top,(*c).scheduler_bottom,(*c).scheduler_top)){return false;}i+=1;}
+ i=0;while i<64{let t=(*d).threads+i;if (*t).token!=0&&overlap(bottom,top,(*t).bottom,(*t).top){return false;}i+=1;}
+ return true;
+}}
+pub unsafe fn configure(id:usize,idle_bottom:u64,idle_top:u64,scheduler_bottom:u64,scheduler_top:u64,
+ mode:u64,tsc_hz:u64,lapic_hz:u64,quantum_ns:u64,apic:u64,lapic:u64,tss:u64)!void{unsafe{
+ let d=try domain();if (*d).started!=0||id>=16||((*(*d).engine).online&(1<<id as u64))==0
+  ||(*((*d).cpus+id)).ready!=0||!available(d,idle_bottom,idle_top)||!available(d,scheduler_bottom,scheduler_top)
+  ||overlap(idle_bottom,idle_top,scheduler_bottom,scheduler_top)||mode<1||mode>2||tsc_hz<1000000||tsc_hz>16000000000
+  ||(mode==2&&(lapic_hz<1000||lapic_hz>16000000000))||quantum_ns==0||quantum_ns>1000000000
+  ||apic>255||!aligned(lapic,4096)||tss==0{return error.Invalid;}
+ let c=(*d).cpus+id;(*c).idle_bottom=idle_bottom;(*c).idle_top=idle_top;(*c).scheduler_bottom=scheduler_bottom;(*c).scheduler_top=scheduler_top;
+ (*c).mode=mode;(*c).tsc_hz=tsc_hz;(*c).lapic_hz=lapic_hz;(*c).quantum_ns=quantum_ns;(*c).apic=apic;(*c).lapic=lapic;(*c).tss=tss;
+ (*c).ready=1;compiler_fence();parallel_arch_register(id as u64,scheduler_top);
+}return;}
+pub unsafe fn start()!void{unsafe{let d=try domain();if (*d).started!=0{return error.State;}
+ var id:usize=0;while id<16{if ((*(*d).engine).online&(1<<id as u64))!=0{let c=try cpu_at(d,id);}id+=1;}
+ compiler_fence();(*d).started=1;
+ id=0;while id<16{if ((*(*d).engine).online&(1<<id as u64))!=0{try notify(d,id);}id+=1;}
+}return;}
+unsafe fn admit_locked(d:*Domain,id:usize,priority:u64,affinity:u64,bottom:u64,top:u64,entry:u64,argument:u64,out:*u64)!void{unsafe{
+ try q.audit((*d).engine);
+ if out==null||id>=64||priority>=32||affinity==0||(affinity&~(*(*d).engine).online)!=0||!available(d,bottom,top)
+  ||entry<(*d).text_begin||entry>=(*d).text_end{return error.Invalid;}
+ if (*((*d).threads+id)).token!=0||(*(*d).engine).threads[id].state!=q.UNUSED||(*(*d).engine).sequence==MAX
+  ||(*(*d).engine).threads[id].generation==0x00ff_ffff_ffff_ffff{return error.State;}
+ let f=(top-8-sizeof(Frame) as u64) as *Frame;var i:usize=0;while i<23{(*f).words[i]=0;i+=1;}
+ (*f).words[4]=entry;(*f).words[9]=argument;(*f).words[18]=(*d).entry;(*f).words[19]=8;
+ (*f).words[20]=0x202;(*f).words[21]=top-8;(*f).words[22]=16;*((top-8) as *u64)=0;
+ let t=(*d).threads+id;parallel_arch_copy((*t).xstate,(*d).template,1024);
+ var token:u64=0;try q.admit((*d).engine,id,priority,affinity,f as u64,&token);
+ (*t).bottom=bottom;(*t).top=top;(*t).token=token;*out=token;
+}return;}
+pub unsafe fn admit(id:usize,priority:u64,affinity:u64,bottom:u64,top:u64,entry:u64,argument:u64,out:*u64)!void{unsafe{
+ let d=try domain();parallel_arch_lock(&(*d).lock);let result=admit_locked(d,id,priority,affinity,bottom,top,entry,argument,out);
+ parallel_arch_unlock(&(*d).lock);match result{ok=>{},err(e)=>{return result;},}
+ if (*d).started!=0{try notify_mask(d,affinity);}return;
+}}
+unsafe fn frame_valid(d:*Domain,frame:u64,bottom:u64,top:u64)bool{unsafe{
+ if !aligned(frame,8)||frame<bottom||frame>top-sizeof(Frame) as u64{return false;}let f=frame as *const Frame;
+ return (*f).words[18]>=(*d).text_begin&&(*f).words[18]<(*d).text_end&&(*f).words[19]==8&&(*f).words[22]==16
+  &&((*f).words[20]&2)!=0&&((*f).words[20]&~0x10ed7)==0&&(*f).words[21]>=bottom&&(*f).words[21]<=top;
+}}
+unsafe fn dispatch_locked(d:*Domain,id:usize,frame:u64)!u64{unsafe{
+ let c=try cpu_at(d,id);try q.audit((*d).engine);if (*c).ticks==MAX{return error.State;}(*c).ticks+=1;
+ if (*c).current!=0{
+  let previous=try token_id(d,(*c).current);let t=(*d).threads+previous;
+  if !frame_valid(d,frame,(*t).bottom,(*t).top){return error.Invalid;}
+  if (*c).depth!=0{return frame;}
+  var state=q.READY;if (*c).request==BLOCK||(*c).request==EXIT{state=q.BLOCKED;}
+  try q.release((*d).engine,id,(*c).current,state,frame);
+  if (*c).request==EXIT{parallel_live_retire(id,previous,frame);try q.remove((*d).engine,(*c).current);let xstate=(*t).xstate;*t=EMPTY_THREAD;(*t).xstate=xstate;}
+  (*c).current=0;(*c).request=0;
+ }else{if !frame_valid(d,frame,(*c).idle_bottom,(*c).idle_top){return error.Invalid;}(*c).idle_frame=frame;}
+ var selected=q.Dispatch{token:0,frame:0,source_cpu:0,target_cpu:0,priority:0};let found=try q.acquire((*d).engine,id,&selected);
+ if !found{if (*c).idle_frame==0{return error.State;}return (*c).idle_frame;}
+ if (*c).switches==MAX{return error.State;}let next=try token_id(d,selected.token);let t=(*d).threads+next;
+ if !frame_valid(d,selected.frame,(*t).bottom,(*t).top){return error.Invalid;}
+ (*c).current=selected.token;(*c).switches+=1;return selected.frame;
+}}
+unsafe fn arm(d:*Domain,c:*Cpu)!void{unsafe{
+ var rate=(*c).tsc_hz;if (*c).mode==2{rate=(*c).lapic_hz;}
+ let ticks=(rate*(*c).quantum_ns+999999999)/1000000000;if ticks==0{return error.Hardware;}
+ var value=ticks;if (*c).mode==1{let now=parallel_arch_clock();if ticks>MAX-now{return error.Hardware;}value=now+ticks;}
+ else if value>0xffff_ffff{return error.Hardware;}
+ if parallel_arch_timer((*c).lapic,(*c).mode,value)!=0{return error.Hardware;}(*c).timer_armed=1;
+}return;}
+unsafe fn stop(c:*Cpu)!void{unsafe{
+ if (*c).timer_armed==0{return;}
+ if parallel_arch_timer((*c).lapic,0,0)!=0{return error.Hardware;}(*c).timer_armed=0;
+}return;}
+unsafe fn needs_quantum(d:*Domain,id:usize)bool{unsafe{
+ let c=(*d).cpus+id;if (*c).current==0{return false;}
+ let priority=(*(*d).engine).threads[(((*c).current&255)-1) as usize].priority;
+ var t:usize=0;while t<64{let thread=&(*(*d).engine).threads[t];
+  if (*thread).state==q.READY&&((*thread).affinity&(1<<id as u64))!=0&&(*thread).priority<=priority{return true;}t+=1;
+ }return false;
+}}
+unsafe fn update_timer(d:*Domain,id:usize)!void{unsafe{
+ let c=try cpu_at(d,id);if (*c).timer_need!=0{try arm(d,c);}else{try stop(c);}
+}return;}
+// Called only after the assembly boundary has saved GPRs and abandoned the
+// interrupted thread stack. Compiler output is checked to contain no SIMD.
+export("parallel_dispatch") fn dispatch(id:usize,frame:u64,event:u64)u64{unsafe{
+ let checked=domain();var d:*Domain=null;match checked{ok(value)=>{d=value;},err(e)=>{return 0;},}
+ let checked_cpu=cpu_at(d,id);var c:*Cpu=null;match checked_cpu{ok(value)=>{c=value;},err(e)=>{hold(d);return 0;},}
+ if (*d).started!=1||(event!=TIMER&&event!=RESCHEDULE)||parallel_arch_on_scheduler((*c).scheduler_bottom,(*c).scheduler_top)!=1
+  ||parallel_arch_root()!=(*d).root{hold(d);return 0;}
+ if (*c).current!=0{let found=token_id(d,(*c).current);match found{ok(index)=>{parallel_arch_save((*((*d).threads+index)).xstate);},err(e)=>{hold(d);return 0;},}}
+ parallel_arch_lock(&(*d).lock);let selected=dispatch_locked(d,id,frame);
+ match selected{ok(value)=>{(*c).timer_need=needs_quantum(d,id) as u64;},err(e)=>{},}
+ parallel_arch_unlock(&(*d).lock);
+ var result:u64=0;match selected{ok(value)=>{result=value;},err(e)=>{hold(d);return 0;},}
+ var top=(*c).idle_top;var xstate:u64=0;
+ if (*c).current!=0{let found=token_id(d,(*c).current);match found{ok(index)=>{let t=(*d).threads+index;top=(*t).top;xstate=(*t).xstate;},err(e)=>{hold(d);return 0;},}}
+ if parallel_arch_install((*d).root,(*c).tss,top)!=0{hold(d);return 0;}
+ let armed=update_timer(d,id);match armed{ok=>{},err(e)=>{hold(d);return 0;},}
+ parallel_arch_eoi((*c).lapic);if xstate!=0{parallel_arch_restore(xstate);}return result;
+}}
+unsafe fn notify(d:*Domain,cpu:usize)!void{unsafe{let c=try cpu_at(d,cpu);
+ if parallel_arch_kick((*c).lapic,(*c).apic)!=0{hold(d);return error.Hardware;}
+}return;}
+unsafe fn notify_mask(d:*Domain,mask:u64)!void{unsafe{
+ var cpu:usize=0;while cpu<16{if (mask&(1<<cpu as u64))!=0{try notify(d,cpu);}cpu+=1;}
+}return;}
+pub unsafe fn wake(value:u64)!void{unsafe{
+ let d=try domain();parallel_arch_lock(&(*d).lock);let result=q.wake((*d).engine,value);
+ var mask:u64=0;match result{ok=>{mask=(*(*d).engine).threads[((value&255)-1) as usize].affinity;},err(e)=>{},}
+ parallel_arch_unlock(&(*d).lock);match result{ok=>{},err(e)=>{return result;},}try notify_mask(d,mask);
+}return;}
+pub unsafe fn affinity(value:u64,mask:u64)!void{unsafe{let d=try domain();parallel_arch_lock(&(*d).lock);
+ let result=q.set_affinity((*d).engine,value,mask);
+ parallel_arch_unlock(&(*d).lock);match result{ok=>{},err(e)=>{return result;},}try notify_mask(d,mask);return;
+}}
+pub unsafe fn priority(value:u64,level:u64)!void{unsafe{let d=try domain();parallel_arch_lock(&(*d).lock);
+ let result=q.set_priority((*d).engine,value,level);
+ var mask:u64=0;match result{ok=>{mask=(*(*d).engine).threads[((value&255)-1) as usize].affinity;},err(e)=>{},}
+ parallel_arch_unlock(&(*d).lock);match result{ok=>{},err(e)=>{return result;},}try notify_mask(d,mask);
+}return;}
+pub unsafe fn rebalance(source:usize,target:usize,out:*q.Move)!bool{unsafe{let d=try domain();parallel_arch_lock(&(*d).lock);
+ let moved=q.rebalance((*d).engine,source,target,out);parallel_arch_unlock(&(*d).lock);
+ match moved{ok(value)=>{if value{try notify_mask(d,(*(*d).engine).online);}return value;},err(e)=>{return moved;},}
+}}
+export("parallel_request") fn request(id:usize,kind:u64)u64{unsafe{let checked=domain();var d:*Domain=null;
+ match checked{ok(value)=>{d=value;},err(e)=>{return e;},}let found=cpu_at(d,id);var c:*Cpu=null;
+ match found{ok(value)=>{c=value;},err(e)=>{return e;},}
+ if kind>EXIT||(*c).current==0||(*c).depth!=0{return 0x0607_0002;}(*c).request=kind;return 0;
+}}
+pub unsafe fn preempt(id:usize,disable:bool)!void{unsafe{let d=try domain();let c=try cpu_at(d,id);
+ if disable{if (*c).depth==MAX{return error.State;}(*c).depth+=1;}else{if (*c).depth==0{return error.State;}(*c).depth-=1;}
+}return;}
+pub fn pointer()*Domain{unsafe{return DOMAIN;}}
+pub unsafe fn interrupts_off()bool{unsafe{return parallel_arch_if0()==1;}}
+pub unsafe fn failstop()void{unsafe{if DOMAIN!=null{hold(DOMAIN);}}return;}
+export("parallel_idle_arm") fn idle_arm(id:usize)u64{unsafe{
+ let checked=domain();var d:*Domain=null;match checked{ok(value)=>{d=value;},err(e)=>{return 0;},}
+ if (*d).started!=1{return 0;}let found=cpu_at(d,id);var c:*Cpu=null;
+ match found{ok(value)=>{c=value;},err(e)=>{return 0;},}if (*c).current!=0{return 0;}
+ let stopped=stop(c);match stopped{ok=>{return 1;},err(e)=>{hold(d);return 0;},}
+}}

@@ -1,0 +1,8 @@
+export("reader_initialize") fn reader_initialize(epoch:u64)u64{unsafe{match initialize(epoch){ok=>{return 0;},err(e)=>{return e;},}}}
+export("reader_allocate") fn reader_allocate(owner:u64,window:u64,out:*abi.Lease)u64{unsafe{match allocate(owner,1,window,64,64,256,out){ok=>{return 0;},err(e)=>{return e;},}}}
+export("reader_depart") fn reader_depart(owner:u64)u64{unsafe{match owner_gone(owner){ok=>{return 0;},err(e)=>{return e;},}}}
+export("reader_revoke") fn reader_revoke(epoch:u64,token:u64)u64{unsafe{match revoke(epoch,token){ok=>{return 0;},err(e)=>{return e;},}}}
+export("reader_compositor_gone") fn reader_compositor_gone()u64{unsafe{match compositor_gone(1){ok=>{return 0;},err(e)=>{return e;},}}}
+export("reader_describe") fn reader_describe(owner:u64,window:u64,token:u64,out:*abi.Lease)u64{unsafe{match describe(owner,1,window,token,out){ok=>{return 0;},err(e)=>{return e;},}}}
+export("reader_budget") fn reader_budget()u64{unsafe{return USED;}}
+export("reader_broker_failed") fn reader_broker_failed()u64{unsafe{return FAILED as u64;}}

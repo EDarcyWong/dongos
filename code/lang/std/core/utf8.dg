@@ -1,0 +1,114 @@
+// core.utf8 — strict UTF-8 scalar decode/encode and whole-slice validation.
+// Only shortest-form encodings of U+0000..U+10FFFF are accepted; surrogates,
+// overlong forms, C0/C1, F5..FF, bad continuations and truncation are
+// rejected. No replacement-character tolerance, no BOM skipping, no state.
+
+module core.utf8;
+
+pub struct Decode {
+    pub scalar: u32,
+    pub width: usize,
+}
+
+fn is_continuation(b: u8) bool {
+    return (b & 0xc0) == 0x80;
+}
+
+// Pack (width << 32) | scalar for the strict UTF-8 sequence starting at start,
+// or 0 on any error. width is always 1..4, so a valid result is never 0.
+fn decode_pack(bytes: []const u8, start: usize) u64 {
+    if start >= bytes.len { return 0; }
+    let b0: u8 = bytes[start];
+    if b0 < 0x80 {
+        return ((1 as u64) << 32) | (b0 as u64);
+    }
+    if b0 < 0xc2 { return 0; }
+    let avail: usize = bytes.len - start;
+    if b0 < 0xe0 {
+        if avail < 2 { return 0; }
+        let b1: u8 = bytes[start + 1];
+        if !is_continuation(b1) { return 0; }
+        let scalar: u32 = (((b0 as u32) & 0x1f) << 6) | ((b1 as u32) & 0x3f);
+        return ((2 as u64) << 32) | (scalar as u64);
+    }
+    if b0 < 0xf0 {
+        if avail < 3 { return 0; }
+        let b1: u8 = bytes[start + 1];
+        let b2: u8 = bytes[start + 2];
+        if !is_continuation(b1) { return 0; }
+        if !is_continuation(b2) { return 0; }
+        if b0 == 0xe0 && b1 < 0xa0 { return 0; }
+        if b0 == 0xed && b1 >= 0xa0 { return 0; }
+        let scalar: u32 = (((b0 as u32) & 0x0f) << 12) | (((b1 as u32) & 0x3f) << 6) | ((b2 as u32) & 0x3f);
+        return ((3 as u64) << 32) | (scalar as u64);
+    }
+    if b0 < 0xf5 {
+        if avail < 4 { return 0; }
+        let b1: u8 = bytes[start + 1];
+        let b2: u8 = bytes[start + 2];
+        let b3: u8 = bytes[start + 3];
+        if !is_continuation(b1) { return 0; }
+        if !is_continuation(b2) { return 0; }
+        if !is_continuation(b3) { return 0; }
+        if b0 == 0xf0 && b1 < 0x90 { return 0; }
+        if b0 == 0xf4 && b1 >= 0x90 { return 0; }
+        let scalar: u32 = (((b0 as u32) & 0x07) << 18) | (((b1 as u32) & 0x3f) << 12) | (((b2 as u32) & 0x3f) << 6) | ((b3 as u32) & 0x3f);
+        return ((4 as u64) << 32) | (scalar as u64);
+    }
+    return 0;
+}
+
+// Decode exactly one scalar at start. On failure Decode is untouched. The
+// suffix is not inspected, so a valid leader with a broken tail still decodes.
+pub unsafe fn decode(bytes: []const u8, start: usize, out: *Decode) bool {
+    let code: u64 = decode_pack(bytes, start);
+    if code == 0 { return false; }
+    unsafe {
+        (*out).scalar = (code & 0xffff_ffff) as u32;
+        (*out).width = (code >> 32) as usize;
+    }
+    return true;
+}
+
+// Write the unique shortest encoding of scalar. Invalid scalars and short
+// output are rejected before any byte or count is published.
+pub unsafe fn encode(scalar: u32, output: []u8, written: *usize) bool {
+    let s: u32 = scalar;
+    if s > 0x10ffff { return false; }
+    if s >= 0xd800 && s <= 0xdfff { return false; }
+    var width: usize = 1;
+    if s >= 0x80 { width = 2; }
+    if s >= 0x800 { width = 3; }
+    if s >= 0x10000 { width = 4; }
+    if output.len < width { return false; }
+    unsafe {
+        if width == 1 {
+            output[0] = s as u8;
+        } else if width == 2 {
+            output[0] = (0xc0 | (s >> 6)) as u8;
+            output[1] = (0x80 | (s & 0x3f)) as u8;
+        } else if width == 3 {
+            output[0] = (0xe0 | (s >> 12)) as u8;
+            output[1] = (0x80 | ((s >> 6) & 0x3f)) as u8;
+            output[2] = (0x80 | (s & 0x3f)) as u8;
+        } else {
+            output[0] = (0xf0 | (s >> 18)) as u8;
+            output[1] = (0x80 | ((s >> 12) & 0x3f)) as u8;
+            output[2] = (0x80 | ((s >> 6) & 0x3f)) as u8;
+            output[3] = (0x80 | (s & 0x3f)) as u8;
+        }
+        (*written) = width;
+    }
+    return true;
+}
+
+// True only when the whole slice is complete strict UTF-8. Read-only.
+pub fn validate(bytes: []const u8) bool {
+    var i: usize = 0;
+    while i < bytes.len {
+        let code: u64 = decode_pack(bytes, i);
+        if code == 0 { return false; }
+        i += (code >> 32) as usize;
+    }
+    return true;
+}

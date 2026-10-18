@@ -1,0 +1,123 @@
+// Modern PCI vendor capabilities, bounded against caller-owned BAR grants.
+module drivers.virtio_pci;
+import drivers.pci as pci;
+pub error InvalidInput = 0x0502_0001;
+pub error Unsupported = 0x0502_0002;
+pub error Malformed = 0x0502_0003;
+pub error MissingCapability = 0x0502_0004;
+pub error IoFailure = 0x0502_0005;
+pub struct Bar { pub physical: u64, pub length: u64, pub handle: u64 }
+pub struct Area { pub handle: u64, pub offset: u64, pub length: u64, pub bar: u64 }
+pub struct Transport { pub common: Area, pub notify: Area, pub isr: Area, pub device: Area, pub multiplier: u64 }
+pub const EMPTY_AREA: Area = Area { handle: 0, offset: 0, length: 0, bar: 0 };
+pub const EMPTY_TRANSPORT: Transport = Transport { common: EMPTY_AREA, notify: EMPTY_AREA, isr: EMPTY_AREA, device: EMPTY_AREA, multiplier: 0 };
+pub type Read = unsafe fn(context: u64, handle: u64, offset: u64, width: u64, out: *u64) u64;
+pub type Write = unsafe fn(context: u64, handle: u64, offset: u64, width: u64, value: u64) u64;
+pub type Fence = unsafe fn(context: u64, kind: u64) u64; // 1 release, 2 acquire, 3 full, compiler+DMA barriers.
+pub unsafe fn read(callback: Read, context: u64, area: *const Area, offset: u64, width: u64) !u64 {
+    unsafe {
+        if area == null || (*area).handle == 0 || (*area).length > 0xffff_ffff_ffff_ffff - (*area).offset || (width != 1 && width != 2 && width != 4 && width != 8)
+            || offset > (*area).length || width > (*area).length - offset || ((offset + (*area).offset) & (width - 1)) != 0 { return error.InvalidInput; }
+        var result: u64 = 0;
+        if callback(context,(*area).handle,(*area).offset + offset,width,&result) != 0 { return error.IoFailure; }
+        if width != 8 && result >= (1 << (width * 8)) { return error.Malformed; }
+        return result;
+    }
+}
+pub unsafe fn write(callback: Write, context: u64, area: *const Area, offset: u64, width: u64, value: u64) !void {
+    unsafe {
+        if area == null || (*area).handle == 0 || (*area).length > 0xffff_ffff_ffff_ffff - (*area).offset || (width != 1 && width != 2 && width != 4 && width != 8)
+            || offset > (*area).length || width > (*area).length - offset || ((offset + (*area).offset) & (width - 1)) != 0
+            || (width != 8 && value >= (1 << (width * 8))) { return error.InvalidInput; }
+        if callback(context,(*area).handle,(*area).offset + offset,width,value) != 0 { return error.IoFailure; }
+    }
+    return;
+}
+pub unsafe fn discover_device(expected:u64,reader: pci.Read32, context: u64, function: *const pci.Function, bars: []const Bar, out: *Transport) !void {
+    unsafe {
+        if function == null || out == null || bars.ptr == null || bars.len != 6 { return error.InvalidInput; }
+        if (*function).vendor != 0x1af4 || ((*function).device_id != expected || (expected!=0x1042 && expected!=0x1052)) || ((*function).header & 127) != 0 { return error.Unsupported; }
+        if ((try pci.read(reader,context,(*function).ecam,4)) & 0x10_0000) == 0 { return error.MissingCapability; }
+        var valid: [6]u64 = [0;6]; var i: usize = 0;
+        while i < 6 {
+            let raw = try pci.read(reader,context,(*function).ecam,16 + i as u64 * 4);
+            if (raw & 1) != 0 { i += 1; continue; } // IO BAR unsupported; a later capability may be usable.
+            let kind = (raw >> 1) & 3; var physical = (raw & ~15) as u64; var upper: bool = false;
+            if kind == 2 {
+                if i == 5 { return error.Malformed; }
+                physical |= (try pci.read(reader,context,(*function).ecam,20 + i as u64 * 4)) as u64 << 32; upper = true;
+            } else if kind != 0 { i += 1; continue; }
+            let grant = bars[i];
+            if grant.length != 0 {
+                if grant.handle == 0 || physical == 0 || grant.physical != physical || grant.length > 0xffff_ffff_ffff_ffff - physical { return error.InvalidInput; }
+                var j: usize = 0;
+                while j < i {
+                    if valid[j] != 0 && physical < bars[j].physical + bars[j].length && bars[j].physical < physical + grant.length { return error.InvalidInput; }
+                    j += 1;
+                }
+                valid[i] = 1;
+            }
+            if upper { i += 1; if bars[i].length != 0 { return error.InvalidInput; } }
+            i += 1;
+        }
+        var result = EMPTY_TRANSPORT; var position = ((try pci.read(reader,context,(*function).ecam,52)) & 255) as u64;
+        var seen: [64]u8 = [0;64]; var steps: usize = 0;
+        while position != 0 {
+            if position < 64 || position > 252 || (position & 3) != 0 || steps == 48 || seen[(position / 4) as usize] != 0 { return error.Malformed; }
+            seen[(position / 4) as usize] = 1; steps += 1;
+            let head = try pci.read(reader,context,(*function).ecam,position); let next = (head >> 8) & 255;
+            if (head & 255) == 9 {
+                let length = ((head >> 16) & 255) as u64; let kind = ((head >> 24) & 255) as u64;
+                // Reserved cfg_type and BAR values must be ignored. Do not
+                // interpret their length/offset fields as supported layouts.
+                if kind >= 1 && kind <= 4 {
+                    if position > 248 { return error.Malformed; }
+                    let bar = ((try pci.read(reader,context,(*function).ecam,position + 4)) & 255) as usize;
+                    if bar < 6 && valid[bar] != 0 {
+                    if length < 16 || length > 256 - position { return error.Malformed; }
+                    var occupied = position + 4;
+                    while occupied < position + length {
+                        if seen[(occupied / 4) as usize] != 0 { return error.Malformed; }
+                        seen[(occupied / 4) as usize] = 1; occupied += 4;
+                    }
+                    let offset = (try pci.read(reader,context,(*function).ecam,position + 8)) as u64;
+                    let bytes = (try pci.read(reader,context,(*function).ecam,position + 12)) as u64;
+                    let grant = bars[bar];
+                    if offset > grant.length || bytes > grant.length - offset { return error.Malformed; }
+                    var minimum: u64 = 1; var alignment: u64 = 1;
+                    if kind == 1 { minimum = 56; alignment = 4; }
+                    if kind == 2 { minimum = 2; alignment = 2; if length < 20 { return error.Malformed; } }
+                    if kind == 4 { minimum = 8; alignment = 4; }
+                    if bytes >= minimum && (offset & (alignment - 1)) == 0 {
+                        let area = Area { handle: grant.handle, offset: offset, length: bytes, bar: bar as u64 };
+                        if kind == 1 && result.common.handle == 0 { result.common = area; }
+                        if kind == 2 && result.notify.handle == 0 {
+                            result.notify = area; result.multiplier = (try pci.read(reader,context,(*function).ecam,position + 16)) as u64;
+                            if (result.multiplier & 1) != 0 { return error.Malformed; }
+                        }
+                        if kind == 3 && result.isr.handle == 0 { result.isr = area; }
+                        if kind == 4 && result.device.handle == 0 { result.device = area; }
+                    }
+                    }
+                }
+            }
+            position = next as u64;
+        }
+        if result.common.handle == 0 || result.notify.handle == 0 || result.isr.handle == 0 || result.device.handle == 0 { return error.MissingCapability; }
+        var areas: [4]Area = [result.common,result.notify,result.isr,result.device]; i = 0;
+        while i < 4 {
+            var j: usize = 0;
+            while j < i {
+                if areas[i].bar == areas[j].bar && areas[i].offset < areas[j].offset + areas[j].length && areas[j].offset < areas[i].offset + areas[i].length { return error.Malformed; }
+                j += 1;
+            }
+            i += 1;
+        }
+        *out = result;
+    }
+    return;
+}
+
+pub unsafe fn discover(reader:pci.Read32,context:u64,function:*const pci.Function,bars:[]const Bar,out:*Transport)!void {
+    unsafe { try discover_device(0x1042,reader,context,function,bars,out); }return;
+}

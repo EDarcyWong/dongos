@@ -1,0 +1,14 @@
+module fat32_paths_probe;
+import fs.fat32 as f;
+export("fpp_sizes") fn sizes(out:*u64)void{unsafe{*out=sizeof(f.Volume) as u64;*(out+1)=sizeof(f.Scratch) as u64;*(out+2)=sizeof(f.Workspace) as u64;*(out+3)=sizeof(f.PathEntry) as u64;}}
+export("fpp_reset") fn reset(v:*f.Volume)void{unsafe{*v=f.EMPTY_VOLUME;}}
+export("fpp_mount") fn mount(v:*f.Volume,d:*const f.Device,w:*f.Scratch)u64{unsafe{match f.mount(v,d,w){ok=>{return 0;},err(e)=>{return e;},}}}
+export("fpp_stat") fn stat(v:*f.Volume,w:*f.Scratch,x:*f.Workspace,p:*const u8,n:usize,out:*f.PathEntry)u64{unsafe{match f.path_stat(v,w,x,slice_from_raw_parts(p,n),out){ok=>{return 0;},err(e)=>{return e;},}}}
+export("fpp_list") fn list(v:*f.Volume,w:*f.Scratch,x:*f.Workspace,p:*const u8,n:usize,index:u64,out:*f.PathEntry,present:*u64)u64{unsafe{match f.path_list(v,w,x,slice_from_raw_parts(p,n),index,out){ok(b)=>{if b{*present=1;}else{*present=0;}return 0;},err(e)=>{return e;},}}}
+export("fpp_create") fn create(v:*f.Volume,w:*f.Scratch,x:*f.Workspace,p:*const u8,n:usize)u64{unsafe{match f.path_create(v,w,x,slice_from_raw_parts(p,n)){ok=>{return 0;},err(e)=>{return e;},}}}
+export("fpp_mkdir") fn mkdir(v:*f.Volume,w:*f.Scratch,x:*f.Workspace,p:*const u8,n:usize)u64{unsafe{match f.path_mkdir(v,w,x,slice_from_raw_parts(p,n)){ok=>{return 0;},err(e)=>{return e;},}}}
+export("fpp_read") fn read(v:*f.Volume,w:*f.Scratch,x:*f.Workspace,p:*const u8,n:usize,offset:u64,out:*u8,length:usize,got:*u64)u64{unsafe{match f.path_read(v,w,x,slice_from_raw_parts(p,n),offset,slice_from_raw_parts(out,length)){ok(count)=>{*got=count as u64;return 0;},err(e)=>{return e;},}}}
+export("fpp_write") fn write(v:*f.Volume,w:*f.Scratch,x:*f.Workspace,p:*const u8,n:usize,offset:u64,data:*const u8,length:usize,got:*u64)u64{unsafe{match f.path_write(v,w,x,slice_from_raw_parts(p,n),offset,slice_from_raw_parts(data,length)){ok(count)=>{*got=count as u64;return 0;},err(e)=>{return e;},}}}
+export("fpp_truncate") fn truncate(v:*f.Volume,w:*f.Scratch,x:*f.Workspace,p:*const u8,n:usize,size:u64)u64{unsafe{match f.path_truncate(v,w,x,slice_from_raw_parts(p,n),size){ok=>{return 0;},err(e)=>{return e;},}}}
+export("fpp_remove") fn remove(v:*f.Volume,w:*f.Scratch,x:*f.Workspace,p:*const u8,n:usize)u64{unsafe{match f.path_remove(v,w,x,slice_from_raw_parts(p,n)){ok=>{return 0;},err(e)=>{return e;},}}}
+export("fpp_flush") fn flush(v:*f.Volume,w:*f.Scratch)u64{unsafe{match f.flush(v,w){ok=>{return 0;},err(e)=>{return e;},}}}

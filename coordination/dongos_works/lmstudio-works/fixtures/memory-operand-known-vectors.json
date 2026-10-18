@@ -1,0 +1,53 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "id": "rax_zero",
+      "base": 0,
+      "disp": "0",
+      "text": "[rax]"
+    },
+    {
+      "id": "rbp_minus8",
+      "base": 5,
+      "disp": "-8",
+      "text": "[rbp - 8]"
+    },
+    {
+      "id": "rsp_plus16",
+      "base": 4,
+      "disp": "16",
+      "text": "[rsp + 16]"
+    },
+    {
+      "id": "r8_plus1",
+      "base": 8,
+      "disp": "1",
+      "text": "[r8 + 1]"
+    },
+    {
+      "id": "r15_minus1",
+      "base": 15,
+      "disp": "-1",
+      "text": "[r15 - 1]"
+    },
+    {
+      "id": "rax_min",
+      "base": 0,
+      "disp": "-2147483648",
+      "text": "[rax - 2147483648]"
+    },
+    {
+      "id": "r10_max",
+      "base": 10,
+      "disp": "2147483647",
+      "text": "[r10 + 2147483647]"
+    },
+    {
+      "id": "rcx_zero",
+      "base": 1,
+      "disp": "0",
+      "text": "[rcx]"
+    }
+  ]
+}

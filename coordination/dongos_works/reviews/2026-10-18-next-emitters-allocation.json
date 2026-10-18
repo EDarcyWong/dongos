@@ -1,0 +1,58 @@
+[
+  {
+    "id": "cursor:CR12",
+    "module": "nasm_integer_memory_load",
+    "title": "有界NASM整数内存装入",
+    "depends_on": [
+      "cursor:CR8"
+    ],
+    "status": "todo",
+    "document": "cursor-works/tasks/CR12-board.md"
+  },
+  {
+    "id": "cursor:CR13",
+    "module": "nasm_integer_memory_store",
+    "title": "有界NASM整数内存存储",
+    "depends_on": [
+      "cursor:CR8"
+    ],
+    "status": "todo",
+    "document": "cursor-works/tasks/CR13-board.md"
+  },
+  {
+    "id": "cursor:CR14",
+    "module": "nasm_integer_cast",
+    "title": "NASM整数截断与符号规范化",
+    "depends_on": [],
+    "status": "todo",
+    "document": "cursor-works/tasks/CR14-board.md"
+  },
+  {
+    "id": "cursor:CR15",
+    "module": "nasm_address_emit",
+    "title": "NASM基址位移地址生成语句",
+    "depends_on": [
+      "cursor:CR8"
+    ],
+    "status": "todo",
+    "document": "cursor-works/tasks/CR15-board.md"
+  },
+  {
+    "id": "claude:C22",
+    "module": "nasm_compare_emit",
+    "title": "64位NASM比较生成规范bool",
+    "depends_on": [
+      "cursor:CR6"
+    ],
+    "status": "todo",
+    "document": "claude-works/tasks/C22-board.md"
+  },
+  {
+    "id": "claude:C23",
+    "module": "nasm_integer_binary",
+    "title": "显式wrapping的64位整数二元发射",
+    "depends_on": [],
+    "status": "todo",
+    "document": "claude-works/tasks/C23-board.md"
+  }
+]

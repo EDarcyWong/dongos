@@ -1,0 +1,44 @@
+module apps.fs_reader;
+import lib.sys as sys;
+import lib.files as files;
+import fs.protocol as protocol;
+pub var CANARY:u64=0;
+var SESSION:files.Session=files.EMPTY;
+var REQUEST:sys.Message=sys.EMPTY_MESSAGE;
+var RESPONSE:sys.Message=sys.EMPTY_MESSAGE;
+const BAD:u64=0x0512_0001;
+const DENIED:u64=0x050c_0003;
+const RIGHTS:u64=395;
+unsafe fn read_fixture(channel:u64,token:u64)u64 {unsafe {
+    let status=files.read(&SESSION,token,0,4096);if status!=0 {return status;}
+    let prefix="DongOS FAT32 persistence fixture.\n";
+    if SESSION.response.words[1]<prefix.len as u64||SESSION.response.words[1]>4096 {return BAD;}
+    var i:usize=0;while i<prefix.len {if *((channel+4096) as *const u8+i)!=prefix[i] {return BAD;}i+=1;}
+    return 0;
+}}
+export("service_main") fn main()u64 {unsafe {
+    let boot=sys.boot();if boot==null||(*boot).version!=1||CANARY!=0||(*boot).channel_bytes!=65536 {return BAD;}
+    CANARY=(*boot).reserved0;let ready=sys.ready_boot(boot);if ready!=0 {return ready;}
+    let channel=(*boot).channel_address;var status=files.init(&SESSION,(*boot).filesystem,channel,RIGHTS);
+    if status!=0 {return status;}var token:u64=0;
+    status=files.open(&SESSION,SESSION.root,"/README.TXT",files.READ|files.STAT,&token);if status!=0 {return status;}
+    status=read_fixture(channel,token);if status!=0 {return status;}
+    var forbidden:u64=0xa55a_a55a_a55a_a55a;
+    status=files.root(&SESSION,files.ALL,&forbidden);
+    if status!=DENIED||forbidden!=0xa55a_a55a_a55a_a55a {return BAD;}
+    status=files.write(&SESSION,token,0,"X");if status!=DENIED {return BAD;}
+    let path="/README.TXT";var i:usize=0;while i<path.len {*((channel as *u8)+i)=path[i];i+=1;}
+    *((channel+4096) as *u8)=88;REQUEST=sys.EMPTY_MESSAGE;REQUEST.words[0]=protocol.PATH_WRITE;
+    REQUEST.words[2]=1;REQUEST.words[3]=path.len as u64;REQUEST.words[4]=4096;REQUEST.words[5]=2;
+    status=sys.call((*boot).filesystem,&REQUEST,&RESPONSE);
+    if status!=0||RESPONSE.words[0]!=DENIED {return BAD;}
+    let alias="README.TXT";i=0;while i<alias.len {*((channel as *u8)+i)=alias[i];i+=1;}
+    *((channel+16) as *u8)=88;REQUEST=sys.EMPTY_MESSAGE;REQUEST.words[0]=protocol.WRITE;
+    REQUEST.words[2]=1;REQUEST.words[3]=alias.len as u64;REQUEST.words[4]=16;
+    status=sys.call((*boot).filesystem,&REQUEST,&RESPONSE);
+    if status!=0||RESPONSE.words[0]!=DENIED {return BAD;}
+    status=read_fixture(channel,token);if status!=0 {return status;}
+    status=files.close(&SESSION,token);if status!=0 {return status;}
+    let logged=sys.log("DONGOS_APP_FS_RIGHTS_PASS\r\n");if logged!=0 {return logged;}
+    return 0;
+}}

@@ -1,0 +1,14 @@
+module services_probe;
+import runtime_probe;
+import boot.abi as boot;
+import boot.service_memory as resources;
+import user.services as services;
+import user.abi as user;
+export("dong_service_capture") fn capture(info:boot.BootInfoPtr,info_physical:u64,handoff_physical:u64)u64 {
+    unsafe { match resources.capture(info,info_physical,handoff_physical) { ok=>{return 0;},err(code)=>{return code;}, } }
+}
+export("dong_services_prepare") fn prepare(kernel_physical:u64)u64 {
+    unsafe { match services.prepare(kernel_physical) { ok=>{return 0;},err(code)=>{return code;}, } }
+}
+export("dong_services_first") fn first()*user.Frame { return services.first(); }
+export("dong_services_report") fn report()*const services.Report { return services.report_pointer(); }

@@ -1,0 +1,18 @@
+module lib.cap_notify_abi;
+pub const CREATE:u64=0xb0;
+pub const SIGNAL:u64=0xb1;
+pub const TAKE:u64=0xb2;
+pub const CALL_CAP:u64=0xb3;
+pub const CLAIM:u64=0xb4;
+pub const EXPORT_ENDPOINT:u64=0xb5;
+pub const WAIT:u64=8;
+pub const SIGNAL_RIGHT:u64=16;
+pub const TRANSFER:u64=4;
+pub const CALL:u64=32;
+pub const COPY:u64=1;
+pub const MOVE:u64=2;
+pub const WOULD_BLOCK:u64=0x0402_0003;
+pub struct Offer {pub version:u64,pub source:u64,pub rights:u64,pub mode:u64}
+pub struct Received {pub version:u64,pub token:u64,pub kind:u64,pub rights:u64}
+pub const EMPTY_OFFER:Offer=Offer{version:1,source:0,rights:0,mode:0};
+pub const EMPTY_RECEIVED:Received=Received{version:1,token:0,kind:0,rights:0};

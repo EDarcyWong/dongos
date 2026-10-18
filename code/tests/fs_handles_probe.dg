@@ -1,0 +1,17 @@
+module fs_handles_probe;
+import fs.handles as h;
+export("fsh_init") fn initialize(t:*h.Table,epoch:u64)u64 {unsafe {match h.init(t,epoch){ok=>{return 0;},err(e)=>{return e;},}}}
+export("fsh_install") fn install(t:*h.Table,owner:u64,kind:u64,rights:u64,p:*const u8,n:usize,sector:u64,offset:u64,a:*const u8,out:*u64)u64 {unsafe {
+    match h.install(t,owner,kind,rights,slice_from_raw_parts(p,n),sector,offset,slice_from_raw_parts(a,11)) {
+        ok(v)=>{*out=v;return 0;},err(e)=>{return e;},
+    }
+}}
+export("fsh_lookup") fn lookup(t:*h.Table,owner:u64,token:u64,rights:u64,out:*u64)u64 {unsafe {
+    match h.lookup(t,owner,token,rights){ok(v)=>{*out=v as u64;return 0;},err(e)=>{return e;},}
+}}
+export("fsh_close") fn close(t:*h.Table,owner:u64,token:u64)u64 {unsafe {match h.close(t,owner,token){ok=>{return 0;},err(e)=>{return e;},}}}
+export("fsh_dup") fn duplicate(t:*h.Table,owner:u64,token:u64,rights:u64,out:*u64)u64 {unsafe {
+    match h.duplicate(t,owner,token,rights){ok(v)=>{*out=v;return 0;},err(e)=>{return e;},}
+}}
+export("fsh_owner") fn owner(t:*h.Table,key:u64)void {unsafe {h.revoke_owner(t,key);}}
+export("fsh_namespace") fn namespace(t:*h.Table)void {unsafe {h.namespace_changed(t);}}

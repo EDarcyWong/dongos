@@ -1,0 +1,95 @@
+// Canonical service bundle v1: bounded inventory and SHA-256 integrity.
+// Borrow must be stable, readable, disjoint from output and parser stack.
+// Embedded hashes provide integrity, not authenticity or capability grants.
+module exec.bundle;
+import exec.sha256 as sha;
+pub error InvalidInput = 0x0404_0001;
+pub error BadHeader = 0x0404_0002;
+pub error BadEntry = 0x0404_0003;
+pub error BadRange = 0x0404_0004;
+pub error BadHash = 0x0404_0005;
+pub error BadPadding = 0x0404_0006;
+pub const MAX_IMAGE: usize = 0x400_0000;
+pub const ELF: u64 = 1;
+pub const DATA: u64 = 2;
+pub struct Entry { pub name: [32]u8, pub offset: u64, pub length: u64, pub kind: u64, pub digest: sha.Digest }
+pub struct Inventory { pub count: u64, pub total: u64, pub entries: [31]Entry }
+pub struct Contents { pub pointer: *const u8, pub length: usize }
+pub const EMPTY_ENTRY: Entry = Entry { name: [0;32], offset: 0, length: 0, kind: 0, digest: sha.EMPTY_DIGEST };
+pub const EMPTY_INVENTORY: Inventory = Inventory { count: 0, total: 0, entries: [EMPTY_ENTRY;31] };
+fn u32_at(raw: *const u8, at: usize) u64 { unsafe { return read_unaligned((raw + at) as *const u32) as u64; } }
+fn u64_at(raw: *const u8, at: usize) u64 { unsafe { return read_unaligned((raw + at) as *const u64); } }
+unsafe fn zeros(raw: *const u8, start: usize, end: usize) !void {
+    unsafe { var i = start; while i < end { if *(raw + i) != 0 { return error.BadPadding; } i += 1; } }
+    return;
+}
+unsafe fn check_hash(raw: *const u8, length: usize, expected: *const u8) !void {
+    unsafe {
+        var result = sha.EMPTY_DIGEST; try sha.hash(slice_from_raw_parts(raw,length),&result);
+        var i: usize = 0; var difference: u8 = 0;
+        while i < 32 { difference |= result.bytes[i] ^ *(expected + i); i += 1; }
+        if difference != 0 { return error.BadHash; }
+    }
+    return;
+}
+pub unsafe fn validate(image: []const u8, out: *Inventory) !void {
+    unsafe {
+        if image.ptr == null || out == null || image.len < 8192 || image.len > MAX_IMAGE || (image.len & 4095) != 0
+            || (image.ptr as u64) > 0xffff_ffff_ffff_ffff - image.len as u64 { return error.InvalidInput; }
+        let raw = image.ptr;
+        if u64_at(raw,0) != 0x3143_5653_474e_4f44 || u32_at(raw,8) != 1 || u32_at(raw,12) != 128
+            || u32_at(raw,16) != 128 || u64_at(raw,24) != image.len as u64 || u64_at(raw,32) != 4096 { return error.BadHeader; }
+        let count = u32_at(raw,20);
+        if count == 0 || count > 31 { return error.BadHeader; }
+        try zeros(raw,72,128); try zeros(raw,128 + count as usize * 128,4096);
+        try check_hash(raw + 128,count as usize * 128,raw + 40);
+        var value = EMPTY_INVENTORY; value.count = count; value.total = image.len as u64;
+        var cursor: u64 = 4096; var i: usize = 0;
+        while i < count as usize {
+            let at = 128 + i * 128; var item = EMPTY_ENTRY;
+            var j: usize = 0; var ended: bool = false;
+            while j < 32 {
+                let b = *(raw + at + j); item.name[j] = b;
+                if b == 0 { if j == 0 { return error.BadEntry; } ended = true; }
+                else {
+                    if ended || j == 31 || (j == 0 && (b < 97 || b > 122))
+                        || (j != 0 && !((b >= 97 && b <= 122) || (b >= 48 && b <= 57) || b == 95 || b == 45)) { return error.BadEntry; }
+                }
+                j += 1;
+            }
+            if !ended { return error.BadEntry; }
+            if i != 0 {
+                var ordered: bool = false; var different: bool = false; j = 0;
+                while j < 32 && !different {
+                    let old = value.entries[i - 1].name[j]; let current = item.name[j];
+                    if old != current { ordered = old < current; different = true; } j += 1;
+                }
+                if !ordered { return error.BadEntry; }
+            }
+            item.offset = u64_at(raw,at + 32); item.length = u64_at(raw,at + 40); item.kind = u64_at(raw,at + 48);
+            if item.kind != ELF && item.kind != DATA { return error.BadEntry; }
+            if item.offset != cursor || item.length == 0 || item.length > 0x100_0000 || item.length > value.total - cursor { return error.BadRange; }
+            let end = cursor + item.length; let stop = (end + 4095) & ~4095;
+            if stop > value.total { return error.BadRange; }
+            try zeros(raw,end as usize,stop as usize); try zeros(raw,at + 88,at + 128);
+            try check_hash(raw + cursor as usize,item.length as usize,raw + at + 56);
+            j = 0; while j < 32 { item.digest.bytes[j] = *(raw + at + 56 + j); j += 1; }
+            value.entries[i] = item; cursor = stop; i += 1;
+        }
+        if cursor != value.total { return error.BadRange; }
+        *out = value;
+    }
+    return;
+}
+// inventory must be the unchanged result for this exact stable image.
+pub unsafe fn contents(image: []const u8, inventory: *const Inventory, index: usize, out: *Contents) !void {
+    unsafe {
+        if inventory == null || image.ptr == null || out == null || image.len > MAX_IMAGE
+            || (image.ptr as u64) > 0xffff_ffff_ffff_ffff - image.len as u64 { return error.InvalidInput; }
+        if (*inventory).count > 31 || index >= (*inventory).count as usize || (*inventory).total != image.len as u64 { return error.BadRange; }
+        let item = (*inventory).entries[index];
+        if item.offset > image.len as u64 || item.length > image.len as u64 - item.offset { return error.BadRange; }
+        *out = Contents { pointer: image.ptr + item.offset as usize, length: item.length as usize };
+    }
+    return;
+}

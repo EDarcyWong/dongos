@@ -1,0 +1,137 @@
+module lib.app_files;
+import lib.files as files;
+import lib.sys as sys;
+import fs.path as path;
+import lib.widget_state as state;
+pub const SYNC:u64=0x20d; // Candidate extension: WRITE/TRUNCATE file grant.
+pub const BAD:u64=0x0744_0001;
+pub const IO:u64=0x0504_0004;
+pub struct Client {pub fs:files.Session,pub channel:u64,pub length:usize,pub raw:[4096]u8,
+    pub normalized:path.Path,pub data:[65536]u8,pub entries:[64]state.Entry}
+pub const EMPTY:Client=Client{fs:files.EMPTY,channel:0,length:0,raw:[0;4096],normalized:path.EMPTY,data:[0;65536],entries:[state.EMPTY_ENTRY;64]};
+pub unsafe fn initialize(c:*Client,endpoint:u64,channel:u64,rights:u64)u64{unsafe{
+    if rights!=395{return BAD;}*c=EMPTY;(*c).channel=channel;return files.init(&(*c).fs,endpoint,channel,rights);
+}}
+pub unsafe fn raw(c:*Client,s:*const state.State,name:[]const u8)u64{unsafe{
+    if name.len==0||name.len>4096{return BAD;}(*c).length=0;
+    if name[0]!=47{var i:usize=0;while i<(*s).cwd.length{(*c).raw[i]=(*s).cwd.bytes[i];i+=1;}(*c).length=(*s).cwd.length;
+        if (*c).length>1{(*c).raw[(*c).length]=47;(*c).length+=1;}}
+    if name.len>4096-(*c).length{return BAD;}var i:usize=0;while i<name.len{(*c).raw[(*c).length+i]=name[i];i+=1;}(*c).length+=name.len;return 0;
+}}
+unsafe fn normalized(c:*Client,s:*const state.State,name:[]const u8)u64{unsafe{
+    match path.normalize((*s).cwd.bytes[0..(*s).cwd.length],name,&(*c).normalized){ok=>{return 0;},err(e)=>{return e;},}
+}}
+pub unsafe fn directory(c:*Client,s:*state.State,name:[]const u8)u64{unsafe{
+    let prepared=raw(c,s,name);if prepared!=0{return prepared;}var token:u64=0;
+    var status=files.open(&(*c).fs,(*c).fs.root,(*c).raw[0..(*c).length],files.STAT,&token);if status!=0{return status;}
+    status=files.stat(&(*c).fs,token);if status==0&&((*c).fs.response.words[3]&16)==0{status=0x0504_0003;}
+    let closed=files.close(&(*c).fs,token);if status!=0{return status;}if closed!=0{return closed;}
+    status=normalized(c,s,name);if status!=0{return status;}(*s).cwd=(*c).normalized;(*s).base=0;(*s).generation=0;
+    (*s).count=0;(*s).selected=0;(*s).scroll=0;return 0;
+}}
+pub unsafe fn list(c:*Client,s:*state.State,base:u64)u64{unsafe{
+    if base>=4096{return BAD;}var token:u64=0;var status=files.open(&(*c).fs,(*c).fs.root,(*s).cwd.bytes[0..(*s).cwd.length],files.LIST,&token);if status!=0{return status;}
+    var count:usize=0;var generation=(*s).generation;
+    while count<64&&base+count as u64<4096{
+        let ordinal=base+count as u64;var supplied=generation;if ordinal==0{supplied=0;}
+        status=files.list(&(*c).fs,token,ordinal,supplied);if status!=0{break;}
+        if (*c).fs.response.words[1]==0{generation=(*c).fs.response.words[6];break;}
+        let record=((*c).channel+4096) as *const u64;let length=*(record+1);let bytes=*record;
+        if (*c).fs.response.words[1]!=1||length>1020||bytes!=80+length||bytes!=(*c).fs.response.words[4]
+            ||*(record+2)!=(*c).fs.response.words[3]||*(record+3)!=(*c).fs.response.words[2]
+            ||*(record+6)!=ordinal+1||*(record+6)!=(*c).fs.response.words[7]
+            ||*(record+7)!=(*c).fs.response.words[6]||(*(record+9)>>24)!=0{status=BAD;break;}
+        let item=&(*c).entries[count];*item=state.EMPTY_ENTRY;(*item).attributes=*(record+2);(*item).size=*(record+3);
+        if *(record+5)==1&&length!=0{
+            let name=slice_from_raw_parts(((*c).channel+4176) as *const u8,length as usize);
+            match state.utf8(name){ok=>{},err(e)=>{status=e;},}if status!=0{break;}
+            (*item).length=length as usize;var i:usize=0;while i<length as usize{(*item).name[i]=name[i];i+=1;}
+        }else{if *(record+5)!=2||length!=0{status=BAD;break;}let label="<OEM raw alias>";var i:usize=0;while i<label.len{(*item).name[i]=label[i];i+=1;}(*item).length=label.len;(*item).attributes|=0x100;}
+        generation=(*c).fs.response.words[6];count+=1;
+    }
+    let closed=files.close(&(*c).fs,token);if status!=0{return status;}if closed!=0{return closed;}
+    var i:usize=0;while i<count{(*s).entries[i]=(*c).entries[i];i+=1;}(*s).count=count;(*s).selected=0;(*s).scroll=0;(*s).base=base;(*s).generation=generation;return 0;
+}}
+pub unsafe fn load(c:*Client,s:*state.State,name:[]const u8)u64{unsafe{
+    if (*s).role==state.EDITOR&&(*s).dirty{return 0x0743_0003;}
+    let prepared=raw(c,s,name);if prepared!=0{return prepared;}var token:u64=0;
+    var status=files.open(&(*c).fs,(*c).fs.root,(*c).raw[0..(*c).length],files.STAT|files.READ,&token);if status!=0{return status;}
+    status=files.stat(&(*c).fs,token);var length:u64=0;
+    if status==0{length=(*c).fs.response.words[2];if length>65536||((*c).fs.response.words[3]&16)!=0{status=BAD;}}
+    var at:u64=0;while status==0&&at<length{var count=length-at;if count>61440{count=61440;}
+        status=files.read(&(*c).fs,token,at,count);if status!=0{break;}let n=(*c).fs.response.words[1];if n==0||n>count{status=IO;break;}
+        var i:usize=0;while i<n as usize{(*c).data[at as usize+i]=*(((*c).channel+4096) as *const u8+i);i+=1;}at+=n;
+    }
+    let closed=files.close(&(*c).fs,token);if status!=0{return status;}if closed!=0{return closed;}
+    match state.utf8((*c).data[0..length as usize]){ok=>{},err(e)=>{return e;},}
+    status=normalized(c,s,name);if status!=0{return status;}
+    var i:usize=0;while i<length as usize{(*s).text[i]=(*c).data[i];i+=1;}(*s).text_length=length as usize;(*s).cursor=length as usize;
+    (*s).target=(*c).normalized;(*s).dirty=false;(*s).saved=true;return 0;
+}}
+fn same_ascii(a:[]const u8,b:[]const u8)bool{
+    if a.len!=b.len{return false;}var i:usize=0;while i<a.len{var x=a[i];var y=b[i];if x>=97&&x<=122{x-=32;}if y>=97&&y<=122{y-=32;}if x!=y{return false;}i+=1;}return true;
+}
+// Derive a fixed scope only; ROOT395 is never enlarged. The complete raw
+// remainder (including every component) is still checked by the FS walker.
+unsafe fn write_scope(c:*Client,s:*const state.State,out:*files.Scope,start:*usize)u64{unsafe{
+    let bytes=(*c).raw[0..(*c).length];*start=0;
+    if (*s).role==state.SETTINGS{
+        var selector:u64=2;if same_ascii(bytes,"/DESK1.CFG"){selector=3;}
+        else if !same_ascii(bytes,"/DESK0.CFG"){return 0x050c_0003;}
+        return files.scope(&(*c).fs,selector,out);
+    }
+    if (*s).role!=state.FILES&&(*s).role!=state.EDITOR{return 0x050c_0003;}
+    if bytes.len<=11||!same_ascii(bytes[0..10],"/Documents")||bytes[10]!=47{return 0x050c_0003;}
+    *start=11;return files.scope(&(*c).fs,1,out);
+}}
+unsafe fn writable(c:*Client,s:*const state.State,out:*u64)u64{unsafe{
+    var grant=files.EMPTY_SCOPE;var start:usize=0;var status=write_scope(c,s,&grant,&start);if status!=0{return status;}
+    if (*s).role==state.SETTINGS{*out=grant.token;return 0;}
+    status=files.create(&(*c).fs,grant.token,(*c).raw[start..(*c).length]);
+    let released=files.close(&(*c).fs,grant.token);
+    if status!=0&&status!=0x0504_0007{return status;}
+    // Creation invalidates directory capabilities. Reacquiring authority is a
+    // separate step; CREATE, WRITE and FLUSH themselves are never retried.
+    status=files.scope(&(*c).fs,1,&grant);if status!=0{return status;}
+    status=files.open(&(*c).fs,grant.token,(*c).raw[start..(*c).length],39,out);
+    let closed=files.close(&(*c).fs,grant.token);if status!=0{return status;}return closed;
+}}
+pub unsafe fn namespace_sync(c:*Client,s:*state.State)u64{unsafe{
+    if (*s).role!=state.FILES{return 0x050c_0003;}var grant=files.EMPTY_SCOPE;
+    var status=files.scope(&(*c).fs,1,&grant);if status!=0{return status;}status=files.scope_sync(&(*c).fs,grant.token);
+    let closed=files.close(&(*c).fs,grant.token);if status!=0{return status;}if closed!=0{return closed;}
+    (*s).dirty=false;(*s).saved=true;return 0;
+}}
+// operation1=create empty file,2=mkdir,3=remove file/empty directory. Namespace
+// state remains dirty until fixed Documents authority performs durable flush.
+pub unsafe fn namespace(c:*Client,s:*state.State,name:[]const u8,operation:u64)u64{unsafe{
+    if (*s).role!=state.FILES||operation<1||operation>3{return 0x050c_0003;}
+    let prepared=raw(c,s,name);if prepared!=0{return prepared;}var grant=files.EMPTY_SCOPE;var start:usize=0;
+    var status=write_scope(c,s,&grant,&start);if status!=0{return status;}(*s).dirty=true;(*s).saved=false;
+    let relative=(*c).raw[start..(*c).length];
+    if operation==1{status=files.create(&(*c).fs,grant.token,relative);}
+    else if operation==2{status=files.mkdir(&(*c).fs,grant.token,relative);}
+    else{var token:u64=0;status=files.open(&(*c).fs,grant.token,relative,files.REMOVE,&token);
+        if status==0{status=files.remove(&(*c).fs,token);let closed=files.close(&(*c).fs,token);}}
+    let closed=files.close(&(*c).fs,grant.token);if status!=0{return status;}
+    status=files.scope(&(*c).fs,1,&grant);if status!=0{return status;}status=files.scope_sync(&(*c).fs,grant.token);
+    let released=files.close(&(*c).fs,grant.token);if status!=0{return status;}if released!=0{return released;}
+    (*s).dirty=false;(*s).saved=true;(*s).generation=0;return 0;
+}}
+pub unsafe fn save(c:*Client,s:*state.State,name:[]const u8)u64{unsafe{
+    let prepared=raw(c,s,name);if prepared!=0{return prepared;}
+    (*s).dirty=true;(*s).saved=false;
+    var token:u64=0;var status=writable(c,s,&token);if status!=0{return status;}
+    status=files.stat(&(*c).fs,token);if status==0&&((*c).fs.response.words[3]&16)!=0{status=BAD;}
+    if status==0{status=normalized(c,s,name);}if status==0{status=files.truncate(&(*c).fs,token,0);}
+    var at:usize=0;while status==0&&at<(*s).text_length{var n=(*s).text_length-at;if n>61440{n=61440;}
+        status=files.write(&(*c).fs,token,at as u64,(*s).text[at..at+n]);if status!=0{break;}if (*c).fs.response.words[1]!=n as u64{status=IO;break;}at+=n;
+    }
+    if status==0{status=files.sync(&(*c).fs,token);}
+    at=0;while status==0&&at<(*s).text_length{var n=(*s).text_length-at;if n>61440{n=61440;}
+        status=files.read(&(*c).fs,token,at as u64,n as u64);if status!=0{break;}if (*c).fs.response.words[1]!=n as u64{status=IO;break;}
+        var i:usize=0;while i<n{if *(((*c).channel+4096) as *const u8+i)!=(*s).text[at+i]{status=IO;break;}i+=1;}at+=n;
+    }
+    let closed=files.close(&(*c).fs,token);if status!=0{return status;}if closed!=0{return closed;}
+    (*s).target=(*c).normalized;(*s).dirty=false;(*s).saved=true;return 0;
+}}

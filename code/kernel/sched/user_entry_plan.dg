@@ -1,0 +1,55 @@
+// Checked arena/header construction. No privileged instruction runs here.
+// Mapping/guard evidence is supplied by the production paging adapter.
+module sched.user_entry_plan;
+import sched.user_domain as ud;
+pub error Invalid=0x060b_0001;pub error Mapping=0x060b_0002;
+pub struct Cpu{
+ pub kernel_stack:u64,pub user_stack:u64,pub continuation:u64,pub root_frame:u64,
+ pub original_cr3:u64,pub syscalls:u64,pub busy:u64,pub result:u64,
+ pub smp:u64,pub domain:u64,pub logical_id:u64,pub contexts:u64,pub context_count:u64,pub pcid_enabled:u64,
+ pub gdt:u64,pub tss:u64,pub idt:u64,pub stack_bottom:u64,pub df_top:u64,pub nmi_top:u64,pub exception_top:u64,
+ pub kernel_xstate:u64,pub capture:u64,pub returned:u64,pub return_xstate:u64,pub ready:u64,pub last_error:u64,
+ pub event:u64,pub raw_frame:u64,pub deadline_ticks:u64,pub tsc_hz:u64,pub timer_hz:u64
+}
+pub struct Stacks{pub bottom:u64,pub top:u64,pub df_bottom:u64,pub df_top:u64,
+ pub nmi_bottom:u64,pub nmi_top:u64,pub exception_bottom:u64,pub exception_top:u64}
+pub struct Metrics{pub switches:u64,pub retained:u64,pub user_timers:u64,pub user_entries:u64,pub last_vector:u64,pub failed:u64,
+ pub gs_base:u64,pub kernel_gs_base:u64,pub fs_base:u64,pub efer:u64,pub star:u64,pub lstar:u64,pub fmask:u64,
+ pub gdtr_base:u64,pub gdtr_limit:u64,pub idtr_base:u64,pub idtr_limit:u64,pub tr:u64,pub cr4:u64,pub xcr0:u64,pub rsp0:u64,pub reserved:[3]u64}
+unsafe extern "sysv64" fn user_entry_mapped(base:u64,bytes:u64,writable:u64)u64;
+unsafe extern "sysv64" fn user_entry_guard(base:u64)u64;
+unsafe extern "sysv64" fn user_smp_prepare_tables(header:*Cpu)u64;
+fn region(base:u64,bytes:u64)bool{return base!=0&&(base&4095)==0&&bytes!=0&&(bytes&4095)==0&&base<=0xffff_ffff_ffff_ffff-bytes;}
+fn disjoint(a:u64,an:u64,b:u64,bn:u64)bool{return a+an<=b||b+bn<=a;}
+unsafe fn stack_ok(bottom:u64,top:u64)!void{unsafe{
+ if top<=bottom||!region(bottom,top-bottom)||top-bottom<16384||bottom<4096||top>0xffff_ffff_ffff_efff{return error.Invalid;}
+ if user_entry_mapped(bottom,top-bottom,1)!=1||user_entry_guard(bottom-4096)!=1||user_entry_guard(top)!=1{return error.Mapping;}
+}return;}
+pub unsafe fn configure(storage:u64,bytes:u64,domain:*ud.Domain,id:usize,contexts:u64,count:u64,stacks:*const Stacks,tsc_hz:u64,timer_hz:u64,out:**Cpu)!void{unsafe{
+ if !region(storage,bytes)||bytes!=8192||domain==null||(*domain).ready!=1||(*domain).failed!=0||id>=16||count==0||count>16||id>=count
+  ||((*domain).online&(1<<id as u64))==0||contexts==0||(contexts&63)!=0||contexts>0xffff_ffff_ffff_ffff-count*256
+  ||stacks==null||out==null||tsc_hz<1000||timer_hz<1000||tsc_hz>16000000000||timer_hz>16000000000{return error.Invalid;}
+ let s=*stacks;
+ try stack_ok(s.bottom,s.top);try stack_ok(s.df_bottom,s.df_top);try stack_ok(s.nmi_bottom,s.nmi_top);try stack_ok(s.exception_bottom,s.exception_top);
+ if !disjoint(storage,bytes,s.bottom-4096,s.top-s.bottom+8192)||!disjoint(storage,bytes,s.df_bottom-4096,s.df_top-s.df_bottom+8192)
+  ||!disjoint(storage,bytes,s.nmi_bottom-4096,s.nmi_top-s.nmi_bottom+8192)||!disjoint(storage,bytes,s.exception_bottom-4096,s.exception_top-s.exception_bottom+8192)
+  ||!disjoint(s.bottom-4096,s.top-s.bottom+8192,s.df_bottom-4096,s.df_top-s.df_bottom+8192)
+  ||!disjoint(s.bottom-4096,s.top-s.bottom+8192,s.nmi_bottom-4096,s.nmi_top-s.nmi_bottom+8192)
+  ||!disjoint(s.bottom-4096,s.top-s.bottom+8192,s.exception_bottom-4096,s.exception_top-s.exception_bottom+8192)
+  ||!disjoint(s.df_bottom-4096,s.df_top-s.df_bottom+8192,s.nmi_bottom-4096,s.nmi_top-s.nmi_bottom+8192)
+  ||!disjoint(s.df_bottom-4096,s.df_top-s.df_bottom+8192,s.exception_bottom-4096,s.exception_top-s.exception_bottom+8192)
+  ||!disjoint(s.nmi_bottom-4096,s.nmi_top-s.nmi_bottom+8192,s.exception_bottom-4096,s.exception_top-s.exception_bottom+8192){return error.Invalid;}
+ if !disjoint(storage,bytes,(*domain).arena,(*domain).bytes)||!disjoint(storage,bytes,contexts,count*256){return error.Invalid;}
+ if user_entry_mapped(storage,bytes,1)!=1||user_entry_mapped(contexts,count*256,1)!=1{return error.Mapping;}
+ let c=storage as *Cpu;let local=(*domain).cpus+id;
+ // All fallible predicates precede any write to the arena or output pointer.
+ (*c).ready=0;(*c).kernel_stack=s.top;(*c).user_stack=0;(*c).continuation=storage;(*c).root_frame=(*local).returned;
+ (*c).original_cr3=(*domain).kernel_root;(*c).syscalls=0;(*c).busy=0;(*c).result=0x5553_4552_534d_5036;
+ (*c).smp=contexts+id as u64*256;(*c).domain=domain as u64;(*c).logical_id=id as u64;(*c).contexts=contexts;(*c).context_count=count;(*c).pcid_enabled=0;
+ (*c).gdt=storage+256;(*c).tss=storage+320;(*c).idt=storage+512;(*c).stack_bottom=s.bottom;
+ (*c).df_top=s.df_top;(*c).nmi_top=s.nmi_top;(*c).exception_top=s.exception_top;(*c).kernel_xstate=storage+4608;
+ (*c).capture=(*local).capture;(*c).returned=(*local).returned;(*c).return_xstate=(*local).return_xstate;
+ (*c).last_error=0;(*c).event=0;(*c).raw_frame=0;(*c).deadline_ticks=tsc_hz;(*c).tsc_hz=tsc_hz;(*c).timer_hz=timer_hz;
+ var i:usize=0;while i<24{*(((storage+5632) as *u64)+i)=0;i+=1;}
+ let ignored=user_smp_prepare_tables(c);compiler_fence();(*c).ready=1;*out=c;
+}return;}

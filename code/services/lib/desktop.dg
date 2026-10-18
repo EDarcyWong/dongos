@@ -1,0 +1,10 @@
+// Immutable desktop grant description. Addresses are process-local VAs.
+module lib.desktop;
+pub const DESCRIPTOR:u64=0x7000_1000;
+pub const DISPLAY_OBJECT:u64=40;
+pub const INPUT_OBJECT:u64=41;
+pub struct Display {
+    pub version:u64,pub width:u64,pub height:u64,pub stride:u64,pub pixel_format:u64,
+    pub framebuffer:u64,pub bytes:u64,pub back_buffer:u64,pub font:u64,pub font_bytes:u64,
+    pub tsc_hz:u64,pub input_queue:u64,pub background_cache:u64,pub window_cache:u64,pub scale_q8:u64,pub font_pixels:u64,
+}

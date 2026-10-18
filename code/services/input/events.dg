@@ -1,0 +1,88 @@
+// Device-local, single-owner event transport. No IRQ, DMA or synchronization.
+module input.events;
+
+pub error InvalidState = 0x0710_0001;
+pub error Capacity = 0x0710_0002;
+pub error InvalidInput = 0x0710_0003;
+pub error InvalidRange = 0x0710_0004;
+pub const KEY: u64 = 1;
+pub const RELATIVE: u64 = 2;
+pub const ABSOLUTE: u64 = 3;
+pub const SCROLL: u64 = 4;
+pub const LOST: u64 = 5;
+pub const QUEUE_FULL: u64 = 1;
+pub const BAD_SEQUENCE: u64 = 2;
+pub const DEVICE_RESET: u64 = 3;
+pub const MOUSE_OVERFLOW: u64 = 4;
+pub const SYN_DROPPED: u64 = 5;
+pub const FRAME_LIMIT: u64 = 6;
+pub const EMPTY_EVENT: Event = Event { kind: 0, code: 0, a: 0, b: 0 };
+pub struct Event { pub kind: u64, pub code: u64, pub a: i64, pub b: i64 }
+pub struct Queue { pub head: usize, pub count: usize, pub items: [64]Event }
+pub const EMPTY_QUEUE: Queue = Queue { head: 0, count: 0, items: [EMPTY_EVENT; 64] };
+pub struct Keys { pub down: [12]u64, pub modifiers: u64 }
+pub const EMPTY_KEYS: Keys = Keys { down: [0; 12], modifiers: 0 };
+// L/R shift, ctrl, alt, meta; then caps/num/scroll lock toggles.
+pub const SHIFT_L: u64 = 1; pub const SHIFT_R: u64 = 2;
+pub const CTRL_L: u64 = 4; pub const CTRL_R: u64 = 8;
+pub const ALT_L: u64 = 16; pub const ALT_R: u64 = 32;
+pub const META_L: u64 = 64; pub const META_R: u64 = 128;
+pub const CAPS: u64 = 256; pub const NUM: u64 = 512; pub const SCROLL_LOCK: u64 = 1024;
+
+pub unsafe fn validate(q: *const Queue) !void {
+    unsafe { if q == null || (*q).head >= 64 || (*q).count > 64 { return error.InvalidState; } }
+    return;
+}
+// Caller has validated the queue and reserved one free slot.
+pub unsafe fn append(q: *Queue, kind: u64, code: u64, a: i64, b: i64) void {
+    unsafe { (*q).items[((*q).head + (*q).count) % 64] = Event { kind: kind, code: code, a: a, b: b }; (*q).count += 1; }
+    return;
+}
+pub unsafe fn push(q: *Queue, event: *const Event) !void {
+    unsafe { try validate(q); if (*q).count == 64 { return error.Capacity; } append(q,(*event).kind,(*event).code,(*event).a,(*event).b); }
+    return;
+}
+pub unsafe fn pop(q: *Queue, out: *Event) !bool {
+    unsafe {
+        try validate(q); if (*q).count == 0 { return false; }
+        *out = (*q).items[(*q).head]; (*q).items[(*q).head] = EMPTY_EVENT;
+        (*q).head = ((*q).head + 1) % 64; (*q).count -= 1;
+    }
+    return true;
+}
+// A device owns its output queue. Loss invalidates every prior queued state
+// change; consumers release this device's held keys/buttons and cancel grabs.
+pub unsafe fn loss(q: *Queue, reason: u64) void {
+    unsafe { *q = EMPTY_QUEUE; append(q,LOST,reason,0,0); }
+    return;
+}
+fn modifier(code: u64) u64 {
+    if code == 42 { return SHIFT_L; } if code == 54 { return SHIFT_R; }
+    if code == 29 { return CTRL_L; } if code == 97 { return CTRL_R; }
+    if code == 56 { return ALT_L; } if code == 100 { return ALT_R; }
+    if code == 125 { return META_L; } if code == 126 { return META_R; }
+    return 0;
+}
+// code is Linux evdev KEY/BTN, value is 0/1/2. Repeated makes become 2;
+// orphan release/repeat is ignored. Caller reserves output before committing.
+pub unsafe fn key(keys: *Keys, code: u64, value: i64, out: *Event) !bool {
+    if code == 0 || code >= 768 || value < 0 || value > 2 { return error.InvalidInput; }
+    unsafe {
+        let index = (code / 64) as usize; let bit: u64 = 1 << (code % 64);
+        let held = ((*keys).down[index] & bit) != 0;
+        if (value == 0 || value == 2) && !held { return false; }
+        var v = value;
+        if value != 0 {
+            if held { v = 2; }
+            else {
+                (*keys).down[index] |= bit;
+                if code == 58 { (*keys).modifiers ^= CAPS; }
+                if code == 69 { (*keys).modifiers ^= NUM; }
+                if code == 70 { (*keys).modifiers ^= SCROLL_LOCK; }
+            }
+            (*keys).modifiers |= modifier(code);
+        } else { (*keys).down[index] &= ~bit; (*keys).modifiers &= ~modifier(code); }
+        *out = Event { kind: KEY, code: code, a: v, b: (*keys).modifiers as i64 };
+    }
+    return true;
+}

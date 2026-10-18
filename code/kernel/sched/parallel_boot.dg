@@ -1,0 +1,94 @@
+// BSP/IF0 monotonic arena owner for the staged AP kernel-thread adapter.
+// Invoke after smp.runtime.begin completed and before any AP scheduler starts.
+module sched.parallel_boot;
+import sched.parallel as scheduler;
+import smp.context as smp;
+import boot.service_memory as resources;
+import boot.memory_startup as startup;
+import mm.paging as paging;
+import runtime_probe as bridge;
+pub struct Timer{pub mode:u64,pub tsc_hz:u64,pub lapic_hz:u64,pub quantum_ns:u64}
+pub error Invalid=0x0608_0001;pub error Held=0x0608_0002;
+pub var FAILED:bool=false;
+var ATTEMPTED:bool=false;
+pub struct Probe{pub ready:u64,pub iterations:u64,pub errors:u64,pub cpu_mask:u64,pub last_cpu:u64,pub reserved:u64,pub stop:u64,pub done:u64,pub scratch:[8]u64}
+var PROBES:*Probe=null;var PROBE_COUNT:usize=0;var PROBE_MASK:u64=0;
+var PROBE_TOKENS:*u64=null;
+unsafe extern "sysv64" fn parallel_arch_seed(template:u64,backup:u64)void;
+unsafe extern "sysv64" fn parallel_arch_entry()u64;
+unsafe extern "sysv64" fn parallel_arch_text_begin()u64;
+unsafe extern "sysv64" fn parallel_arch_text_end()u64;
+unsafe extern "sysv64" fn parallel_probe_entry()u64;
+unsafe fn failed()void{unsafe{FAILED=true;scheduler.failstop();}return;}
+unsafe fn guard(address:u64)!void{unsafe{
+ var retired=paging.EMPTY_RETIRED;
+ try paging.unmap_live(startup.space_pointer(),address,&retired);
+ // Existing acknowledged SMP domain covers every online AP. No table is
+ // reclaimed before all APs retire the old supervisor-stack translation.
+ bridge.runtime_flush_root();try paging.reclaim(startup.space_pointer(),&retired);
+}return;}
+unsafe fn private_stack(out:*u64)!void{unsafe{
+ var block=resources.Block{physical:0,virtual:0,pages:0};try resources.allocate(6,1,&block);
+ try guard(block.virtual);try guard(block.virtual+5*4096);*out=block.virtual+4096;
+}return;}
+unsafe fn prepare_inner(cpus:*const smp.Context,count:usize,timers:[]const Timer)!void{unsafe{
+ if cpus==null||count<2||count>16||timers.ptr==null||timers.len!=count||startup.space_pointer()==null{return error.Invalid;}
+ let root=try paging.root_physical(startup.space_pointer());var mask:u64=0;var id:usize=1;
+ while id<count{let c=cpus+id;let timer=timers[id];
+  if (*c).self!=c as u64||(*c).logical_id!=id as u64||(*c).state!=smp.ONLINE||(*c).cr3!=root
+   ||timer.mode<1||timer.mode>2||timer.tsc_hz<1000000||timer.tsc_hz>16000000000
+   ||(timer.mode==2&&(timer.lapic_hz<1000||timer.lapic_hz>16000000000))||timer.quantum_ns==0||timer.quantum_ns>1000000000{return error.Invalid;}
+  mask|=1<<id as u64;id+=1;
+ }
+ let required=scheduler.required_bytes();let pages=((required+2048+4095)/4096) as usize;
+ var arena=resources.Block{physical:0,virtual:0,pages:0};try resources.allocate(pages,1,&arena);
+ let template=arena.virtual+required;let backup=template+1024;
+ parallel_arch_seed(template,backup);
+ try scheduler.initialize(arena.virtual,pages as u64*4096,mask,root,parallel_arch_text_begin(),parallel_arch_text_end(),parallel_arch_entry(),template);
+ id=1;while id<count{let c=cpus+id;let timer=timers[id];var stack:u64=0;try private_stack(&stack);
+  try scheduler.configure(id,(*c).stack_bottom,(*c).stack_top,stack,stack+16384,
+   timer.mode,timer.tsc_hz,timer.lapic_hz,timer.quantum_ns,(*c).apic_id,(*c).lapic_va,(*c).tss);id+=1;
+ }
+}return;}
+pub unsafe fn prepare(cpus:*const smp.Context,count:usize,timers:[]const Timer)!void{unsafe{
+ if ATTEMPTED||FAILED||!scheduler.interrupts_off(){return error.Invalid;}ATTEMPTED=true;
+ let result=prepare_inner(cpus,count,timers);match result{ok=>{return;},err(e)=>{failed();return result;},}
+}}
+// Allocation is monotonic/held. Any failure after reservation permanently
+// refuses further builder calls; integration must fail-stop rather than retry.
+pub unsafe fn admit(id:usize,priority:u64,affinity:u64,entry:u64,argument:u64,out:*u64)!void{unsafe{
+ if !ATTEMPTED||FAILED||out==null||!scheduler.interrupts_off(){return error.Invalid;}
+ var stack:u64=0;let allocated=private_stack(&stack);match allocated{ok=>{},err(e)=>{failed();return allocated;},}
+ let result=scheduler.admit(id,priority,affinity,stack,stack+16384,entry,argument,out);
+ match result{ok=>{return;},err(e)=>{failed();return result;},}
+}}
+// Diagnostic startup only. Each AP receives two ordinary equal-priority
+// frames/private stacks; their loops have no cooperative yield. These helpers
+// are kernel-only and are not a syscall or a replacement for user scheduling.
+pub export("dong_parallel_probe_begin") fn probe_begin(cpus:*const smp.Context,count:usize,timers:*const Timer)u64{unsafe{
+ if cpus==null||timers==null||count<2||count>16||!scheduler.interrupts_off(){return 0x0608_0001;}
+ let prepared=prepare(cpus,count,slice_from_raw_parts(timers,count));match prepared{ok=>{},err(e)=>{return e;},}
+ var block=resources.Block{physical:0,virtual:0,pages:0};let allocated=resources.allocate(2,1,&block);
+ match allocated{ok=>{},err(e)=>{failed();return e;},}
+ PROBES=block.virtual as *Probe;PROBE_TOKENS=(block.virtual+4096) as *u64;PROBE_COUNT=(count-1)*2;
+ var id:usize=0;while id<PROBE_COUNT{let cpu=id/2+1;PROBE_MASK|=1<<cpu as u64;
+  var token:u64=0;let admitted=admit(id,8,1<<cpu as u64,parallel_probe_entry(),(PROBES+id) as u64,&token);
+  match admitted{ok=>{},err(e)=>{failed();return e;},}*(PROBE_TOKENS+id)=token;id+=1;
+ }
+ let started=scheduler.start();match started{ok=>{return 0;},err(e)=>{failed();return e;},}
+}}
+// Open the remaining workers' affinity before retiring the last AP's two
+// workers. That AP must then steal real saved frames from another AP queue.
+pub export("dong_parallel_probe_steal") fn probe_steal()u64{unsafe{
+ if FAILED||PROBES==null||PROBE_COUNT<4{return 0x0608_0001;}
+ var id:usize=0;while id<PROBE_COUNT{let changed=scheduler.affinity(*(PROBE_TOKENS+id),PROBE_MASK);
+  match changed{ok=>{},err(e)=>{failed();return e;},}id+=1;
+ }
+ atomic_store(&(*(PROBES+PROBE_COUNT-2)).stop,1);atomic_store(&(*(PROBES+PROBE_COUNT-1)).stop,1);return 0;
+}}
+pub export("dong_parallel_probe_stop") fn probe_stop()void{unsafe{
+ var id:usize=0;while id<PROBE_COUNT{atomic_store(&(*(PROBES+id)).stop,1);id+=1;}
+}return;}
+pub export("dong_parallel_probe_records") fn probe_records()*Probe{unsafe{return PROBES;}}
+pub export("dong_parallel_probe_count") fn probe_count()usize{unsafe{return PROBE_COUNT;}}
+pub export("dong_parallel_domain") fn domain_pointer()*scheduler.Domain{return scheduler.pointer();}

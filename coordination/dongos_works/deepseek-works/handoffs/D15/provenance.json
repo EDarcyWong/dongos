@@ -1,0 +1,34 @@
+{
+  "from_task": "claude:C18",
+  "to_task": "deepseek:D15",
+  "candidate": "f065055003b04b14b0c3f62930b787e4",
+  "fingerprint": {
+    "claude-works/src/bootstrap/string_table.dg": "fd0fdfb95707b1f6fb46bec81c24e91ec843a7d00e5ab87a785941d9c628725a",
+    "claude-works/src/bootstrap/string_table.md": "2e639362a9ba1827f9354ce5e75845221fc6b5bf78985621e65127e5114be6f0",
+    "claude-works/tests/test_string_table.py": "5cf62313645645a66317245587450ce442fd196c68964b0df7930fb2a34ef7ab",
+    "claude-works/deliveries/C18.md": "6bfe3bc652148a9473435dc932534d84713fc7c8467d9bfd37ed527f49a61fa6"
+  },
+  "copies": [
+    {
+      "source": "claude-works/src/bootstrap/string_table.dg",
+      "source_sha256": "fd0fdfb95707b1f6fb46bec81c24e91ec843a7d00e5ab87a785941d9c628725a",
+      "target": "deepseek-works/src/bootstrap/string_table.dg",
+      "target_sha256": "fd0fdfb95707b1f6fb46bec81c24e91ec843a7d00e5ab87a785941d9c628725a"
+    },
+    {
+      "source": "claude-works/src/bootstrap/string_table.md",
+      "source_sha256": "2e639362a9ba1827f9354ce5e75845221fc6b5bf78985621e65127e5114be6f0",
+      "target": "deepseek-works/src/bootstrap/string_table.md",
+      "target_sha256": "2e639362a9ba1827f9354ce5e75845221fc6b5bf78985621e65127e5114be6f0"
+    },
+    {
+      "source": "claude-works/tests/test_string_table.py",
+      "source_sha256": "5cf62313645645a66317245587450ce442fd196c68964b0df7930fb2a34ef7ab",
+      "target": "deepseek-works/tests/test_string_table.py",
+      "target_sha256": "314d26227bc73d3b27a8d6cd1d496ce1a1d2a16301bf3ed1aeb3b5f14bf7022f"
+    }
+  ],
+  "prior_verification": null,
+  "repairs": "原C18算术守卫if c>MAX-1-total在total==MAX时会先下溢。Codex提取同一算术片段的小标量见证：total=MAX,count=1，debug panic退出87、release返回OK并写1。这是算术级见证，不是巨大公共输入复现。让检查自身也不下溢，例如先短路total==MAX，再检查c>MAX-total-1。保留原公共接口、去重/输出算法和原3项测试；在私有测试桥接导出同一checked-add/helper，有限覆盖MAX-2/1→OK MAX、MAX-1/1和MAX/1→INVALID且输出不变，两模式；不巨大分配，不伪地址解引用，不扩新矩阵。详见claude-works/reviews/2026-10-18-C18-R1.md。",
+  "transfer_is_not_delivery": true
+}

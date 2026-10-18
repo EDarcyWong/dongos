@@ -1,0 +1,22 @@
+// Pure preflight for the fixed 128-page table pool plus 16-page boot stack.
+// Input is normalize's sorted, disjoint, coalesced relative page ranges in a
+// 1024-page arena. Thus start+count <=1024 and all arithmetic below is bounded.
+module boot.arena_fit;
+import boot.memory_policy as policy;
+
+import mm.memory_map as mmap;
+
+pub fn fits(ranges: []const mmap.PageRange) bool {
+    var pool: bool = false;
+    var stack_blocks: usize = 0;
+    for range in ranges {
+        let end = range.start_page + range.page_count;
+        let first_pool = (range.start_page + policy.POOL_PAGES - 1) & ~(policy.POOL_PAGES - 1);
+        if first_pool <= end && end - first_pool >= policy.POOL_PAGES { pool = true; }
+        let first_stack = (range.start_page + 15) & ~15;
+        if first_stack < end { stack_blocks += (end - first_stack) / 16; }
+    }
+    // The pool consumes POOL_PAGES/16 aligned stack-size blocks. One extra
+    // complete block guarantees a disjoint stack whichever pool buddy picks.
+    return pool && stack_blocks >= policy.POOL_PAGES / 16 + 1;
+}

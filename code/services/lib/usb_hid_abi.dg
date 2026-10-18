@@ -1,0 +1,32 @@
+// Data-only raw boot HID RPC. Kernel accepted-ticket PID/dual-incarnation
+// checks are mandatory at the input service; message fields are not authority.
+module lib.usb_hid_abi;
+import lib.abi as abi;
+pub const MAGIC:u64=0x4447_5548_4944_0001;
+pub const KEYBOARD:u64=1;
+pub const MOUSE:u64=2;
+pub error Invalid=0x081b_0001;
+pub struct Report {pub source:u64,pub kind:u64,pub bytes:u64,pub sequence:u64,pub epoch:u64,pub raw:u64}
+pub const EMPTY:Report=Report {source:0,kind:0,bytes:0,sequence:0,epoch:0,raw:0};
+unsafe fn valid(r:*const Report)!void {unsafe {
+    if r==null||(*r).source==0||(*r).source>3||(*r).sequence==0||(*r).epoch==0||(*r).epoch>0x0fff_ffff {return error.Invalid;}
+    if (*r).kind==KEYBOARD {if (*r).bytes!=8 {return error.Invalid;}}
+    else if (*r).kind!=MOUSE||(*r).bytes<3||(*r).bytes>8 {return error.Invalid;}
+    if (*r).bytes<8&&((*r).raw>>((*r).bytes*8))!=0 {return error.Invalid;}
+}return;}
+pub unsafe fn encode(r:*const Report,out:*abi.Message)!void {unsafe {
+    if out==null {return error.Invalid;}try valid(r);*out=abi.EMPTY_MESSAGE;
+    (*out).words[0]=MAGIC;(*out).words[1]=(*r).source;(*out).words[2]=(*r).kind;(*out).words[3]=(*r).bytes;
+    (*out).words[4]=(*r).sequence;(*out).words[5]=(*r).raw;(*out).words[6]=(*r).epoch;
+}return;}
+pub unsafe fn decode(message:*const abi.Message,out:*Report)!void {unsafe {
+    if message==null||out==null||(*message).words[0]!=MAGIC||(*message).words[7]!=0 {return error.Invalid;}
+    let r=Report {source:(*message).words[1],kind:(*message).words[2],bytes:(*message).words[3],sequence:(*message).words[4],raw:(*message).words[5],epoch:(*message).words[6]};try valid(&r);*out=r;
+}return;}
+pub unsafe fn acknowledge(r:*const Report,status:u64,out:*abi.Message)!void {unsafe {
+    if out==null {return error.Invalid;}try valid(r);*out=abi.EMPTY_MESSAGE;(*out).words[0]=status;(*out).words[1]=(*r).source;(*out).words[2]=(*r).sequence;
+}return;}
+pub unsafe fn acknowledged(r:*const Report,message:*const abi.Message)!void {unsafe {
+    try valid(r);if message==null||(*message).words[0]!=0||(*message).words[1]!=(*r).source||(*message).words[2]!=(*r).sequence
+        ||(*message).words[3]!=0||(*message).words[4]!=0||(*message).words[5]!=0||(*message).words[6]!=0||(*message).words[7]!=0 {return error.Invalid;}
+}return;}

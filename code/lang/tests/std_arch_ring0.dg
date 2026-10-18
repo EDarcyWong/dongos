@@ -1,0 +1,67 @@
+// std_arch_ring0 — independent EFI probe for arch.x86_64 privileged wrappers.
+// Runs at CPL 0 under QEMU TCG. The probe functions call the real dg_arch_*
+// implementations; the independent NASM reference in std_arch_ring0.asm cross-
+// checks reference writes against wrapper reads and wrapper writes against
+// reference reads on the same hardware locations.
+
+module std_arch_ring0;
+
+import arch.x86_64 as arch;
+
+const TEST_MSR: u32 = 0xc0000100; // IA32_FS_BASE
+const TEST_VALUE: u64 = 0x0000000100000000; // 4 GiB: canonical, high 32 bits non-zero
+
+// Flag helpers implemented by std_arch_ring0.asm (pushfq/cli and popfq).
+extern "sysv64" ("ring0_save_flags") fn ring0_save_flags() u64;
+extern "sysv64" ("ring0_restore_flags") fn ring0_restore_flags(flags: u64) void;
+
+// COM1 16550 scratch register (offset 7): wrapper round-trips.
+export("probe_io") fn probe_io() u64 {
+    var errors: u64 = 0;
+    unsafe {
+        let orig: u8 = arch.in8(0x3ff);
+        arch.out8(0x3ff, 0);
+        if arch.in8(0x3ff) != 0 { errors += 1; }
+        arch.out8(0x3ff, 0x55);
+        if arch.in8(0x3ff) != 0x55 { errors += 1; }
+        arch.out8(0x3ff, 0xaa);
+        if arch.in8(0x3ff) != 0xaa { errors += 1; }
+        arch.out8(0x3ff, 0xff);
+        if arch.in8(0x3ff) != 0xff { errors += 1; }
+        arch.out8(0x3ff, orig);
+    }
+    return errors;
+}
+
+export("probe_cr3") fn probe_cr3() u64 {
+    var errors: u64 = 0;
+    unsafe {
+        // No self-loop write here: the independent NASM ref_check first confirms
+        // the legal original CR3, then writes it back and independently verifies.
+        let first: u64 = arch.read_cr3();
+        if arch.read_cr3() != first { errors += 1; }
+    }
+    return errors;
+}
+
+export("probe_msr") fn probe_msr() u64 {
+    var errors: u64 = 0;
+    unsafe {
+        let flags: u64 = ring0_save_flags();
+        let orig: u64 = arch.read_msr(TEST_MSR);
+        arch.write_msr(TEST_MSR, TEST_VALUE);
+        if arch.read_msr(TEST_MSR) != TEST_VALUE { errors += 1; }
+        arch.write_msr(TEST_MSR, orig);
+        if arch.read_msr(TEST_MSR) != orig { errors += 1; }
+        ring0_restore_flags(flags);
+    }
+    return errors;
+}
+
+// Cross-check helpers: expose wrapper reads/writes for the NASM reference.
+export("probe_io_read") fn probe_io_read() u8 { unsafe { return arch.in8(0x3ff); } }
+export("probe_io_write") fn probe_io_write(value: u8) void { unsafe { arch.out8(0x3ff, value); } }
+export("probe_cr3_read") fn probe_cr3_read() u64 { unsafe { return arch.read_cr3(); } }
+export("probe_cr3_write") fn probe_cr3_write(value: u64) void { unsafe { arch.write_cr3(value); } }
+export("probe_msr_read") fn probe_msr_read() u64 { unsafe { return arch.read_msr(TEST_MSR); } }
+export("probe_msr_write") fn probe_msr_write(value: u64) void { unsafe { arch.write_msr(TEST_MSR, value); } }

@@ -1,0 +1,78 @@
+// core.arena — caller-supplied linear arena. The caller owns the storage;
+// the arena only tracks base/capacity/used and hands out aligned byte offsets.
+// No allocation, growth, zeroing, locks, global state or OS calls.
+
+module core.arena;
+
+const USIZE_MAX: usize = 0xffff_ffff_ffff_ffff;
+
+pub struct Arena {
+    pub base: *u8,
+    pub capacity: usize,
+    pub used: usize,
+}
+
+// Adopt caller storage. Rejects a null pointer with non-empty storage and any
+// base+capacity overflow. On success sets base/capacity and used=0 without
+// touching a single storage byte. On failure the Arena bytes stay unchanged.
+pub unsafe fn init(arena: *Arena, storage: []u8) bool {
+    unsafe {
+        let addr: usize = storage.ptr as usize;
+        if storage.len != 0 {
+            if storage.ptr == null { return false; }
+            if addr > USIZE_MAX - storage.len { return false; }
+        }
+        (*arena).base = storage.ptr;
+        (*arena).capacity = storage.len;
+        (*arena).used = 0;
+    }
+    return true;
+}
+
+// Reserve size bytes at the first alignment-aligned address at or after
+// base+used. alignment must be a non-zero power of two. All rounding, padding
+// and range checks run before any write, so debug/release never overflow or
+// panic. Success writes only *out = p and used = (p - base) + size and keeps
+// base/capacity; failure keeps the entire Arena, out and storage unchanged.
+pub unsafe fn allocate(arena: *Arena, size: usize, alignment: usize, out: *usize) bool {
+    unsafe {
+        let base = (*arena).base;
+        let capacity = (*arena).capacity;
+        let used = (*arena).used;
+        if used > capacity { return false; }
+        if alignment == 0 { return false; }
+        if (alignment & (alignment - 1)) != 0 { return false; }
+        let base_addr: usize = base as usize;
+        if base_addr == 0 { if capacity != 0 { return false; } }
+        if base_addr > USIZE_MAX - capacity { return false; }
+        let current: usize = base_addr + used;
+        let mask: usize = alignment - 1;
+        if current > USIZE_MAX - mask { return false; }
+        let p: usize = (current + mask) & ~mask;
+        if p > USIZE_MAX - size { return false; }
+        let end: usize = p + size;
+        let limit: usize = base_addr + capacity;
+        if end > limit { return false; }
+        (*out) = p;
+        (*arena).used = (p - base_addr) + size;
+    }
+    return true;
+}
+
+// Roll used back to the byte mark. Requires mark <= used <= capacity and a
+// valid arena interval; success changes only used. A mark is a byte offset,
+// not a generation-checked handle: the caller owns post-rewind lifetimes.
+pub unsafe fn rewind(arena: *Arena, mark: usize) bool {
+    unsafe {
+        let base = (*arena).base;
+        let capacity = (*arena).capacity;
+        let used = (*arena).used;
+        let base_addr: usize = base as usize;
+        if base_addr == 0 { if capacity != 0 { return false; } }
+        if base_addr > USIZE_MAX - capacity { return false; }
+        if mark > used { return false; }
+        if used > capacity { return false; }
+        (*arena).used = mark;
+    }
+    return true;
+}

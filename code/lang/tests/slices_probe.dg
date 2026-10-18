@@ -1,0 +1,69 @@
+module slices_probe;
+
+extern "sysv64" fn slices_asm_sysv(a:u64,b:u64,c:u64,d:u64,e:u64,f:u64,g:u64,h:u64)u64;
+extern "win64" fn slices_asm_win(a:u64,b:u64,c:u64,d:u64,e:u64,f:u64,g:u64,h:u64)u64;
+extern "sysv64" fn slices_c_sysv(a:i8,b:u16,c:*u64,d:u64,e:u64,f:u64,g:u64,h:u64)i64;
+extern "win64" fn slices_c_win(a:i8,b:u16,c:*u64,d:u64,e:u64,f:u64,g:u64,h:u64)i64;
+extern "sysv64" fn slices_unused()u64;
+
+fn mark(order:*u64,v:u64)usize {unsafe{*order=*order*10+v;return v;}}
+fn receive(s:[]const u64)u64{return s.len*100+s[0];}
+fn swap(p:*[]u64,q:[]u64)usize {unsafe{*p=q;return 0;}}
+fn change(p:*[]u64,q:[]u64)u64 {unsafe{*p=q;return 7;}}
+fn receiver(order:*u64,s:[]u64)[]u64 {unsafe{*order=*order*10+1;}return s;}
+fn tail(s:[]u64)[]u64{return s[1..];}
+
+export("dg_slice_return") fn slice_return(s:[]u64)[]u64{return tail(s);}
+export("dg_slice_raw") fn slice_raw(p:*u64,n:usize)[]u64 {unsafe{return slice_from_raw_parts(p,n);}}
+export("dg_slice_utf8") fn utf8()[]const u8{return "董\0A";}
+export("dg_slice_empty") fn empty()[]const u8{return "";}
+export("dg_slice_range") fn range(s:[]u64,lo:usize,hi:usize)[]u64{return s[lo..hi];}
+export("dg_slice_index") fn index(s:[]u64,n:usize)u64{return s[n];}
+export("dg_slice_array_range") fn array_range(lo:usize,hi:usize)u64 {
+    let values:[3]u64=[10,20,30];let s=values[lo..hi];return s.len;
+}
+export("dg_slice_effects") fn effects()u64 {
+    var values:[5]u64=[10,20,30,40,50];var order:u64=0;
+    let first=values[..];
+    unsafe{let second=receiver(&order,first)[mark(&order,2)..mark(&order,3)];
+        return order*1000+second.len*100+second[0];}
+}
+export("dg_slice_alias") fn alias()u64 {
+    var values:[4]u64=[10,20,30,40];let s=values[1..];var copy=s;copy[1]=77;
+    let read:[]const u64=s;
+    return read.len*1000+read[1]*10+values[2];
+}
+export("dg_slice_snapshot") fn snapshot()u64 {
+    var a:[2]u64=[10,20];var b:[3]u64=[50,60,70];var s=a[..];let other=b[..];
+    unsafe{let x=s[swap(&s,other)];return x*1000+s.len*100+s[0];}
+}
+export("dg_slice_arg_snapshot") fn arg_snapshot()u64 {
+    var a:[2]u64=[10,20];var b:[3]u64=[50,60,70];var s=a[..];
+    unsafe{return pair(s,change(&s,b[..]));}
+}
+fn pair(s:[]u64,z:u64)u64{return s.len*100+s[0]+z;}
+export("dg_slice_nested") fn nested()u64 {
+    var a:[4]u64=[1,2,3,4];return receive(tail(a[..])[..2])+tail(a[..]).len;
+}
+export("dg_slice_null_empty") fn null_empty()u64 {
+    unsafe{let s=slice_from_raw_parts(null as *u64,0);let t=s[..];
+        if t.ptr!=null{return 999;}return t.len;}
+}
+export("dg_slice_external_asm") fn external_asm()u64 {
+    unsafe{return slices_asm_sysv(1,2,3,4,5,6,7,8)+slices_asm_win(1,2,3,4,5,6,7,8);}
+}
+export("dg_slice_external_c") fn external_c()i64 {
+    var value:u64=30;
+    unsafe{return slices_c_sysv(-7,60000,&value,4,5,6,7,8)+slices_c_win(-7,60000,&value,4,5,6,7,8);}
+}
+
+fn replace_index(p:*[]u64,q:[]u64,n:usize)usize{unsafe{*p=q;return n;}}
+export("dg_slice_snapshot_bounds") fn snapshot_bounds(n:usize)u64{
+    var a:[2]u64=[10,20];var b:[3]u64=[50,60,70];var s=a[..];
+    unsafe{return s[replace_index(&s,b[..],n)];}
+}
+export("dg_slice_range_snapshot") fn range_snapshot()u64{
+    var a:[2]u64=[10,20];var b:[3]u64=[50,60,70];var s=a[..];
+    unsafe{let t=s[replace_index(&s,b[..],1)..];return t.len*100+t[0];}
+}
+export("dg_slice_field_bounds") fn field_bounds(s:[]u64,n:usize)usize{return s[n..].len;}

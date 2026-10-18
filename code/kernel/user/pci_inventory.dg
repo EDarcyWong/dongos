@@ -1,0 +1,40 @@
+// No hardware reads, map/cap mutation or authority output. Caller holds BKL.
+module user.pci_inventory;
+import user.device_manager as ledger;import lib.device_abi as device;
+import lib.pci_inventory_abi as abi;
+const MAX:u64=0x00ff_ffff_ffff_ffff;
+pub unsafe fn read(t:*const ledger.Table,complete:bool,base:u64,first:u64,last:u64,cursor:u64,out:*abi.Entry)!void{unsafe{
+ if !complete||t==null||(*t).initialized!=1{return error.abi.NotReady;}
+ if out==null||base==0||(base&0xf_ffff)!=0||base>=0x1_0000_0000||first>last||last>255
+  ||(last+1)*0x10_0000>0x1_0000_0000-base||(*t).count==0||(*t).count>32||cursor>(*t).count as u64{return error.abi.Invalid;}
+ // Full-table validation precedes output, including earlier cursor entries.
+ var i:usize=0;var previous:u64=0;
+ while i<(*t).count{
+  let d=(*t).devices[i];let original=d.token>>8;
+  if d.version!=1||d.reserved!=0||d.next_cursor!=0||d.generation==0||d.generation>MAX
+   ||original==0||original>=MAX||(d.token&255)!=i as u64+1
+   ||(d.flags&~(device.SUPPORTED|device.BOUND|device.REVOKED))!=0{return error.abi.Corrupt;}
+  if (d.flags&device.REVOKED)==0{if d.generation!=original{return error.abi.Corrupt;}}
+  else{if d.generation!=original+1{return error.abi.Corrupt;}}
+  if d.kind==device.PCI{
+   if i+1==(*t).count||d.segment!=0||d.bus<first||d.bus>last||d.device>31||d.function>7
+    ||d.vendor==0||d.vendor>=65535||d.device_id>65535||d.class_code>0xff_ffff||d.header>255
+    ||d.ecam!=base+(d.bus<<20)+(d.device<<15)+(d.function<<12)||d.ecam<=previous{return error.abi.Corrupt;}
+   previous=d.ecam;
+  }else if d.kind==device.I8042{
+   if i+1!=(*t).count||d.ecam!=0||d.segment!=0||d.bus!=0||d.device!=0||d.function!=0||d.vendor!=0
+    ||d.device_id!=0||d.class_code!=0||d.header!=0{return error.abi.Corrupt;}
+  }else{return error.abi.Corrupt;}i+=1;
+ }
+ if (*t).devices[(*t).count-1].kind!=device.I8042{return error.abi.Corrupt;}
+ var result=abi.EMPTY;i=cursor as usize;
+ while i<(*t).count{
+  let d=(*t).devices[i];i+=1;
+  if d.kind==device.PCI&&(d.flags&device.REVOKED)==0{
+   result=abi.Entry{version:1,next_cursor:i as u64,ecam:d.ecam,segment:d.segment,bus:d.bus,
+    device:d.device,function:d.function,vendor:d.vendor,device_id:d.device_id,class_code:d.class_code,
+    header:d.header,present:1,reserved:[0;4]};*out=result;return;
+  }
+ }
+ result.next_cursor=(*t).count as u64;*out=result;
+}return;}

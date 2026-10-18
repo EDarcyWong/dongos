@@ -1,0 +1,2 @@
+module drivers.virtio_pci;
+pub struct Bar {pub physical:u64,pub length:u64,pub handle:u64}

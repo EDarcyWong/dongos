@@ -1,0 +1,87 @@
+// Direct root port, one selected HID boot or BOT interface per USB device.
+module usb.enumerate;
+import usb.transport as io;
+import usb.xhci_trb as wire;
+import usb.xhci_ring as ring;
+import usb.xhci_context as ctx;
+import usb.descriptor as desc;
+pub error Invalid=0x0814_0001;
+pub error Busy=0x0814_0002;
+pub error Faulted=0x0814_0003;
+pub error BadDescriptor=0x0814_0004;
+pub error Unsupported=0x0814_0005;
+pub const BYTES:u64=32768;
+pub struct Setup {pub region:wire.Region,pub physical:u64,pub pointer:*u8,pub dcbaa_physical:u64,pub dcbaa:*u64,pub context_bytes:u64,pub port:u64,pub epoch:u64,pub hz:u64,pub timeout_ms:u64}
+pub struct State {pub held:u64,pub ready:u64,pub fault:u64,pub busy:u64,pub phase:u64,pub slot:u64,pub speed:u64,pub packet:u64,pub last_tsc:u64,pub ops:*const io.Ops,pub context:u64,pub setup:Setup,pub configuration:desc.Configuration,pub device:desc.Device,pub ep0:ring.Producer,pub input:ring.Producer,pub output:ring.Producer}
+unsafe fn end(s:*State)!u64 {unsafe {return io.deadline((*s).ops,(*s).context,(*s).setup.hz,(*s).setup.timeout_ms,&(*s).last_tsc);}}
+unsafe fn buffer(s:*State,offset:u64,bytes:u64,out:*io.Buffer)void {unsafe {*out=io.Buffer {physical:(*s).setup.physical+offset,pointer:(*s).setup.pointer+offset as usize,bytes:bytes};}return;}
+unsafe fn command(s:*State,kind:u64,context:bool)!void {unsafe {
+    var c=wire.Command {kind:kind,slot:(*s).slot,context:0,context_bytes:0,block_set_address:0};if kind==9 {c.slot=0;}
+    if context {c.context=(*s).setup.physical;c.context_bytes=33*(*s).setup.context_bytes;}
+    let deadline=try end(s);var slot:u64=0;try io.fence((*s).ops,(*s).context);
+    try io.command((*s).ops,(*s).context,&(*s).setup.region,&c,deadline,&slot);(*s).slot=slot;
+}return;}
+unsafe fn ring_init(s:*State,out:*ring.Producer,offset:u64,address:u64)!void {unsafe {
+    let id=try ctx.endpoint_id(address);var b=io.EMPTY;buffer(s,offset,4096,&b);let setup=ring.Setup {physical:b.physical,pointer:b.pointer,entries:256,physical_bits:(*s).setup.region.physical_bits,epoch:(*s).setup.epoch,kind:ring.TRANSFER,slot:(*s).slot,endpoint:id};
+    match ring.producer_initialize(out,&setup) {ok=>{},err(e)=>{return error.Invalid;},}
+}return;}
+unsafe fn encode(s:*State,address:u64,packet:u64,transfer:u64,interval:u64,offset:u64,entries:u64,initial:bool)!void {unsafe {
+    let slot=ctx.Slot {speed:(*s).speed,root_port:(*s).setup.port,entries:entries};let endpoint=ctx.Endpoint {address:address,transfer_type:transfer,packet:packet,interval:interval,ring:(*s).setup.physical+offset,ring_entries:256,cycle:1,average:packet};
+    match ctx.encode(&(*s).setup.region,(*s).setup.physical,(*s).setup.context_bytes,&slot,&endpoint,initial,slice_from_raw_parts((*s).setup.pointer,(33*(*s).setup.context_bytes) as usize)) {ok=>{},err(e)=>{return error.Unsupported;},}
+}return;}
+unsafe fn control(s:*State,request_type:u64,request:u64,value:u64,index:u64,bytes:u64)!u64 {unsafe {
+    var b=io.EMPTY;if bytes!=0 {buffer(s,20480,bytes,&b);}
+    let r=wire.Control {request_type:request_type,request:request,value:value,index:index,bytes:bytes,data:b.physical};let deadline=try end(s);var actual:u64=0;
+    try io.control((*s).ops,(*s).context,(*s).slot,&(*s).ep0,&(*s).setup.region,&r,&b,deadline,&actual);return actual;
+}}
+unsafe fn inner(s:*State)!void {unsafe {
+    var port=io.Port {connected:0,speed:0};let limit=try end(s);try io.status((*(*s).ops).reset_port((*s).context,(*s).setup.port,limit,&port));
+    if port.connected!=1 {return error.io.Disconnected;}if port.speed<1||port.speed>4 {return error.Unsupported;}(*s).speed=port.speed;(*s).phase=2;
+    (*s).packet=8;if port.speed==3 {(*s).packet=64;}if port.speed==4 {(*s).packet=512;}
+    try command(s,9,false);try ring_init(s,&(*s).ep0,8192,0);
+    // Install a private output device context before AddressDevice reads DCBAA.
+    var i:u64=0;while i<4096/8 {volatile_store(((*s).setup.pointer+4096+(i*8) as usize) as *u64,0);i+=1;}
+    volatile_store((*s).setup.dcbaa+(*s).slot as usize,(*s).setup.physical+4096);
+    try encode(s,0,(*s).packet,0,0,8192,1,true);try command(s,11,true);(*s).phase=3;
+    if (try control(s,128,6,0x100,0,8))!=8 {return error.BadDescriptor;}
+    let data=(*s).setup.pointer+20480;var packet:u64=0;
+    match desc.packet0(slice_from_raw_parts(data,8),(*s).speed) {ok(v)=>{packet=v;},err(e)=>{return error.BadDescriptor;},}
+    if packet!=(*s).packet {
+        try encode(s,0,packet,0,0,8192,1,true);
+        // EvaluateContext changes only EP0 MaxPacket; Slot add flag is absent.
+        write_unaligned(((*s).setup.pointer+4) as *u32,2);try command(s,13,true);(*s).packet=packet;
+    }
+    if (try control(s,128,6,0x100,0,18))!=18 {return error.BadDescriptor;}
+    match desc.device(slice_from_raw_parts(data,18),(*s).speed,&(*s).device) {ok=>{},err(e)=>{return error.BadDescriptor;},}
+    if (try control(s,128,6,0x200,0,9))!=9 {return error.BadDescriptor;}var length:usize=0;
+    match desc.configuration_bytes(slice_from_raw_parts(data,9)) {ok(v)=>{length=v;},err(e)=>{return error.BadDescriptor;},}
+    if (try control(s,128,6,0x200,0,length as u64))!=length as u64 {return error.BadDescriptor;}
+    match desc.configuration(slice_from_raw_parts(data,length),(*s).speed,&(*s).configuration) {ok=>{},err(e)=>{return error.Unsupported;},}
+    if (*s).configuration.count!=1 {return error.Unsupported;}(*s).phase=4;
+    let binding=(*s).configuration.bindings[0];try control(s,0,9,(*s).configuration.value,0,0);
+    var transfer:u64=3;var interval:u64=0;if binding.kind==desc.STORAGE {transfer=2;}else {interval=try ctx.interval((*s).speed,binding.interval);}
+    let incoming=try ctx.endpoint_id(binding.in_address);var entries=incoming;
+    if binding.out_address!=0 {let outgoing=try ctx.endpoint_id(binding.out_address);if outgoing>entries {entries=outgoing;}}
+    try ring_init(s,&(*s).input,12288,binding.in_address);try encode(s,binding.in_address,binding.in_packet,transfer,interval,12288,entries,false);try command(s,12,true);
+    if binding.out_address!=0 {try ring_init(s,&(*s).output,16384,binding.out_address);try encode(s,binding.out_address,binding.out_packet,2,0,16384,entries,false);try command(s,12,true);}
+    if binding.kind==desc.KEYBOARD||binding.kind==desc.MOUSE {
+        try control(s,0x21,11,0,binding.interface,0);
+        // Duration=0, reportID=0: reports only on state changes.
+        // HID boot keyboard requires SetIdle; a boot mouse may reject it.
+        if binding.kind==desc.KEYBOARD {try control(s,0x21,10,0,binding.interface,0);}
+    }
+    (*s).phase=5;(*s).ready=1;
+}return;}
+pub unsafe fn initialize(s:*State,ops:*const io.Ops,context:u64,setup:*const Setup)!void {unsafe {
+    if s==null||ops==null||setup==null||(*s).held!=0||(*s).busy!=0 {return error.Invalid;}
+    let input=*setup;if input.context_bytes!=32&&input.context_bytes!=64 {return error.Unsupported;}
+    if input.pointer==null||(input.pointer as u64&4095)!=0||(input.physical&4095)!=0||input.pointer as u64>0xffff_ffff_ffff_ffff-BYTES
+        ||input.dcbaa==null||(input.dcbaa as u64&63)!=0||(input.dcbaa as u64)>0xffff_ffff_ffff_ffff-2048||input.port==0||input.port>32||input.epoch==0||input.hz<1000000||input.hz>16000000000||input.timeout_ms==0||input.timeout_ms>5000 {return error.Invalid;}
+    match wire.span(&input.region,input.physical,BYTES,4096) {ok=>{},err(e)=>{return error.Invalid;},}
+    match wire.span(&input.region,input.dcbaa_physical,2048,64) {ok=>{},err(e)=>{return error.Invalid;},}
+    if input.physical<input.dcbaa_physical+2048&&input.dcbaa_physical<input.physical+BYTES {return error.Invalid;}
+    if input.pointer as u64<(input.dcbaa as u64)+2048&&(input.dcbaa as u64)<(input.pointer as u64)+BYTES {return error.Invalid;}
+    (*s).held=1;(*s).ready=0;(*s).fault=0;(*s).busy=1;(*s).phase=1;(*s).slot=0;(*s).last_tsc=0;(*s).ops=ops;(*s).context=context;(*s).setup=input;
+    (*s).ep0=ring.EMPTY_PRODUCER;(*s).input=ring.EMPTY_PRODUCER;(*s).output=ring.EMPTY_PRODUCER;
+    let result=inner(s);(*s).busy=0;match result {ok=>{return;},err(e)=>{(*s).fault=1;(*s).ready=0;return result;},}
+}}

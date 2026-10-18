@@ -1,0 +1,58 @@
+module gfx_probe;
+import gfx.geometry as geo;
+import gfx.raster as raster;
+import gfx.compositor as comp;
+import gfx.atlas as atlas;
+
+export("gfx_surface_size") fn surface_size() usize { return sizeof(raster.Surface); }
+export("gfx_damage_size") fn damage_size() usize { return sizeof(geo.Damage); }
+export("gfx_window_size") fn window_size() usize { return sizeof(comp.Window); }
+export("gfx_atlas_size") fn atlas_size() usize { return sizeof(atlas.Atlas); }
+export("gfx_glyph_size") fn glyph_size() usize { return sizeof(atlas.Glyph); }
+export("gfx_over") fn over(d: u32, s: u32) u32 { return raster.over(d,s); }
+export("gfx_coverage") fn coverage(s: u32, a: u8) u32 { return raster.coverage(s,a); }
+export("gfx_fill") fn fill(s: *raster.Surface, r: *const geo.Rect, color: u32) u64 {
+    unsafe { match raster.fill(s,r,color) { ok => { return 0; }, err(code) => { return code; }, } }
+}
+export("gfx_blit") fn blit(d: *raster.Surface, x: i64, y: i64, s: *const raster.Surface, r: *const geo.Rect, a: u8) u64 {
+    unsafe { match raster.blit(d,x,y,s,r,a) { ok => { return 0; }, err(code) => { return code; }, } }
+}
+pub struct Mask { pub ptr: *const u8, pub len: usize, pub width: usize, pub height: usize, pub stride: usize }
+export("gfx_mask") fn mask(d: *raster.Surface, x: i64, y: i64, m: *const Mask, color: u32) u64 {
+    unsafe {
+        let bytes = slice_from_raw_parts((*m).ptr,(*m).len);
+        match raster.mask(d,x,y,bytes,(*m).width,(*m).height,(*m).stride,color) {
+            ok => { return 0; }, err(code) => { return code; },
+        }
+    }
+}
+export("gfx_damage_init") fn damage_init(b: *const geo.Rect, d: *geo.Damage) u64 {
+    unsafe { match geo.init_damage(b,d) { ok => { return 0; }, err(code) => { return code; }, } }
+}
+export("gfx_damage_add") fn damage_add(d: *geo.Damage, r: *const geo.Rect) u64 {
+    unsafe { match geo.damage_add(d,r) { ok => { return 0; }, err(code) => { return code; }, } }
+}
+export("gfx_compose") fn compose(d: *raster.Surface, w: *const comp.Window, n: usize, damage: *const geo.Damage, bg: u32) u64 {
+    unsafe {
+        let windows = slice_from_raw_parts(w,n);
+        match comp.compose(d,windows,damage,bg) { ok => { return 0; }, err(code) => { return code; }, }
+    }
+}
+export("gfx_atlas_open") fn atlas_open(p: *const u8, len: usize, out: *atlas.Atlas) u64 {
+    unsafe {
+        let bytes = slice_from_raw_parts(p,len);
+        match atlas.open(bytes,out) { ok => { return 0; }, err(code) => { return code; }, }
+    }
+}
+export("gfx_lookup") fn lookup(a: *const atlas.Atlas, cp: u32, g: *atlas.Glyph, found: *u64) u64 {
+    unsafe {
+        match atlas.lookup(a,cp,g) { ok(value) => { *found = value as u64; return 0; }, err(code) => { return code; }, }
+    }
+}
+export("gfx_text") fn text(d: *raster.Surface, a: *const atlas.Atlas, p: *const u8, n: usize,
+                           x: i64, y: i64, color: u32, advance: *i64) u64 {
+    unsafe {
+        let bytes = slice_from_raw_parts(p,n);
+        match atlas.draw_text(d,a,bytes,x,y,color,advance) { ok => { return 0; }, err(code) => { return code; }, }
+    }
+}

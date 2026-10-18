@@ -1,0 +1,38 @@
+// Explicit native adapter. No paging, physical RAM, PCID or CPU calls execute.
+module service_launch_memory;import user.shared_objects as shared;pub var OBJECT_FAILED:bool=false;pub var PCI_FAILED:bool=false;
+import service_launch_trace as trace;
+pub struct Process{pub ready:u64}
+var PROCESSES:[16]Process=[Process{ready:0};16];
+pub var STAGE_FAILED:bool=false;pub var ACTIVE:u64=16;
+pub error Stage=0x051a_0001;pub error Abort=0x051a_0004;pub error Commit=0x051a_0005;pub error Invalid=0x051a_0006;
+pub fn processes()*Process{unsafe{return &PROCESSES[0];}}
+pub fn reset()void{unsafe{shared.reset();EPOCH=0;FAILED=false;UNSHARE_FAILED=false;RESOURCE_FAILED=false;var i:usize=0;while i<16{PROCESSES[i].ready=0;i+=1;}STAGE_FAILED=false;ACTIVE=16;}return;}
+pub unsafe fn stage_random(id:usize,image:[]const u8)!void{unsafe{
+    if ACTIVE!=16||STAGE_FAILED{return error.Invalid;}ACTIVE=id as u64;
+    let action=trace.launch_adapter_event(1,id as u64,7,0,0);
+    if action!=0{if action==2{STAGE_FAILED=true;}else{ACTIVE=16;}return error.Stage;}
+    PROCESSES[id].ready=1;
+}return;}
+pub unsafe fn stage_abort(id:usize)!void{unsafe{
+    if ACTIVE!=id as u64{return error.Invalid;}
+    if trace.launch_adapter_event(6,id as u64,7,0,0)!=0{STAGE_FAILED=true;return error.Abort;}
+    PROCESSES[id].ready=0;shared.abort_owner(id);ACTIVE=16;
+}return;}
+pub unsafe fn skip_abort(id:usize)!void{return;}
+pub unsafe fn stage_commit(id:usize)!void{unsafe{
+    if ACTIVE!=id as u64{return error.Invalid;}
+    if trace.launch_adapter_event(5,id as u64,7,0,0)!=0{return error.Commit;}ACTIVE=16;
+}return;}
+pub unsafe fn check_range(id:usize,address:u64,length:usize,write:bool)!void{
+    if id>=16||address==0||length!=64{return error.Invalid;}return;
+}
+pub unsafe fn copy_out(id:usize,address:u64,input:[]const u8)!void{unsafe{
+    try check_range(id,address,input.len,true);var i:usize=0;while i<input.len{*((address as *u8)+i)=input[i];i+=1;}
+}return;}
+pub unsafe fn copy_in(id:usize,address:u64,output:[]u8)!void{return error.Invalid;}
+
+// Explicit broker boundary model; the separate broker test executes real aliases.
+pub var EPOCH:u64=0;pub var FAILED:bool=false;pub var UNSHARE_FAILED:bool=false;pub var RESOURCE_FAILED:bool=false;
+pub unsafe fn initialize(epoch:u64)!void{unsafe{EPOCH=epoch;}return;}
+pub unsafe fn compositor_gone(epoch:u64)!void{return;}
+pub unsafe fn owner_gone(owner:u64)!void{return;}

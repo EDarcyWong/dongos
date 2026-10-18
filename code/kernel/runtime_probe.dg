@@ -1,0 +1,47 @@
+// Later runtime modules are imported only by runtime_level builds. Legacy
+// P0/P1/P2 gates continue to compile memory_probe.dg as their root.
+module runtime_probe;
+import memory_probe;
+import boot.device_memory as devices;
+import boot.device_policy as device_policy;
+import boot.memory_startup as startup;
+import boot.preflight as preflight;
+import firmware.acpi as acpi;
+import irq.platform as platform;
+import sched.runtime as scheduler;
+import mm.paging as paging;
+
+pub unsafe fn runtime_flush_root() void { unsafe { devices.runtime_flush_root(); }return; }
+
+
+export("dong_device_prepare") fn device_prepare(state: *const preflight.State, out: *device_policy.Views) u64 {
+    unsafe { match devices.prepare(state,out) { ok => { return 0; }, err(code) => { return code; }, } }
+}
+export("dong_device_plan") fn device_plan() *const device_policy.Plan { return devices.plan_pointer(); }
+export("dong_platform_init") fn platform_init(inventory: *const acpi.Inventory, views: *const platform.Views, out: *platform.Report) u64 {
+    unsafe { match platform.initialize(inventory,views,out) { ok => { return 0; }, err(code) => { return code; }, } }
+}
+export("dong_platform_arm") fn platform_arm(ns: u64) u64 {
+    unsafe { match platform.arm(ns) { ok => { return 0; }, err(code) => { return code; }, } }
+}
+export("dong_platform_report") fn platform_report(out: *platform.Report) u64 {
+    unsafe { match platform.describe(out) { ok => { return 0; }, err(code) => { return code; }, } }
+}
+
+// Root assembly has checked this is one exact guard page within the linked
+// private scheduler BSS stack allocation. It owns the Space with IF=0; no
+// live adapter operation, allocator use or AP may race this ownership epoch.
+export("dong_runtime_guard") fn guard(virtual: u64) u64 {
+    unsafe {
+        let space = startup.space_pointer();
+        if space == null || (virtual & 4095) != 0 { return 0x0303_0006; }
+        var before = paging.Mapping { physical: 0, flags: 0 };
+        match paging.query(space,virtual,&before) { ok => {}, err(code) => { return code; }, }
+        if before.flags != paging.WRITE { return 0x0303_0006; }
+        var retired = paging.EMPTY_RETIRED;
+        match paging.unmap_live(space,virtual,&retired) { ok => {}, err(code) => { return code; }, }
+        compiler_fence();
+        devices.runtime_flush_root();
+        match paging.reclaim(space,&retired) { ok => { return 0; }, err(code) => { return code; }, }
+    }
+}

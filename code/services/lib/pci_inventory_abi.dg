@@ -1,0 +1,10 @@
+// Read-only boot inventory. Identity numbers never confer device authority.
+module lib.pci_inventory_abi;
+pub const ENUMERATE:u64=0x97;
+pub struct Entry{pub version:u64,pub next_cursor:u64,pub ecam:u64,pub segment:u64,
+ pub bus:u64,pub device:u64,pub function:u64,pub vendor:u64,pub device_id:u64,
+ pub class_code:u64,pub header:u64,pub present:u64,pub reserved:[4]u64}
+pub const EMPTY:Entry=Entry{version:1,next_cursor:0,ecam:0,segment:0,bus:0,device:0,function:0,
+ vendor:0,device_id:0,class_code:0,header:0,present:0,reserved:[0;4]};
+pub error Invalid=0x0514_0001;pub error NotReady=0x0514_0002;pub error Corrupt=0x0514_0003;
+pub error Transport=0x0514_0004;

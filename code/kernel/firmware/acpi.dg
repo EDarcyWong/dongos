@@ -1,0 +1,385 @@
+// Bounded ACPI inventory. Physical addresses are numbers, never pointers.
+// Reader must return the complete stable requested range or null, disjoint
+// from output and parser storage. All storage and callbacks are unsafe borrows.
+module firmware.acpi;
+
+import firmware.acpi_errors as errors;
+
+pub type Reader = unsafe fn(context: u64, physical: u64, length: usize) *const u8;
+pub struct Gas {
+    pub address_space: u64, pub bit_width: u64, pub bit_offset: u64,
+    pub access_size: u64, pub address: u64,
+}
+pub struct Cpu { pub kind: u64, pub uid: u64, pub apic_id: u64, pub flags: u64 }
+pub struct IoApic { pub id: u64, pub address: u64, pub gsi_base: u64 }
+pub struct Iso { pub bus: u64, pub source: u64, pub gsi: u64, pub flags: u64 }
+// kind=3: global GSI source; kind=4/10: local APIC/x2APIC LINT source.
+// processor=255/0xffffffff denotes all processors for kind=4/10 respectively.
+pub struct Nmi { pub kind: u64, pub processor: u64, pub flags: u64, pub lint: u64, pub gsi: u64 }
+pub struct McfgRegion { pub base: u64, pub segment: u64, pub start_bus: u64, pub end_bus: u64 }
+pub struct Inventory {
+    pub rsdp: u64, pub xsdt: u64, pub madt: u64, pub fadt: u64, pub hpet: u64, pub mcfg: u64,
+    pub rsdp_revision: u64, pub table_count: u64, pub lapic_address: u64, pub madt_flags: u64,
+    pub cpu_count: u64, pub ioapic_count: u64, pub iso_count: u64, pub nmi_count: u64, pub mcfg_count: u64,
+    pub fadt_revision: u64, pub fadt_flags: u64, pub sci_interrupt: u64, pub boot_arch: u64,
+    pub dsdt: u64, pub pm_timer_block: u64, pub pm_timer_length: u64, pub pm_timer_32bit: u64,
+    pub reset_value: u64, pub hpet_id: u64, pub hpet_number: u64,
+    pub hpet_min_tick: u64, pub hpet_page_protection: u64,
+    pub pm_timer_gas: Gas, pub reset_gas: Gas, pub hpet_gas: Gas,
+    pub cpus: [16]Cpu, pub ioapics: [8]IoApic, pub isos: [16]Iso,
+    pub nmis: [16]Nmi, pub mcfg_regions: [8]McfgRegion,
+}
+pub const EMPTY_GAS: Gas = Gas { address_space: 0, bit_width: 0, bit_offset: 0, access_size: 0, address: 0 };
+pub const EMPTY_CPU: Cpu = Cpu { kind: 0, uid: 0, apic_id: 0, flags: 0 };
+pub const EMPTY_IOAPIC: IoApic = IoApic { id: 0, address: 0, gsi_base: 0 };
+pub const EMPTY_ISO: Iso = Iso { bus: 0, source: 0, gsi: 0, flags: 0 };
+pub const EMPTY_NMI: Nmi = Nmi { kind: 0, processor: 0, flags: 0, lint: 0, gsi: 0 };
+pub const EMPTY_MCFG: McfgRegion = McfgRegion { base: 0, segment: 0, start_bus: 0, end_bus: 0 };
+pub const EMPTY_INVENTORY: Inventory = Inventory {
+    rsdp: 0, xsdt: 0, madt: 0, fadt: 0, hpet: 0, mcfg: 0,
+    rsdp_revision: 0, table_count: 0, lapic_address: 0, madt_flags: 0,
+    cpu_count: 0, ioapic_count: 0, iso_count: 0, nmi_count: 0, mcfg_count: 0,
+    fadt_revision: 0, fadt_flags: 0, sci_interrupt: 0, boot_arch: 0,
+    dsdt: 0, pm_timer_block: 0, pm_timer_length: 0, pm_timer_32bit: 0,
+    reset_value: 0, hpet_id: 0, hpet_number: 0, hpet_min_tick: 0, hpet_page_protection: 0,
+    pm_timer_gas: EMPTY_GAS, reset_gas: EMPTY_GAS, hpet_gas: EMPTY_GAS,
+    cpus: [EMPTY_CPU; 16], ioapics: [EMPTY_IOAPIC; 8], isos: [EMPTY_ISO; 16],
+    nmis: [EMPTY_NMI; 16], mcfg_regions: [EMPTY_MCFG; 8],
+};
+
+const LIMIT: u64 = 0x1_0000_0000;
+const MAX_TABLE: usize = 0x10_0000;
+
+fn u8_at(raw: *const u8, offset: usize) u64 { unsafe { return *(raw + offset) as u64; } }
+fn u16_at(raw: *const u8, offset: usize) u64 { unsafe { return read_unaligned((raw + offset) as *const u16) as u64; } }
+fn u32_at(raw: *const u8, offset: usize) u64 { unsafe { return read_unaligned((raw + offset) as *const u32) as u64; } }
+fn u64_at(raw: *const u8, offset: usize) u64 { unsafe { return read_unaligned((raw + offset) as *const u64); } }
+
+fn range(physical: u64, length: usize) !void {
+    if physical == 0 || physical >= LIMIT || length == 0 || length > MAX_TABLE
+        || (length as u64) > LIMIT - physical { return error.errors.InvalidRange; }
+    return;
+}
+
+unsafe fn read(reader: Reader, context: u64, physical: u64, length: usize) !*const u8 {
+    try range(physical,length);
+    unsafe {
+        let raw = reader(context,physical,length);
+        if raw == null { return error.errors.Unreadable; }
+        return raw;
+    }
+}
+
+fn checksum(raw: *const u8, length: usize) !void {
+    var total: u64 = 0;
+    var i: usize = 0;
+    while i < length { total = (total + u8_at(raw,i)) & 255; i += 1; }
+    if total != 0 { return error.errors.BadChecksum; }
+    return;
+}
+
+unsafe fn table(reader: Reader, context: u64, physical: u64) !*const u8 {
+    unsafe {
+        let header = try read(reader,context,physical,36);
+        let length = u32_at(header,4) as usize;
+        if length < 36 || length > MAX_TABLE { return error.errors.BadLength; }
+        let raw = try read(reader,context,physical,length);
+        try checksum(raw,length);
+        return raw;
+    }
+}
+
+unsafe fn gas(raw: *const u8, offset: usize, out: *Gas) void {
+    unsafe { *out = Gas { address_space: u8_at(raw,offset), bit_width: u8_at(raw,offset + 1),
+        bit_offset: u8_at(raw,offset + 2), access_size: u8_at(raw,offset + 3), address: u64_at(raw,offset + 4) }; }
+    return;
+}
+
+fn interrupt_flags(flags: u64) !void {
+    // Reserved high bits are retained. Encoding 2 in either defined pair is
+    // reserved; conforming(0), high/edge(1), low/level(3) remain distinct.
+    if (flags & 3) == 2 || ((flags >> 2) & 3) == 2 { return error.errors.Malformed; }
+    return;
+}
+
+fn mmio(address: u64, alignment: u64, bytes: usize) !void {
+    try range(address,bytes);
+    if (address & (alignment - 1)) != 0 { return error.errors.Malformed; }
+    return;
+}
+
+unsafe fn cpu_add(value: *Inventory, kind: u64, uid: u64, apic_id: u64, flags: u64) !void {
+    let cpu = Cpu { kind: kind, uid: uid, apic_id: apic_id, flags: flags };
+    unsafe {
+        if (*value).cpu_count == 16 { return error.errors.Capacity; }
+        if cpu.apic_id == 0xffff_ffff || (cpu.kind == 0 && cpu.apic_id == 255) { return error.errors.Malformed; }
+        var i: usize = 0;
+        while i < (*value).cpu_count as usize {
+            if (*value).cpus[i].uid == cpu.uid || (*value).cpus[i].apic_id == cpu.apic_id { return error.errors.Duplicate; }
+            i += 1;
+        }
+        (*value).cpus[(*value).cpu_count as usize] = cpu;
+        (*value).cpu_count += 1;
+    }
+    return;
+}
+
+unsafe fn nmi_add(value: *Inventory, kind: u64, processor: u64, flags: u64, lint: u64, gsi: u64) !void {
+    let nmi = Nmi { kind: kind, processor: processor, flags: flags, lint: lint, gsi: gsi };
+    try interrupt_flags(nmi.flags);
+    if nmi.kind != 3 && nmi.lint > 1 { return error.errors.Malformed; }
+    unsafe {
+        if (*value).nmi_count == 16 { return error.errors.Capacity; }
+        var i: usize = 0;
+        while i < (*value).nmi_count as usize {
+            let old = (*value).nmis[i];
+            if old.kind == nmi.kind && ((nmi.kind == 3 && old.gsi == nmi.gsi)
+                || (nmi.kind != 3 && old.processor == nmi.processor && old.lint == nmi.lint)) {
+                return error.errors.Duplicate;
+            }
+            i += 1;
+        }
+        (*value).nmis[(*value).nmi_count as usize] = nmi;
+        (*value).nmi_count += 1;
+    }
+    return;
+}
+
+unsafe fn madt(raw: *const u8, value: *Inventory) !void {
+    let length = u32_at(raw,4) as usize;
+    if length < 44 { return error.errors.BadLength; }
+    unsafe {
+        (*value).lapic_address = u32_at(raw,36);
+        (*value).madt_flags = u32_at(raw,40);
+        var override_seen = false;
+        var offset: usize = 44;
+        while offset < length {
+            if length - offset < 2 { return error.errors.BadLength; }
+            let kind = u8_at(raw,offset);
+            let bytes = u8_at(raw,offset + 1) as usize;
+            if bytes < 2 || bytes > length - offset { return error.errors.BadLength; }
+            let entry = raw + offset;
+            if kind == 0 {
+                if bytes < 8 { return error.errors.BadLength; }
+                try cpu_add(value,0,u8_at(entry,2),u8_at(entry,3),u32_at(entry,4));
+            } else if kind == 9 {
+                if bytes < 16 { return error.errors.BadLength; }
+                try cpu_add(value,9,u32_at(entry,12),u32_at(entry,4),u32_at(entry,8));
+            } else if kind == 1 {
+                if bytes < 12 { return error.errors.BadLength; }
+                let item = IoApic { id: u8_at(entry,2), address: u32_at(entry,4), gsi_base: u32_at(entry,8) };
+                try mmio(item.address,4096,4096);
+                if (*value).ioapic_count == 8 { return error.errors.Capacity; }
+                var i: usize = 0;
+                while i < (*value).ioapic_count as usize {
+                    let old = (*value).ioapics[i];
+                    if old.id == item.id || old.address == item.address || old.gsi_base == item.gsi_base { return error.errors.Duplicate; }
+                    i += 1;
+                }
+                (*value).ioapics[(*value).ioapic_count as usize] = item;
+                (*value).ioapic_count += 1;
+            } else if kind == 2 {
+                if bytes < 10 { return error.errors.BadLength; }
+                let item = Iso { bus: u8_at(entry,2), source: u8_at(entry,3), gsi: u32_at(entry,4), flags: u16_at(entry,8) };
+                if item.bus != 0 || item.source > 15 { return error.errors.Unsupported; }
+                try interrupt_flags(item.flags);
+                if (*value).iso_count == 16 { return error.errors.Capacity; }
+                var i: usize = 0;
+                while i < (*value).iso_count as usize {
+                    if (*value).isos[i].source == item.source { return error.errors.Duplicate; }
+                    i += 1;
+                }
+                (*value).isos[(*value).iso_count as usize] = item;
+                (*value).iso_count += 1;
+            } else if kind == 3 {
+                if bytes < 8 { return error.errors.BadLength; }
+                try nmi_add(value,3,0,u16_at(entry,2),0,u32_at(entry,4));
+            } else if kind == 4 {
+                if bytes < 6 { return error.errors.BadLength; }
+                try nmi_add(value,4,u8_at(entry,2),u16_at(entry,3),u8_at(entry,5),0);
+            } else if kind == 5 {
+                if bytes < 12 { return error.errors.BadLength; }
+                if override_seen { return error.errors.Duplicate; }
+                override_seen = true;
+                (*value).lapic_address = u64_at(entry,4);
+            } else if kind == 10 {
+                if bytes < 12 { return error.errors.BadLength; }
+                try nmi_add(value,10,u32_at(entry,4),u16_at(entry,2),u8_at(entry,8),0);
+            }
+            // Unknown types are safely skipped using their complete length.
+            offset += bytes;
+        }
+        try mmio((*value).lapic_address,4096,4096);
+        if (*value).cpu_count == 0 || (*value).ioapic_count == 0 { return error.errors.MissingRequired; }
+    }
+    return;
+}
+
+unsafe fn check_gas(item: *const Gas, spaces: u64) !void {
+    unsafe {
+    // Zero address denotes an absent register; the other bytes have no
+    // usable-register meaning and are retained without being acted upon.
+    if (*item).address == 0 { return; }
+    if (*item).address_space > 2 || (spaces & (1 << (*item).address_space)) == 0 { return error.errors.Unsupported; }
+    if (*item).bit_width == 0 || (*item).bit_width > 64 || (*item).bit_offset >= 64
+        || (*item).bit_width + (*item).bit_offset > 64 || (*item).access_size > 4 { return error.errors.Malformed; }
+    // Cover the actual field and complete access units, rather than treating
+    // every GAS as an eight-byte register. Bounds use subtraction before any
+    // endpoint addition; the validated field contains at most eight bytes.
+    var extent = ((*item).bit_width + (*item).bit_offset + 7) / 8;
+    if (*item).access_size != 0 {
+        let unit: u64 = 1 << ((*item).access_size - 1);
+        extent = (extent + unit - 1) & ~(unit - 1);
+    }
+    if (*item).address_space == 0 { try range((*item).address,extent as usize); }
+    if (*item).address_space == 1 && ((*item).address >= 65536 || extent > 65536 - (*item).address) {
+        return error.errors.InvalidRange;
+    }
+    }
+    return;
+}
+
+unsafe fn fadt(raw: *const u8, value: *Inventory) !void {
+    let length = u32_at(raw,4) as usize;
+    if length < 116 { return error.errors.BadLength; }
+    unsafe {
+        (*value).fadt_revision = u8_at(raw,8);
+        (*value).fadt_flags = u32_at(raw,112);
+        (*value).sci_interrupt = u16_at(raw,46);
+        (*value).boot_arch = u16_at(raw,109);
+        (*value).dsdt = u32_at(raw,40);
+        if length >= 148 && u64_at(raw,140) != 0 { (*value).dsdt = u64_at(raw,140); }
+        try range((*value).dsdt,36);
+        (*value).pm_timer_block = u32_at(raw,76);
+        (*value).pm_timer_length = u8_at(raw,91);
+        (*value).pm_timer_32bit = ((*value).fadt_flags >> 8) & 1;
+        if length >= 128 { gas(raw,116,&(*value).reset_gas); try check_gas(&(*value).reset_gas,7); }
+        if length >= 129 { (*value).reset_value = u8_at(raw,128); }
+        if ((*value).fadt_flags & 1024) != 0 && (length < 129 || (*value).reset_gas.address == 0
+            || (*value).reset_gas.bit_width != 8 || (*value).reset_gas.bit_offset != 0) { return error.errors.Malformed; }
+        if length >= 220 {
+            gas(raw,208,&(*value).pm_timer_gas);
+            try check_gas(&(*value).pm_timer_gas,3);
+            if (*value).pm_timer_gas.address != 0 && ((*value).pm_timer_gas.bit_width != 32 || (*value).pm_timer_gas.bit_offset != 0) {
+                return error.errors.Malformed;
+            }
+        }
+        if (*value).pm_timer_block != 0 {
+            if (*value).pm_timer_block > 65532 || (*value).pm_timer_length != 4 { return error.errors.Malformed; }
+        } else if (*value).pm_timer_gas.address == 0 && (*value).pm_timer_length != 0 { return error.errors.Malformed; }
+    }
+    return;
+}
+
+unsafe fn hpet(raw: *const u8, value: *Inventory) !void {
+    if u32_at(raw,4) < 56 { return error.errors.BadLength; }
+    var item = EMPTY_GAS;
+    unsafe { gas(raw,40,&item); }
+    // HPET's historical GAS width/offset/access bytes are reserved/informative,
+    // not a generic scalar-register width. Retain them; never touch the MMIO.
+    if item.address_space != 0 { return error.errors.Unsupported; }
+    try mmio(item.address,1024,1024);
+    let protection = u8_at(raw,55) & 15;
+    if protection > 2 { return error.errors.Malformed; }
+    unsafe {
+        (*value).hpet_id = u32_at(raw,36);
+        (*value).hpet_number = u8_at(raw,52);
+        (*value).hpet_min_tick = u16_at(raw,53);
+        (*value).hpet_page_protection = u8_at(raw,55);
+        (*value).hpet_gas = item;
+    }
+    return;
+}
+
+unsafe fn mcfg(raw: *const u8, value: *Inventory) !void {
+    let length = u32_at(raw,4) as usize;
+    if length < 44 || ((length - 44) & 15) != 0 { return error.errors.BadLength; }
+    let count = (length - 44) / 16;
+    if count > 8 { return error.errors.Capacity; }
+    var i: usize = 0;
+    unsafe {
+        while i < count {
+            let offset = 44 + i * 16;
+            let item = McfgRegion { base: u64_at(raw,offset), segment: u16_at(raw,offset + 8),
+                start_bus: u8_at(raw,offset + 10), end_bus: u8_at(raw,offset + 11) };
+            if item.base == 0 || (item.base & 0xf_ffff) != 0 || item.start_bus > item.end_bus
+                || item.base >= LIMIT || ((item.end_bus + 1) << 20) > LIMIT - item.base { return error.errors.Malformed; }
+            var j: usize = 0;
+            while j < i {
+                let old = (*value).mcfg_regions[j];
+                if old.segment == item.segment && old.start_bus <= item.end_bus && item.start_bus <= old.end_bus {
+                    return error.errors.Duplicate;
+                }
+                let start = item.base + (item.start_bus << 20);
+                let end = item.base + ((item.end_bus + 1) << 20);
+                let old_start = old.base + (old.start_bus << 20);
+                let old_end = old.base + ((old.end_bus + 1) << 20);
+                if start < old_end && old_start < end { return error.errors.Duplicate; }
+                j += 1;
+            }
+            (*value).mcfg_regions[i] = item;
+            i += 1;
+        }
+        (*value).mcfg_count = count as u64;
+    }
+    return;
+}
+
+// Reader is the sole PA translation authority. Every requested range is
+// checked before callback and before any byte is read. Output is published
+// exactly once after every required/optional/unknown table has been checked.
+pub unsafe fn discover(reader: Reader, context: u64, rsdp: u64, out: *Inventory) !void {
+    unsafe {
+        let legacy = try read(reader,context,rsdp,20);
+        if u64_at(legacy,0) != 0x2052_5450_2044_5352 { return error.errors.BadSignature; }
+        try checksum(legacy,20);
+        if u8_at(legacy,15) < 2 { return error.errors.Unsupported; }
+        let header = try read(reader,context,rsdp,36);
+        let length = u32_at(header,20) as usize;
+        if length < 36 || length > MAX_TABLE { return error.errors.BadLength; }
+        let root = try read(reader,context,rsdp,length);
+        try checksum(root,length);
+        let xsdt_pa = u64_at(root,24);
+        let xsdt = try table(reader,context,xsdt_pa);
+        if u32_at(xsdt,0) != 0x5444_5358 { return error.errors.BadSignature; }
+        let xsdt_length = u32_at(xsdt,4) as usize;
+        if ((xsdt_length - 36) & 7) != 0 { return error.errors.BadLength; }
+        let count = (xsdt_length - 36) / 8;
+        if count > 64 { return error.errors.Capacity; }
+        var value = EMPTY_INVENTORY;
+        value.rsdp = rsdp;
+        value.rsdp_revision = u8_at(root,15);
+        value.xsdt = xsdt_pa;
+        value.table_count = count as u64;
+        var i: usize = 0;
+        while i < count {
+            let physical = u64_at(xsdt,36 + i * 8);
+            if physical == xsdt_pa || physical == rsdp { return error.errors.Duplicate; }
+            var j: usize = 0;
+            while j < i { if u64_at(xsdt,36 + j * 8) == physical { return error.errors.Duplicate; } j += 1; }
+            let raw = try table(reader,context,physical);
+            let signature = u32_at(raw,0);
+            if signature == 0x4349_5041 {
+                if value.madt != 0 { return error.errors.Duplicate; }
+                value.madt = physical;
+                try madt(raw,&value);
+            } else if signature == 0x5043_4146 {
+                if value.fadt != 0 { return error.errors.Duplicate; }
+                value.fadt = physical;
+                try fadt(raw,&value);
+            } else if signature == 0x5445_5048 {
+                if value.hpet != 0 { return error.errors.Capacity; }
+                value.hpet = physical;
+                try hpet(raw,&value);
+            } else if signature == 0x4746_434d {
+                if value.mcfg != 0 { return error.errors.Duplicate; }
+                value.mcfg = physical;
+                try mcfg(raw,&value);
+            }
+            i += 1;
+        }
+        if value.madt == 0 || value.fadt == 0 { return error.errors.MissingRequired; }
+        *out = value;
+    }
+    return;
+}

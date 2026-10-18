@@ -1,0 +1,45 @@
+// Raw-LF byte line index: build records 0 and the offset after every LF byte
+// (a trailing LF yields source.len); locate maps a byte offset to a 1-based line
+// and 1-based byte column by binary search over a numerically validated index.
+// CR, NUL and UTF-8 bytes are ordinary bytes. Nothing is written unless OK.
+module bootstrap.line_index;
+pub const OK:u64=0;pub const INVALID:u64=1;pub const CAPACITY:u64=2;
+pub struct Position{pub line:usize,pub byte_column:usize}
+const MAX:u64=0xffff_ffff_ffff_ffff;
+fn span(p:u64,n:u64)bool{return n==0||(p!=0&&n<=MAX-p);}
+fn overlap(a:u64,n:u64,b:u64,m:u64)bool{return n!=0&&m!=0&&a<b+m&&b<a+n;}
+fn breaks(source:[]const u8,i:usize)bool{return source[i]==10;}
+pub unsafe fn build(source:[]const u8,starts:[]usize,used:*usize)u64{unsafe{
+ if used==null||starts.len>MAX/8{return INVALID;}
+ let sp=source.ptr as u64;let tp=starts.ptr as u64;let up=used as u64;
+ let sn=source.len;let tn=starts.len*8;
+ if !span(sp,sn)||!span(tp,tn)||!span(up,8){return INVALID;}
+ if (tn!=0&&(tp&7)!=0)||(up&7)!=0{return INVALID;}
+ if overlap(tp,tn,sp,sn)||overlap(up,8,sp,sn)||overlap(tp,tn,up,8){return INVALID;}
+ // Count first: lf<=source.len, and lf<starts.len rules out lf+1 wrapping.
+ var lf:usize=0;var i:usize=0;
+ while i<sn{if breaks(source,i){lf+=1;}i+=1;}
+ if lf>=starts.len{return CAPACITY;}
+ starts[0]=0;var k:usize=1;i=0;
+ // i<source.len<=MAX, so i+1 cannot wrap.
+ while i<sn{if breaks(source,i){starts[k]=i+1;k+=1;}i+=1;}
+ *used=lf+1;return OK;
+}}
+pub unsafe fn locate(starts:[]const usize,source_len:usize,offset:usize,result:*Position)u64{unsafe{
+ if result==null||starts.len>MAX/8{return INVALID;}
+ let tp=starts.ptr as u64;let rp=result as u64;let tn=starts.len*8;let rn=sizeof(Position);
+ if !span(tp,tn)||!span(rp,rn){return INVALID;}
+ if (tn!=0&&(tp&7)!=0)||(rp&7)!=0{return INVALID;}
+ if overlap(rp,rn,tp,tn){return INVALID;}
+ let n=starts.len;
+ if n==0||starts[0]!=0||offset>source_len{return INVALID;}
+ var i:usize=1;
+ while i<n{if starts[i]<=starts[i-1]||starts[i]>source_len{return INVALID;}i+=1;}
+ // Invariant: starts[lo]<=offset, and starts[hi]>offset or hi==n.
+ var lo:usize=0;var hi:usize=n;
+ while hi-lo>1{let mid=lo+(hi-lo)/2;if starts[mid]<=offset{lo=mid;}else{hi=mid;}}
+ let delta=offset-starts[lo];
+ if delta==MAX{return INVALID;}
+ // lo<n<=MAX/8, so lo+1 cannot wrap.
+ *result=Position{line:lo+1,byte_column:delta+1};return OK;
+}}

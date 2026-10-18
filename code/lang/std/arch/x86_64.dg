@@ -1,0 +1,39 @@
+// arch.x86_64 — reviewed external-assembly wrappers for x86-64 hardware.
+// Every declaration below is unsafe: the callee may require privilege, or its
+// effect depends on CPU/page-table state the caller owns. The NASM bodies are
+// in lang/std/arch/x86_64.asm; link names use the dg_arch_ prefix.
+
+module arch.x86_64;
+
+pub struct CpuId { pub eax: u32, pub ebx: u32, pub ecx: u32, pub edx: u32 }
+
+// Port I/O. Privileged: needs CPL 0 or an IOPL that permits the port.
+// in8 reads one byte from port into the low byte of the u8 result.
+pub unsafe extern "sysv64" ("dg_arch_in8") fn in8(port: u16) u8;
+// out8 writes one byte (value) to port.
+pub unsafe extern "sysv64" ("dg_arch_out8") fn out8(port: u16, value: u8) void;
+
+// Page-table root. Privileged. write_cr3 changes the address space: the caller
+// owns the page tables, the CR3 reserved bits and TLB/PGE semantics.
+pub unsafe extern "sysv64" ("dg_arch_read_cr3") fn read_cr3() u64;
+pub unsafe extern "sysv64" ("dg_arch_write_cr3") fn write_cr3(value: u64) void;
+
+// Model-specific registers. Privileged. read_msr returns the 64-bit value;
+// write_msr splits value into EDX:EAX. The caller owns MSR selection and
+// reserved/undefined bits.
+pub unsafe extern "sysv64" ("dg_arch_read_msr") fn read_msr(msr: u32) u64;
+pub unsafe extern "sysv64" ("dg_arch_write_msr") fn write_msr(msr: u32, value: u64) void;
+
+// Time-stamp counter. Available in user mode on most CPUs; the read itself is
+// not a serializing barrier, so pair it with a fence for ordering.
+pub unsafe extern "sysv64" ("dg_arch_read_tsc") fn read_tsc() u64;
+
+// CPUID. Writes the four result registers into *out (eax/ebx/ecx/edx order).
+// Preserves the SysV non-volatile registers, especially RBX which CPUID
+// clobbers. CpuId is passed by pointer, never by value.
+pub unsafe extern "sysv64" ("dg_arch_cpuid") fn cpuid(leaf: u32, subleaf: u32, out: *CpuId) void;
+
+// Ordering fences as thin wrappers.
+pub unsafe extern "sysv64" ("dg_arch_lfence") fn lfence() void;
+pub unsafe extern "sysv64" ("dg_arch_sfence") fn sfence() void;
+pub unsafe extern "sysv64" ("dg_arch_mfence") fn mfence() void;

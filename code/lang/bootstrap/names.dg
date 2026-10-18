@@ -1,0 +1,141 @@
+// Module-level semantic namespace, member uniqueness and import visibility.
+module bootstrap.names;
+import bootstrap.modules as modules;
+import bootstrap.expression as ast;
+import bootstrap.lexer as lex;
+pub const NONE:usize=0xffff_ffff_ffff_ffff;
+pub const OK:u64=0;pub const INVALID:u64=1;pub const DUPLICATE:u64=2;pub const BAD_GRAPH:u64=3;
+pub const CAPACITY:u64=4;pub const UNKNOWN:u64=5;pub const PRIVATE:u64=6;
+pub const IMPORT:u64=1;pub const FUNCTION:u64=2;pub const STRUCT:u64=3;pub const ENUM:u64=4;
+pub const ERROR:u64=5;pub const ALIAS:u64=6;pub const CONST:u64=7;pub const GLOBAL:u64=8;pub const METHOD:u64=9;
+pub struct Symbol{pub unit:usize,pub name_token:usize,pub declaration:usize,pub kind:u64,pub flags:u64,pub target:usize}
+pub struct Result{pub code:u64,pub count:usize,pub unit:usize,pub token:usize,pub detail:usize}
+struct Region{p:u64,n:usize}
+fn span(p:u64,n:usize)bool{return n==0||(p!=0&&n<=NONE-p);}
+fn overlap(a:*const Region,b:*const Region)bool{unsafe{return (*a).n!=0&&(*b).n!=0&&(*a).p<(*b).p+(*b).n&&(*b).p<(*a).p+(*a).n;}}
+fn equal(a:[]const u8,b:[]const u8)bool{
+ if a.len!=b.len{return false;}var i:usize=0;while i<a.len{if a[i]!=b[i]{return false;}i+=1;}return true;
+}
+pub unsafe fn text(sources:[]const modules.Source,units:[]const modules.Unit,tokens:[]const lex.Token,
+ unit:usize,token:usize)[]const u8{unsafe{
+ let u=units[unit];let source=modules.unit_source(sources,&u);let t=tokens[u.token_start+token];
+ return slice_from_raw_parts(source.ptr+t.start,t.end-t.start);
+}}
+fn builtin(name:[]const u8)bool{
+ return equal(name,"u8")||equal(name,"u16")||equal(name,"u32")||equal(name,"u64")||equal(name,"i8")||equal(name,"i16")
+  ||equal(name,"i32")||equal(name,"i64")||equal(name,"bool")||equal(name,"void")||equal(name,"noreturn")||equal(name,"usize")||equal(name,"isize");
+}
+// Descriptor spans must already be validated by the caller. Does not mutate.
+pub unsafe fn valid_graph(sources:[]const modules.Source,units:[]const modules.Unit,tokens:[]const lex.Token,nodes:[]const ast.Node,edges:[]const modules.Edge)bool{unsafe{
+ var i:usize=0;while i<units.len{let u=units[i];
+  if u.source_index>=sources.len||u.skip>sources[u.source_index].bytes.len
+   ||u.token_start>tokens.len||u.token_count>tokens.len-u.token_start||u.node_start>nodes.len||u.node_count>nodes.len-u.node_start||u.root>=u.node_count{return false;}
+  if nodes[u.node_start+u.root].kind!=ast.MODULE{return false;}
+  var j:usize=0;while j<u.token_count{let t=tokens[u.token_start+j];if t.start>t.end||t.end>sources[u.source_index].bytes.len-u.skip{return false;}j+=1;}
+  j=0;while j<u.node_count{let n=nodes[u.node_start+j];
+   if n.token>=u.token_count||(n.next!=NONE&&n.next>=u.node_count)||(n.a!=NONE&&n.a>=u.node_count)
+    ||(n.b!=NONE&&n.b>=u.node_count)||(n.c!=NONE&&n.c>=u.node_count){return false;}j+=1;
+  }i+=1;
+ }
+ i=0;while i<edges.len{let e=edges[i];if e.from>=units.len||e.to>=units.len{return false;}
+  if e.import_node>=units[e.from].node_count||e.alias_token>=units[e.from].token_count{return false;}i+=1;
+ }return true;
+}}
+unsafe fn add(sources:[]const modules.Source,units:[]const modules.Unit,tokens:[]const lex.Token,
+ work:[]Symbol,count:*usize,symbol:*const Symbol,result:*Result)u64{unsafe{
+ var i:usize=0;while i<*count{let old=work[i];
+  if old.unit==(*symbol).unit&&old.kind!=METHOD&&(*symbol).kind!=METHOD
+   &&equal(text(sources,units,tokens,old.unit,old.name_token),text(sources,units,tokens,(*symbol).unit,(*symbol).name_token)){
+   *result=Result{code:DUPLICATE,count:0,unit:(*symbol).unit,token:(*symbol).name_token,detail:old.name_token};return DUPLICATE;
+  }i+=1;
+ }
+ if *count==work.len{*result=Result{code:CAPACITY,count:0,unit:(*symbol).unit,token:(*symbol).name_token,detail:0};return CAPACITY;}
+ work[*count]=*symbol;*count+=1;return OK;
+}}
+pub unsafe fn collect(sources:[]const modules.Source,units:[]const modules.Unit,tokens:[]const lex.Token,nodes:[]const ast.Node,
+ edges:[]const modules.Edge,out:[]Symbol,work:[]Symbol,result:*Result)u64{unsafe{
+ if result==null||sources.len>NONE/sizeof(modules.Source)||units.len>NONE/sizeof(modules.Unit)||tokens.len>NONE/sizeof(lex.Token)
+  ||nodes.len>NONE/sizeof(ast.Node)||edges.len>NONE/sizeof(modules.Edge)||out.len>NONE/sizeof(Symbol)||work.len>NONE/sizeof(Symbol){return INVALID;}
+ let inputs=[Region{p:sources.ptr as u64,n:sources.len*sizeof(modules.Source)},Region{p:units.ptr as u64,n:units.len*sizeof(modules.Unit)},
+  Region{p:tokens.ptr as u64,n:tokens.len*sizeof(lex.Token)},Region{p:nodes.ptr as u64,n:nodes.len*sizeof(ast.Node)},Region{p:edges.ptr as u64,n:edges.len*sizeof(modules.Edge)}];
+ let outputs=[Region{p:out.ptr as u64,n:out.len*sizeof(Symbol)},Region{p:work.ptr as u64,n:work.len*sizeof(Symbol)},Region{p:result as u64,n:sizeof(Result)}];
+ var i:usize=0;while i<inputs.len{let r=inputs[i];if !span(r.p,r.n)||(r.n!=0&&(r.p&7)!=0){return INVALID;}i+=1;}
+ i=0;while i<outputs.len{let r=outputs[i];if !span(r.p,r.n)||(r.n!=0&&(r.p&7)!=0){return INVALID;}
+  var j:usize=0;while j<inputs.len{if overlap(&r,&inputs[j]){return INVALID;}j+=1;}
+  j=0;while j<i{if overlap(&r,&outputs[j]){return INVALID;}j+=1;}i+=1;
+ }
+ i=0;while i<sources.len{let p=Region{p:sources[i].path.ptr as u64,n:sources[i].path.len};let b=Region{p:sources[i].bytes.ptr as u64,n:sources[i].bytes.len};
+  if !span(p.p,p.n)||!span(b.p,b.n){return INVALID;}var j:usize=0;while j<outputs.len{if overlap(&p,&outputs[j])||overlap(&b,&outputs[j]){return INVALID;}j+=1;}i+=1;
+ }
+ if !valid_graph(sources,units,tokens,nodes,edges){*result=Result{code:BAD_GRAPH,count:0,unit:0,token:0,detail:0};return BAD_GRAPH;}
+ var count:usize=0;i=0;
+ while i<units.len{let u=units[i];var item=nodes[u.node_start+u.root].b;var steps:usize=0;
+  while item!=NONE{
+   if steps>=u.node_count{*result=Result{code:BAD_GRAPH,count:0,unit:i,token:0,detail:0};return BAD_GRAPH;}steps+=1;
+   let n=nodes[u.node_start+item];var symbol=Symbol{unit:i,name_token:n.token,declaration:item,kind:0,flags:0,target:i};
+   if n.kind==ast.IMPORT{
+    var edge:usize=0;while edge<edges.len{if edges[edge].from==i&&edges[edge].import_node==item{break;}edge+=1;}
+    if edge==edges.len{*result=Result{code:BAD_GRAPH,count:0,unit:i,token:n.token,detail:0};return BAD_GRAPH;}
+    symbol.kind=IMPORT;symbol.name_token=edges[edge].alias_token;symbol.target=edges[edge].to;
+   }else if n.kind==ast.DECLARATION&&n.a!=NONE{
+    let d=nodes[u.node_start+n.a];symbol.declaration=n.a;symbol.name_token=d.token;
+    var attr=n.b;var seen:usize=0;
+    while attr!=NONE{if seen>=u.node_count{*result=Result{code:BAD_GRAPH,count:0,unit:i,token:n.token,detail:0};return BAD_GRAPH;}seen+=1;
+     let a=nodes[u.node_start+attr];if a.kind!=ast.ATTRIBUTE{*result=Result{code:BAD_GRAPH,count:0,unit:i,token:a.token,detail:0};return BAD_GRAPH;}
+     if a.op==259{symbol.flags=1;}attr=a.next;
+    }
+    if d.kind==ast.FUNCTION{symbol.kind=FUNCTION;if d.a!=NONE&&nodes[u.node_start+d.a].flags==1{symbol.kind=METHOD;}}
+    else if d.kind==ast.STRUCT_DECL{symbol.kind=STRUCT;}else if d.kind==ast.ENUM_DECL{symbol.kind=ENUM;}
+    else if d.kind==ast.ERROR_DECL{symbol.kind=ERROR;}else if d.kind==ast.ALIAS_DECL{symbol.kind=ALIAS;}
+    else if d.kind==ast.GLOBAL{symbol.kind=GLOBAL;if d.op==260{symbol.kind=CONST;}}
+    else{*result=Result{code:BAD_GRAPH,count:0,unit:i,token:d.token,detail:0};return BAD_GRAPH;}
+    if symbol.kind>=STRUCT&&symbol.kind<=ALIAS&&builtin(text(sources,units,tokens,i,d.token)){
+     *result=Result{code:DUPLICATE,count:0,unit:i,token:d.token,detail:d.token};return DUPLICATE;
+    }
+    if d.kind==ast.STRUCT_DECL||d.kind==ast.ENUM_DECL||d.kind==ast.FUNCTION{
+     var member=d.a;var walked:usize=0;
+     while member!=NONE{if walked>=u.node_count{*result=Result{code:BAD_GRAPH,count:0,unit:i,token:d.token,detail:0};return BAD_GRAPH;}walked+=1;
+      let m=nodes[u.node_start+member];var previous=d.a;var before:usize=0;
+      while previous!=member{if before>=u.node_count||previous==NONE{*result=Result{code:BAD_GRAPH,count:0,unit:i,token:m.token,detail:0};return BAD_GRAPH;}before+=1;
+       let old=nodes[u.node_start+previous];if equal(text(sources,units,tokens,i,old.token),text(sources,units,tokens,i,m.token)){
+        *result=Result{code:DUPLICATE,count:0,unit:i,token:m.token,detail:old.token};return DUPLICATE;
+       }previous=old.next;
+      }member=m.next;
+     }
+    }
+   }else{*result=Result{code:BAD_GRAPH,count:0,unit:i,token:n.token,detail:0};return BAD_GRAPH;}
+   let status=add(sources,units,tokens,work,&count,&symbol,result);if status!=OK{return status;}item=n.next;
+  }i+=1;
+ }
+ if out.len<count{*result=Result{code:CAPACITY,count:0,unit:0,token:0,detail:count};return CAPACITY;}
+ i=0;while i<count{out[i]=work[i];i+=1;}*result=Result{code:OK,count:count,unit:0,token:0,detail:0};return OK;
+}}
+// Lookup names in a successfully collected table. Paths are either local or
+// import_alias.member; methods and field/enum suffixes are a later typed stage.
+pub unsafe fn resolve(sources:[]const modules.Source,units:[]const modules.Unit,tokens:[]const lex.Token,
+ symbols:[]const Symbol,owner:usize,name:[]const u8,out:*usize)u64{unsafe{
+ if out==null||owner>=units.len||sources.len>NONE/sizeof(modules.Source)||units.len>NONE/sizeof(modules.Unit)
+  ||tokens.len>NONE/sizeof(lex.Token)||symbols.len>NONE/sizeof(Symbol){return INVALID;}
+ let r=Region{p:out as u64,n:8};let inputs=[Region{p:sources.ptr as u64,n:sources.len*sizeof(modules.Source)},
+  Region{p:units.ptr as u64,n:units.len*sizeof(modules.Unit)},Region{p:tokens.ptr as u64,n:tokens.len*sizeof(lex.Token)},
+  Region{p:symbols.ptr as u64,n:symbols.len*sizeof(Symbol)},Region{p:name.ptr as u64,n:name.len}];
+ if !span(r.p,r.n)||(r.p&7)!=0{return INVALID;}var i:usize=0;
+ while i<inputs.len{let q=inputs[i];if !span(q.p,q.n)||overlap(&r,&q)||(i!=4&&q.n!=0&&(q.p&7)!=0){return INVALID;}i+=1;}
+ i=0;while i<sources.len{let b=Region{p:sources[i].bytes.ptr as u64,n:sources[i].bytes.len};let p=Region{p:sources[i].path.ptr as u64,n:sources[i].path.len};
+  if !span(b.p,b.n)||!span(p.p,p.n)||overlap(&r,&b)||overlap(&r,&p){return INVALID;}i+=1;
+ }
+ i=0;while i<symbols.len{let s=symbols[i];if s.unit>=units.len||s.target>=units.len{return BAD_GRAPH;}
+  let u=units[s.unit];if u.source_index>=sources.len||u.skip>sources[u.source_index].bytes.len||u.token_start>tokens.len
+   ||u.token_count>tokens.len-u.token_start||s.name_token>=u.token_count{return BAD_GRAPH;}
+  let t=tokens[u.token_start+s.name_token];if t.start>t.end||t.end>sources[u.source_index].bytes.len-u.skip{return BAD_GRAPH;}i+=1;
+ }
+ var dot:usize=0;while dot<name.len&&name[dot]!=46{dot+=1;}
+ let first=slice_from_raw_parts(name.ptr,dot);var found:usize=NONE;i=0;
+ while i<symbols.len{let s=symbols[i];if s.unit==owner&&s.kind!=METHOD&&equal(text(sources,units,tokens,owner,s.name_token),first){found=i;break;}i+=1;}
+ if found==NONE{return UNKNOWN;}if dot==name.len{*out=found;return OK;}
+ if symbols[found].kind!=IMPORT{return UNKNOWN;}let target=symbols[found].target;
+ let tail=slice_from_raw_parts(name.ptr+dot+1,name.len-dot-1);i=0;
+ while i<symbols.len{let s=symbols[i];if s.unit==target&&s.kind!=METHOD&&equal(text(sources,units,tokens,target,s.name_token),tail){
+  if s.flags!=1||s.kind==IMPORT{return PRIVATE;}*out=i;return OK;
+ }i+=1;}return UNKNOWN;
+}}

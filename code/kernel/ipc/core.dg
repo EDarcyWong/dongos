@@ -1,0 +1,227 @@
+// Pure object policy. Endpoint/notification/backing storage is caller owned;
+// the syscall bridge validates peer and capabilities, then serializes calls.
+module ipc.core;
+import ipc.handles as handles;
+pub error InvalidArgument = 0x0402_0001;
+pub error Closed = 0x0402_0002;
+pub error WouldBlock = 0x0402_0003;
+pub error Denied = 0x0402_0004;
+pub error InvalidToken = 0x0402_0005;
+pub error AlreadyInitialized = 0x0402_0006;
+pub error Exhausted = 0x0402_0007;
+pub const IDLE: u64 = 0;
+pub const PENDING: u64 = 1;
+pub const ACCEPTED: u64 = 2;
+pub const REPLIED: u64 = 3;
+pub struct Message { pub peer: u64, pub length: u64, pub bytes: [64]u8 }
+pub struct Endpoint {
+    pub initialized: u64, pub live: u64, pub identity: u64, pub owner: u64,
+    pub queued: u64, pub sequence: u64, pub state: u64, pub caller: u64, pub token: u64,
+    pub request: Message, pub response: Message, pub messages: [4]Message,
+}
+pub struct Notification { pub initialized: u64, pub live: u64, pub bits: u64 }
+pub struct MemoryObject { pub initialized: u64, pub live: u64, pub identity: u64, pub base: u64, pub size: u64, pub rights: u64 }
+pub struct Region { pub address: u64, pub length: u64, pub rights: u64 }
+pub const EMPTY_MESSAGE: Message = Message { peer: 0, length: 0, bytes: [0; 64] };
+pub const EMPTY_ENDPOINT: Endpoint = Endpoint { initialized: 0, live: 0, identity: 0, owner: 0, queued: 0, sequence: 0, state: 0, caller: 0, token: 0, request: EMPTY_MESSAGE, response: EMPTY_MESSAGE, messages: [EMPTY_MESSAGE; 4] };
+pub const EMPTY_NOTIFICATION: Notification = Notification { initialized: 0, live: 0, bits: 0 };
+pub const EMPTY_MEMORY: MemoryObject = MemoryObject { initialized: 0, live: 0, identity: 0, base: 0, size: 0, rights: 0 };
+
+unsafe fn copy_message(out: *Message, peer: u64, bytes: []const u8) void {
+    unsafe {
+        *out = EMPTY_MESSAGE;
+        (*out).peer = peer;
+        (*out).length = bytes.len as u64;
+        var i: usize = 0;
+        while i < bytes.len { (*out).bytes[i] = bytes[i]; i += 1; }
+    }
+}
+fn payload_valid(bytes: []const u8) bool { return bytes.len <= 64 && (bytes.len == 0 || bytes.ptr != null); }
+pub unsafe fn endpoint_init(endpoint: *Endpoint, identity: u64, owner: u64) !void {
+    if identity == 0 || identity > 0xffff_ffff || owner == 0 { return error.InvalidArgument; }
+    unsafe {
+        if (*endpoint).initialized != 0 { return error.AlreadyInitialized; }
+        *endpoint = EMPTY_ENDPOINT;
+        (*endpoint).initialized = 1; (*endpoint).live = 1;
+        (*endpoint).identity = identity; (*endpoint).owner = owner;
+    }
+    return;
+}
+pub unsafe fn send(endpoint: *Endpoint, sender: u64, bytes: []const u8) !void {
+    if sender == 0 || !payload_valid(bytes) { return error.InvalidArgument; }
+    unsafe {
+        if (*endpoint).live != 1 { return error.Closed; }
+        if (*endpoint).queued >= 4 { return error.WouldBlock; }
+        copy_message(&(*endpoint).messages[(*endpoint).queued as usize], sender, bytes);
+        (*endpoint).queued += 1;
+    }
+    return;
+}
+pub unsafe fn receive(endpoint: *Endpoint, receiver: u64, out: *Message) !void {
+    unsafe {
+        if (*endpoint).live != 1 { return error.Closed; }
+        if receiver != (*endpoint).owner { return error.Denied; }
+        if (*endpoint).queued == 0 { return error.WouldBlock; }
+        *out = (*endpoint).messages[0];
+        var i: usize = 1;
+        while i < (*endpoint).queued as usize { (*endpoint).messages[i-1] = (*endpoint).messages[i]; i += 1; }
+        (*endpoint).queued -= 1;
+        (*endpoint).messages[(*endpoint).queued as usize] = EMPTY_MESSAGE;
+    }
+    return;
+}
+pub unsafe fn call(endpoint: *Endpoint, caller: u64, bytes: []const u8) !u64 {
+    if caller == 0 || !payload_valid(bytes) { return error.InvalidArgument; }
+    unsafe {
+        if (*endpoint).live != 1 { return error.Closed; }
+        if caller == (*endpoint).owner { return error.Denied; }
+        if (*endpoint).state != IDLE { return error.WouldBlock; }
+        if (*endpoint).sequence == 0xffff_ffff { return error.Exhausted; }
+        (*endpoint).sequence += 1;
+        (*endpoint).token = ((*endpoint).identity << 32) | (*endpoint).sequence;
+        (*endpoint).caller = caller;
+        copy_message(&(*endpoint).request, caller, bytes);
+        (*endpoint).response = EMPTY_MESSAGE;
+        (*endpoint).state = PENDING;
+        return (*endpoint).token;
+    }
+}
+pub unsafe fn accept(endpoint: *Endpoint, receiver: u64, out: *Message, token: *u64) !void {
+    unsafe {
+        if (*endpoint).live != 1 { return error.Closed; }
+        if receiver != (*endpoint).owner { return error.Denied; }
+        if (*endpoint).state != PENDING { return error.WouldBlock; }
+        *out = (*endpoint).request;
+        *token = (*endpoint).token;
+        (*endpoint).state = ACCEPTED;
+    }
+    return;
+}
+pub unsafe fn reply(endpoint: *Endpoint, receiver: u64, token: u64, bytes: []const u8) !void {
+    if !payload_valid(bytes) { return error.InvalidArgument; }
+    unsafe {
+        if (*endpoint).live != 1 { return error.Closed; }
+        if receiver != (*endpoint).owner { return error.Denied; }
+        if (*endpoint).state != ACCEPTED || token == 0 || token != (*endpoint).token { return error.InvalidToken; }
+        copy_message(&(*endpoint).response, receiver, bytes);
+        (*endpoint).state = REPLIED;
+    }
+    return;
+}
+unsafe fn reset_call(endpoint: *Endpoint) void {
+    unsafe {
+        (*endpoint).state = IDLE; (*endpoint).caller = 0; (*endpoint).token = 0;
+        (*endpoint).request = EMPTY_MESSAGE; (*endpoint).response = EMPTY_MESSAGE;
+    }
+}
+pub unsafe fn take_reply(endpoint: *Endpoint, caller: u64, token: u64, out: *Message) !void {
+    unsafe {
+        if (*endpoint).live != 1 { return error.Closed; }
+        if caller != (*endpoint).caller { return error.Denied; }
+        if token == 0 || token != (*endpoint).token { return error.InvalidToken; }
+        if (*endpoint).state != REPLIED { return error.WouldBlock; }
+        *out = (*endpoint).response;
+        reset_call(endpoint);
+    }
+    return;
+}
+pub unsafe fn cancel(endpoint: *Endpoint, caller: u64, token: u64) !void {
+    unsafe {
+        if (*endpoint).live != 1 { return error.Closed; }
+        if caller != (*endpoint).caller { return error.Denied; }
+        if (*endpoint).state == IDLE || token == 0 || token != (*endpoint).token { return error.InvalidToken; }
+        reset_call(endpoint);
+    }
+    return;
+}
+pub unsafe fn detach(endpoint: *Endpoint, peer: u64) !void {
+    if peer == 0 { return error.InvalidArgument; }
+    unsafe {
+        if (*endpoint).live != 1 { return error.Closed; }
+        if peer == (*endpoint).owner {
+            (*endpoint).live = 0;
+            (*endpoint).queued = 0;
+            (*endpoint).messages = [EMPTY_MESSAGE; 4];
+            reset_call(endpoint);
+            return;
+        }
+        if peer == (*endpoint).caller { reset_call(endpoint); }
+        var kept: usize = 0;
+        var i: usize = 0;
+        while i < (*endpoint).queued as usize {
+            if (*endpoint).messages[i].peer != peer { (*endpoint).messages[kept] = (*endpoint).messages[i]; kept += 1; }
+            i += 1;
+        }
+        (*endpoint).queued = kept as u64;
+        while kept < 4 { (*endpoint).messages[kept] = EMPTY_MESSAGE; kept += 1; }
+    }
+    return;
+}
+pub unsafe fn notification_init(notification: *Notification) !void {
+    unsafe {
+        if (*notification).initialized != 0 { return error.AlreadyInitialized; }
+        *notification = Notification { initialized: 1, live: 1, bits: 0 };
+    }
+    return;
+}
+pub unsafe fn signal(notification: *Notification, bits: u64) !void {
+    if bits == 0 { return error.InvalidArgument; }
+    unsafe {
+        if (*notification).live != 1 { return error.Closed; }
+        (*notification).bits |= bits;
+    }
+    return;
+}
+pub unsafe fn take_bits(notification: *Notification, mask: u64, out: *u64) !void {
+    if mask == 0 { return error.InvalidArgument; }
+    unsafe {
+        if (*notification).live != 1 { return error.Closed; }
+        let result = (*notification).bits & mask;
+        if result == 0 { return error.WouldBlock; }
+        *out = result;
+        (*notification).bits &= ~result;
+    }
+    return;
+}
+pub unsafe fn notification_close(notification: *Notification) !void {
+    unsafe {
+        if (*notification).live != 1 { return error.Closed; }
+        (*notification).live = 0; (*notification).bits = 0;
+    }
+    return;
+}
+fn canonical(address: u64) bool {
+    let high = address >> 48;
+    if (address & 0x0000_8000_0000_0000) == 0 { return high == 0; }
+    return high == 0xffff;
+}
+pub unsafe fn memory_init(memory: *MemoryObject, identity: u64, base: u64, size: u64, rights: u64) !void {
+    if identity == 0 || base == 0 || size == 0 || size > 0xffff_ffff_ffff_ffff - base
+        || !canonical(base) || !canonical(base + size - 1) || ((base ^ (base + size - 1)) & 0x8000_0000_0000_0000) != 0
+        || rights == 0 || (rights & ~(handles.READ | handles.WRITE)) != 0 { return error.InvalidArgument; }
+    unsafe {
+        if (*memory).initialized != 0 { return error.AlreadyInitialized; }
+        *memory = MemoryObject { initialized: 1, live: 1, identity: identity, base: base, size: size, rights: rights };
+    }
+    return;
+}
+pub unsafe fn shared_view(table: *const handles.Table, handle: u64, memory: *const MemoryObject,
+    offset: u64, length: u64, rights: u64, out: *Region) !void {
+    if rights == 0 || (rights & ~(handles.READ | handles.WRITE)) != 0 { return error.InvalidArgument; }
+    unsafe {
+        var view = handles.EMPTY_VIEW;
+        try handles.lookup(table,handle,handles.SHARED,rights | handles.MAP,&view);
+        if (*memory).live != 1 { return error.Closed; }
+        if view.object != (*memory).identity || (rights & ~(*memory).rights) != 0 { return error.Denied; }
+        if length == 0 || offset > (*memory).size || length > (*memory).size - offset { return error.InvalidArgument; }
+        *out = Region { address: (*memory).base + offset, length: length, rights: rights };
+    }
+    return;
+}
+pub unsafe fn memory_close(memory: *MemoryObject) !void {
+    unsafe {
+        if (*memory).live != 1 { return error.Closed; }
+        (*memory).live = 0;
+    }
+    return;
+}

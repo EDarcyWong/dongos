@@ -1,0 +1,6 @@
+module user.memory;
+pub error Failed=0x0980_0002;
+unsafe extern "sysv64" ("broker_map") fn host_map(id:usize,virtual:u64,physical:u64,bytes:u64)u64;
+pub unsafe fn map_device(id:usize,virtual:u64,physical:u64,bytes:u64)!void {unsafe {
+    if host_map(id,virtual,physical,bytes)!=0 {return error.Failed;}
+}return;}

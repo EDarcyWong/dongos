@@ -1,0 +1,117 @@
+// Separate CPL3 hardware manager. ENUM snapshots come from the kernel's ECAM
+// reader; BIND revalidates hardware before issuing any role capabilities.
+module drivers.device_manager;
+import lib.sys as sys;
+import lib.device as device;
+import lib.device_abi as abi;
+import drivers.device_policy as policy;
+import lib.process as process;
+import lib.process_abi as proc;
+pub struct Report {
+    pub version:u64,pub scans:u64,pub enumerated:u64,pub unsupported:u64,
+    pub duplicates:u64,pub bindings:u64,pub revocations:u64,pub last_error:u64,
+}
+pub var REPORT:Report=Report {version:1,scans:0,enumerated:0,unsupported:0,duplicates:0,bindings:0,revocations:0,last_error:0};
+var CURRENT:abi.Device=abi.EMPTY_DEVICE;
+var CHOICES:[4]abi.Device=[abi.EMPTY_DEVICE;4];
+var SELECTED:[4]abi.Device=[abi.EMPTY_DEVICE;4];
+var BINDINGS:[4]abi.Binding=[abi.EMPTY_BINDING;4];
+var SEEN:u64=0;
+unsafe fn scan(cap:u64,initial:bool)!void {unsafe {
+    var cursor:u64=0;var count:usize=0;SEEN=0;
+    while count<4096 {
+        let status=device.enumerate(cap,cursor,&CURRENT);if status!=0 {return error.abi.Readback;}
+        if CURRENT.version!=1||CURRENT.reserved!=0 {return error.abi.Invalid;}
+        if CURRENT.kind==0 {REPORT.scans+=1;return;}
+        if CURRENT.token==0||CURRENT.generation==0||CURRENT.next_cursor<=cursor||CURRENT.next_cursor>65536 {return error.abi.Invalid;}
+        REPORT.enumerated+=1;var matched=false;var role:u64=1;
+        while role<=4 {
+            let i=(role-1) as usize;let rank=policy.rank(&CURRENT,role);
+            if rank!=0 {
+                matched=true;
+                if initial {
+                    let prior=policy.rank(&CHOICES[i],role);
+                    if prior!=0 {REPORT.duplicates+=1;}
+                    if rank>prior {CHOICES[i]=CURRENT;}
+                }else if BINDINGS[i].device_token==CURRENT.token&&CURRENT.generation==BINDINGS[i].generation
+                    &&(CURRENT.flags&abi.REVOKED)==0&&policy.same_identity(&CURRENT,&SELECTED[i]) {SEEN|=1<<role;}
+            }
+            role+=1;
+        }
+        if !matched {REPORT.unsupported+=1;}
+        cursor=CURRENT.next_cursor;count+=1;
+    }
+}return error.abi.Capacity;}
+unsafe fn start(cap:u64)!void {unsafe {
+    try scan(cap,true);
+    if CHOICES[0].token==0&&CHOICES[3].token==0 {return error.abi.Removed;}
+    var i:usize=0;while i<4 {
+        if CHOICES[i].token!=0 {
+            let status=device.bind(cap,CHOICES[i].token,i as u64+1,&BINDINGS[i]);if status!=0 {return error.abi.Denied;}
+            if BINDINGS[i].version!=1||BINDINGS[i].device_token!=CHOICES[i].token||BINDINGS[i].role!=i as u64+1
+                ||BINDINGS[i].generation!=CHOICES[i].generation||BINDINGS[i].reserved!=0 {return error.abi.Invalid;}
+            if i==3&&BINDINGS[i].configuration_id!=13 {return error.abi.Invalid;}
+            SELECTED[i]=CHOICES[i];REPORT.bindings+=1;
+        }i+=1;
+    }
+}return;}
+unsafe fn start_xhci(manager:u64,cap:u64)!void {unsafe {
+    if BINDINGS[3].device_token==0 {return;}
+    var failed:u64=0;var config=proc.EMPTY_CONFIG;var state=proc.EMPTY_SNAPSHOT;
+    if manager==0 {failed=0x0511_0001;}else {
+        failed=process.configuration_state(manager,13,&config,&state);
+        if failed==0 {
+            if config.version!=1||config.id!=13||state.version!=1||state.configuration!=13||state.state!=proc.STOPPED
+                ||state.generation==0xffff_ffff_ffff_ffff {failed=0x0511_0001;}
+            else {
+                let previous=state.generation;failed=process.spawn(manager,13,previous,0,&state);
+                if failed==0&&(state.version!=1||state.configuration!=13||(state.process&255)!=14||(state.process>>8)==0
+                    ||(state.process>>8)>0x0fff_ffff||state.generation!=previous+1||state.state!=proc.STARTING) {failed=0x0511_0001;}
+            }
+        }
+    }
+    if failed!=0 {
+        // Optional USB bring-up cannot strand a binding or stop the existing
+        // storage/input boot. There is exactly one spawn attempt, then kernel
+        // quarantine; uncertain isolation is fatal to the manager itself.
+        let revoked=device.revoke(cap,BINDINGS[3].device_token,BINDINGS[3].generation);
+        if revoked!=0&&revoked!=0x0512_0004 {return error.abi.Readback;}
+        BINDINGS[3].flags|=abi.REVOKED;REPORT.revocations+=1;REPORT.last_error=failed;
+        if sys.log("DONGOS_XHCI_LAUNCH_FAILED\r\n")!=0 {return error.abi.Readback;}
+        return;
+    }
+    if sys.log("DONGOS_XHCI_LAUNCHED\r\n")!=0 {return error.abi.Readback;}
+}return;}
+unsafe fn monitor(cap:u64)!void {unsafe {
+    var failed:u64=0;
+    match scan(cap,false) {ok=>{},err(e)=>{failed=e;SEEN=0;},}
+    // If the catalog cannot be trusted, isolate every admitted device before
+    // reporting manager failure. In particular, a failed runtime ECAM read
+    // must not leave the old controller authorized to keep issuing DMA.
+    var i:usize=0;while i<4 {
+        if BINDINGS[i].device_token!=0&&(BINDINGS[i].flags&abi.REVOKED)==0&&(SEEN&(1<<(i as u64+1)))==0 {
+            let status=device.revoke(cap,BINDINGS[i].device_token,BINDINGS[i].generation);
+            if status!=0&&status!=0x0512_0004 {return error.abi.Readback;}
+            BINDINGS[i].flags|=abi.REVOKED;REPORT.revocations+=1;
+            let log=sys.log("DONGOS_DEVICE_REVOKED\r\n");if log!=0 {return error.abi.Readback;}
+        }i+=1;
+    }
+    if failed!=0 {REPORT.last_error=failed;return error.abi.Readback;}
+}return;}
+export("service_main") fn main()u64 {unsafe {
+    let boot=sys.boot();if boot==null||(*boot).version!=1||(*boot).configuration==0 {return 0x0512_0001;}
+    let cap=(*boot).configuration;
+    match start(cap) {ok=>{},err(e)=>{REPORT.last_error=e;return e;},}
+    let ready=sys.ready_boot(boot);if ready!=0 {return ready;}
+    let log=sys.log("DONGOS_DEVICE_MANAGER_READY\r\n");if log!=0 {return log;}
+    // CONFIG13 depends on this manager's READY, so spawn follows publication.
+    match start_xhci((*boot).reserved0,cap) {ok=>{},err(e)=>{REPORT.last_error=e;return e;},}
+    var interval:u64=0;
+    loop {
+        let status=sys.yield_now();if status!=0 {return status;}
+        interval+=1;
+        if interval==1024 {
+            interval=0;match monitor(cap) {ok=>{},err(e)=>{REPORT.last_error=e;return e;},}
+        }
+    }
+}}

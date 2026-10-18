@@ -1,0 +1,16 @@
+
+export("broker_reset") fn reset()void {unsafe {
+    SELECTED=0;SELECTED_KIND=0;INPUT_SELECTED=0;BLOCK_GRANT_ATTEMPTED=false;INPUT_GRANT_ATTEMPTED=false;TABLE.used=0;
+    var i:usize=0;while i<6 {BARS[i]=EMPTY_BAR;VIRTUAL[i]=0;INPUT_BARS[i]=EMPTY_BAR;INPUT_VIRTUAL[i]=0;i+=1;}
+}return;}
+export("broker_grant") fn run(id:usize,ecam:u64)u64 {unsafe {
+    match grant(id,&TABLE,ecam) {ok=>{return 0;},err(code)=>{return code;},}
+}}
+export("broker_snapshot") fn snapshot(out:*u64)void {unsafe {
+    out[0]=SELECTED;out[1]=INPUT_SELECTED;out[2]=SELECTED_KIND;out[3]=0;out[4]=0;out[5]=0;
+    if BLOCK_GRANT_ATTEMPTED {out[3]=1;}if INPUT_GRANT_ATTEMPTED {out[4]=1;}
+    var i:usize=0;while i<6 {
+        out[6+i*4]=BARS[i].physical;out[7+i*4]=BARS[i].length;out[8+i*4]=BARS[i].handle;out[9+i*4]=VIRTUAL[i];
+        out[30+i*4]=INPUT_BARS[i].physical;out[31+i*4]=INPUT_BARS[i].length;out[32+i*4]=INPUT_BARS[i].handle;out[33+i*4]=INPUT_VIRTUAL[i];i+=1;
+    }
+}return;}

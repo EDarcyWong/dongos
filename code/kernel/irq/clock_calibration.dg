@@ -1,0 +1,182 @@
+// Allocation/I/O-free policy for bracketed reference/TSC/LAPIC measurements.
+// The collector serializes each endpoint as reference_before, LAPIC, ordered
+// TSC, reference_after. Inputs/output are live stable typed unsafe borrows.
+module irq.clock_calibration;
+pub error InvalidArgument=0x0306_0001;
+pub error InvalidReference=0x0306_0002;
+pub error InvalidSample=0x0306_0003;
+pub error AmbiguousWrap=0x0306_0004;
+pub error Uncertain=0x0306_0005;
+pub error OutOfRange=0x0306_0006;
+pub error Overflow=0x0306_0007;
+pub error Insufficient=0x0306_0008;
+pub error Inconsistent=0x0306_0009;
+pub const CAPACITY:usize=7;
+pub const MINIMUM:usize=3;
+pub const MIN_SPAN_NS:u64=5_000_000;
+pub const MAX_SPAN_NS:u64=25_000_000;
+const MAX:u64=0xffff_ffff_ffff_ffff;
+// Exactly one time description is nonzero: HPET's integral femtosecond period
+// or an exact reference frequency (PM timer 3579545Hz). Never truncate the PM
+// period into a fabricated integral femtosecond clock.
+pub struct Reference { pub mask:u64,pub period_fs:u64,pub hz:u64 }
+pub struct Sample {
+    pub r0_before:u64,pub c0:u64,pub t0:u64,pub r0_after:u64,
+    pub r1_before:u64,pub c1:u64,pub t1:u64,pub r1_after:u64
+}
+pub const EMPTY_SAMPLE:Sample=Sample { r0_before:0,c0:0,t0:0,r0_after:0,r1_before:0,c1:0,t1:0,r1_after:0 };
+pub struct Estimate {
+    pub reference_lower:u64,pub reference_upper:u64,pub ns_lower:u64,pub ns_upper:u64,
+    pub tsc_lower_hz:u64,pub tsc_upper_hz:u64,pub lapic_lower_hz:u64,pub lapic_upper_hz:u64,
+    pub tsc_hz:u64,pub lapic_hz:u64,pub uncertainty_ppm:u64
+}
+pub const EMPTY_ESTIMATE:Estimate=Estimate { reference_lower:0,reference_upper:0,ns_lower:0,ns_upper:0,
+    tsc_lower_hz:0,tsc_upper_hz:0,lapic_lower_hz:0,lapic_upper_hz:0,tsc_hz:0,lapic_hz:0,uncertainty_ppm:0 };
+pub struct Result {
+    pub total:u64,pub accepted:u64,pub rejected:u64,pub consistent:u64,
+    pub accepted_mask:u64,pub selected_mask:u64,
+    pub tsc_lower_hz:u64,pub tsc_upper_hz:u64,pub tsc_hz:u64,
+    pub lapic_lower_hz:u64,pub lapic_upper_hz:u64,pub lapic_hz:u64,
+    pub median_tsc_hz:u64,pub median_lapic_hz:u64,
+    pub tightest_index:u64,pub reference_delta:u64,pub uncertainty_ppm:u64,
+    pub errors:[7]u64
+}
+pub const EMPTY_RESULT:Result=Result { total:0,accepted:0,rejected:0,consistent:0,accepted_mask:0,selected_mask:0,
+    tsc_lower_hz:0,tsc_upper_hz:0,tsc_hz:0,lapic_lower_hz:0,lapic_upper_hz:0,lapic_hz:0,
+    median_tsc_hz:0,median_lapic_hz:0,tightest_index:0,reference_delta:0,uncertainty_ppm:0,errors:[0;7] };
+fn mul(a:u64,b:u64)!u64 { if b!=0 && a>MAX/b { return error.Overflow; }return a*b; }
+fn ceiling(n:u64,d:u64)u64 { var q=n/d;if n%d!=0 { q+=1; }return q; }
+unsafe fn reference_valid(reference:*const Reference)!void {
+    unsafe {
+        if reference==null { return error.InvalidReference; }
+        let mask=(*reference).mask;
+        if mask!=0xff_ffff && mask!=0xffff_ffff && mask!=MAX { return error.InvalidReference; }
+        let period=(*reference).period_fs;let hz=(*reference).hz;var window:u64=0;
+        if period!=0 {
+            if hz!=0 || period<1000 || period>100_000_000 { return error.InvalidReference; }
+            window=ceiling(MAX_SPAN_NS*1_000_000,period);
+        } else {
+            if hz<1_000_000 || hz>1_000_000_000 { return error.InvalidReference; }
+            window=ceiling(MAX_SPAN_NS*hz,1_000_000_000);
+        }
+        // The complete supported sample horizon must fit strictly inside one
+        // half-cycle. This rejects counters whose modulus cannot distinguish
+        // a backwards sample from a forward wrap in the supported horizon.
+        if window>=mask/2+1 { return error.AmbiguousWrap; }
+    }return;
+}
+fn forward(start:u64,now:u64,mask:u64)u64 {
+    if now>=start { return now-start; }return (mask-start)+now+1;
+}
+unsafe fn nanoseconds(reference:*const Reference,ticks:u64,up:bool)!u64 {
+    unsafe {
+        var numerator:u64=0;var denominator:u64=0;
+        if (*reference).period_fs!=0 { numerator=try mul(ticks,(*reference).period_fs);denominator=1_000_000; }
+        else { numerator=try mul(ticks,1_000_000_000);denominator=(*reference).hz; }
+        if up { return ceiling(numerator,denominator); }return numerator/denominator;
+    }
+}
+fn rate(count:u64,ns:u64,up:bool)!u64 {
+    let numerator=try mul(count,1_000_000_000);
+    if up { return ceiling(numerator,ns); }return numerator/ns;
+}
+fn middle(lower:u64,upper:u64)u64 { return lower+(upper-lower)/2; }
+
+// Conservative common time bounds apply to BOTH counter pairs, because both
+// c0/t0 and c1/t1 were captured inside the same respective reference brackets.
+// +/-1 reference tick accounts for counter-read quantization; +/-1 measured
+// counter tick likewise keeps the resulting frequency interval conservative.
+// Every failure leaves out unchanged. Each endpoint is <=1% of the lower
+// elapsed bound and their combined uncertainty is <=2%.
+pub unsafe fn estimate(reference:*const Reference,sample:*const Sample,out:*Estimate)!void {
+    unsafe {
+        if sample==null || out==null { return error.InvalidArgument; }
+        try reference_valid(reference);let s=*sample;let mask=(*reference).mask;
+        if s.r0_before>mask || s.r0_after>mask || s.r1_before>mask || s.r1_after>mask
+            || s.t1<=s.t0 || s.c0>0xffff_ffff || s.c1==0 || s.c1>=s.c0 { return error.InvalidSample; }
+        let a=forward(s.r0_before,s.r0_after,mask);
+        let b=forward(s.r0_before,s.r1_before,mask);
+        let c=forward(s.r0_before,s.r1_after,mask);
+        if c>=mask/2 || a>b || b>c { return error.AmbiguousWrap; }
+        if b-a<=1 { return error.InvalidSample; }
+        let lower=b-a-1;let upper=c+1;
+        let ns_lower=try nanoseconds(reference,lower,false);let ns_upper=try nanoseconds(reference,upper,true);
+        if ns_lower<MIN_SPAN_NS || ns_upper>MAX_SPAN_NS || ns_upper<=ns_lower { return error.OutOfRange; }
+        let first=a+1;let second=c-b+1;
+        if (try mul(first,100))>lower || (try mul(second,100))>lower
+            || (try mul(first+second,50))>lower { return error.Uncertain; }
+        let dt=s.t1-s.t0;let dc=s.c0-s.c1;
+        if dt<=1 || dc<=1 || dt==MAX { return error.InvalidSample; }
+        var value=EMPTY_ESTIMATE;
+        value.reference_lower=lower;value.reference_upper=upper;value.ns_lower=ns_lower;value.ns_upper=ns_upper;
+        value.tsc_lower_hz=try rate(dt-1,ns_upper,false);value.tsc_upper_hz=try rate(dt+1,ns_lower,true);
+        value.lapic_lower_hz=try rate(dc-1,ns_upper,false);value.lapic_upper_hz=try rate(dc+1,ns_lower,true);
+        if value.tsc_lower_hz<1_000_000 || value.tsc_upper_hz>16_000_000_000
+            || value.lapic_lower_hz<1000 || value.lapic_upper_hz>4_000_000_000 { return error.OutOfRange; }
+        value.tsc_hz=middle(value.tsc_lower_hz,value.tsc_upper_hz);
+        value.lapic_hz=middle(value.lapic_lower_hz,value.lapic_upper_hz);
+        value.uncertainty_ppm=(try mul(upper-lower,1_000_000))/lower;
+        *out=value;
+    }return;
+}
+fn population(mask:u64)u64 { var bits=mask;var count:u64=0;while bits!=0 { count+=bits&1;bits>>=1; }return count; }
+unsafe fn sorted_insert(values:*u64,count:usize,value:u64)void {
+    unsafe { var at=count;while at!=0 && values[at-1]>value { values[at]=values[at-1];at-=1; }values[at]=value; }return;
+}
+fn clamp(value:u64,lower:u64,upper:u64)u64 { if value<lower { return lower; }if value>upper { return upper; }return value; }
+
+// Select the UNIQUE largest simultaneous TSC/LAPIC interval intersection, with
+// at least three qualified samples. At most 127 subsets are examined. Equal
+// sized distinct consensus groups are rejected, never selected by their high
+// rate or input order. Median interval centres are clamped to the common tight
+// bounds. This is intentionally neither a single sample nor a max-rate policy.
+pub unsafe fn select(reference:*const Reference,samples:[]const Sample,out:*Result)!void {
+    unsafe {
+        if out==null || samples.ptr==null || samples.len<MINIMUM || samples.len>CAPACITY { return error.InvalidArgument; }
+        try reference_valid(reference);
+        var estimates:[7]Estimate=[EMPTY_ESTIMATE;7];var result=EMPTY_RESULT;result.total=samples.len as u64;
+        var i:usize=0;while i<samples.len {
+            match estimate(reference,&samples[i],&estimates[i]) {
+                ok=>{result.accepted+=1;result.accepted_mask|=1<<i;},
+                err(code)=>{result.rejected+=1;result.errors[i]=code;},
+            }i+=1;
+        }
+        if result.accepted<MINIMUM as u64 { return error.Insufficient; }
+        var subset:u64=1;let end:u64=1<<samples.len;var tied=false;
+        while subset<end {
+            let count=population(subset);
+            if (subset&~result.accepted_mask)==0 && count>=MINIMUM as u64 && count>=result.consistent {
+                var tl:u64=0;var th=MAX;var ll:u64=0;var lh=MAX;
+                i=0;while i<samples.len {
+                    if (subset&(1<<i))!=0 {
+                        let item=estimates[i];
+                        if item.tsc_lower_hz>tl { tl=item.tsc_lower_hz; }if item.tsc_upper_hz<th { th=item.tsc_upper_hz; }
+                        if item.lapic_lower_hz>ll { ll=item.lapic_lower_hz; }if item.lapic_upper_hz<lh { lh=item.lapic_upper_hz; }
+                    }i+=1;
+                }
+                if tl<=th && ll<=lh {
+                    if count>result.consistent {
+                        result.consistent=count;result.selected_mask=subset;result.tsc_lower_hz=tl;result.tsc_upper_hz=th;
+                        result.lapic_lower_hz=ll;result.lapic_upper_hz=lh;tied=false;
+                    }else { if subset!=result.selected_mask { tied=true; } }
+                }
+            }subset+=1;
+        }
+        if result.consistent<MINIMUM as u64 || tied { return error.Inconsistent; }
+        var tsc:[7]u64=[0;7];var lapic:[7]u64=[0;7];var count:usize=0;var tight=MAX;
+        i=0;while i<samples.len {
+            if (result.selected_mask&(1<<i))!=0 {
+                let item=estimates[i];sorted_insert(&tsc[0],count,item.tsc_hz);sorted_insert(&lapic[0],count,item.lapic_hz);count+=1;
+                if item.uncertainty_ppm<tight {
+                    tight=item.uncertainty_ppm;result.tightest_index=i as u64;
+                    result.reference_delta=middle(item.reference_lower,item.reference_upper);
+                }
+            }i+=1;
+        }
+        result.uncertainty_ppm=tight;result.median_tsc_hz=tsc[count/2];result.median_lapic_hz=lapic[count/2];
+        if count%2==0 { result.median_tsc_hz=middle(tsc[count/2-1],tsc[count/2]);result.median_lapic_hz=middle(lapic[count/2-1],lapic[count/2]); }
+        result.tsc_hz=clamp(result.median_tsc_hz,result.tsc_lower_hz,result.tsc_upper_hz);
+        result.lapic_hz=clamp(result.median_lapic_hz,result.lapic_lower_hz,result.lapic_upper_hz);
+        *out=result;
+    }return;
+}

@@ -1,0 +1,10 @@
+module boot.trace_loader;
+import boot.trace as trace;
+pub export("loader_trace_initialize") fn initialize(page:*trace.Trace,stamp:*const trace.Stamp)u64{unsafe{
+ if stamp==null{return 0x0610_0001;}
+ match trace.initialize(page,(*stamp).tsc,(*stamp).tsc,(*stamp).cpu){ok=>{return 0;},err(e)=>{return e;},}
+}}
+pub export("loader_trace_ebs") fn exited(page:*trace.Trace,stamp:*const trace.Stamp)u64{unsafe{
+ if stamp==null{return 0x0610_0001;}let event=trace.Event{kind:trace.LOADER_EBS,subject:0,generation:0,detail:0};
+ match trace.record(page,&event,(*stamp).tsc,(*stamp).cpu){ok=>{return 0;},err(e)=>{return e;},}
+}}

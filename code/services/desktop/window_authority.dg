@@ -1,0 +1,148 @@
+// Candidate server policy. External IRQ/BSP serialization is mandatory. This
+// table holds metadata only; no static pixel buffers or user/physical pointers.
+module desktop.window_authority;
+import lib.window_abi as abi;
+pub const FREE:u64=0;
+pub const RESERVED:u64=1;
+pub const LIVE:u64=2;
+pub const RESIZING:u64=3;
+pub const CLOSING:u64=4;
+pub const MAX_GENERATION:u64=0xff_ffff;
+pub error Invalid=0x0741_0001;
+pub error Stale=0x0741_0002;
+pub error Denied=0x0741_0003;
+pub error Capacity=0x0741_0004;
+pub error Busy=0x0741_0005;
+pub error Exhausted=0x0741_0006;
+pub struct Slot {
+    pub generation:u64,pub status:u64,pub owner:u64,pub rights:u64,pub serial:u64,
+    pub active:u64,pub retired:u64,pub retired_bytes:u64,pub release_ready:u64,
+    pub committed:u64,pub committed_serial:u64,pub presented:u64,pub layout:abi.Layout,pub pending:abi.Layout,
+}
+pub const EMPTY_SLOT:Slot=Slot{generation:1,status:0,owner:0,rights:0,serial:0,active:0,retired:0,
+    retired_bytes:0,release_ready:0,committed:0,committed_serial:0,presented:0,layout:abi.EMPTY_LAYOUT,pending:abi.EMPTY_LAYOUT};
+pub struct State {pub ready:u64,pub epoch:u64,pub used:u64,pub slots:[16]Slot}
+pub const EMPTY:State=State{ready:0,epoch:0,used:0,slots:[EMPTY_SLOT;16]};
+pub struct Leases {pub active:u64,pub retired:u64}
+pub unsafe fn initialize(state:*State,epoch:u64)!void {unsafe {
+    if (*state).ready!=0||epoch==0||epoch>0xffff_ffff {return error.Invalid;}
+    *state=EMPTY;(*state).ready=1;(*state).epoch=epoch;
+}return;}
+unsafe fn find(state:*const State,token:u64)!usize {unsafe {
+    let slot=token&255;let generation=(token>>8)&MAX_GENERATION;
+    if (*state).ready!=1||slot==0||slot>16||generation==0||token>>32!=(*state).epoch {return error.Stale;}
+    let item=&(*state).slots[(slot-1) as usize];
+    if (*item).status==FREE||(*item).generation!=generation {return error.Stale;}
+    return (slot-1) as usize;
+}}
+unsafe fn owned(state:*const State,owner:u64,token:u64,rights:u64)!usize {unsafe {
+    let slot=try find(state,token);let item=&(*state).slots[slot];
+    if owner==0||(*item).owner!=owner||(rights&~(*item).rights)!=0 {return error.Denied;}
+    return slot;
+}}
+pub unsafe fn lookup(state:*const State,owner:u64,token:u64,rights:u64)!usize {unsafe {
+    return owned(state,owner,token,rights);
+}}
+unsafe fn unique(state:*const State,lease:u64)!void {unsafe {
+    if lease==0 {return error.Invalid;}var i:usize=0;while i<16 {
+        let s=&(*state).slots[i];if (*s).status!=FREE&&((*s).active==lease||(*s).retired==lease) {return error.Busy;}i+=1;
+    }
+}return;}
+unsafe fn release_slot(state:*State,slot:usize)void {unsafe {
+    let generation=(*state).slots[slot].generation+1;
+    (*state).slots[slot]=EMPTY_SLOT;(*state).slots[slot].generation=generation;
+}return;}
+pub unsafe fn reserve(state:*State,owner:u64,rights:u64,width:u64,height:u64,stride:u64)!u64 {unsafe {
+    if (*state).ready!=1||owner==0||rights==0||(rights&~abi.ALL)!=0 {return error.Invalid;}
+    var dimensions=abi.EMPTY_LAYOUT;try abi.layout(width,height,stride,&dimensions);
+    if (*state).used>abi.MAX_TOTAL_BYTES||dimensions.bytes>abi.MAX_TOTAL_BYTES-(*state).used {return error.Capacity;}
+    var i:usize=0;while i<16 {
+        let item=&(*state).slots[i];if (*item).status==FREE&&(*item).generation<MAX_GENERATION {
+            (*item).status=RESERVED;(*item).owner=owner;(*item).rights=rights;(*item).layout=dimensions;(*item).serial=1;
+            (*state).used+=dimensions.bytes;return ((*state).epoch<<32)|((*item).generation<<8)|(i as u64+1);
+        }i+=1;
+    }return error.Capacity;
+}}
+// Bridge calls activate only after allocating and validating a shared lease.
+pub unsafe fn activate(state:*State,owner:u64,token:u64,lease:u64)!void {unsafe {
+    let slot=try owned(state,owner,token,0);if (*state).slots[slot].status!=RESERVED {return error.Busy;}
+    try unique(state,lease);(*state).slots[slot].active=lease;(*state).slots[slot].status=LIVE;
+}return;}
+pub unsafe fn cancel(state:*State,owner:u64,token:u64)!void {unsafe {
+    let slot=try owned(state,owner,token,0);let item=&(*state).slots[slot];
+    if (*item).status!=RESERVED {return error.Busy;}
+    (*state).used-=(*item).layout.bytes;release_slot(state,slot);
+}return;}
+// Compositor-only configuration proposal. Both old and reserved new allocation
+// count toward the 3MiB per-window and 8MiB global budgets before broker I/O.
+pub unsafe fn configure(state:*State,token:u64,width:u64,height:u64,stride:u64)!u64 {unsafe {
+    let slot=try find(state,token);let item=&(*state).slots[slot];
+    if (*item).status!=LIVE||(*item).retired!=0 {return error.Busy;}
+    if (*item).serial==0xffff_ffff_ffff_ffff {return error.Exhausted;}
+    var dimensions=abi.EMPTY_LAYOUT;try abi.layout(width,height,stride,&dimensions);
+    if dimensions.bytes>abi.MAX_LEASE_BYTES-(*item).layout.bytes
+        ||(*state).used>abi.MAX_TOTAL_BYTES||dimensions.bytes>abi.MAX_TOTAL_BYTES-(*state).used {return error.Capacity;}
+    (*item).serial+=1;(*item).pending=dimensions;(*item).status=RESIZING;(*state).used+=dimensions.bytes;return (*item).serial;
+}}
+// Trusted bridge rollback only before CONFIGURE has been published. No client
+// has observed this serial or lease; an allocation failure must keep its old
+// active configuration usable. Never call after enqueue/delivery or ACK.
+pub unsafe fn abort_unpublished(state:*State,token:u64,serial:u64)!void {unsafe {
+    let slot=try find(state,token);let item=&(*state).slots[slot];
+    if (*item).status!=RESIZING||serial<2||serial!=(*item).serial||(*item).pending.bytes==0 {return error.Stale;}
+    (*state).used-=(*item).pending.bytes;(*item).pending=abi.EMPTY_LAYOUT;
+    (*item).serial-=1;(*item).status=LIVE;
+}return;}
+pub unsafe fn acknowledge(state:*State,owner:u64,token:u64,serial:u64,lease:u64)!void {unsafe {
+    let slot=try owned(state,owner,token,abi.RESIZE);let item=&(*state).slots[slot];
+    if (*item).status!=RESIZING||serial!=(*item).serial {return error.Stale;}
+    try unique(state,lease);
+    (*item).retired=(*item).active;(*item).retired_bytes=(*item).layout.bytes;(*item).release_ready=0;
+    (*item).active=lease;(*item).layout=(*item).pending;(*item).pending=abi.EMPTY_LAYOUT;(*item).status=LIVE;
+}return;}
+pub unsafe fn commit(state:*State,owner:u64,token:u64,lease:u64,serial:u64,sequence:u64,damage:*const abi.Rectangle)!void {unsafe {
+    let slot=try owned(state,owner,token,abi.DRAW);let item=&(*state).slots[slot];
+    if (*item).status!=LIVE||lease!=(*item).active||serial!=(*item).serial
+        ||sequence==0||sequence<=(*item).committed {return error.Stale;}
+    if (*damage).width==0||(*damage).height==0||(*damage).x>=(*item).layout.width||(*damage).y>=(*item).layout.height
+        ||(*damage).width>(*item).layout.width-(*damage).x||(*damage).height>(*item).layout.height-(*damage).y {return error.Invalid;}
+    (*item).committed=sequence;(*item).committed_serial=serial;
+}return;}
+// Called after actual presentation completion. Budget remains charged until
+// the bridge confirms both user mappings and the shared object are revoked.
+pub unsafe fn presented(state:*State,token:u64,serial:u64,sequence:u64)!u64 {unsafe {
+    let slot=try find(state,token);let item=&(*state).slots[slot];
+    if (*item).status!=LIVE||serial!=(*item).serial||serial!=(*item).committed_serial||sequence==0
+        ||sequence!=(*item).committed||sequence<=(*item).presented {return error.Stale;}
+    (*item).presented=sequence;if (*item).retired!=0 {(*item).release_ready=1;}return (*item).retired;
+}}
+pub unsafe fn retired_complete(state:*State,token:u64,lease:u64)!void {unsafe {
+    let slot=try find(state,token);let item=&(*state).slots[slot];
+    if (*item).status!=LIVE||lease==0||lease!=(*item).retired||(*item).release_ready!=1 {return error.Stale;}
+    (*state).used-=(*item).retired_bytes;(*item).retired=0;(*item).retired_bytes=0;(*item).release_ready=0;
+}return;}
+pub unsafe fn close(state:*State,owner:u64,token:u64)!void {unsafe {
+    let slot=try owned(state,owner,token,abi.CLOSE);let item=&(*state).slots[slot];
+    if (*item).status==RESERVED {return error.Busy;}
+    if (*item).status==RESIZING {(*state).used-=(*item).pending.bytes;(*item).pending=abi.EMPTY_LAYOUT;}
+    (*item).status=CLOSING;
+}return;}
+pub unsafe fn closing(state:*const State,token:u64,out:*Leases)!void {unsafe {
+    let slot=try find(state,token);let item=&(*state).slots[slot];
+    if (*item).status!=CLOSING {return error.Busy;}*out=Leases{active:(*item).active,retired:(*item).retired};
+}return;}
+pub unsafe fn closed(state:*State,token:u64,active:u64,retired:u64)!void {unsafe {
+    let slot=try find(state,token);let item=&(*state).slots[slot];
+    if (*item).status!=CLOSING||active!=(*item).active||retired!=(*item).retired {return error.Stale;}
+    (*state).used-=(*item).layout.bytes+(*item).retired_bytes;release_slot(state,slot);
+}return;}
+// Trusted lifecycle event only. Tokens stay occupied while the bridge still
+// needs to revoke actual live mappings; crashed owners cannot reclaim early.
+pub unsafe fn owner_gone(state:*State,owner:u64)void {unsafe {
+    var i:usize=0;while i<16 {let item=&(*state).slots[i];
+        if (*item).owner==owner&&(*item).status!=FREE {
+            if (*item).status==RESERVED {(*state).used-=(*item).layout.bytes;release_slot(state,i);}
+            else {if (*item).status==RESIZING {(*state).used-=(*item).pending.bytes;(*item).pending=abi.EMPTY_LAYOUT;}(*item).status=CLOSING;}
+        }i+=1;
+    }
+}return;}

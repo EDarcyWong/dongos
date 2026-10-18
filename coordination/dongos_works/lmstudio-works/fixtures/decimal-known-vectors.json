@@ -1,0 +1,61 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "id": "u8_zero",
+      "width": 8,
+      "signed": false,
+      "raw": "0",
+      "text": "0"
+    },
+    {
+      "id": "u8_max",
+      "width": 8,
+      "signed": false,
+      "raw": "255",
+      "text": "255"
+    },
+    {
+      "id": "i8_min",
+      "width": 8,
+      "signed": true,
+      "raw": "128",
+      "text": "-128"
+    },
+    {
+      "id": "u32_max",
+      "width": 32,
+      "signed": false,
+      "raw": "4294967295",
+      "text": "4294967295"
+    },
+    {
+      "id": "i32_min",
+      "width": 32,
+      "signed": true,
+      "raw": "2147483648",
+      "text": "-2147483648"
+    },
+    {
+      "id": "u64_max",
+      "width": 64,
+      "signed": false,
+      "raw": "18446744073709551615",
+      "text": "18446744073709551615"
+    },
+    {
+      "id": "i64_min",
+      "width": 64,
+      "signed": true,
+      "raw": "9223372036854775808",
+      "text": "-9223372036854775808"
+    },
+    {
+      "id": "i64_minus1",
+      "width": 64,
+      "signed": true,
+      "raw": "18446744073709551615",
+      "text": "-1"
+    }
+  ]
+}

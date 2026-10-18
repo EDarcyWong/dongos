@@ -1,0 +1,14 @@
+module power_probe;
+import firmware.power as power;
+export("pwr_sizes") fn sizes(out:*u64)void {
+    unsafe {out[0]=sizeof(power.Policy) as u64;out[1]=sizeof(power.Write) as u64;out[2]=sizeof(power.Sleep) as u64;out[3]=sizeof(power.Shutdown) as u64;out[4]=sizeof(power.Table) as u64;}return;
+}
+export("pwr_reset") fn reset(raw:*const u8,length:usize,allowed:*const power.Policy,out:*power.Write)u64 {
+    unsafe {match power.reset(slice_from_raw_parts(raw,length),allowed,out) {ok=>{return 0;},err(code)=>{return code;},}}
+}
+export("pwr_s5") fn s5(tables:*const power.Table,count:usize,out:*power.Sleep)u64 {
+    unsafe {match power.s5(slice_from_raw_parts(tables,count),out) {ok=>{return 0;},err(code)=>{return code;},}}
+}
+export("pwr_shutdown") fn shutdown(raw:*const u8,length:usize,tables:*const power.Table,count:usize,allowed:*const power.Policy,out:*power.Shutdown)u64 {
+    unsafe {match power.shutdown(slice_from_raw_parts(raw,length),slice_from_raw_parts(tables,count),allowed,out) {ok=>{return 0;},err(code)=>{return code;},}}
+}

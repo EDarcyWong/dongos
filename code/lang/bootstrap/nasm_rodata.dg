@@ -1,0 +1,51 @@
+// Emit a restricted NASM label line plus CR1 db bytes for read-only data.
+// All descriptors, aliasing, label rules, and need-length checks finish before
+// any output byte is written. Calls bootstrap.nasm_bytes.encode only after
+// every failure path is ruled out; label bytes are written after encode.
+module bootstrap.nasm_rodata;
+import bootstrap.nasm_bytes as bytes;
+pub const OK:u64=0;pub const INVALID:u64=1;pub const CAPACITY:u64=2;
+const MAX:u64=0xffff_ffff_ffff_ffff;
+const PREFIX:usize=7;
+const MIN_LABEL:usize=8;
+const MAX_LABEL:usize=128;
+fn span(p:u64,n:u64)bool{return n==0||(p!=0&&n<=MAX-p);}
+fn overlap(a:u64,n:u64,b:u64,m:u64)bool{return n!=0&&m!=0&&a<b+m&&b<a+n;}
+fn label_ok(label:[]const u8)bool{
+ if label.len<MIN_LABEL||label.len>MAX_LABEL{return false;}
+ if label[0]!=95||label[1]!=95||label[2]!=100||label[3]!=111||label[4]!=110||label[5]!=103||label[6]!=95{return false;}
+ var i:usize=PREFIX;
+ while i<label.len{
+  let c=label[i];
+  if !((c>=65&&c<=90)||(c>=97&&c<=122)||(c>=48&&c<=57)||c==95){return false;}
+  i+=1;
+ }
+ return true;
+}
+pub unsafe fn emit(label:[]const u8,data:[]const u8,out:[]u8,written:*usize)u64{unsafe{
+ let wp=written as u64;let lp=label.ptr as u64;let dp=data.ptr as u64;let op=out.ptr as u64;
+ if written==null||(wp&7)!=0||!span(wp,8){return INVALID;}
+ if !span(lp,label.len)||!span(dp,data.len)||!span(op,out.len){return INVALID;}
+ if overlap(op,out.len,lp,label.len)||overlap(op,out.len,dp,data.len){return INVALID;}
+ if overlap(wp,8,lp,label.len)||overlap(wp,8,dp,data.len)||overlap(wp,8,op,out.len){return INVALID;}
+ if !label_ok(label){return INVALID;}
+ if label.len>MAX-2{return INVALID;}let head=label.len+2;
+ var need:usize=0;
+ if data.len!=0{
+  let n=data.len;let full=n/16;let rem=n%16;
+  var lines:usize=full;if rem!=0{lines=full+1;}
+  if n>MAX/5{return INVALID;}let body=5*n;
+  if lines>MAX/3{return INVALID;}let overhead=3*lines;
+  if body>MAX-overhead{return INVALID;}need=body+overhead;
+ }
+ if need>MAX-head{return INVALID;}let total=head+need;
+ if total>out.len{return CAPACITY;}
+ let rest=out.len-head;
+ let tail=slice_from_raw_parts(out.ptr+head,rest);
+ let st=bytes.encode(data,tail,written);
+ if st!=OK{return st;}
+ var i:usize=0;
+ while i<label.len{out[i]=label[i];i+=1;}
+ out[label.len]=58;out[label.len+1]=10;
+ *written=head+(*written);return OK;
+}}

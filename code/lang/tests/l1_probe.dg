@@ -1,0 +1,201 @@
+module l1_probe;
+import l1_defs as d;
+
+var TRACE:u64=0;
+var BYTES:[3]u8=[1,2,3];
+
+fn stamp(value:u64)void { TRACE=TRACE*10+value; }
+fn marked(value:u64,tag:u64)u64 { stamp(tag); return value; }
+fn signed_marked(value:i16,tag:u64)i16 { stamp(tag); return value; }
+fn bytes()[]u8 { stamp(1); return BYTES[..]; }
+fn optional_at(index:usize)?u64 { if index==1 {return null;} return index; }
+
+export("l1_trace") fn trace()u64 { return TRACE; }
+export("l1_defer") fn defer_order(early:bool)u64 {
+    TRACE=0;
+    var value:u64=2;
+    defer stamp(value);
+    {
+        defer stamp(3);
+        if early { return marked(42,4); }
+        stamp(5);
+    }
+    value=7;
+    return 9;
+}
+export("l1_shadow_defer") fn shadow_defer()u64 {
+    TRACE=0;
+    var value:u64=1;
+    defer stamp(value);
+    {let value:u64=8;defer stamp(value);}
+    value=9;
+    return value;
+}
+export("l1_late_defer") fn late_defer()u64 {
+    TRACE=0;defer stamp(marked(9,1));stamp(2);return 3;
+}
+export("l1_defer_registration") fn defer_registration(early:bool)u64 {
+    TRACE=0;defer stamp(1);
+    if early {return 4;}
+    defer stamp(2);return 5;
+}
+export("l1_panic_defer") fn panic_defer(index:usize)u64 {
+    TRACE=0;defer stamp(9);stamp(1);var values:[2]u64=[7,8];return values[index];
+}
+export("l1_while_defer") fn while_defer()u64 {
+    TRACE=0;defer stamp(9);
+    var index:u64=0;
+    var sum:u64=0;
+    while index<4 {
+        index+=1;
+        defer stamp(index);
+        if index==2 {continue;}
+        if index==3 {break;}
+        sum+=index;
+    }
+    return sum;
+}
+export("l1_for_range") fn for_range()u64 {
+    TRACE=0;
+    var sum:u64=0;
+    for index in marked(2,1)..marked(5,2) {sum+=index;}
+    for index in 9..2 {sum+=100+index;}
+    return sum;
+}
+export("l1_for_array") fn for_array()u64 {
+    var values:[3]u64=[1,2,3];
+    var sum:u64=0;
+    for value in values {
+        if value==1 {values[1]=7;}
+        sum+=value;
+    }
+    return sum;
+}
+export("l1_for_slice") fn for_slice()u64 {
+    TRACE=0;BYTES=[1,2,3];
+    var sum:u64=0;
+    for value in bytes() {if value==1 {BYTES[1]=7;}sum+=value as u64;}
+    return sum;
+}
+export("l1_loop_defer") fn loop_defer()u64 {
+    TRACE=0;
+    loop {defer stamp(2);break;}
+    for index in 0..3 {defer stamp(index+1);if index==1 {continue;}}
+    return 5;
+}
+export("l1_local_const") fn local_const()u64 {
+    const COUNT:usize=wrapping_add(2,1);
+    const VALUE:u8=255;
+    const WRAPPED:u8=wrapping_add(VALUE,1);
+    var values:[COUNT]u64=[7;COUNT];
+    {const COUNT:usize=2;var other:[COUNT]u64=[5;COUNT];values[0]+=other[1];}
+    return values.len+values[0]+values[1]+values[2]+(WRAPPED as u64);
+}
+export("l1_methods") fn methods()u64 {
+    var counter=d.Counter{value:7};
+    let pointer=&counter;
+    let readonly:*const d.Counter=pointer;
+    unsafe {return pointer.add(5)+readonly.read()+d.add(pointer,2)+d.read(readonly)+d.via_free_calls(pointer);}
+}
+
+export("l1_event") fn event(kind:usize,value:i16)d.Event {
+    if kind==0 {return d.Event.Timer;}
+    if kind==1 {return d.Event.Key(value as u8);}
+    if kind==2 {return d.Event.Count(value);}
+    return d.Event.Shutdown;
+}
+export("l1_event_score") fn event_score(event:d.Event)i64 {
+    match event {
+        d.Event.Timer=>{return 10;},
+        d.Event.Key(code)=>{return (code as i64)+100;},
+        d.Event.Count(value)=>{return (value as i64)-100;},
+        d.Event.Shutdown=>{return 20;},
+    }
+}
+export("l1_flag") fn flag(value:d.Flag)u64 {
+    match value {d.Flag.First=>{return 11;},d.Flag.Second=>{return 22;},d.Flag.Third=>{return 33;},}
+}
+export("l1_bool_match") fn bool_match(value:bool)u64 {
+    match value {true=>{return 81;},false=>{return 27;},}
+}
+export("l1_optional") fn optional(present:bool,value:i16)?i16 {
+    if present {return value;}return null;
+}
+export("l1_optional_score") fn optional_score(value:?i16)i64 {
+    match value {null=>{return -999;},some(number)=>{return number as i64;},}
+}
+export("l1_orelse") fn optional_fallback(value:?i16)i16 {
+    TRACE=0;return value orelse signed_marked(-12,6);
+}
+export("l1_orelse_return") fn optional_return(value:?u32)u64 {
+    TRACE=0;defer stamp(9);
+    let number=value orelse return 7;
+    stamp(1);return number as u64;
+}
+export("l1_orelse_continue") fn optional_continue()u64 {
+    TRACE=0;defer stamp(9);var sum:u64=0;
+    for index in 0..3 {defer stamp(index+1);let value=optional_at(index) orelse continue;sum+=value;}
+    return sum;
+}
+export("l1_orelse_break") fn optional_break()u64 {
+    TRACE=0;defer stamp(9);var sum:u64=0;
+    for index in 0..3 {defer stamp(index+1);let value=optional_at(index) orelse break;sum+=value;}
+    return sum;
+}
+fn checked(value:u64)!u32 {
+    if value==0 {return error.d.Failed;}
+    if value==1 {return error.d.Rejected;}
+    return value as u32;
+}
+export("l1_result") fn result(value:u64)!u32 {return checked(value);}
+export("l1_result_score") fn result_score(value:!u32)u64 {
+    match value {ok(number)=>{return number as u64;},err(code)=>{return 1000+code;},}
+}
+export("l1_try") fn try_cleanup(value:u64)!u64 {
+    TRACE=0;defer stamp(9);
+    {defer stamp(3);let number=try checked(value);stamp(1);return (number as u64)+4;}
+}
+export("l1_try_pair_return") fn try_pair_return(value:u64)!i8 {
+    defer stamp(8);
+    let number=try checked(value);
+    return number as i8;
+}
+fn check_void(fail:bool)!void {if fail {return error.d.Failed;}return;}
+export("l1_void_result") fn void_result(fail:bool)!void {
+    TRACE=0;defer stamp(7);try check_void(fail);stamp(1);return;
+}
+export("l1_void_match") fn void_match(value:!void)u64 {
+    match value {ok=>{return 5;},err(code)=>{return code+100;},}
+}
+export("l1_static_values") fn static_values()u64 {
+    let a=d.DEFAULT;
+    let b=d.NEGATIVE;
+    let c=d.FAILURE;
+    var sum:u64=0;
+    match a {d.Event.Key(value)=>{sum+=value as u64;},_=>{return 0;},}
+    match b {some(value)=>{sum+=(0-value) as u64;},null=>{return 0;},}
+    match c {err(code)=>{sum+=code;},ok(value)=>{sum+=value as u64;},}
+    match d.EVENTS[1] {d.Event.Count(value)=>{sum+=(0-value) as u64;},_=>{return 0;},}
+    d.CURRENT=d.Event.Count(-8);
+    match d.CURRENT {d.Event.Count(value)=>{sum+=(0-value) as u64;},_=>{return 0;},}
+    return sum;
+}
+
+type OptionalCall=fn(?i16) ?i16;
+fn echo_optional(value:?i16)?i16 {return value;}
+export("l1_optional_indirect") fn optional_indirect(value:?i16)?i16 {
+    let call:OptionalCall=echo_optional;unsafe{return call(value);}
+}
+export("l1_optional_stack") fn optional_stack(a:u64,b:u64,c:u64,fourth:u64,e:u64,value:?i16,z:u64)?i16 {
+    if a+b+c+fourth+e+z!=21 {return null;}return value;
+}
+export("l1_result_stack") fn result_stack(a:u64,b:u64,c:u64,fourth:u64,e:u64,value:!u32,z:u64)!u32 {
+    if a+b+c+fourth+e+z!=21 {return error.d.Failed;}return value;
+}
+export("l1_event_stack") fn event_stack(a:u64,b:u64,c:u64,fourth:u64,e:u64,value:d.Event,z:u64)d.Event {
+    if a+b+c+fourth+e+z!=21 {return d.Event.Timer;}return value;
+}
+extern "sysv64" fn l1_asm_roundtrip()u64;
+export("l1_asm_check") fn asm_check()u64 {unsafe{return l1_asm_roundtrip();}}
+extern "sysv64" fn l1_terminate(code:u64)noreturn;
+export("l1_never") fn never()noreturn {unsafe{l1_terminate(23);}}

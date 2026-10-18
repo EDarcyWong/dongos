@@ -1,0 +1,100 @@
+// Arbitrary-precision bitwise operations and shifts over bootstrap.bigint
+// values, matching infinite sign-extended two's complement (& | ^ ~ << >>).
+// Values stay canonical sign/magnitude at the interface; two's complement is
+// formed limb by limb in a width with one extra sign-extension limb.
+// Storage rules match bootstrap.bigint: INVALID changes nothing;
+// WORKSPACE/CAPACITY may change work only.
+module bootstrap.bigint_bits;
+import bootstrap.bigint as big;
+pub const AND:u64=1;
+pub const OR:u64=2;
+pub const XOR:u64=3;
+const MAX:u64=0xffff_ffff_ffff_ffff;
+const MASK:u64=0xffff_ffff;
+fn span(p:u64,n:u64)bool{return n==0||(p!=0&&n<=MAX-p);}
+fn overlap(a:u64,n:u64,b:u64,m:u64)bool{return n!=0&&m!=0&&a<b+m&&b<a+n;}
+unsafe fn valid(a:[]const u32,b:[]const u32,out:[]u32,work:[]u32,result:*big.Result)bool{unsafe{
+ if result==null||a.len>MAX/4||b.len>MAX/4||out.len>MAX/4||work.len>MAX/4{return false;}
+ let ap=a.ptr as u64;let bp=b.ptr as u64;let op=out.ptr as u64;let wp=work.ptr as u64;let rp=result as u64;
+ let an=a.len*4;let bn=b.len*4;let on=out.len*4;let wn=work.len*4;let rn=sizeof(big.Result);
+ if !span(ap,an)||!span(bp,bn)||!span(op,on)||!span(wp,wn)||!span(rp,rn){return false;}
+ if (an!=0&&(ap&3)!=0)||(bn!=0&&(bp&3)!=0)||(on!=0&&(op&3)!=0)||(wn!=0&&(wp&3)!=0)||(rp&7)!=0{return false;}
+ if overlap(ap,an,op,on)||overlap(bp,bn,op,on)||overlap(ap,an,wp,wn)||overlap(bp,bn,wp,wn)
+  ||overlap(ap,an,rp,rn)||overlap(bp,bn,rp,rn)
+  ||overlap(op,on,wp,wn)||overlap(op,on,rp,rn)||overlap(wp,wn,rp,rn){return false;}
+ return true;
+}}
+fn canonical(negative:bool,a:[]const u32)bool{
+ if a.len==0{return !negative;}return a[a.len-1]!=0;
+}
+fn trimmed(a:[]const u32,n:usize)usize{var used=n;while used!=0&&a[used-1]==0{used-=1;}return used;}
+unsafe fn publish(negative:bool,used:usize,out:[]u32,work:[]u32,result:*big.Result)u64{unsafe{
+ if used>out.len{return big.CAPACITY;}var i:usize=0;while i<used{out[i]=work[i];i+=1;}
+ *result=big.Result{negative:negative&&used!=0,used:used};return big.OK;
+}}
+// Scratch: max(a.len,b.len)+1 limbs for every operand pair.
+pub unsafe fn bitwise(operation:u64,negative_a:bool,a:[]const u32,
+ negative_b:bool,b:[]const u32,out:[]u32,work:[]u32,result:*big.Result)u64{unsafe{
+ if operation<AND||operation>XOR||!valid(a,b,out,work,result){return big.INVALID;}
+ if !canonical(negative_a,a)||!canonical(negative_b,b){return big.INVALID;}
+ var width=a.len;if b.len>width{width=b.len;}width+=1;
+ if work.len<width{return big.WORKSPACE;}
+ var negative=negative_a!=negative_b;
+ if operation==AND{negative=negative_a&&negative_b;}else if operation==OR{negative=negative_a||negative_b;}
+ var ca:u64=1;var cb:u64=1;var cr:u64=1;var i:usize=0;
+ while i<width{
+  var x:u64=0;if i<a.len{x=a[i]as u64;}
+  if negative_a{let t=(x^MASK)+ca;x=t&MASK;ca=t>>32;}
+  var y:u64=0;if i<b.len{y=b[i]as u64;}
+  if negative_b{let t=(y^MASK)+cb;y=t&MASK;cb=t>>32;}
+  var r=x^y;if operation==AND{r=x&y;}else if operation==OR{r=x|y;}
+  if negative{let t=(r^MASK)+cr;r=t&MASK;cr=t>>32;}
+  work[i]=r as u32;i+=1;
+ }
+ return publish(negative,trimmed(work,width),out,work,result);
+}}
+// ~x = -x-1. Scratch: a.len+1 limbs.
+pub unsafe fn invert(negative:bool,a:[]const u32,out:[]u32,work:[]u32,result:*big.Result)u64{unsafe{
+ if !valid(a,a,out,work,result)||!canonical(negative,a){return big.INVALID;}
+ if work.len<a.len+1{return big.WORKSPACE;}
+ var i:usize=0;
+ if !negative{
+  var carry:u64=1;while i<a.len{let t=(a[i]as u64)+carry;work[i]=t as u32;carry=t>>32;i+=1;}
+  work[a.len]=carry as u32;return publish(true,trimmed(work,a.len+1),out,work,result);
+ }
+ var borrow:u64=1;
+ while i<a.len{let x=a[i]as u64;work[i]=wrapping_sub(x,borrow)as u32;if x>=borrow{borrow=0;}i+=1;}
+ return publish(false,trimmed(work,a.len),out,work,result);
+}}
+// Exact left shift / arithmetic right shift (floor). Scratch, with
+// q=amount/32 and n=a.len: zero 0; left n+q+1; right nonnegative n-q
+// (0 when q>=n); right negative n-q+1 (1 when q>=n).
+pub unsafe fn shift(left:bool,negative:bool,a:[]const u32,amount:usize,
+ out:[]u32,work:[]u32,result:*big.Result)u64{unsafe{
+ if !valid(a,a,out,work,result)||!canonical(negative,a){return big.INVALID;}
+ if a.len==0{return publish(false,0,out,work,result);}
+ let n=a.len;let q=amount/32;let bits=amount%32;var i:usize=0;
+ if left{
+  // n<=2^62 and q<2^59, so n+q+1 cannot wrap; huge q fails here without looping.
+  let width=n+q+1;if work.len<width{return big.WORKSPACE;}
+  while i<q{work[i]=0;i+=1;}
+  var carry:u64=0;i=0;
+  while i<n{let t=((a[i]as u64)<<bits)|carry;work[q+i]=t as u32;carry=t>>32;i+=1;}
+  work[q+n]=carry as u32;return publish(negative,trimmed(work,width),out,work,result);
+ }
+ if q>=n{
+  if !negative{return publish(false,0,out,work,result);}
+  if work.len<1{return big.WORKSPACE;}work[0]=1;return publish(true,1,out,work,result);
+ }
+ let kept=n-q;var width=kept;if negative{width+=1;}
+ if work.len<width{return big.WORKSPACE;}
+ while i<kept{var high:u64=0;if q+i+1<n{high=a[q+i+1]as u64;}
+  work[i]=(((high<<32)|(a[q+i]as u64))>>bits)as u32;i+=1;
+ }
+ if !negative{return publish(false,trimmed(work,kept),out,work,result);}
+ var dropped=false;i=0;while i<q{if a[i]!=0{dropped=true;}i+=1;}
+ if bits!=0&&((a[q]as u64)&((MASK>>(32-bits))))!=0{dropped=true;}
+ var carry:u64=0;if dropped{carry=1;}i=0;
+ while i<kept{let t=(work[i]as u64)+carry;work[i]=t as u32;carry=t>>32;i+=1;}
+ work[kept]=carry as u32;return publish(true,trimmed(work,width),out,work,result);
+}}

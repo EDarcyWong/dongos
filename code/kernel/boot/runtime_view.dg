@@ -1,0 +1,146 @@
+// Pure PA-to-VA views. No physical address is dereferenced here.
+module boot.runtime_view;
+import boot.memory_policy as policy;
+
+import boot.abi as abi;
+import boot.runtime_errors as errors;
+
+const LIMIT: u64 = 0x1_0000_0000;
+const HHDM: u64 = 0xffff_8000_0000_0000;
+const STACK: u64 = 0xffff_9000_0000_1000;
+const POOL_BYTES: u64 = policy.POOL_BYTES;
+const STACK_BYTES: u64 = 16 * 4096;
+
+pub struct Display {
+    pub framebuffer_base: u64, pub framebuffer_size: u64,
+    pub width: u64, pub height: u64, pub stride: u64, pub pixel_format: u64,
+}
+
+pub struct View {
+    pub display: Display,
+    pub boot_info: u64, pub raw_map: u64, pub raw_size: u64,
+    pub descriptor_size: u64, pub rsdp: u64, pub rsdp_size: u64,
+    pub pool: u64, pub pool_physical: u64, pub pool_pages: u64,
+    pub stack_bottom: u64, pub stack_top: u64,
+    pub stack_probe_bottom: u64, pub stack_probe_top: u64,
+    pub root_physical: u64,
+}
+
+pub const EMPTY_DISPLAY: Display = Display {
+    framebuffer_base: 0, framebuffer_size: 0, width: 0, height: 0,
+    stride: 0, pixel_format: 0,
+};
+pub const EMPTY_VIEW: View = View {
+    display: EMPTY_DISPLAY, boot_info: 0, raw_map: 0, raw_size: 0,
+    descriptor_size: 0, rsdp: 0, rsdp_size: 0, pool: 0,
+    pool_physical: 0, pool_pages: 0, stack_bottom: 0, stack_top: 0,
+    stack_probe_bottom: 0, stack_probe_top: 0, root_physical: 0,
+};
+
+fn low_range(base: u64, bytes: u64) bool {
+    return base != 0 && base < LIMIT && bytes != 0 && bytes <= LIMIT - base;
+}
+
+// The unsafe caller supplies readable/writable, aligned live storage. Reject
+// null/wrapped/overlapping storage before reading or publishing anything.
+fn storage(info: abi.BootInfoPtr, output: u64, bytes: u64) !void {
+    unsafe {
+        let source = info as u64;
+        if source == 0 || output == 0 || source > 0xffff_ffff_ffff_ffff - 160 ||
+            output > 0xffff_ffff_ffff_ffff - bytes {
+            return error.errors.InvalidView;
+        }
+        if source < output + bytes && output < source + 160 {
+            return error.errors.InvalidView;
+        }
+    }
+    return;
+}
+
+unsafe fn checked_display(info: abi.BootInfoPtr, out: *Display) !void {
+    unsafe {
+        if (*info).magic != 0x544f_4f42_474e_4f44 || (*info).version != 1 ||
+            (*info).size != 160 || ((*info).flags & 1) == 0 {
+            return error.errors.InvalidView;
+        }
+        let base = (*info).framebuffer_base as u64;
+        let bytes = (*info).framebuffer_size as u64;
+        let width = (*info).width as u64;
+        let height = (*info).height as u64;
+        let stride = (*info).stride as u64;
+        if !low_range(base, bytes) || width == 0 || width > 8192 ||
+            height == 0 || height > 8192 || stride < width || stride > 16384 ||
+            (*info).pixel_format > 1 {
+            return error.errors.InvalidView;
+        }
+        // Geometry is bounded above, so this product cannot overflow.
+        if stride * height * 4 > bytes { return error.errors.InvalidView; }
+        *out = Display {
+            framebuffer_base: HHDM + base, framebuffer_size: bytes,
+            width: width, height: height, stride: stride,
+            pixel_format: (*info).pixel_format,
+        };
+    }
+    return;
+}
+
+pub unsafe fn display(info: abi.BootInfoPtr, out: *Display) !void {
+    unsafe {
+        try storage(info, out as u64, sizeof(Display) as u64);
+        return checked_display(info, out);
+    }
+}
+
+// Caller has separately validated UEFI descriptor contents/ownership and the
+// actual relation between info's readable VA and info_physical. This function
+// validates only the immutable view's own address/size/geometry parameters.
+pub unsafe fn make(info: abi.BootInfoPtr, info_physical: u64, rsdp_size: u64,
+                   pool: u64, stack: u64, out: *View) !void {
+    var screen = EMPTY_DISPLAY;
+    unsafe {
+        try storage(info, out as u64, sizeof(View) as u64);
+        try checked_display(info, &screen);
+        let raw = (*info).memory_map as u64;
+        let raw_size = (*info).memory_map_size as u64;
+        let stride = (*info).descriptor_size as u64;
+        let rsdp = (*info).rsdp as u64;
+        if raw_size == 0 || raw_size > 65536 || stride < 40 ||
+            (*info).descriptor_version != 1 {
+            return error.errors.InvalidView;
+        }
+        if raw_size % stride != 0 || rsdp_size < 36 || rsdp_size > 4096 ||
+            (pool & (POOL_BYTES - 1)) != 0 || (stack & (STACK_BYTES - 1)) != 0 {
+            return error.errors.InvalidView;
+        }
+        let bases: [6]u64 = [info_physical, raw, rsdp,
+            (*info).framebuffer_base as u64, pool, stack];
+        let lengths: [6]u64 = [160, raw_size, rsdp_size,
+            (*info).framebuffer_size as u64, POOL_BYTES, STACK_BYTES];
+        var i: usize = 0;
+        while i < 6 {
+            if !low_range(bases[i], lengths[i]) { return error.errors.InvalidView; }
+            i += 1;
+        }
+        i = 0;
+        while i < 6 {
+            var j = i + 1;
+            while j < 6 {
+                if bases[i] < bases[j] + lengths[j] && bases[j] < bases[i] + lengths[i] {
+                    return error.errors.InvalidView;
+                }
+                j += 1;
+            }
+            i += 1;
+        }
+        *out = View {
+            display: screen, boot_info: HHDM + info_physical,
+            raw_map: HHDM + raw, raw_size: raw_size, descriptor_size: stride,
+            rsdp: HHDM + rsdp, rsdp_size: rsdp_size,
+            pool: HHDM + pool, pool_physical: pool, pool_pages: policy.POOL_PAGES as u64,
+            stack_bottom: STACK, stack_top: STACK + STACK_BYTES,
+            stack_probe_bottom: HHDM + stack,
+            stack_probe_top: HHDM + stack + STACK_BYTES, root_physical: pool,
+        };
+    }
+    return;
+}

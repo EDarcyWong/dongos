@@ -1,0 +1,258 @@
+module shell.main;
+import lib.sys as sys;
+import lib.boot_trace as boot_trace;
+import fs.protocol as protocol;
+import fs.path as path;
+import shell.parser as parser;
+import lib.files as files;
+import lib.process as process;
+import lib.process_abi as process_abi;
+const CHANNEL:u64=0x5000_0000;
+const BAD:u64=0x0508_0003;
+var BOOT:*const sys.Boot=null;
+var LINE:[8192]u8=[0;8192];
+var PARSED:parser.Parsed=parser.EMPTY;
+var PARSE_WORK:parser.Parsed=parser.EMPTY;
+var CWD:path.Path=path.EMPTY;
+var CANDIDATE:path.Path=path.EMPTY;
+var RAW_PATH:[4096]u8=[0;4096];
+var RAW_LENGTH:usize=0;
+var REQUEST:sys.Message=sys.EMPTY_MESSAGE;
+var RESPONSE:sys.Message=sys.EMPTY_MESSAGE;
+var FILES:files.Session=files.EMPTY;
+var PROCESS_CONFIG:process_abi.Config=process_abi.EMPTY_CONFIG;
+var PROCESS_STATE:process_abi.Snapshot=process_abi.EMPTY_SNAPSHOT;
+var PROCESS_EVENT:process_abi.Event=process_abi.EMPTY_EVENT;
+var PROCESS_RUNTIME:process_abi.Runtime=process_abi.EMPTY_RUNTIME;
+var LAST_PROCESS:u64=0;
+var LAST_CONFIGURATION:u64=0;
+var LAST_GENERATION:u64=0;
+var PROCESS_CURSOR:u64=0;
+var EXEC_BYTES:[262144]u8=[0;262144];
+var HEX:[18]u8=[0;18];
+var DECIMAL:[20]u8=[0;20];
+fn equal(a:[]const u8,b:[]const u8)bool{if a.len!=b.len{return false;}var i:usize=0;while i<a.len{if a[i]!=b[i]{return false;}i+=1;}return true;}
+fn text(value:[]const u8)void{
+    var at:usize=0;while at<value.len{var count:usize=value.len-at;if count>4096{count=4096;}let status=sys.log(value[at..at+count]);if status!=0{return;}at+=count;}return;
+}
+fn error_text(code:u64)void{unsafe{HEX[0]=48;HEX[1]=120;let digits="0123456789abcdef";var i:usize=0;while i<16{HEX[i+2]=digits[((code>>((15-i)*4))&15) as usize];i+=1;}text("ERROR ");text(HEX[..]);text("\r\n");}return;}
+fn number(value:u64)void{unsafe{var n=value;var at:usize=20;loop{at-=1;DECIMAL[at]=(48+n%10) as u8;n/=10;if n==0{break;}}text(DECIMAL[at..20]);}return;}
+unsafe fn control(op:u64)u64{unsafe{
+    REQUEST=sys.EMPTY_MESSAGE;RESPONSE=sys.EMPTY_MESSAGE;REQUEST.words[0]=op;REQUEST.words[4]=16;
+    let status=sys.call((*BOOT).filesystem,&REQUEST,&RESPONSE);if status!=0{return status;}return RESPONSE.words[0];
+}}
+// Concatenate the cwd without lexical collapsing. The filesystem must observe
+// missing/file intermediate components before it can accept dotdot traversal.
+unsafe fn raw_path(name:[]const u8)u64{unsafe{
+    if name.len>4096{return 0x0504_0001;}RAW_LENGTH=0;
+    if name.len==0||name[0]!=47{var i:usize=0;while i<CWD.length{RAW_PATH[i]=CWD.bytes[i];i+=1;}RAW_LENGTH=CWD.length;
+        if name.len!=0&&CWD.length>1{RAW_PATH[RAW_LENGTH]=47;RAW_LENGTH+=1;}
+    }
+    if name.len>4096-RAW_LENGTH{return 0x0504_0001;}var i:usize=0;while i<name.len{RAW_PATH[RAW_LENGTH+i]=name[i];i+=1;}RAW_LENGTH+=name.len;
+    if RAW_LENGTH==0{return 0x0504_0001;}return 0;
+}}
+unsafe fn fs_path(op:u64,name:[]const u8,offset:u64,count:u64,generation:u64,body:[]const u8)u64{unsafe{
+    let invalid=raw_path(name);if invalid!=0{return invalid;}if count>61440||body.len>61440{return BAD;}
+    let raw=RAW_PATH[0..RAW_LENGTH];var status:u64=0;
+    if op==protocol.PATH_CREATE {status=files.create(&FILES,FILES.root,raw);RESPONSE=FILES.response;return status;}
+    if op==protocol.PATH_MKDIR {status=files.mkdir(&FILES,FILES.root,raw);RESPONSE=FILES.response;return status;}
+    var rights=files.STAT;
+    if op==protocol.PATH_LIST {rights=files.LIST;}
+    else if op==protocol.PATH_READ {rights=files.READ;}
+    else if op==protocol.PATH_WRITE||op==protocol.PATH_APPEND {rights=files.WRITE;}
+    else if op==protocol.PATH_TRUNCATE {rights=files.TRUNCATE;}
+    else if op==protocol.PATH_REMOVE {rights=files.REMOVE;}
+    else if op!=protocol.PATH_STAT {return BAD;}
+    var token:u64=0;status=files.open(&FILES,FILES.root,raw,rights,&token);if status!=0 {return status;}
+    if op==protocol.PATH_STAT {status=files.stat(&FILES,token);}
+    else if op==protocol.PATH_LIST {status=files.list(&FILES,token,offset,generation);}
+    else if op==protocol.PATH_READ {status=files.read(&FILES,token,offset,count);}
+    else if op==protocol.PATH_WRITE {status=files.write(&FILES,token,offset,body);}
+    else if op==protocol.PATH_APPEND {status=files.append(&FILES,token,body);}
+    else if op==protocol.PATH_TRUNCATE {status=files.truncate(&FILES,token,offset);}
+    else {status=files.remove(&FILES,token);}
+    RESPONSE=FILES.response;
+    // REMOVE revokes its own non-root token together with other open objects.
+    if op!=protocol.PATH_REMOVE||status!=0 {let closed=files.close(&FILES,token);if status==0&&closed!=0 {return closed;}}
+    return status;
+}}
+unsafe fn valid_record()bool{unsafe{
+    if RESPONSE.words[1]!=1||RESPONSE.words[4]<80||RESPONSE.words[4]>1100{return false;}
+    let words=(CHANNEL+4096) as *const u64;let length=*(words+1);
+    if length>1020||*words!=80+length||*words!=RESPONSE.words[4]||*(words+2)!=RESPONSE.words[3]||*(words+3)!=RESPONSE.words[2]||*(words+4)>1||*(words+6)!=RESPONSE.words[7]||*(words+7)!=RESPONSE.words[6]||(*(words+9)>>24)!=0{return false;}
+    if (*(words+5)!=1&&*(words+5)!=2)||(*(words+5)==2&&length!=0)||(*(words+5)==1&&length==0){return false;}
+    return true;
+}}
+unsafe fn display_record()void{unsafe{
+    let words=(CHANNEL+4096) as *const u64;let length=*(words+1);
+    if *(words+5)==1{text(slice_from_raw_parts((CHANNEL+4176) as *const u8,length as usize));}else{text("<OEM alias>");}
+    if (RESPONSE.words[3]&16)!=0{text("/");}text(" ");number(RESPONSE.words[2]);text("\r\n");
+}return;}
+unsafe fn sync_ok(label:[]const u8)void{unsafe{let status=control(protocol.FLUSH);if status!=0{error_text(status);}else{text(label);text(" OK\r\n");}}return;}
+unsafe fn decimal(input:[]const u8,out:*u64)bool{unsafe{
+    if input.len==0{return false;}var value:u64=0;var i:usize=0;while i<input.len{let ch=input[i];if ch<48||ch>57{return false;}let digit=(ch-48) as u64;if value>(0xffff_ffff-digit)/10{return false;}value=value*10+digit;i+=1;}*out=value;return true;
+}}
+unsafe fn decimal64(input:[]const u8,out:*u64)bool{unsafe{
+    if input.len==0{return false;}var value:u64=0;var i:usize=0;while i<input.len{
+        let ch=input[i];if ch<48||ch>57{return false;}let digit=(ch-48) as u64;
+        if value>(0xffff_ffff_ffff_ffff-digit)/10{return false;}value=value*10+digit;i+=1;
+    }*out=value;return true;
+}}
+unsafe fn process_config(index:u64)u64{unsafe{
+    if (*BOOT).configuration==0||(*BOOT).reserved1==0||(*BOOT).reserved1>process_abi.LIMIT as u64||index>=(*BOOT).reserved1{return 0x0511_0001;}
+    let status=process.configuration_state((*BOOT).configuration,index,&PROCESS_CONFIG,&PROCESS_STATE);
+    if status!=0{return status;}
+    if PROCESS_CONFIG.version!=1||PROCESS_CONFIG.id!=index||PROCESS_CONFIG.name_length==0||PROCESS_CONFIG.name_length>32
+        ||PROCESS_STATE.version!=1||PROCESS_STATE.configuration!=index||PROCESS_STATE.state>5{return BAD;}
+    return 0;
+}}
+unsafe fn process_line(label:[]const u8,token:u64,generation:u64,state:u64,status:u64)void{unsafe{
+    text(label);text(" token=");number(token);text(" generation=");number(generation);
+    text(" state=");number(state);text(" status=");number(status);text("\r\n");
+}return;}
+unsafe fn processes()u64{unsafe{
+    var index:u64=0;while index<(*BOOT).reserved1{
+        let status=process_config(index);if status!=0{return status;}
+        text("PROCESS ");text(PROCESS_CONFIG.name[0..PROCESS_CONFIG.name_length as usize]);text(" id=");number(index);
+        process_line("",PROCESS_STATE.process,PROCESS_STATE.generation,PROCESS_STATE.state,PROCESS_STATE.status);index+=1;
+    }return 0;
+}}
+unsafe fn run_process(name:[]const u8,argument:u64)u64{unsafe{
+    var index:u64=0;while index<(*BOOT).reserved1{
+        let status=process_config(index);if status!=0{return status;}
+        if equal(name,PROCESS_CONFIG.name[0..PROCESS_CONFIG.name_length as usize]){
+            if (PROCESS_CONFIG.flags&process_abi.ORDINARY)==0||index==12{return 0x0401_0003;}
+            let spawned=process.spawn((*BOOT).configuration,index,PROCESS_STATE.generation,argument,&PROCESS_STATE);
+            if spawned!=0{return spawned;}LAST_PROCESS=PROCESS_STATE.process;
+            LAST_CONFIGURATION=PROCESS_STATE.configuration;LAST_GENERATION=PROCESS_STATE.generation;
+            text("RUN OK ");text(name);process_line("",PROCESS_STATE.process,PROCESS_STATE.generation,PROCESS_STATE.state,PROCESS_STATE.status);return 0;
+        }index+=1;
+    }return 0x0504_0006;
+}}
+unsafe fn wait_process(token:u64)u64{unsafe{
+    if token==0{return 0x0511_0001;}var index:u64=0;var found:bool=false;
+    while index<(*BOOT).reserved1{
+        let status=process_config(index);if status!=0{return status;}
+        if PROCESS_STATE.process==token||(token==LAST_PROCESS&&index==LAST_CONFIGURATION&&PROCESS_STATE.generation==LAST_GENERATION){
+            if (PROCESS_CONFIG.flags&process_abi.ORDINARY)==0{return 0x0401_0003;}
+            found=true;
+            if PROCESS_STATE.state>=process_abi.EXITED{
+                process_line("WAIT OK",token,PROCESS_STATE.generation,PROCESS_STATE.state,PROCESS_STATE.status);return 0;
+            }break;
+        }index+=1;
+    }
+    loop{
+        var flags=process_abi.NONBLOCK;if found{flags=process_abi.BLOCK;}
+        let status=process.wait((*BOOT).configuration,PROCESS_CURSOR,&PROCESS_EVENT,flags,0);
+        if !found&&status==0x0511_0005{return 0x0511_0003;}
+        if status!=0{return status;}
+        if PROCESS_EVENT.version!=1||PROCESS_EVENT.sequence<=PROCESS_CURSOR||PROCESS_EVENT.state>5{return BAD;}
+        PROCESS_CURSOR=PROCESS_EVENT.sequence;
+        if PROCESS_EVENT.process==token{found=true;}
+        if PROCESS_EVENT.process==token&&PROCESS_EVENT.state>=process_abi.EXITED{
+            process_line("WAIT OK",token,PROCESS_EVENT.generation,PROCESS_EVENT.state,PROCESS_EVENT.status);return 0;
+        }
+    }
+}}
+unsafe fn execute_file(name:[]const u8,argument:u64)u64{unsafe{
+    let invalid=raw_path(name);if invalid!=0{return invalid;}var token:u64=0;
+    var status=files.open(&FILES,FILES.root,RAW_PATH[0..RAW_LENGTH],files.STAT|files.READ,&token);
+    if status!=0{return status;}status=files.stat(&FILES,token);var length:u64=0;
+    if status==0{length=FILES.response.words[2];if length>262144{status=0x0511_0001;}}
+    var offset:u64=0;while status==0&&offset<length{
+        var count=length-offset;if count>61440{count=61440;}
+        status=files.read(&FILES,token,offset,count);if status!=0{break;}
+        let bytes=FILES.response.words[1];if bytes==0||bytes>count{status=BAD;break;}
+        var i:usize=0;while i<bytes as usize{EXEC_BYTES[offset as usize+i]=*((CHANNEL+4096) as *const u8+i);i+=1;}offset+=bytes;
+    }
+    let closed=files.close(&FILES,token);if status!=0{return status;}if closed!=0{return closed;}
+    status=process.execute((*BOOT).configuration,EXEC_BYTES[0..length as usize],argument,&PROCESS_STATE);if status!=0{return status;}
+    LAST_PROCESS=PROCESS_STATE.process;LAST_CONFIGURATION=PROCESS_STATE.configuration;LAST_GENERATION=PROCESS_STATE.generation;
+    text("EXEC OK ");text(name);process_line("",PROCESS_STATE.process,PROCESS_STATE.generation,PROCESS_STATE.state,PROCESS_STATE.status);return 0;
+}}
+unsafe fn command()bool{unsafe{
+    let verb=PARSED.bytes[PARSED.verb_start..PARSED.verb_start+PARSED.verb_length];
+    let name=PARSED.bytes[PARSED.path_start..PARSED.path_start+PARSED.path_length];
+    let body=PARSED.bytes[PARSED.body_start..PARSED.body_start+PARSED.body_length];
+    if PARSED.count==0{return true;}
+    if equal(verb,"help"){if PARSED.count!=1{error_text(0x0504_0001);return true;}text("help ls cd pwd cat write append touch mkdir rm truncate sync ps run wait kill exec pcid restart shutdown reboot exit\r\n");return true;}
+    if equal(verb,"pcid"){
+        if PARSED.count!=1{error_text(0x0511_0001);return true;}
+        let status=process.runtime((*BOOT).configuration,&PROCESS_RUNTIME);if status!=0{error_text(status);return true;}
+        if PROCESS_RUNTIME.version!=1||PROCESS_RUNTIME.pcide>1||PROCESS_RUNTIME.reserved!=0{error_text(BAD);return true;}
+        text("PCID enabled=");number(PROCESS_RUNTIME.pcide);text(" switches=");number(PROCESS_RUNTIME.switches);
+        text(" retained=");number(PROCESS_RUNTIME.retained);text(" cr4=");number(PROCESS_RUNTIME.cr4);
+        text(" root=");number(PROCESS_RUNTIME.user_root);text(" incarnation=");number(PROCESS_RUNTIME.incarnation);text("\r\n");return true;
+    }
+    if equal(verb,"restart"){
+        if PARSED.count!=2||!(equal(name,"fs")||equal(name,"compositor")){error_text(0x0511_0001);return true;}
+        var id:u64=1;if equal(name,"compositor"){id=3;}let checked=process_config(id);
+        if checked!=0{error_text(checked);return true;}
+        text("RESTART REQUEST ");text(name);text("\r\n");let status=process.restart((*BOOT).configuration,id,PROCESS_STATE.generation);
+        if status!=0{error_text(status);}else{text("RESTART OK ");text(name);text("\r\n");}return true;
+    }
+    if equal(verb,"ps"){
+        if PARSED.count!=1{error_text(0x0511_0001);}else{let status=processes();if status!=0{error_text(status);}}return true;
+    }
+    if equal(verb,"run")||equal(verb,"exec"){
+        var argument:u64=0;if PARSED.count<2||(PARSED.count==3&&!decimal64(body,&argument)){error_text(0x0511_0001);return true;}
+        var status:u64=0;if equal(verb,"run"){status=run_process(name,argument);}else{status=execute_file(name,argument);}
+        if status!=0{error_text(status);}return true;
+    }
+    if equal(verb,"wait")||equal(verb,"kill"){
+        var token=LAST_PROCESS;if PARSED.count>2||(PARSED.count==2&&!decimal64(name,&token))
+            ||(equal(verb,"kill")&&PARSED.count!=2){error_text(0x0511_0001);return true;}
+        var status:u64=0;if equal(verb,"wait"){status=wait_process(token);}
+        else{status=process.kill((*BOOT).configuration,token,0);if status==0{process_line("KILL OK",token,0,process_abi.KILLED,0);}}
+        if status!=0{error_text(status);}return true;
+    }
+    if equal(verb,"pwd"){if PARSED.count!=1{error_text(0x0504_0001);}else{text(CWD.bytes[0..CWD.length]);text("\r\n");}return true;}
+    if equal(verb,"exit")||equal(verb,"sync")||equal(verb,"shutdown")||equal(verb,"reboot"){
+        if PARSED.count!=1{error_text(0x0504_0001);return true;}let status=control(protocol.FLUSH);if status!=0{error_text(status);return true;}
+        if equal(verb,"sync"){text("SYNC OK\r\n");return true;}
+        if equal(verb,"exit"){text("DONGOS_SHELL_EXIT\r\n");return false;}
+        let logged=sys.log("DONGOS_POWER_SYNCED\r\n");if logged!=0{error_text(logged);return true;}var action:u64=2;if equal(verb,"reboot"){action=1;}let returned=sys.power((*BOOT).reserved3,action);error_text(returned);return true;
+    }
+    if equal(verb,"ls"){
+        if PARSED.count>2{error_text(0x0504_0001);return true;}var index:u64=0;var generation:u64=0;
+        loop{let status=fs_path(protocol.PATH_LIST,name,index,0,generation,"");if status!=0{error_text(status);break;}if RESPONSE.words[1]==0{break;}
+            if !valid_record()||RESPONSE.words[7]!=index+1||index>=4096{error_text(BAD);break;}display_record();index=RESPONSE.words[7];generation=RESPONSE.words[6];if index==4096{break;}
+        }return true;
+    }
+    if equal(verb,"cd"){
+        if PARSED.count>2{error_text(0x0504_0001);return true;}var target:[]const u8=name;if PARSED.count==1{target="/";}
+        let status=fs_path(protocol.PATH_STAT,target,0,0,0,"");if status!=0{error_text(status);return true;}if !valid_record(){error_text(BAD);return true;}if (RESPONSE.words[3]&16)==0{error_text(0x0504_0003);return true;}
+        let normalized=path.normalize(CWD.bytes[0..CWD.length],target,&CANDIDATE);match normalized{ok=>{CWD=CANDIDATE;text("CD OK\r\n");},err(e)=>{error_text(e);},}return true;
+    }
+    if !(equal(verb,"cat")||equal(verb,"write")||equal(verb,"append")||equal(verb,"touch")||equal(verb,"mkdir")||equal(verb,"rm")||equal(verb,"truncate")){text("unknown command\r\n");return true;}
+    if PARSED.count<2||name.len==0{text("filename required\r\n");return true;}
+    if !equal(verb,"write")&&!equal(verb,"append")&&!equal(verb,"truncate")&&PARSED.count!=2{error_text(0x0504_0001);return true;}
+    if equal(verb,"cat"){
+        var offset:u64=0;loop{let status=fs_path(protocol.PATH_READ,name,offset,61440,0,"");if status!=0{error_text(status);return true;}let bytes=RESPONSE.words[1];if bytes>61440||offset>0xffff_ffff_ffff_ffff-bytes{error_text(BAD);return true;}if bytes==0{break;}text(slice_from_raw_parts((CHANNEL+4096) as *const u8,bytes as usize));offset+=bytes;}
+        text("\r\n");return true;
+    }
+    if equal(verb,"rm"){let status=fs_path(protocol.PATH_REMOVE,name,0,0,0,"");if status!=0{error_text(status);}else{sync_ok("RM");}return true;}
+    if equal(verb,"mkdir"){let status=fs_path(protocol.PATH_MKDIR,name,0,0,0,"");if status!=0{error_text(status);}else{sync_ok("MKDIR");}return true;}
+    if equal(verb,"truncate"){var size:u64=0;if PARSED.count!=3||!decimal(body,&size){error_text(0x0504_0001);return true;}let status=fs_path(protocol.PATH_TRUNCATE,name,size,0,0,"");if status!=0{error_text(status);}else{sync_ok("TRUNCATE");}return true;}
+    if equal(verb,"append"){let status=fs_path(protocol.PATH_APPEND,name,0,body.len as u64,0,body);if status!=0{error_text(status);}else{if RESPONSE.words[1]!=body.len as u64{error_text(0x0504_0004);}else{sync_ok("APPEND");}}return true;}
+    var status=fs_path(protocol.PATH_CREATE,name,0,0,0,"");if status!=0&&status!=0x0504_0007{error_text(status);return true;}
+    if equal(verb,"write"){
+        status=fs_path(protocol.PATH_TRUNCATE,name,0,0,0,"");if status!=0{error_text(status);return true;}
+        status=fs_path(protocol.PATH_WRITE,name,0,body.len as u64,0,body);if status!=0{error_text(status);return true;}if RESPONSE.words[1]!=body.len as u64{error_text(0x0504_0004);return true;}
+    }
+    sync_ok("WRITE");return true;
+}}
+export("service_main") fn main()u64{unsafe{
+    BOOT=sys.boot();if BOOT==null||(*BOOT).version!=1||(*BOOT).channel_address!=CHANNEL||(*BOOT).channel_bytes!=65536{return 0x0509_0001;}
+    let ready=control(protocol.READY);if ready!=0{return ready;}if RESPONSE.words[5]!=2{return BAD;}
+    let authorized=files.init(&FILES,(*BOOT).filesystem,CHANNEL,files.ALL);if authorized!=0{return authorized;}
+    CWD.length=1;CWD.directory_hint=1;CWD.bytes[0]=47;
+    let announced=sys.ready_boot(BOOT);if announced!=0{return announced;}
+    let prompt_status=sys.log("DONGOS_SHELL_READY\r\nDongOS shell: help for commands\r\n> ");if prompt_status==0{let trace_status=boot_trace.mark(1);}var length:usize=0;var previous_cr:bool=false;var overflow:bool=false;
+    loop{let key=sys.character((*BOOT).console);if key==256{let ignored=sys.yield_now();continue;}if key>255{return key;}
+        if key==10&&previous_cr{previous_cr=false;continue;}previous_cr=key==13;
+        if key==10||key==13{text("\r\n");if overflow{error_text(0x050d_0002);}else{let decoded=parser.parse(LINE[0..length],&PARSED,&PARSE_WORK);match decoded{ok=>{if !command(){return 0;}},err(e)=>{error_text(e);},}}length=0;overflow=false;text("> ");}
+        else if key==8||key==127{if !overflow&&length!=0{length-=1;while length>0&&(LINE[length]&0xc0)==0x80{length-=1;}text("\x08 \x08");}}
+        else if key==9||key>=32{if !overflow{if length<8192{LINE[length]=key as u8;text(LINE[length..length+1]);length+=1;}else{overflow=true;}}}
+    }
+}}

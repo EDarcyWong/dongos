@@ -1,0 +1,62 @@
+// core.mem — raw byte-memory primitives with explicit pointer and length.
+// All functions treat memory as untyped bytes; callers guarantee that every
+// non-zero-length range is valid, mapped and large enough for the count.
+
+module core.mem;
+
+// Copy count bytes from src to dst. The source and destination ranges must
+// not overlap; use move for ranges that may overlap. A zero count never
+// touches memory and permits null pointers on either side.
+pub unsafe fn copy(dst: *u8, src: *const u8, count: usize) void {
+    var i: usize = 0;
+    while i < count {
+        unsafe { *(dst + i) = *(src + i); }
+        i += 1;
+    }
+}
+
+// Copy count bytes, accepting overlapping ranges and identical addresses.
+// A zero count performs no memory access.
+pub unsafe fn move(dst: *u8, src: *const u8, count: usize) void {
+    var destination: usize = 0;
+    var source: usize = 0;
+    unsafe {
+        destination = dst as usize;
+        source = src as usize;
+    }
+    if source < destination {
+        var i: usize = count;
+        while i > 0 {
+            i = i - 1;
+            unsafe { *(dst + i) = *(src + i); }
+        }
+    } else {
+        var i: usize = 0;
+        while i < count {
+            unsafe { *(dst + i) = *(src + i); }
+            i += 1;
+        }
+    }
+}
+
+// Set count bytes at dst to zero.
+pub unsafe fn zero(dst: *u8, count: usize) void {
+    var i: usize = 0;
+    while i < count {
+        unsafe { *(dst + i) = 0; }
+        i += 1;
+    }
+}
+
+// Lexicographic comparison of count unsigned bytes, returning -1, 0 or 1.
+pub unsafe fn compare(a: *const u8, b: *const u8, count: usize) i32 {
+    var i: usize = 0;
+    while i < count {
+        unsafe {
+            if *(a + i) < *(b + i) { return -1; }
+            if *(a + i) > *(b + i) { return 1; }
+        }
+        i += 1;
+    }
+    return 0;
+}

@@ -1,0 +1,30 @@
+// sync.spin — a spin lock over a single u32 cell, built on sequential-
+// consistency atomics and the pause hint. It has no interrupt, preemption or
+// scheduler integration; callers must enforce the locking discipline.
+
+module sync.spin;
+
+pub struct Lock { pub state: u32 }
+
+// Try to acquire without waiting. Returns true on success.
+pub unsafe fn try_lock(lock: *Lock) bool {
+    unsafe { return atomic_compare_exchange(&(*lock).state, 0, 1) == 0; }
+}
+
+// Acquire the lock, spinning until it becomes free.
+pub unsafe fn lock(lock: *Lock) void {
+    unsafe {
+        while atomic_compare_exchange(&(*lock).state, 0, 1) != 0 {
+            while atomic_load(&(*lock).state) != 0 {
+                asm { pause }
+            }
+        }
+    }
+}
+
+// Release the lock. Only the holder may call this.
+pub unsafe fn unlock(lock: *Lock) void {
+    unsafe {
+        atomic_store(&(*lock).state, 0);
+    }
+}

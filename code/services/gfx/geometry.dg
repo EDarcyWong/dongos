@@ -1,0 +1,113 @@
+// Half-open signed rectangles and bounded damage. No allocation or MMIO.
+module gfx.geometry;
+import gfx.errors as errors;
+
+pub struct Rect { pub left: i64, pub top: i64, pub right: i64, pub bottom: i64 }
+pub const EMPTY: Rect = Rect { left: 0, top: 0, right: 0, bottom: 0 };
+pub const CAPACITY: usize = 16;
+pub struct Damage { pub bounds: Rect, pub count: usize, pub full: bool, pub rects: [16]Rect }
+pub const EMPTY_DAMAGE: Damage = Damage { bounds: EMPTY, count: 0, full: false, rects: [EMPTY; 16] };
+const MAX: i64 = 0x7fff_ffff_ffff_ffff;
+const MIN: i64 = -0x7fff_ffff_ffff_ffff - 1;
+
+pub fn add(a: i64, b: i64) !i64 {
+    if (b > 0 && a > MAX - b) || (b < 0 && a < MIN - b) { return error.errors.InvalidRect; }
+    return a + b;
+}
+pub unsafe fn valid(r: *const Rect) bool {
+    unsafe { return r != null && (*r).left <= (*r).right && (*r).top <= (*r).bottom; }
+}
+pub unsafe fn empty(r: *const Rect) bool {
+    unsafe { return (*r).left == (*r).right || (*r).top == (*r).bottom; }
+}
+pub unsafe fn from_xywh(x: i64, y: i64, width: usize, height: usize, out: *Rect) !void {
+    if width > MAX as usize || height > MAX as usize { return error.errors.InvalidRect; }
+    let right = try add(x,width as i64);
+    let bottom = try add(y,height as i64);
+    unsafe { *out = Rect { left: x, top: y, right: right, bottom: bottom }; }
+    return;
+}
+pub unsafe fn intersect(a: *const Rect, b: *const Rect, out: *Rect) !bool {
+    unsafe {
+        if !valid(a) || !valid(b) { return error.errors.InvalidRect; }
+        var r = *a;
+        if (*b).left > r.left { r.left = (*b).left; }
+        if (*b).top > r.top { r.top = (*b).top; }
+        if (*b).right < r.right { r.right = (*b).right; }
+        if (*b).bottom < r.bottom { r.bottom = (*b).bottom; }
+        if r.left >= r.right || r.top >= r.bottom { *out = EMPTY; return false; }
+        *out = r;
+    }
+    return true;
+}
+pub unsafe fn contains(outer: *const Rect, inner: *const Rect) bool {
+    unsafe {
+        return valid(outer) && valid(inner) && (*outer).left <= (*inner).left
+            && (*outer).top <= (*inner).top && (*inner).right <= (*outer).right
+            && (*inner).bottom <= (*outer).bottom;
+    }
+}
+pub unsafe fn validate_damage(value: *const Damage) !void {
+    unsafe {
+        if value == null || !valid(&(*value).bounds) || empty(&(*value).bounds)
+            || (*value).count > CAPACITY { return error.errors.InvalidDamage; }
+        if (*value).full && (*value).count != 1 { return error.errors.InvalidDamage; }
+        var i: usize = 0;
+        while i < (*value).count {
+            if !contains(&(*value).bounds,&(*value).rects[i]) || empty(&(*value).rects[i]) {
+                return error.errors.InvalidDamage;
+            }
+            i += 1;
+        }
+        if (*value).full {
+            let r = (*value).rects[0];
+            let b = (*value).bounds;
+            if r.left != b.left || r.top != b.top || r.right != b.right || r.bottom != b.bottom {
+                return error.errors.InvalidDamage;
+            }
+        }
+    }
+    return;
+}
+pub unsafe fn init_damage(bounds: *const Rect, out: *Damage) !void {
+    unsafe {
+        if !valid(bounds) || empty(bounds) { return error.errors.InvalidRect; }
+        var value = EMPTY_DAMAGE;
+        value.bounds = *bounds;
+        *out = value;
+    }
+    return;
+}
+pub unsafe fn damage_add(value: *Damage, rect: *const Rect) !void {
+    unsafe {
+        try validate_damage(value);
+        var r = EMPTY;
+        let nonempty = try intersect(&(*value).bounds,rect,&r);
+        if !nonempty || (*value).full { return; }
+        var i: usize = 0;
+        while i < (*value).count {
+            let other = (*value).rects[i];
+            if r.left <= other.right && other.left <= r.right && r.top <= other.bottom && other.top <= r.bottom {
+                if other.left < r.left { r.left = other.left; }
+                if other.top < r.top { r.top = other.top; }
+                if other.right > r.right { r.right = other.right; }
+                if other.bottom > r.bottom { r.bottom = other.bottom; }
+                (*value).count -= 1;
+                (*value).rects[i] = (*value).rects[(*value).count];
+                (*value).rects[(*value).count] = EMPTY;
+                i = 0;
+            } else { i += 1; }
+        }
+        if (*value).count == CAPACITY {
+            (*value).full = true;
+            (*value).count = 1;
+            (*value).rects = [EMPTY; 16];
+            (*value).rects[0] = (*value).bounds;
+        } else {
+            (*value).rects[(*value).count] = r;
+            (*value).count += 1;
+        }
+    }
+    return;
+}
+

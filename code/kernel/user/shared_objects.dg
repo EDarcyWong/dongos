@@ -1,0 +1,71 @@
+// Real object-owned arena RAM broker; called under the process/cap/BKL lock.
+module user.shared_objects;
+import ipc.shared_core as core;import ipc.handles as handles;import user.memory as memory;
+import boot.service_memory as resources;import lib.shared_abi as abi;
+var REGISTRY:*core.Registry=null;var ATTEMPTED:bool=false;
+pub fn pointer()*core.Registry{unsafe{return REGISTRY;}}
+pub fn tagged(identity:u64)bool{return core.tagged(identity);}
+pub fn bound_owner(id:usize)u64{unsafe{if REGISTRY==null||id>=16{return 0;}return (*REGISTRY).owners[id];}}
+pub unsafe fn initialize()!void{unsafe{
+ if ATTEMPTED{return error.abi.Invalid;}ATTEMPTED=true;
+ var meta=resources.Block{physical:0,virtual:0,pages:0};var pool=meta;
+ try resources.allocate((sizeof(core.Registry)+4095)/4096,1,&meta);
+ try resources.allocate(128,16,&pool);
+ let reg=meta.virtual as *core.Registry;try core.initialize(reg,pool.physical,pool.virtual);
+ try memory.object_attach(reg);REGISTRY=reg;
+}return;}
+pub unsafe fn bind_owner(id:usize,owner:u64)!void{unsafe{
+ if REGISTRY==null{return error.abi.Invalid;}try core.bind_owner(REGISTRY,id,owner);
+}return;}
+// Preflight before a capability-table mutation. The commit helpers below
+// cannot fail while the shared process/cap lock and real tables stay held.
+pub unsafe fn check_ref(identity:u64,increase:bool)!void{unsafe{
+ let i=try core.get(REGISTRY,identity);let refs=(*REGISTRY).objects[i].cap_refs;
+ if refs==0{return error.abi.Stale;}if increase&&refs>=512{return error.abi.Exhausted;}
+}return;}
+pub unsafe fn retain(identity:u64)void{unsafe{let i=((identity&255)-1) as usize;(*REGISTRY).objects[i].cap_refs+=1;}return;}
+unsafe fn collect(identity:u64)void{unsafe{
+ let index=((identity&255)-1) as usize;let value=(*REGISTRY).objects[index];
+ if value.state!=core.LIVE||value.cap_refs!=0||value.map_refs!=0{return;}
+ let checked=memory.object_slot_precheck(index,value.pages);
+ match checked{ok=>{},err(code)=>{(*REGISTRY).objects[index].state=core.HELD;memory.object_failed();return;},}
+ // No USER mapping or pending receipt can reach these bytes: map_refs only
+ // drops after the actual all-tag remote acknowledgement and reclaim.
+ var word:usize=0;let words=value.pages*512;let out=core.alias(REGISTRY,index) as *u64;
+ while word<words{*(out+word)=0;word+=1;}compiler_fence();
+ var next=value.generation;if next<core.GENERATION_MAX{next+=1;}
+ (*REGISTRY).objects[index]=core.Object{generation:next,state:0,cap_refs:0,map_refs:0,pages:0};
+}return;}
+pub unsafe fn drop(identity:u64)void{unsafe{
+ let i=((identity&255)-1) as usize;(*REGISTRY).objects[i].cap_refs-=1;collect(identity);
+}return;}
+pub unsafe fn create(table:*handles.Table,bytes:u64,rights:u64)!u64{unsafe{
+ if REGISTRY==null||memory.OBJECT_FAILED||bytes==0||bytes>65536||(bytes&4095)!=0
+  ||(rights&~(handles.READ|handles.WRITE|handles.MAP|handles.TRANSFER))!=0
+  ||(rights&(handles.READ|handles.MAP))!=(handles.READ|handles.MAP){return error.abi.Invalid;}
+ var index:usize=0;while index<8{let value=(*REGISTRY).objects[index];
+  if value.state==0&&value.generation>0&&value.generation<core.GENERATION_MAX{
+   try memory.object_slot_precheck(index,(bytes/4096) as usize);
+   let identity=core.identity(REGISTRY,index);let token=try handles.install(table,handles.SHARED,identity,rights);
+   (*REGISTRY).objects[index]=core.Object{generation:value.generation,state:core.LIVE,cap_refs:1,map_refs:0,pages:(bytes/4096) as usize};return token;
+  }index+=1;
+ }
+}return error.abi.NoSpace;}
+pub unsafe fn info(table:*const handles.Table,token:u64,out:*abi.Info)!void{unsafe{
+ var view=handles.EMPTY_VIEW;try handles.lookup(table,token,handles.SHARED,handles.READ,&view);
+ let index=try core.get(REGISTRY,view.object);if memory.OBJECT_FAILED{return error.abi.Held;}
+ *out=abi.Info{version:1,bytes:(*REGISTRY).objects[index].pages as u64*4096,rights:view.rights,mappings:4,reserved:[0;4]};
+}return;}
+pub unsafe fn map(id:usize,owner:u64,table:*const handles.Table,token:u64,rights:u64,out:*abi.Mapping)!void{unsafe{
+ if !core.owner_valid(id,owner)||(rights&~(handles.READ|handles.WRITE))!=0||(rights&handles.READ)==0{return error.abi.Invalid;}
+ var view=handles.EMPTY_VIEW;try handles.lookup(table,token,handles.SHARED,handles.MAP|handles.READ,&view);
+ if (rights&~view.rights)!=0{return error.abi.Denied;}try check_ref(view.object,false);
+ try memory.object_map(id,owner,view.object,rights,out);
+}return;}
+pub unsafe fn unmap(id:usize,owner:u64,token:u64)!void{unsafe{
+ var object:u64=0;try memory.object_unmap(id,owner,token,&object);collect(object);
+}return;}
+pub unsafe fn owner_gone(id:usize,owner:u64)!void{unsafe{
+ var objects:[4]u64=[0;4];try memory.object_owner_gone(id,owner,&objects[0]);
+ var i:usize=0;while i<4{if objects[i]!=0{collect(objects[i]);}i+=1;}
+}return;}

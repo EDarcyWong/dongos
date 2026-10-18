@@ -1,0 +1,211 @@
+// Polling xHCI controller executor. MMIO is exclusively 32-bit; DMA VA and PA
+// are separate. Kernel enable_bme validates the admitted device/private lease.
+module usb.xhci_controller;
+import usb.xhci_trb as wire;
+import usb.xhci_ring as ring;
+pub const DMA_BYTES:u64=131072;
+pub const COMMAND_OFFSET:u64=4096;
+pub const EVENT_OFFSET:u64=8192;
+pub const ERST_OFFSET:u64=12288;
+pub error Invalid=0x0811_0001;
+pub error Unsupported=0x0811_0002;
+pub error IoFailure=0x0811_0003;
+pub error Timeout=0x0811_0004;
+pub error BadRegisters=0x0811_0005;
+pub error NotReady=0x0811_0006;
+pub error Busy=0x0811_0007;
+pub error Faulted=0x0811_0008;
+pub error BadEvent=0x0811_0009;
+pub type Read=unsafe fn(context:u64,handle:u64,offset:u64,out:*u32)u64;
+pub type Write=unsafe fn(context:u64,handle:u64,offset:u64,value:u32)u64;
+pub type Now=unsafe fn(context:u64,out:*u64)u64;
+pub type Enable=unsafe fn(context:u64)u64;
+pub struct Ops {pub read:Read,pub write:Write,pub fence:ring.Fence,pub now:Now,pub enable_bme:Enable}
+pub struct Setup {
+    pub bar:u64,pub bar_bytes:u64,pub lease_token:u64,pub physical:u64,pub pointer:*u8,pub bytes:u64,
+    pub physical_bits:u64,pub epoch:u64,pub tsc_hz:u64,pub timeout_ms:u64,
+    pub device_token:u64,pub exclusive:u64,pub interrupts_off:u64,pub pci_command:u64,
+}
+pub struct Caps {
+    pub version:u64,pub operational:u64,pub runtime:u64,pub doorbells:u64,pub ports:u64,
+    pub maximum_slots:u64,pub enabled_slots:u64,pub context_bytes:u64,pub ac64:u64,
+    pub protocols:[32]u64,
+}
+pub const EMPTY_CAPS:Caps=Caps {version:0,operational:0,runtime:0,doorbells:0,ports:0,
+    maximum_slots:0,enabled_slots:0,context_bytes:0,ac64:0,protocols:[0;32]};
+pub struct Info {pub version:u64,pub ready:u64,pub held:u64,pub fault:u64,pub phase:u64,pub commands:u64,pub events:u64,pub port_changes:u64,pub last_status:u64,pub last_tsc:u64}
+pub const EMPTY_INFO:Info=Info {version:1,ready:0,held:0,fault:0,phase:0,commands:0,events:0,port_changes:0,last_status:0,last_tsc:0};
+pub struct State {pub info:Info,pub busy:u64,pub enabled:u64,pub setup:Setup,pub caps:Caps,pub ops:*const Ops,pub context:u64,pub command:ring.Producer,pub events:ring.Consumer,pub plan:ring.Plan}
+pub const EMPTY_SETUP:Setup=Setup {bar:0,bar_bytes:0,lease_token:0,physical:0,pointer:null,bytes:0,
+    physical_bits:0,epoch:0,tsc_hz:0,timeout_ms:0,device_token:0,exclusive:0,interrupts_off:0,pci_command:0};
+pub const EMPTY_STATE:State=State {info:EMPTY_INFO,busy:0,enabled:0,setup:EMPTY_SETUP,caps:EMPTY_CAPS,ops:null,context:0,command:ring.EMPTY_PRODUCER,events:ring.EMPTY_CONSUMER,plan:ring.EMPTY_PLAN};
+const MAX:u64=0xffff_ffff_ffff_ffff;
+const LIMIT:usize=1000000;
+unsafe fn read_raw(ops:*const Ops,context:u64,s:*const Setup,offset:u64)!u32 {unsafe {
+    if ops==null||s==null||offset&3!=0||offset>(*s).bar_bytes||4>(*s).bar_bytes-offset {return error.Invalid;}
+    var value:u32=0;if (*ops).read(context,(*s).bar,offset,&value)!=0 {return error.IoFailure;}return value;
+}}
+unsafe fn read(s:*State,offset:u64)!u32 {unsafe {return read_raw((*s).ops,(*s).context,&(*s).setup,offset);}}
+unsafe fn write(s:*State,offset:u64,value:u32)!void {unsafe {
+    if offset&3!=0||offset>(*s).setup.bar_bytes||4>(*s).setup.bar_bytes-offset {return error.Invalid;}
+    if (*(*s).ops).write((*s).context,(*s).setup.bar,offset,value)!=0 {return error.IoFailure;}
+}return;}
+unsafe fn now(s:*State)!u64 {unsafe {
+    var value:u64=0;if (*(*s).ops).now((*s).context,&value)!=0 {return error.IoFailure;}
+    if value<(*s).info.last_tsc {return error.BadRegisters;}(*s).info.last_tsc=value;return value;
+}}
+unsafe fn deadline(s:*State)!u64 {unsafe {
+    let start=try now(s);let cycles=((*s).setup.tsc_hz*(*s).setup.timeout_ms+999)/1000;
+    if cycles==0||start>MAX-cycles {return error.BadRegisters;}return start+cycles;
+}}
+unsafe fn wait(s:*State,offset:u64,mask:u32,expected:u32)!void {unsafe {
+    let end=try deadline(s);var i:usize=0;while i<LIMIT {
+        let value=try read(s,offset);if (value&mask)==expected {return;}
+        if (try now(s))>=end {return error.Timeout;}i+=1;
+    }
+}return error.Timeout;}
+fn overlaps(a:u64,n:u64,b:u64,m:u64)bool {return a<b+m&&b<a+n;}
+unsafe fn precheck(ops:*const Ops,context:u64,s:*const Setup,out:*Caps)!void {unsafe {
+    if ops==null||s==null||out==null||(*s).bar==0||(*s).bar_bytes<4096||(*s).bar_bytes>0x1000_0000
+        ||(*s).lease_token==0||(*s).device_token==0||(*s).exclusive!=1||(*s).interrupts_off!=3
+        ||((*s).pci_command&0x407)!=0x402||(*s).epoch==0||(*s).pointer==null||((*s).pointer as u64&4095)!=0
+        ||(*s).bytes!=DMA_BYTES||((*s).physical&4095)!=0||(*s).tsc_hz<1000000||(*s).tsc_hz>16000000000
+        ||(*s).timeout_ms==0||(*s).timeout_ms>5000||((*s).pointer as u64)>MAX-DMA_BYTES {return error.Invalid;}
+    let region=wire.Region {physical:(*s).physical,bytes:(*s).bytes,physical_bits:(*s).physical_bits};
+    match wire.span(&region,(*s).physical,DMA_BYTES,4096) {ok=>{},err(e)=>{return error.Invalid;},}
+    var c=EMPTY_CAPS;let first=try read_raw(ops,context,s,0);c.version=(first>>16) as u64;c.operational=(first&255) as u64;
+    if (first&0xff00)!=0||c.operational<32||(c.operational&3)!=0
+        ||(c.version!=0x100&&c.version!=0x110&&c.version!=0x120) {return error.Unsupported;}
+    let hcs1=try read_raw(ops,context,s,4);let hcs2=try read_raw(ops,context,s,8);let hcc=try read_raw(ops,context,s,16);
+    c.maximum_slots=(hcs1&255) as u64;c.enabled_slots=c.maximum_slots;if c.enabled_slots>8 {c.enabled_slots=8;}
+    c.ports=(hcs1>>24) as u64;c.ac64=(hcc&1) as u64;c.context_bytes=32;if (hcc&4)!=0 {c.context_bytes=64;}
+    let scratch=((hcs2>>27)&31)|(((hcs2>>21)&31)<<5);
+    if c.maximum_slots==0||((hcs1>>8)&2047)==0||c.ports==0||c.ports>32||scratch!=0
+        ||(hcs1&0x00f8_0000)!=0||((hcs2>>26)&1)!=0 {return error.Unsupported;}
+    if c.ac64==0&&(*s).physical+DMA_BYTES>0x1_0000_0000 {return error.Unsupported;}
+    c.doorbells=(try read_raw(ops,context,s,20)) as u64;c.runtime=(try read_raw(ops,context,s,24)) as u64;
+    let operational_bytes=0x400+c.ports*16;let runtime_bytes:u64=64;let doorbell_bytes=(c.enabled_slots+1)*4;
+    if (c.doorbells&3)!=0||(c.runtime&31)!=0||c.runtime<c.operational||c.doorbells<c.operational
+        ||c.operational>(*s).bar_bytes||operational_bytes>(*s).bar_bytes-c.operational
+        ||c.runtime>(*s).bar_bytes||runtime_bytes>(*s).bar_bytes-c.runtime
+        ||c.doorbells>(*s).bar_bytes||doorbell_bytes>(*s).bar_bytes-c.doorbells
+        ||overlaps(c.operational,operational_bytes,c.runtime,runtime_bytes)
+        ||overlaps(c.operational,operational_bytes,c.doorbells,doorbell_bytes)
+        ||overlaps(c.runtime,runtime_bytes,c.doorbells,doorbell_bytes) {return error.Invalid;}
+    if ((try read_raw(ops,context,s,c.operational+8))&1)==0 {return error.Unsupported;}
+    var offset=((hcc>>16) as u64)*4;var count:usize=0;
+    while offset!=0 {
+        if count==64 {return error.Unsupported;}let header=try read_raw(ops,context,s,offset);let id=header&255;
+        if id==1 {
+            // Initial kernel admission must resolve BIOS ownership/SMIs. This
+            // executor does not pretend an uncleared semaphore is a handoff.
+            if (header&0x1_0000)!=0||(header&0x100_0000)==0 {return error.Unsupported;}
+            if (try read_raw(ops,context,s,offset+4))!=0 {return error.Unsupported;}
+        }else if id==2 {
+            if (try read_raw(ops,context,s,offset+4))!=0x2042_5355 {return error.Unsupported;}
+            let range=try read_raw(ops,context,s,offset+8);let slot=try read_raw(ops,context,s,offset+12);
+            let start=(range&255) as u64;let ports=((range>>8)&255) as u64;let major=(header>>24) as u64;
+            // Empty SupportedProtocol ranges describe no ports. Their offset may
+            // be the one-past-end sentinel; they never populate protocols[].
+            if start==0||start>c.ports+1||ports>c.ports+1-start||(major!=2&&major!=3)
+                ||(range&0xf000_0000)!=0||(slot&~31)!=0||(slot&31)!=0 {return error.Unsupported;}
+            var i=start-1;while i<start-1+ports {if c.protocols[i as usize]!=0 {return error.Invalid;}c.protocols[i as usize]=major;i+=1;}
+        }else {return error.Unsupported;}
+        let next=((header>>8)&255) as u64;if next==0 {offset=0;}else {if offset>MAX-next*4 {return error.Invalid;}offset+=next*4;}count+=1;
+    }
+    *out=c;
+}return;}
+unsafe fn fence(s:*State,phase:u64)!void {unsafe {
+    compiler_fence();if (*(*s).ops).fence((*s).context,phase)!=0 {return error.IoFailure;}compiler_fence();
+}return;}
+unsafe fn ring_fence(context:u64,phase:u64)u64 {unsafe {
+    let s=context as *State;return (*(*s).ops).fence((*s).context,phase);
+}}
+var RING_OPS:ring.Ops=ring.Ops {fence:ring_fence};
+unsafe fn write64(s:*State,offset:u64,value:u64)!void {unsafe {
+    try write(s,offset,(value&0xffff_ffff) as u32);
+    if (*s).caps.ac64!=0 {try write(s,offset+4,(value>>32) as u32);}
+}return;}
+unsafe fn read64(s:*State,offset:u64)!u64 {unsafe {
+    let low=try read(s,offset);var high:u32=0;if (*s).caps.ac64!=0 {high=try read(s,offset+4);}return low as u64|((high as u64)<<32);
+}}
+unsafe fn readback(s:*State,offset:u64,value:u64,mask:u64)!void {unsafe {
+    if ((try read64(s,offset))&mask)!=(value&mask) {return error.BadRegisters;}
+}return;}
+unsafe fn consume(s:*State,event:*wire.Event)!void {unsafe {
+    let erdp=ring.erdp(&(*s).events,true);var value:u64=0;match erdp {ok(v)=>{value=v;},err(e)=>{return error.BadEvent;},}
+    try write64(s,(*s).caps.runtime+0x38,value);try readback(s,(*s).caps.runtime+0x38,value,MAX-15);
+    try write(s,(*s).caps.runtime+0x20,1);try write(s,(*s).caps.operational+4,8);(*s).info.events+=1;
+    if (*event).kind==34 {if (*event).port==0||(*event).port>(*s).caps.ports {return error.BadEvent;}
+        (*s).info.port_changes|=(1 as u64)<<((*event).port-1);}
+}return;}
+unsafe fn healthy(s:*State)!void {unsafe {
+    let status=try read(s,(*s).caps.operational+4);(*s).info.last_status=status as u64;
+    if (status&0x1805)!=0 {return error.BadRegisters;}
+}return;}
+unsafe fn noop_inner(s:*State)!void {unsafe {
+    try healthy(s);
+    let command=wire.Trb {parameter:0,status:0,control:23<<10};
+    match ring.plan(&(*s).command,slice_from_raw_parts(&command,1),&(*s).plan) {ok=>{},err(e)=>{return error.BadEvent;},}
+    match ring.publish(&(*s).command,&(*s).plan,&RING_OPS,s as u64) {ok=>{},err(e)=>{return error.IoFailure;},}
+    try write(s,(*s).caps.doorbells,0);let end=try deadline(s);var loops:usize=0;
+    while loops<LIMIT {
+        var event=wire.EMPTY_EVENT;var found=false;
+        match ring.poll(&(*s).events,&RING_OPS,s as u64,&event) {ok(v)=>{found=v;},err(e)=>{return error.BadEvent;},}
+        if found {
+            try consume(s,&event);
+            if event.kind==33 {
+                var completion=ring.Completion {generation:0,index:0,code:0,residual:0,final:0};
+                match ring.complete(&(*s).command,(*s).setup.epoch,(*s).plan.generation,&event,&completion) {ok=>{},err(e)=>{return error.BadEvent;},}
+                if completion.final!=1||completion.residual!=0 {return error.BadEvent;}try healthy(s);(*s).info.commands+=1;return;
+            }
+            if event.kind!=34 {return error.BadEvent;}
+        }
+        try healthy(s);
+        if (try now(s))>=end {return error.Timeout;}loops+=1;
+    }
+}return error.Timeout;}
+unsafe fn initialize_inner(s:*State)!void {unsafe {
+    let op=(*s).caps.operational;let runtime=(*s).caps.runtime;(*s).info.phase=2;
+    try write(s,op,0);try wait(s,op+4,1,1);(*s).info.phase=3;
+    try write(s,op,2);try wait(s,op,2,0);try wait(s,op+4,0x800,0);
+    if ((try read(s,op+4))&1)==0 {return error.BadRegisters;}(*s).info.phase=4;
+    var i:u64=0;while i<DMA_BYTES/8 {volatile_store(((*s).setup.pointer+(i*8) as usize) as *u64,0);i+=1;}
+    var setup=ring.Setup {physical:(*s).setup.physical+COMMAND_OFFSET,pointer:(*s).setup.pointer+COMMAND_OFFSET as usize,
+        entries:256,physical_bits:(*s).setup.physical_bits,epoch:(*s).setup.epoch,kind:ring.COMMAND,slot:0,endpoint:0};
+    match ring.producer_initialize(&(*s).command,&setup) {ok=>{},err(e)=>{return error.Invalid;},}
+    setup.physical=(*s).setup.physical+EVENT_OFFSET;setup.pointer=(*s).setup.pointer+EVENT_OFFSET as usize;setup.kind=0;
+    match ring.consumer_initialize(&(*s).events,&setup) {ok=>{},err(e)=>{return error.Invalid;},}
+    match ring.erst(&setup,slice_from_raw_parts((*s).setup.pointer+ERST_OFFSET as usize,16)) {ok=>{},err(e)=>{return error.Invalid;},}
+    try fence(s,4);(*s).info.phase=5;
+    try write(s,runtime+0x20,1);try write(s,runtime+0x24,0);try write(s,runtime+0x28,1);
+    try write64(s,runtime+0x38,(*s).setup.physical+EVENT_OFFSET);
+    try write64(s,op+0x30,(*s).setup.physical);
+    try write64(s,op+0x18,(*s).setup.physical+COMMAND_OFFSET+1);
+    try write(s,op+0x38,(*s).caps.enabled_slots as u32);
+    if ((try read(s,runtime+0x20))&2)!=0||(try read(s,runtime+0x28))!=1
+        ||((try read(s,op+0x38))&255)!=(*s).caps.enabled_slots as u32 {return error.BadRegisters;}
+    try readback(s,runtime+0x38,(*s).setup.physical+EVENT_OFFSET,MAX-15);
+    try readback(s,op+0x30,(*s).setup.physical,MAX-63);
+    try readback(s,op+0x18,(*s).setup.physical+COMMAND_OFFSET+1,MAX-14);
+    try fence(s,5);(*s).info.phase=6;
+    if (*(*s).ops).enable_bme((*s).context)!=0 {return error.IoFailure;}(*s).enabled=1;
+    // ERSTBA submission may fetch the table immediately, even while halted.
+    // Enable only the kernel-admitted private lease before exposing this pointer.
+    try write64(s,runtime+0x30,(*s).setup.physical+ERST_OFFSET);
+    try readback(s,runtime+0x30,(*s).setup.physical+ERST_OFFSET,MAX-63);
+    if ((try read(s,op+4))&0x1805)!=1 {return error.BadRegisters;}
+    try write(s,op,1);try wait(s,op+4,1,0);(*s).info.phase=7;
+    try noop_inner(s);(*s).info.phase=8;(*s).info.ready=1;
+}return;}
+pub unsafe fn initialize(s:*State,ops:*const Ops,context:u64,input:*const Setup)!void {unsafe {
+    if s==null||(*s).info.held!=0||(*s).busy!=0 {return error.Invalid;}
+    var caps=EMPTY_CAPS;try precheck(ops,context,input,&caps);
+    *s=EMPTY_STATE;(*s).ops=ops;(*s).context=context;(*s).setup=*input;(*s).caps=caps;(*s).info.held=1;(*s).busy=1;(*s).info.phase=1;
+    let result=initialize_inner(s);match result {ok=>{(*s).busy=0;return;},err(e)=>{(*s).busy=0;(*s).info.fault=1;(*s).info.ready=0;return result;},}
+}}
+pub unsafe fn noop(s:*State)!void {unsafe {
+    if s==null {return error.Invalid;}if (*s).busy!=0 {return error.Busy;}
+    if (*s).info.fault!=0 {return error.Faulted;}if (*s).info.ready!=1||(*s).info.held!=1 {return error.NotReady;}
+    (*s).busy=1;let result=noop_inner(s);match result {ok=>{(*s).busy=0;return;},err(e)=>{(*s).busy=0;(*s).info.fault=1;(*s).info.ready=0;return result;},}
+}}

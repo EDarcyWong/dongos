@@ -1,0 +1,124 @@
+// Actual AP scheduling gate, invoked by BSP after the established SMP/TLB gate.
+// All new metadata is arena backed. Workers busy-loop without yield; only real
+// timer/IPI entries can switch them. Failure stops the domain permanently.
+module sched.parallel_live;
+import sched.parallel as p;
+import sched.parallel_boot as boot;
+import smp.runtime as smp;
+import smp.context as context;
+import irq.platform as irq;
+import boot.service_memory as resources;
+import arch.x86_64 as arch;
+pub error Invalid=0x060a_0001;pub error Deadline=0x060a_0002;pub error Worker=0x060a_0003;pub error Timer=0x060a_0004;
+pub struct Report{
+ pub version:u64,pub phase:u64,pub error_code:u64,pub cpus:u64,pub domain:u64,pub probes:u64,pub count:u64,pub tsc_hz:u64,
+ pub quantum_ns:u64,pub started:u64,pub initial_done:u64,pub migrated_done:u64,pub idle_start:u64,pub idle_end:u64,
+ pub wake_start:u64,pub wake_end:u64,pub completed:u64,pub restart_token:u64,
+ pub restart_bottom:u64,pub restart_top:u64,pub restart_xstate:u64,pub restart_frame:u64,
+ pub rates:[16]u64,pub timer_events:[16]u64,pub ipi_events:[16]u64,pub initial_ticks:[16]u64,pub initial_switches:[16]u64,
+ pub idle_ticks:[16]u64,pub idle_end_ticks:[16]u64,pub wake_ticks:[16]u64,pub wake_end_ticks:[16]u64,
+ pub initial_masks:[32]u64,pub migrated_masks:[32]u64,pub iterations:[32]u64,pub errors:[32]u64,
+ pub stack_bottom:[32]u64,pub stack_top:[32]u64,pub xstate:[32]u64,pub final_frame:[32]u64,pub retired_token:[32]u64,
+}
+var INFO:*Report=null;var TIMERS:*boot.Timer=null;
+unsafe extern "sysv64" fn parallel_live_rate(lapic:u64,tsc_hz:u64)u64;
+unsafe extern "sysv64" fn parallel_live_worker()u64;
+unsafe extern "sysv64" fn parallel_live_pause()void;
+unsafe fn report()!*Report{unsafe{if INFO==null{return error.Invalid;}return INFO;}}
+unsafe fn timed(start:u64)!void{unsafe{
+ let now=arch.read_tsc();if now<start||now-start>(*INFO).tsc_hz*20{return error.Deadline;}
+ if boot.FAILED||p.pointer()==null||atomic_load(&(*p.pointer()).failed)!=0{return error.Worker;}
+}return;}
+unsafe fn healthy()!void{unsafe{
+ let probes=boot.probe_records();var n:usize=0;while n<boot.probe_count(){if atomic_load(&(*(probes+n)).errors)!=0{return error.Worker;}n+=1;}
+}return;}
+unsafe fn delay(ticks:u64)!void{unsafe{let started=arch.read_tsc();while true{
+ let now=arch.read_tsc();if now<started{return error.Deadline;}if now-started>=ticks{return;}
+ try healthy();try timed(started);parallel_live_pause();
+}}return;}
+unsafe fn settle_idle(d:*p.Domain,count:usize,frequency:u64)!void{unsafe{
+ let draining=arch.read_tsc();var complete=false;var cpu:usize=0;
+ while !complete{try timed(draining);(*INFO).idle_start=arch.read_tsc();
+  cpu=1;while cpu<count{(*INFO).idle_ticks[cpu]=atomic_load(&(*((*d).cpus+cpu)).ticks);cpu+=1;}
+  try delay(frequency/20);(*INFO).idle_end=arch.read_tsc();complete=true;
+  cpu=1;while cpu<count{let value=atomic_load(&(*((*d).cpus+cpu)).ticks);(*INFO).idle_end_ticks[cpu]=value;if value!=(*INFO).idle_ticks[cpu]{complete=false;}cpu+=1;}
+ }
+}return;}
+// Runs on each AP's scheduler stack, before the ordinary dispatcher. This is
+// the first local calibration, not a reused BSP LAPIC-rate claim.
+export("dong_parallel_live_event") fn event(cpu:usize,vector:u64)u64{unsafe{
+ if INFO==null||cpu==0||cpu>=(*INFO).cpus{return 0x060a_0001;}
+ let d=p.pointer();if d==null{return 0x060a_0001;}let c=(*d).cpus+cpu;
+ if (*c).ticks==0{
+  let rate=parallel_live_rate((*c).lapic,(*c).tsc_hz);
+  if rate<1000||rate>16000000000{p.failstop();return 0x060a_0004;}
+  (*c).lapic_hz=rate;atomic_store(&(*INFO).rates[cpu],rate);
+ }
+ if vector==0x40{atomic_fetch_add(&(*INFO).timer_events[cpu],1);}
+ else if vector==0xf3{atomic_fetch_add(&(*INFO).ipi_events[cpu],1);}else{return 0x060a_0001;}return 0;
+}}
+// Called while the real queue lock still owns the retiring thread, before the
+// metadata is cleared. Stack/xstate storage remains held for physical oracles.
+export("dong_parallel_live_retire") fn retired(cpu:usize,id:usize,frame:u64)void{unsafe{
+ if INFO!=null&&id<32&&cpu<(*INFO).cpus{let d=p.pointer();let t=(*d).threads+id;
+  if (*INFO).phase>=5&&id==0{(*INFO).restart_frame=frame;}
+  else{(*INFO).final_frame[id]=frame;(*INFO).retired_token[id]=(*t).token;}compiler_fence();}
+}return;}
+pub unsafe fn begin()!void{unsafe{
+ if INFO!=null||!p.interrupts_off()||sizeof(Report)>4096{return error.Invalid;}
+ let prior=smp.report_pointer();let count=(*prior).cpu_count as usize;if count<3||count>16||(*prior).steps!=31{return error.Invalid;}
+ var block=resources.Block{physical:0,virtual:0,pages:0};try resources.allocate(2,1,&block);
+ var z:usize=0;while z<1024{*((block.virtual as *u64)+z)=0;z+=1;}
+ INFO=block.virtual as *Report;TIMERS=(block.virtual+4096) as *boot.Timer;
+ var platform=irq.EMPTY_REPORT;try irq.describe(&platform);
+ let frequency=platform.tsc_hz;if frequency<1000000||frequency>16000000000{return error.Invalid;}
+ (*INFO).version=1;(*INFO).cpus=count as u64;(*INFO).tsc_hz=frequency;(*INFO).quantum_ns=1000000;
+ var cpu:usize=0;while cpu<count{let t=TIMERS+cpu;(*t).mode=2;(*t).tsc_hz=frequency;(*t).lapic_hz=1000000;(*t).quantum_ns=1000000;cpu+=1;}
+ (*INFO).phase=1;(*INFO).started=arch.read_tsc();let started=boot.probe_begin((*prior).context_pointer as *context.Context,count,TIMERS);
+ if started!=0{(*INFO).error_code=started;return error.Worker;}
+ let d=p.pointer();let probes=boot.probe_records();let workers=boot.probe_count();
+ if d==null||probes==null||workers!=(count-1)*2{return error.Invalid;}
+ (*INFO).domain=d as u64;(*INFO).probes=probes as u64;(*INFO).count=workers as u64;
+ var id:usize=0;while id<workers{let t=(*d).threads+id;
+  (*INFO).stack_bottom[id]=(*t).bottom;(*INFO).stack_top[id]=(*t).top;(*INFO).xstate[id]=(*t).xstate;id+=1;}
+ let first=arch.read_tsc();var complete=false;
+ while !complete{try timed(first);try healthy();complete=true;id=0;
+  while id<workers{let t=probes+id;if atomic_load(&(*t).ready)!=1||atomic_load(&(*t).iterations)<8192{complete=false;}id+=1;}
+  cpu=1;while cpu<count{if atomic_load(&(*INFO).timer_events[cpu])<3||atomic_load(&(*((*d).cpus+cpu)).switches)<3{complete=false;}cpu+=1;}
+  parallel_live_pause();
+ }
+ (*INFO).initial_done=arch.read_tsc();id=0;while id<workers{let mask=atomic_load(&(*(probes+id)).cpu_mask);
+  if mask!=(1<<((id/2+1) as u64)){return error.Worker;}(*INFO).initial_masks[id]=mask;id+=1;}
+ cpu=1;while cpu<count{let c=(*d).cpus+cpu;(*INFO).initial_ticks[cpu]=atomic_load(&(*c).ticks);(*INFO).initial_switches[cpu]=atomic_load(&(*c).switches);cpu+=1;}
+ (*INFO).phase=2;let changed=boot.probe_steal();if changed!=0{return error.Worker;}
+ let stealing=arch.read_tsc();complete=false;
+ while !complete{try timed(stealing);try healthy();complete=false;id=0;
+  while id<workers-2{let mask=atomic_load(&(*(probes+id)).cpu_mask);if (mask&(1<<((count-1) as u64)))!=0&&(mask&(mask-1))!=0{complete=true;}id+=1;}
+  if atomic_load(&(*(probes+workers-2)).done)!=1||atomic_load(&(*(probes+workers-1)).done)!=1{complete=false;}parallel_live_pause();
+ }
+ (*INFO).migrated_done=arch.read_tsc();id=0;while id<workers{(*INFO).migrated_masks[id]=atomic_load(&(*(probes+id)).cpu_mask);id+=1;}
+ (*INFO).phase=3;boot.probe_stop();let stopping=arch.read_tsc();complete=false;
+ while !complete{try timed(stopping);try healthy();complete=atomic_load(&(*(*d).engine).count)==0;id=0;
+  while id<workers{if atomic_load(&(*(probes+id)).done)!=1||atomic_load(&(*INFO).final_frame[id])==0{complete=false;}id+=1;}
+  cpu=1;while cpu<count{let c=(*d).cpus+cpu;if atomic_load(&(*c).current)!=0||atomic_load(&(*c).timer_armed)!=0{complete=false;}cpu+=1;}parallel_live_pause();
+ }
+ // Drain in-flight IPIs, then prove that the actual idle counters stay still.
+ (*INFO).phase=4;try settle_idle(d,count,frequency);
+ id=0;while id<workers{(*INFO).iterations[id]=atomic_load(&(*(probes+id)).iterations);(*INFO).errors[id]=atomic_load(&(*(probes+id)).errors);id+=1;}
+ // Reuse a real token slot after the empty-domain interval. Admission sends
+ // the wake IPI; a lone thread needs no quantum and exits through its own INT.
+ (*INFO).phase=5;var word:usize=0;while word<16{*((probes as *u64)+word)=0;word+=1;}
+ var token:u64=0;try boot.admit(0,8,2,parallel_live_worker(),probes as u64,&token);(*INFO).restart_token=token;
+ let fresh=(*d).threads;(*INFO).restart_bottom=(*fresh).bottom;(*INFO).restart_top=(*fresh).top;(*INFO).restart_xstate=(*fresh).xstate;
+ let waking=arch.read_tsc();while atomic_load(&(*probes).iterations)<8192{try timed(waking);try healthy();parallel_live_pause();}
+ if atomic_load(&(*probes).cpu_mask)!=2||token==(*INFO).retired_token[0]{return error.Worker;}
+ (*INFO).wake_start=arch.read_tsc();cpu=1;while cpu<count{(*INFO).wake_ticks[cpu]=atomic_load(&(*((*d).cpus+cpu)).ticks);cpu+=1;}
+ let before=atomic_load(&(*probes).iterations);try delay(frequency/100);(*INFO).wake_end=arch.read_tsc();
+ if atomic_load(&(*probes).iterations)<=before||atomic_load(&(*((*d).cpus+1)).timer_armed)!=0{return error.Timer;}
+ cpu=1;while cpu<count{let value=atomic_load(&(*((*d).cpus+cpu)).ticks);(*INFO).wake_end_ticks[cpu]=value;if value!=(*INFO).wake_ticks[cpu]{return error.Timer;}cpu+=1;}
+ boot.probe_stop();let last=arch.read_tsc();while atomic_load(&(*(*d).engine).count)!=0||atomic_load(&(*INFO).restart_frame)==0{try timed(last);try healthy();parallel_live_pause();}
+ if atomic_load(&(*probes).done)!=1{return error.Worker;}(*INFO).completed=arch.read_tsc();(*INFO).phase=6;
+}return;}
+export("dong_parallel_live_begin") fn entry()u64{unsafe{let result=begin();match result{ok=>{return 0;},err(e)=>{
+ if INFO!=null&&(*INFO).error_code==0{(*INFO).error_code=e;}p.failstop();return e;},}}}
+export("dong_parallel_live_report") fn describe()*const Report{unsafe{return INFO;}}

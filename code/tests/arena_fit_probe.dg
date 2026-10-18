@@ -1,0 +1,13 @@
+module arena_fit_probe;
+
+import boot.arena_fit as arena;
+import mm.memory_map as mmap;
+
+export("arena_fits") fn probe(ranges: *const mmap.PageRange, count: usize) usize {
+    unsafe {
+        if arena.fits(slice_from_raw_parts(ranges, count)) { return 1; }
+    }
+    return 0;
+}
+export("arena_range_size") fn range_size() usize { return sizeof(mmap.PageRange); }
+export("arena_range_align") fn range_align() usize { return alignof(mmap.PageRange); }

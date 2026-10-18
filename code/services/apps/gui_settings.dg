@@ -1,0 +1,3 @@
+module apps.gui_settings;
+import lib.gui_app as app;
+export("service_main") fn main()u64{unsafe{return app.run(4);}}

@@ -1,0 +1,20 @@
+module parallel_builder_probe;
+import sched.parallel_boot as boot;import sched.parallel as p;
+import smp.context as smp;import boot.memory_startup as startup;import mm.paging as paging;
+var CPUS:[4]smp.Context=[smp.EMPTY;4];
+var TIMERS:[4]boot.Timer=[boot.Timer{mode:2,tsc_hz:1000000000,lapic_hz:10000000,quantum_ns:1000000};4];
+export("pb_begin") fn begin(idle:u64)u64{unsafe{
+ var i:usize=0;while i<4{let c=&CPUS[i];(*c).self=c as u64;(*c).logical_id=i as u64;(*c).state=smp.ONLINE;
+  (*c).cr3=0x100000;(*c).stack_bottom=idle+i as u64*16384;(*c).stack_top=(*c).stack_bottom+16384;
+  (*c).apic_id=i as u64+16;(*c).lapic_va=0xfec00000;(*c).tss=0x100000+i as u64*4096;i+=1;
+ }return boot.probe_begin(&CPUS[0],4,&TIMERS[0]);
+}}
+export("pb_get") fn get(which:u64,id:usize)u64{unsafe{let d=p.pointer();if which==2{return boot.FAILED as u64;}
+ if d==null{return 0;}if which==0{return (*d).failed;}if which==1{return (*(*d).engine).count;}
+ if which==3{return (*d).started;}if which==4{return boot.probe_count();}if which==5{return boot.probe_records() as u64;}
+ if which==6{return (*((*d).cpus+id)).scheduler_top;}return (*((*d).threads+id)).token;
+}}
+export("pb_leaf") fn leaf(address:u64)u64{unsafe{var m=paging.Mapping{physical:0,flags:0};
+ match paging.query(startup.space_pointer(),address,&m){ok=>{return m.physical|m.flags;},err(e)=>{return 0;},}
+}}
+export("pb_more") fn more(out:*u64)u64{unsafe{match boot.admit(10,8,14,0x80000200,0,out){ok=>{return 0;},err(e)=>{return e;},}}}

@@ -1,0 +1,69 @@
+// Exclusive BSP, IF=0, after the original P2 lifecycle checks. Failure is
+// fail-stop: allocated table pages remain held and no driver is called.
+module boot.device_memory;
+
+import boot.memory_startup as startup;
+import boot.device_policy as policy;
+import boot.acpi_startup as acpi;
+import boot.preflight as preflight;
+import boot.memory_resources as resources;
+import mm.paging as paging;
+
+pub unsafe extern "sysv64" fn runtime_invalidate(virtual: u64) void;
+
+pub error InvalidState = 0x0303_0006;
+pub error AlreadyAttempted = 0x0303_0007;
+pub error Occupied = 0x0303_0008;
+var ATTEMPTED: bool = false;
+var READY: bool = false;
+var PLAN: policy.Plan = policy.EMPTY_PLAN;
+
+pub unsafe fn prepare(state: *const preflight.State, out: *policy.Views) !void {
+    unsafe {
+        if ATTEMPTED { return error.AlreadyAttempted; }
+        ATTEMPTED = true;
+        let view = startup.runtime_pointer();
+        let space = startup.space_pointer();
+        let topology = acpi.inventory_pointer();
+        if state == null || out == null || view == null || space == null || topology == null { return error.InvalidState; }
+        let s = *state;
+        if s.cr3 != (*view).root_physical || (s.rflags & 0x60600) != 0 || (s.rflags & 2) == 0
+            || (s.cr4 & 0x21080) != 0 || (s.cr0 & 0xe001_0001) != 0x8001_0001
+            || (s.efer & 0xd00) != 0xd00 || (s.pat & 255) != 6 || ((s.pat >> 24) & 255) != 0 {
+            return error.InvalidState;
+        }
+        let raw = slice_from_raw_parts((*view).raw_map as *const u8,(*view).raw_size as usize);
+        let kept = slice_from_raw_parts(startup.manifest_pointer(),resources.COUNT + 2);
+        try policy.plan(topology,raw,(*view).descriptor_size as usize,kept,&PLAN);
+        var slot: usize = 0;
+        while slot < policy.SLOTS {
+            if PLAN.physical[slot] != 0 {
+                var old = paging.Mapping { physical: 0, flags: 0 };
+                let found = paging.query(space,policy.BASE + (slot as u64) * 4096,&old);
+                match found { ok => { return error.Occupied; }, err(code) => {
+                    if code != 0x0203_0002 { return found; }
+                }, }
+            }
+            slot += 1;
+        }
+        slot = 0;
+        while slot < policy.SLOTS {
+            if PLAN.physical[slot] != 0 {
+                let virtual = policy.BASE + (slot as u64) * 4096;
+                try paging.map_live(space,virtual,PLAN.physical[slot],paging.WRITE | paging.UNCACHED);
+                compiler_fence();
+                runtime_invalidate(virtual);
+            }
+            slot += 1;
+        }
+        READY = true;
+        *out = PLAN.views;
+    }
+    return;
+}
+
+pub fn plan_pointer() *const policy.Plan {
+    unsafe { if !READY { return null; } return &PLAN; }
+}
+
+pub unsafe extern "sysv64" fn runtime_flush_root() void;

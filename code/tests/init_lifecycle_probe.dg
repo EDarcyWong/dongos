@@ -1,0 +1,14 @@
+module init_lifecycle_probe;
+import lib.process_abi as abi;
+import init.policy as policy;
+import init.main as main;
+export("il_validate") fn validate(c:*const abi.Config,n:usize)u64 {unsafe {match policy.validate(c,n) {ok=>{return 0;},err(e)=>{return e;},}}}
+export("il_initialize") fn initialize(c:*const abi.Config,n:usize,m:*policy.Manager)u64 {unsafe {match policy.initialize(c,n,m) {ok=>{return 0;},err(e)=>{return e;},}}}
+export("il_next") fn next(m:*policy.Manager,now:u64,out:*policy.Action,result:*u64)u64 {unsafe {match policy.next(m,now,out) {ok(value)=>{*result=value as u64;return 0;},err(e)=>{return e;},}}}
+export("il_spawned") fn spawned(m:*policy.Manager,id:u64,s:*const abi.Snapshot,now:u64)u64 {unsafe {match policy.spawned(m,id,s,now) {ok=>{return 0;},err(e)=>{return e;},}}}
+export("il_failed") fn failed(m:*policy.Manager,id:u64,status:u64)u64 {unsafe {match policy.spawn_failed(m,id,status) {ok=>{return 0;},err(e)=>{return e;},}}}
+export("il_adopt") fn adopt(m:*policy.Manager,s:*const abi.Snapshot,now:u64)u64 {unsafe {match policy.adopt(m,s,now) {ok=>{return 0;},err(e)=>{return e;},}}}
+export("il_killed") fn killed(m:*policy.Manager,id:u64,generation:u64)u64 {unsafe {match policy.killed(m,id,generation) {ok=>{return 0;},err(e)=>{return e;},}}}
+export("il_observe") fn observe(m:*policy.Manager,e:*const abi.Event,result:*u64)u64 {unsafe {match policy.observe(m,e) {ok(value)=>{*result=value as u64;return 0;},err(e)=>{return e;},}}}
+export("il_deadline") fn deadline(m:*const policy.Manager,out:*u64)u64 {unsafe {match policy.next_deadline(m) {ok(value)=>{*out=value;return 0;},err(e)=>{return e;},}}}
+export("il_exhausted") fn exhausted(m:*const policy.Manager,out:*u64)u64 {unsafe {match policy.exhausted(m) {ok(value)=>{*out=value as u64;return 0;},err(e)=>{return e;},}}}

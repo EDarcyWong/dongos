@@ -1,0 +1,71 @@
+// Pure readback policy after the non-returning root/stack handoff. No CPU
+// controls, table entries, display pixels or caller objects are modified here.
+module boot.activation;
+
+import boot.preflight as preflight;
+import boot.runtime_view as runtime;
+
+pub struct Report {
+    pub cr3: u64, pub cr0: u64, pub cr4: u64, pub efer: u64,
+    pub pat: u64, pub rflags: u64, pub entry_rsp: u64, pub entry_rbp: u64,
+    pub rsp: u64, pub rbp: u64, pub nested_value: u64, pub display_value: u64,
+    pub runtime_value: u64, pub cache_steps: u64,
+}
+
+pub const EMPTY_REPORT: Report = Report {
+    cr3: 0, cr0: 0, cr4: 0, efer: 0, pat: 0, rflags: 0,
+    entry_rsp: 0, entry_rbp: 0, rsp: 0, rbp: 0, nested_value: 0,
+    display_value: 0, runtime_value: 0, cache_steps: 0,
+};
+
+pub error InvalidActivation = 0x0209_0001;
+
+fn storage(address: u64, bytes: u64) bool {
+    return address != 0 && (address & 7) == 0 && address <= 0xffff_ffff_ffff_ffff - bytes;
+}
+
+// Non-null pointers must refer to aligned, readable live objects. Stack
+// bounds are checked by subtraction, so a wrapped frame can never pass.
+pub unsafe fn verify(report: *const Report, before: *const preflight.State,
+                     plan: *const preflight.Plan, view: *const runtime.View) !void {
+    unsafe {
+        if !storage(report as u64, sizeof(Report) as u64)
+            || !storage(before as u64, sizeof(preflight.State) as u64)
+            || !storage(plan as u64, sizeof(preflight.Plan) as u64)
+            || !storage(view as u64, sizeof(runtime.View) as u64) {
+            return error.InvalidActivation;
+        }
+        let r = *report;
+        let b = *before;
+        let p = *plan;
+        let v = *view;
+        var expected = preflight.EMPTY_PLAN;
+        match preflight.plan(before, b.cr3, &expected) {
+            ok => {},
+            err(code) => { return error.InvalidActivation; },
+        }
+        if p.cr0 != expected.cr0 || p.efer != expected.efer || p.actions != expected.actions {
+            return error.InvalidActivation;
+        }
+        if r.cr3 == 0 || (r.cr3 & 4095) != 0 || r.cr3 >= 0x1_0000_0000
+            || r.cr3 != v.root_physical || r.cr3 == b.cr3
+            || r.cr0 != p.cr0 || r.efer != p.efer || r.cr4 != b.cr4 || r.pat != b.pat {
+            return error.InvalidActivation;
+        }
+        if (r.rflags & 0x60600) != 0 || (r.rflags & 2) == 0
+            || r.entry_rsp != v.stack_top || r.entry_rbp != 0 {
+            return error.InvalidActivation;
+        }
+        if v.stack_bottom >= v.stack_top || r.rsp < v.stack_bottom || r.rsp >= v.stack_top
+            || (r.rsp & 15) != 8 || (r.rbp & 15) != 0
+            || r.rbp < v.stack_bottom || r.rbp >= v.stack_top {
+            return error.InvalidActivation;
+        }
+        if v.stack_top - r.rbp < 16 || r.nested_value != 0x4143_5449_5645
+            || r.display_value != 0x0055_aa33 || r.runtime_value != 0x5255_4e54_494d_45
+            || r.cache_steps != 31 {
+            return error.InvalidActivation;
+        }
+    }
+    return;
+}

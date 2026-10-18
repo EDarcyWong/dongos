@@ -1,0 +1,285 @@
+// RAM-only UI rendering; frame-wide preflight precedes drawing. Source backing,
+// models and labels are stable, disjoint unsafe borrows for the entire call.
+module desktop.render;
+import gfx.geometry as geo;
+import gfx.raster as raster;
+import gfx.atlas as atlas;
+import desktop.theme as theme;
+import desktop.widgets as ui;
+import desktop.windows as windows;
+pub error InvalidRender = 0x0723_0001;
+const MAX: u64 = 0xffff_ffff_ffff_ffff;
+// The empty slice contains a relocation. Keep its storage in RW data so a
+// userspace PIE loader never needs a text/rodata relocation.
+var ZERO_GLYPH: atlas.Glyph = atlas.Glyph { width: 0, height: 0, bearing_x: 0, bearing_y: 0,
+    advance_q6: 0, coverage: "", stride: 0 };
+unsafe fn disjoint(dst: *const raster.Surface, bytes: []const u8) !void {
+    unsafe {
+        let a = (*dst).pixels.ptr as u64; let b = bytes.ptr as u64;
+        if b > MAX - bytes.len as u64 || (bytes.len != 0 && a < b + bytes.len as u64 && b < a + ((*dst).pixels.len as u64) * 4) { return error.InvalidRender; }
+    }
+    return;
+}
+unsafe fn glyph(font: *const atlas.Atlas, cp: u32, out: *atlas.Glyph) !void {
+    unsafe {
+        let found = try atlas.lookup(font,cp,out);
+        if !found { let fallback = try atlas.lookup(font,0xfffd,out); if !fallback { return error.InvalidRender; } }
+    }
+    return;
+}
+unsafe fn empty_glyph(font: *const atlas.Atlas, out: *atlas.Glyph) void {
+    unsafe { *out = atlas.Glyph { width: 0, height: 0, bearing_x: 0, bearing_y: 0, advance_q6: 0,
+        coverage: (*font).bytes[0..0], stride: 0 }; }
+    return;
+}
+pub unsafe fn measure(font: *const atlas.Atlas, bytes: []const u8) !i64 {
+    unsafe {
+        try ui.utf8(bytes); if font == null { return error.InvalidRender; }
+        var g = ZERO_GLYPH;
+        // Validate Atlas even for an empty label.
+        let unused = try atlas.lookup(font,0,&g);
+        var at: usize = 0; var cp: u32 = 0; var pen: i64 = 0; var maximum: i64 = 0;
+        while at < bytes.len {
+            at = try ui.next(bytes,at,&cp);
+            if cp == 10 { if pen > maximum { maximum = pen; } pen = 0; }
+            else { try glyph(font,cp,&g); pen += g.advance_q6; }
+        }
+        if pen > maximum { maximum = pen; } return maximum / 64;
+    }
+}
+unsafe fn checked_rect(rect: *const geo.Rect) !void {
+    unsafe {
+        if !geo.valid(rect) || (*rect).left < -65536 || (*rect).top < -65536
+            || (*rect).right > 65536 || (*rect).bottom > 65536 { return error.InvalidRender; }
+    }
+    return;
+}
+unsafe fn put(dst: *raster.Surface, x: i64, y: i64, color: u32) void {
+    unsafe { let at = (y as usize) * (*dst).stride + x as usize; (*dst).pixels[at] = raster.over((*dst).pixels[at],color); }
+    return;
+}
+unsafe fn solid(dst: *raster.Surface, rect: *const geo.Rect, clip: *const geo.Rect, color: u32) !void {
+    unsafe {
+        var area = geo.EMPTY; let visible = try geo.intersect(rect,clip,&area); if !visible { return; }
+        var y = area.top; while y < area.bottom { var x = area.left; while x < area.right { put(dst,x,y,color); x += 1; } y += 1; }
+    }
+    return;
+}
+unsafe fn coverage(rect: *const geo.Rect, radius: i64, x: i64, y: i64) u8 {
+    unsafe {
+        if radius == 0 { return 255; }
+        var cx = x * 8 + 4; var cy = y * 8 + 4;
+        if x < (*rect).left + radius { cx = ((*rect).left + radius) * 8; }
+        else { if x >= (*rect).right - radius { cx = ((*rect).right - radius) * 8; } }
+        if y < (*rect).top + radius { cy = ((*rect).top + radius) * 8; }
+        else { if y >= (*rect).bottom - radius { cy = ((*rect).bottom - radius) * 8; } }
+        if cx == x * 8 + 4 || cy == y * 8 + 4 { return 255; }
+        var hits: u64 = 0; var sy: i64 = 1;
+        while sy < 8 { var sx: i64 = 1; while sx < 8 {
+            let dx = x * 8 + sx - cx; let dy = y * 8 + sy - cy;
+            if dx * dx + dy * dy <= radius * radius * 64 { hits += 1; } sx += 2;
+        } sy += 2; }
+        return ((hits * 255 + 8) / 16) as u8;
+    }
+}
+unsafe fn round(dst: *raster.Surface, rect: *const geo.Rect, clip: *const geo.Rect, radius: i64, color: u32) !void {
+    unsafe {
+        var r = radius; let w = (*rect).right - (*rect).left; let h = (*rect).bottom - (*rect).top;
+        if r > w / 2 { r = w / 2; } if r > h / 2 { r = h / 2; }
+        var area = geo.EMPTY; let visible = try geo.intersect(rect,clip,&area); if !visible { return; }
+        var y = area.top; while y < area.bottom { var x = area.left; while x < area.right {
+            put(dst,x,y,raster.coverage(color,coverage(rect,r,x,y))); x += 1;
+        } y += 1; }
+    }
+    return;
+}
+pub unsafe fn rounded(dst: *raster.Surface, rect: *const geo.Rect, clip: *const geo.Rect, radius: i64, color: u32) !void {
+    unsafe {
+        try raster.validate(dst); try checked_rect(rect);
+        var bounds = geo.EMPTY; raster.bounds(dst,&bounds);
+        if radius < 0 || radius > 128 || !theme.valid_color(color) || !geo.contains(&bounds,clip) { return error.InvalidRender; }
+        try round(dst,rect,clip,radius,color);
+    }
+    return;
+}
+unsafe fn paint(dst: *raster.Surface, font: *const atlas.Atlas, bytes: []const u8, x: i64, baseline: i64,
+                   color: u32, clip: *const geo.Rect, low: usize, high: usize, selection: u32, caret: usize, show_caret: bool) !void {
+    unsafe {
+        var g = ZERO_GLYPH; var at: usize = 0; var cp: u32 = 0; var pen: i64 = 0; var line = baseline;
+        var cursor_x = x; var cursor_y = line; var cursor_seen = caret == 0;
+        while at < bytes.len {
+            let begin = at;
+            if at == caret { cursor_x = x + pen / 64; cursor_y = line; cursor_seen = true; }
+            at = try ui.next(bytes,at,&cp);
+            if cp == 10 { pen = 0; line += (*font).ascent + (*font).descent; }
+            else {
+                try glyph(font,cp,&g);
+                let gx = x + pen / 64 + g.bearing_x; let gy = line - g.bearing_y;
+                if begin >= low && begin < high {
+                    var width = g.advance_q6 / 64; if width < 1 { width = 1; }
+                    let area = geo.Rect { left: x + pen / 64, top: line - (*font).ascent,
+                        right: x + pen / 64 + width, bottom: line + (*font).descent };
+                    try solid(dst,&area,clip,selection);
+                }
+                var area = geo.Rect { left: gx, top: gy, right: gx + g.width as i64, bottom: gy + g.height as i64 };
+                var visible = geo.EMPTY; let hit = try geo.intersect(&area,clip,&visible);
+                if hit {
+                    var yy = visible.top; while yy < visible.bottom { var xx = visible.left; while xx < visible.right {
+                        let alpha = g.coverage[((yy - gy) as usize) * g.stride + (xx - gx) as usize];
+                        put(dst,xx,yy,raster.coverage(color,alpha)); xx += 1;
+                    } yy += 1; }
+                }
+                pen += g.advance_q6;
+            }
+        }
+        if caret == bytes.len { cursor_x = x + pen / 64; cursor_y = line; cursor_seen = true; }
+        if show_caret && cursor_seen {
+            let area = geo.Rect { left: cursor_x, top: cursor_y - (*font).ascent, right: cursor_x + 1, bottom: cursor_y + (*font).descent };
+            try solid(dst,&area,clip,color);
+        }
+    }
+    return;
+}
+pub unsafe fn text(dst: *raster.Surface, font: *const atlas.Atlas, bytes: []const u8,
+                     x: i64, baseline: i64, color: u32, clip: *const geo.Rect) !void {
+    unsafe {
+        try raster.validate(dst); let width = try measure(font,bytes);
+        var bounds = geo.EMPTY; raster.bounds(dst,&bounds);
+        if x < -65536 || x > 65536 || baseline < -65536 || baseline > 65536 || !theme.valid_color(color)
+            || !geo.contains(&bounds,clip) { return error.InvalidRender; }
+        try disjoint(dst,bytes); try disjoint(dst,(*font).bytes);
+        try paint(dst,font,bytes,x,baseline,color,clip,0,0,0,0,false);
+    }
+    return;
+}
+unsafe fn shadow(dst: *raster.Surface, rect: *const geo.Rect, clip: *const geo.Rect, blur: i64, radius: i64, color: u32) !void {
+    if blur == 0 { return; }
+    unsafe {
+        let outer = geo.Rect { left: (*rect).left - blur, top: (*rect).top - blur / 2,
+            right: (*rect).right + blur, bottom: (*rect).bottom + blur + blur / 2 };
+        var area = geo.EMPTY; let visible = try geo.intersect(&outer,clip,&area); if !visible { return; }
+        var y = area.top; while y < area.bottom { var x = area.left; while x < area.right {
+            var dx: i64 = 0; var dy: i64 = 0;
+            if x < (*rect).left { dx = (*rect).left - x; } if x >= (*rect).right { dx = x - (*rect).right + 1; }
+            let yy = y - blur / 2;
+            if yy < (*rect).top { dy = (*rect).top - yy; } if yy >= (*rect).bottom { dy = yy - (*rect).bottom + 1; }
+            var distance = dx; if dy > distance { distance = dy; }
+            if distance < blur {
+                let fade = ((blur - distance) * 255 / blur) as u8;
+                let alpha = coverage(&outer,radius + blur,x,y);
+                put(dst,x,y,raster.coverage(raster.coverage(color,fade),alpha));
+            }
+            x += 1;
+        } y += 1; }
+    }
+    return;
+}
+unsafe fn check_frame(dst: *const raster.Surface, font: *const atlas.Atlas, model: *const ui.Model,
+                         style: *const theme.Theme, damage: *const geo.Damage) !void {
+    unsafe {
+        try raster.validate(dst); try theme.validate(style); try ui.validate(model); try geo.validate_damage(damage);
+        if (*model).bounds.right != (*dst).width as i64 || (*model).bounds.bottom != (*dst).height as i64
+            || (*damage).bounds.left != 0 || (*damage).bounds.top != 0 || (*damage).bounds.right != (*model).bounds.right
+            || (*damage).bounds.bottom != (*model).bounds.bottom { return error.InvalidRender; }
+        let width = try measure(font,""); try disjoint(dst,(*font).bytes);
+        var i: usize = 0; while i < (*model).count {
+            let c = &(*model).controls[i]; var j: usize = 0;
+            while j < (*c).count {
+                let bytes = slice_from_raw_parts((*c).labels[j].bytes,(*c).labels[j].len);
+                let length = try measure(font,bytes); try disjoint(dst,bytes); j += 1;
+            }
+            if (*c).kind == ui.TEXTBOX {
+                let t = (*c).text; let bytes = slice_from_raw_parts((*t).bytes,(*t).len);
+                let length = try measure(font,bytes); try disjoint(dst,bytes);
+            }
+            i += 1;
+        }
+    }
+    return;
+}
+pub unsafe fn model(dst: *raster.Surface, font: *const atlas.Atlas, value: *const ui.Model,
+                      style: *const theme.Theme, damage: *const geo.Damage, now_ms: u64) !void {
+    unsafe {
+        try check_frame(dst,font,value,style,damage);
+        let radius = try theme.scaled(style,(*style).radius as i64);
+        let blur = try theme.scaled(style,(*style).shadow_size as i64);
+        let padding = try theme.scaled(style,5);
+        var d: usize = 0; while d < (*damage).count {
+            let clip = (*damage).rects[d]; try raster.fill(dst,&clip,(*style).background);
+            var i: usize = 0; while i < (*value).count {
+                let c = &(*value).controls[i];
+                if ((*c).flags & ui.VISIBLE) != 0 {
+                    try shadow(dst,&(*c).rect,&clip,blur,radius,(*style).shadow);
+                    var body = (*style).surface;
+                    if ((*c).flags & ui.ENABLED) != 0 {
+                        let hover = try theme.sample(&(*c).hover,now_ms);
+                        body = theme.mix(body,(*style).accent,(hover as u64) / 4);
+                        if (*value).pressed == (*c).id { body = (*style).accent; }
+                    }
+                    try round(dst,&(*c).rect,&clip,radius,(*style).border);
+                    let inside = geo.Rect { left: (*c).rect.left + 1, top: (*c).rect.top + 1, right: (*c).rect.right - 1, bottom: (*c).rect.bottom - 1 };
+                    if geo.valid(&inside) && !geo.empty(&inside) { var r = radius - 1; if r < 0 { r = 0; } try round(dst,&inside,&clip,r,body); }
+                    var content = geo.EMPTY; let visible = try geo.intersect(&(*c).rect,&clip,&content);
+                    if visible {
+                        var color = (*style).text; if ((*c).flags & ui.ENABLED) == 0 { color = (*style).muted; }
+                        if (*c).kind == ui.TEXTBOX {
+                            let t = (*c).text; let begin = (*c).scroll;
+                            let bytes = slice_from_raw_parts((*t).bytes + begin,(*t).len - begin);
+                            var cursor: usize = 0; if (*t).caret >= begin { cursor = (*t).caret - begin; }
+                            let prefix = slice_from_raw_parts((*t).bytes + begin,cursor); let caret_width = try measure(font,prefix);
+                            var offset: i64 = 0; let available = (*c).rect.right - (*c).rect.left - padding * 2 - 1;
+                            if caret_width > available { offset = caret_width - available; }
+                            var low = (*t).anchor; var high = (*t).caret; if low > high { let swap = low; low = high; high = swap; }
+                            if low < begin { low = begin; } if high < begin { high = begin; } low -= begin; high -= begin;
+                            try paint(dst,font,bytes,(*c).rect.left + padding - offset,(*c).rect.top + padding + (*font).ascent,
+                                color,&content,low,high,(*style).selection,cursor,(*t).caret >= begin && (*value).focus == (*c).id && (now_ms / 500) % 2 == 0);
+                        } else { if (*c).kind == ui.BUTTON {
+                            if (*c).count != 0 {
+                                let bytes = slice_from_raw_parts((*c).labels[0].bytes,(*c).labels[0].len); let width = try measure(font,bytes);
+                                try paint(dst,font,bytes,(*c).rect.left + ((*c).rect.right - (*c).rect.left - width) / 2,
+                                    (*c).rect.top + ((*c).rect.bottom - (*c).rect.top - (*font).ascent - (*font).descent) / 2 + (*font).ascent,
+                                    color,&content,0,0,0,0,false);
+                            }
+                        } else {
+                            var n = (*c).scroll; if (*c).kind == ui.TASKBAR { n = 0; }
+                            var row: usize = 0;
+                            while n < (*c).count {
+                                var box = (*c).rect;
+                                if (*c).kind == ui.LIST { box.top += row as i64 * (*c).row_height; box.bottom = box.top + (*c).row_height; if box.top >= (*c).rect.bottom { n = (*c).count; } }
+                                else { box.left += n as i64 * ((*c).rect.right - (*c).rect.left) / (*c).count as i64; box.right = (*c).rect.left + (n as i64 + 1) * ((*c).rect.right - (*c).rect.left) / (*c).count as i64; }
+                                if n < (*c).count {
+                                    var itemclip = geo.EMPTY; let itemvisible = try geo.intersect(&box,&content,&itemclip);
+                                    if itemvisible {
+                                        if (*c).value == n as i64 { try solid(dst,&box,&itemclip,(*style).selection); }
+                                        let bytes = slice_from_raw_parts((*c).labels[n].bytes,(*c).labels[n].len);
+                                        try paint(dst,font,bytes,box.left + padding,box.top + (box.bottom - box.top - (*font).ascent - (*font).descent) / 2 + (*font).ascent,
+                                            color,&itemclip,0,0,0,0,false);
+                                    }
+                                    n += 1; row += 1;
+                                }
+                            }
+                        } }
+                    }
+                }
+                i += 1;
+            }
+            d += 1;
+        }
+    }
+    return;
+}
+// A real WindowState is checked rather than treating a generation-less slot
+// index as a UI identity. The caller supplies the current active lease's Surface.
+pub unsafe fn window(dst: *raster.Surface, font: *const atlas.Atlas, state: *const windows.State, handle: u64,
+                       value: *const ui.Model, style: *const theme.Theme, damage: *const geo.Damage, now_ms: u64) !void {
+    unsafe {
+        try raster.validate(dst); try windows.validate(state); let low = handle & 255;
+        if low == 0 || low > 16 { return error.InvalidRender; }
+        let slot = &(*state).slots[(low - 1) as usize];
+        if (*slot).status != windows.LIVE || ((*slot).generation << 8) != (handle & ~255)
+            || (*slot).rect.right - (*slot).rect.left != (*dst).width as i64
+            || (*slot).rect.bottom - (*slot).rect.top != (*dst).height as i64 { return error.InvalidRender; }
+        try model(dst,font,value,style,damage,now_ms);
+    }
+    return;
+}

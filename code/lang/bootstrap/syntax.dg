@@ -1,0 +1,15 @@
+// Syntax facade over the common bounded token/AST engine. No semantic checking.
+module bootstrap.syntax;
+import bootstrap.lexer as lex;
+import bootstrap.expression as expression;
+pub const BLOCK:u64=1;pub const MODULE:u64=2;pub const STATEMENT:u64=3;pub const DECLARATION:u64=4;
+pub unsafe fn parse(mode:u64,source:[]const u8,tokens:[]const lex.Token,start:usize,
+ nodes:[]expression.Node,max_depth:usize,result:*expression.Result)u64{unsafe{
+ if mode<BLOCK||mode>DECLARATION{return expression.INVALID;}
+ return expression.parse_syntax(mode,source,tokens,start,nodes,max_depth,result);
+}}
+export("dong_bootstrap_syntax") pub unsafe fn parse_raw(source:*const u8,length:usize,tokens:*const lex.Token,count:usize,
+ start:usize,nodes:*expression.Node,capacity:usize,max_depth:usize,mode:u8,result:*expression.Result)u64{unsafe{
+ return parse(mode as u64,slice_from_raw_parts(source,length),slice_from_raw_parts(tokens,count),start,
+  slice_from_raw_parts(nodes,capacity),max_depth,result);
+}}

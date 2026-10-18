@@ -1,0 +1,14 @@
+module path_probe;
+import fs.path as path;
+export("path_sizes") fn sizes(out:*u64)void {unsafe {
+    out[0]=sizeof(path.Path) as u64;out[1]=path.MAX_BYTES as u64;
+    out[2]=path.MAX_INPUT_BYTES as u64;out[3]=path.MAX_COMPONENTS as u64;out[4]=path.MAX_NAME_UNITS as u64;
+}return;}
+export("path_name") fn name(input:*const u8,length:usize,units:*u64)u64 {unsafe {
+    match path.validate_name(slice_from_raw_parts(input,length)) {ok(n)=>{*units=n as u64;return 0;},err(code)=>{return code;},}
+}}
+export("path_normalize") fn normalize(cwd:*const u8,cwd_length:usize,input:*const u8,length:usize,out:*path.Path)u64 {unsafe {
+    match path.normalize(slice_from_raw_parts(cwd,cwd_length),slice_from_raw_parts(input,length),out) {
+        ok=>{return 0;},err(code)=>{return code;},
+    }
+}}

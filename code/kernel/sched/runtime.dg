@@ -1,0 +1,20 @@
+// Exported scalar/pointer bridge used by the reviewed resumable IRQ assembly.
+module sched.runtime;
+import sched.core as core;
+pub fn link() u64 { return sizeof(core.Engine); }
+export("dong_sched_init") fn init(engine: *core.Engine, first: u64, second: u64) u64 {
+    unsafe {
+        match core.init(engine, 2) { ok => {}, err(code) => { return code; }, }
+        match core.add(engine, 0, 0, 8) { ok => {}, err(code) => { return code; }, }
+        match core.add(engine, 1, 1, first) { ok => {}, err(code) => { return code; }, }
+        match core.add(engine, 2, 1, second) { ok => {}, err(code) => { return code; }, }
+    }
+    return 0;
+}
+export("dong_sched_tick") fn tick(engine: *core.Engine, frame: u64) u64 {
+    unsafe {
+        if (*engine).ticks == 0 { (*engine).threads[0].state = core.BLOCKED; }
+        if (*engine).ticks == 128 { (*engine).threads[0].state = core.READY; }
+        match core.tick(engine, frame) { ok(value) => { return value; }, err(code) => { return code; }, }
+    }
+}

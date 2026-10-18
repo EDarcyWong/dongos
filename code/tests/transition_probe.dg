@@ -1,0 +1,16 @@
+module transition_probe;
+import desktop.transition as transition;
+import gfx.geometry as geo;
+export("transition_size") fn size()u64 { return sizeof(transition.Track) as u64; }
+export("transition_begin") fn begin(track:*transition.Track,screen:*const geo.Rect,from:*const geo.Rect,to:*const geo.Rect,now:u64,duration:u64)u64 {
+    unsafe { match transition.begin(track,screen,from,to,now,duration) {ok=>{return 0;},err(code)=>{return code;},} }
+}
+export("transition_sample") fn sample(track:*const transition.Track,screen:*const geo.Rect,now:u64,out:*geo.Rect,active:*u64)u64 {
+    unsafe { match transition.sample(track,screen,now,out) {ok(value)=>{*active=value as u64;return 0;},err(code)=>{return code;},} }
+}
+export("transition_retarget") fn retarget(track:*transition.Track,screen:*const geo.Rect,to:*const geo.Rect,now:u64,duration:u64)u64 {
+    unsafe { match transition.retarget(track,screen,to,now,duration) {ok=>{return 0;},err(code)=>{return code;},} }
+}
+export("transition_zoom") fn zoom(target:*const geo.Rect,screen:*const geo.Rect,out:*geo.Rect)u64 {
+    unsafe { match transition.zoom(target,screen,out) {ok=>{return 0;},err(code)=>{return code;},} }
+}

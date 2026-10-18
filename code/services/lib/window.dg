@@ -1,0 +1,95 @@
+// Candidate client: ordinary GUI processes use only existing IPC CALL. The
+// compositor owns the future privileged shared-object allocation backend.
+module lib.window;
+import lib.sys as sys;
+import lib.window_abi as abi;
+import gfx.atlas as atlas;
+pub const NO_EVENT:u64=0x0742_0001;
+pub const BAD:u64=0x0742_0002;
+pub struct Session {
+    pub endpoint:u64,pub epoch:u64,pub token:u64,pub lease:u64,pub address:u64,pub bytes:u64,
+    pub width:u64,pub height:u64,pub stride:u64,pub serial:u64,pub sequence:u64,pub event_sequence:u64,
+    pub request:sys.Message,pub response:sys.Message,
+}
+pub const EMPTY:Session=Session{endpoint:0,epoch:0,token:0,lease:0,address:0,bytes:0,width:0,height:0,stride:0,
+    serial:0,sequence:0,event_sequence:0,request:sys.EMPTY_MESSAGE,response:sys.EMPTY_MESSAGE};
+pub struct Event {pub sequence:u64,pub kind:u64,pub a:u64,pub b:u64,pub c:u64,pub d:u64}
+pub const EMPTY_EVENT:Event=Event{sequence:0,kind:0,a:0,b:0,c:0,d:0};
+unsafe fn request(s:*Session,op:u64)void{unsafe{
+    (*s).request=sys.EMPTY_MESSAGE;(*s).response=sys.EMPTY_MESSAGE;(*s).request.words[0]=op;
+    (*s).request.words[1]=(*s).epoch;(*s).request.words[2]=(*s).token;
+}return;}
+unsafe fn call(s:*Session)u64{unsafe{
+    // Retry only the kernel's explicit not-accepted transport refusal.
+    // An accepted response, peer loss or I/O error is never sent twice.
+    var retries:u64=0;var status:u64=0;loop{
+        (*s).response=sys.EMPTY_MESSAGE;status=sys.call((*s).endpoint,&(*s).request,&(*s).response);
+        if status!=0x0402_0003{break;}if retries==256{return status;}
+        let yielded=sys.yield_now();if yielded!=0{return yielded;}retries+=1;
+    }if status!=0{return status;}
+    return (*s).response.words[0];
+}}
+unsafe fn surface(s:*Session,serial:u64)u64{unsafe{
+    let r=&(*s).response;let width=(*r).words[6]&0xffff_ffff;let height=(*r).words[6]>>32;
+    var layout=abi.EMPTY_LAYOUT;match abi.layout(width,height,(*r).words[5],&layout){ok=>{},err(e)=>{return BAD;},}
+    let address=(*r).words[3];let token=(*r).words[1];
+    if (*r).words[7]!=(*s).epoch||token>>32!=(*s).epoch||(token&255)==0||(token&255)>16
+        ||((token>>8)&0xff_ffff)==0||(*r).words[2]==0||address<65536||(address&4095)!=0
+        ||address>=0x0000_8000_0000_0000||layout.bytes>0x0000_8000_0000_0000-address
+        ||(*r).words[4]!=layout.bytes||serial==0 {return BAD;}
+    (*s).token=token;(*s).lease=(*r).words[2];(*s).address=address;(*s).bytes=layout.bytes;
+    (*s).width=width;(*s).height=height;(*s).stride=layout.stride;(*s).serial=serial;return 0;
+}}
+pub unsafe fn initialize(s:*Session,endpoint:u64,width:u64,height:u64)u64{unsafe{
+    if endpoint==0||width==0||width>1920||height==0||height>1080{return BAD;}*s=EMPTY;(*s).endpoint=endpoint;
+    request(s,abi.HELLO);(*s).request.words[1]=abi.VERSION;
+    let hello=call(s);if hello!=0{return hello;}
+    if (*s).response.words[1]==0||(*s).response.words[1]>0xffff_ffff||(*s).response.words[2]!=abi.VERSION
+        ||(*s).response.words[3]!=abi.MAX_TOTAL_BYTES||(*s).response.words[4]!=abi.MAX_LEASE_BYTES
+        ||(*s).response.words[5]!=0||(*s).response.words[6]!=0||(*s).response.words[7]!=0 {return BAD;}
+    (*s).epoch=(*s).response.words[1];var layout=abi.EMPTY_LAYOUT;
+    match abi.layout(width,height,width*4,&layout){ok=>{},err(e)=>{return BAD;},}
+    request(s,abi.CREATE);(*s).request.words[5]=(height<<32)|width;(*s).request.words[6]=layout.stride;
+    let created=call(s);if created!=0{return created;}return surface(s,1);
+}}
+pub unsafe fn font(s:*Session,out:*atlas.Atlas)u64{unsafe{
+    request(s,abi.GET_FONT);let status=call(s);if status!=0{return status;}
+    let r=&(*s).response;let address=(*r).words[1];let bytes=(*r).words[2];
+    if (*r).words[7]!=(*s).epoch||address<65536||(address&4095)!=0||bytes<48||bytes>0x80_0000
+        ||address>=0x0000_8000_0000_0000||bytes>0x0000_8000_0000_0000-address||(*r).words[5]!=1
+        ||((*r).words[4]!=256&&(*r).words[4]!=320&&(*r).words[4]!=384&&(*r).words[4]!=448&&(*r).words[4]!=512)
+        ||(*r).words[3]!=(*r).words[4]/16 {return BAD;}
+    var candidate=atlas.Atlas{bytes:"",count:0,pixel_size:0,records:0,bitmap:0,bitmap_size:0,ascent:0,descent:0};
+    match atlas.open(slice_from_raw_parts(address as *const u8,bytes as usize),&candidate){ok=>{},err(e)=>{return e;},}
+    if candidate.pixel_size as u64!=(*r).words[3]||candidate.count as u64!=(*r).words[6] {return BAD;}*out=candidate;return 0;
+}}
+pub unsafe fn poll(s:*Session,out:*Event)u64{unsafe{
+    request(s,abi.POLL);(*s).request.words[5]=(*s).event_sequence;let status=call(s);if status!=0{return status;}
+    let r=&(*s).response;if (*r).words[7]!=(*s).epoch||(*r).words[1]<=(*s).event_sequence
+        ||(*r).words[2]<abi.KEY||(*r).words[2]>abi.THEME {return BAD;}
+    *out=Event{sequence:(*r).words[1],kind:(*r).words[2],a:(*r).words[3],b:(*r).words[4],c:(*r).words[5],d:(*r).words[6]};
+    (*s).event_sequence=(*r).words[1];return 0;
+}}
+pub unsafe fn configure(s:*Session,event:*const Event)u64{unsafe{
+    if (*event).kind!=abi.CONFIGURE||(*event).a<=(*s).serial||(*event).d==0{return BAD;}
+    request(s,abi.ACK_CONFIGURE);(*s).request.words[3]=(*event).d;(*s).request.words[4]=(*event).a;
+    let status=call(s);if status!=0{return status;}
+    if (*s).response.words[1]!=(*s).token||(*s).response.words[2]!=(*event).d
+        ||(*s).response.words[5]!=(*event).c||(*s).response.words[6]!=(*event).b{return BAD;}
+    return surface(s,(*event).a);
+}}
+pub unsafe fn commit(s:*Session)u64{unsafe{
+    if (*s).sequence==0xffff_ffff_ffff_ffff{return BAD;}request(s,abi.COMMIT);
+    (*s).request.words[3]=(*s).lease;(*s).request.words[4]=(*s).serial;(*s).request.words[5]=(*s).sequence+1;
+    (*s).request.words[6]=((*s).width<<32)|((*s).height<<48);sys.svc_fence();
+    let status=call(s);if status!=0{return status;}if (*s).response.words[7]!=(*s).epoch{return BAD;}
+    (*s).sequence+=1;return 0;
+}}
+pub unsafe fn close(s:*Session)u64{unsafe{
+    request(s,abi.DESTROY);let status=call(s);if status!=0{return status;}
+    (*s).token=0;(*s).lease=0;(*s).address=0;return 0;
+}}
+pub unsafe fn apply_settings(s:*Session,light:bool,scale:u64)u64{unsafe{
+    request(s,abi.APPLY_SETTINGS);if light{(*s).request.words[5]=1;}(*s).request.words[6]=scale;
+    let status=call(s);if status!=0{return status;}if (*s).response.words[7]!=(*s).epoch{return BAD;}return 0;
+}}

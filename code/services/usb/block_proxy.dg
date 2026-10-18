@@ -1,0 +1,60 @@
+// Accepted-ticket block2 RPC over private BOT DMA. The caller supplies peer
+// metadata only after kernel 0x29/0x2a authenticates the accepted IPC ticket.
+module usb.block_proxy;
+import lib.abi as abi;
+import fs.protocol as protocol;
+import usb.bot as bot;
+import usb.transport as io;
+pub error Invalid=0x081a_0001;
+pub error Denied=0x081a_0002;
+pub error Busy=0x081a_0003;
+pub error Exhausted=0x081a_0004;
+pub const CHANNEL_BYTES:u64=65536;
+pub struct State {pub ready:u64,pub busy:u64,pub epoch:u64,pub completed:u64,pub storage:*bot.State,pub channel:*u8,pub bounce:io.Buffer}
+pub const EMPTY:State=State {ready:0,busy:0,epoch:0,completed:0,storage:null,channel:null,bounce:io.EMPTY};
+unsafe fn overlap(a:u64,an:u64,b:u64,bn:u64)bool {return a<b+bn&&b<a+an;}
+pub unsafe fn initialize(s:*State,storage:*bot.State,channel:*u8,bytes:u64,epoch:u64,bounce:*const io.Buffer)!void {unsafe {
+    if s==null||(*s).ready!=0||storage==null||channel==null||bytes!=CHANNEL_BYTES||epoch==0||epoch>0x0fff_ffff||bounce==null {return error.Invalid;}
+    if (*storage).held!=1||(*storage).ready!=1||(*storage).fault!=0||(*storage).busy!=0||(*storage).block_bytes!=512||(*storage).blocks==0||(*storage).blocks>0xffff_ffff {return error.Invalid;}
+    if channel as u64>0xffff_ffff_ffff_ffff-CHANNEL_BYTES||(*bounce).bytes!=4096||(*bounce).pointer==null
+        ||(*bounce).pointer as u64>0xffff_ffff_ffff_ffff-4096||(*storage).setup.scratch.physical>0xffff_ffff_ffff_ffff-4608
+        ||(*storage).setup.scratch.pointer as u64>0xffff_ffff_ffff_ffff-4608
+        ||(*bounce).physical!=(*storage).setup.scratch.physical+4096||(*bounce).pointer!=(*storage).setup.scratch.pointer+4096 {return error.Invalid;}
+    try io.span(&(*storage).setup.region,bounce,false);
+    if overlap(channel as u64,CHANNEL_BYTES,(*bounce).pointer as u64,4096)||overlap(channel as u64,CHANNEL_BYTES,(*storage).setup.scratch.pointer as u64,512) {return error.Invalid;}
+    *s=EMPTY;(*s).epoch=epoch;(*s).storage=storage;(*s).channel=channel;(*s).bounce=*bounce;(*s).ready=1;
+}return;}
+unsafe fn transfer(s:*State,lba:u64,count:u64,offset:u64,inward:bool,out:*u64)!void {unsafe {
+    var done:u64=0;while done<count {
+        var chunk=count-done;if chunk>8 {chunk=8;}let bytes=chunk*512;
+        let data=io.Buffer {physical:(*s).bounce.physical,pointer:(*s).bounce.pointer,bytes:bytes};
+        let shared=(*s).channel+(offset+done*512) as usize;var i:u64=0;
+        if !inward {while i<bytes {*(data.pointer+i as usize)=*(shared+i as usize);i+=1;}compiler_fence();}
+        try bot.read_write((*s).storage,lba+done,chunk,&data,inward);
+        if inward {compiler_fence();i=0;while i<bytes {*(shared+i as usize)=*(data.pointer+i as usize);i+=1;}}
+        done+=chunk;*out=done;
+    }
+}return;}
+unsafe fn operation(s:*State,request:*const abi.Message,peer:u64,epochs:u64,out:*u64)!void {unsafe {
+    // PID and both generations came from the accepted ticket, not message words.
+    if peer!=3||(epochs>>32)!=(*s).epoch||(epochs&0xffff_ffff)==0||(epochs&0xffff_ffff)>0x0fff_ffff {return error.Denied;}
+    if (*(*s).storage).ready!=1||(*(*s).storage).fault!=0||(*(*s).storage).busy!=0 {return error.bot.Faulted;}
+    let op=(*request).words[0];let lba=(*request).words[1];let count=(*request).words[2];let offset=(*request).words[4];
+    if (*request).words[3]!=0||(*request).words[5]!=0||(*request).words[6]!=0||(*request).words[7]!=0 {return error.Invalid;}
+    if op==protocol.READY {if lba!=0||count!=0||offset!=0 {return error.Invalid;}return;}
+    if (*s).completed==0xffff_ffff_ffff_ffff {return error.Exhausted;}
+    if op==protocol.FLUSH {if lba!=0||count!=0||offset!=0 {return error.Invalid;}try bot.synchronize((*s).storage);(*s).completed+=1;return;}
+    if (op!=protocol.READ&&op!=protocol.WRITE)||count==0||count>128||offset>CHANNEL_BYTES||count*512>CHANNEL_BYTES-offset
+        ||lba>0xffff_ffff||lba>=(*(*s).storage).blocks||count>(*(*s).storage).blocks-lba {return error.Invalid;}
+    try transfer(s,lba,count,offset,op==protocol.READ,out);(*s).completed+=1;
+}return;}
+pub unsafe fn request(s:*State,message:*const abi.Message,peer:u64,epochs:u64,response:*abi.Message)u64 {unsafe {
+    if s==null||message==null||response==null {return 0x081a_0001;}
+    if (*s).ready!=1||(*s).storage==null||(*s).busy!=0 {return 0x081a_0003;}
+    // Service uses separate request/response objects. Reject aliasing instead
+    // of clearing any caller input before validating its full request.
+    let a=message as u64;let b=response as u64;if a>0xffff_ffff_ffff_ffff-64||b>0xffff_ffff_ffff_ffff-64||overlap(a,64,b,64) {return 0x081a_0001;}
+    var done:u64=0;(*s).busy=1;let result=operation(s,message,peer,epochs,&done);(*s).busy=0;
+    *response=abi.EMPTY_MESSAGE;match result {ok=>{},err(e)=>{(*response).words[0]=e;if e==0x081a_0002 {return e;}},}
+    (*response).words[1]=done;(*response).words[2]=(*(*s).storage).blocks;(*response).words[4]=(*s).completed;return (*response).words[0];
+}}

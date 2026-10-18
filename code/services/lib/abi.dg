@@ -1,0 +1,11 @@
+// Shared data-only ABI; importing it never links a userspace syscall stub
+// into the kernel. Both sides check complete caller-owned object spans.
+module lib.abi;
+pub struct Message { pub words:[8]u64 }
+pub const EMPTY_MESSAGE:Message=Message { words:[0;8] };
+pub struct Boot {
+    pub version:u64,pub process:u64,pub endpoint:u64,pub filesystem:u64,
+    pub block:u64,pub channel:u64,pub channel_address:u64,pub channel_bytes:u64,
+    pub configuration:u64,pub dma:u64,pub console:u64,pub service_count:u64,
+    pub reserved0:u64,pub reserved1:u64,pub reserved2:u64,pub reserved3:u64,
+}

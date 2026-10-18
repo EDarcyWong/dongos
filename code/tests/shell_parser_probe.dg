@@ -1,0 +1,4 @@
+module shell_parser_probe;
+import shell.parser as p;
+export("sp_size") fn size()u64{return sizeof(p.Parsed) as u64;}
+export("sp_parse") unsafe fn parse(input:*const u8,length:usize,out:*p.Parsed,work:*p.Parsed)u64{unsafe{match p.parse(slice_from_raw_parts(input,length),out,work){ok=>{return 0;},err(e)=>{return e;},}}}

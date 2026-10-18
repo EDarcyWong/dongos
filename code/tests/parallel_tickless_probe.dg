@@ -1,0 +1,33 @@
+module parallel_tickless_probe;
+import sched.parallel as p;
+import sched.multicore as q;
+export("ps_required") fn required()u64{return p.required_bytes();}
+export("ps_init") fn init(arena:u64,bytes:u64,template:u64)u64{unsafe{
+ match p.initialize(arena,bytes,14,0x100000,0x80000000,0x80010000,0x80000010,template){ok=>{return 0;},err(e)=>{return e;},}
+}}
+export("ps_config") fn config(id:usize,idle:u64,scheduler:u64)u64{unsafe{
+ var mode:u64=1;var lapic_hz:u64=0;if id==2{mode=2;lapic_hz=10000000;}
+ match p.configure(id,idle,idle+16384,scheduler,scheduler+16384,mode,1000000000,lapic_hz,1000000,id as u64+16,0xfec00000,0x100000+id as u64*4096){ok=>{return 0;},err(e)=>{return e;},}
+}}
+export("ps_admit") fn admit(id:usize,priority:u64,affinity:u64,stack:u64,out:*u64)u64{unsafe{
+ match p.admit(id,priority,affinity,stack,stack+16384,0x80000100+id as u64*16,id as u64+100,out){ok=>{return 0;},err(e)=>{return e;},}
+}}
+export("ps_start") fn start()u64{unsafe{match p.start(){ok=>{return 0;},err(e)=>{return e;},}}}
+export("ps_wake") fn wake(token:u64)u64{unsafe{match p.wake(token){ok=>{return 0;},err(e)=>{return e;},}}}
+export("ps_affinity") fn affinity(token:u64,mask:u64)u64{unsafe{match p.affinity(token,mask){ok=>{return 0;},err(e)=>{return e;},}}}
+export("ps_priority") fn priority(token:u64,level:u64)u64{unsafe{match p.priority(token,level){ok=>{return 0;},err(e)=>{return e;},}}}
+export("ps_preempt") fn preempt(cpu:usize,disable:bool)u64{unsafe{match p.preempt(cpu,disable){ok=>{return 0;},err(e)=>{return e;},}}}
+export("ps_rebalance") fn rebalance(source:usize,target:usize,out:*q.Move)u64{unsafe{match p.rebalance(source,target,out){ok(value)=>{return value as u64;},err(e)=>{return e;},}}}
+export("ps_get") fn get(which:u64,id:usize)u64{unsafe{let d=p.pointer();if d==null{return 0;}
+ if which==0{return (*d).failed;}if which==1{return (*(*d).engine).count;}if which==2{return (*(*d).engine).sequence;}
+ if which==3{return (*((*d).cpus+id)).current;}if which==4{return (*((*d).threads+id)).token;}
+ if which==5{return (*(*d).engine).threads[id].state;}if which==6{return (*(*d).engine).threads[id].frame;}
+ if which==7{return (*(*d).engine).threads[id].cpu;}if which==8{return (*((*d).threads+id)).xstate;}
+ if which==9{return (*((*d).threads+id)).top;}if which==10{return (*((*d).cpus+id)).idle_top;}
+ if which==11{return (*((*d).cpus+id)).scheduler_top;}if which==12{return (*((*d).cpus+id)).ticks;}
+ if which==13{return (*((*d).cpus+id)).depth;}if which==14{return (*d).root;}
+ if which==15{return (*(*d).engine).cpus[id].ready_count;}if which==17{return (*(*d).engine).threads[id].priority;}
+ if which==19{return (*((*d).cpus+id)).timer_armed;}if which==20{return (*((*d).cpus+id)).timer_need;}
+ if which==18{return (*(*d).engine).threads[id].affinity;}return (*d).started;
+}}
+export("ps_audit") fn audit()u64{unsafe{let d=p.pointer();match q.audit((*d).engine){ok=>{return 0;},err(e)=>{return e;},}}}

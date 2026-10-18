@@ -1,0 +1,90 @@
+// One-way arena builder after the actual CPL0 live gate drained every worker.
+// Compiled only in the isolated overlay; the assembly selector defaults off.
+module sched.user_boot;
+import sched.user_domain as ud;
+import sched.user_bridge as bridge;
+import sched.user_entry_plan as ep;
+import sched.parallel as prior;
+import sched.parallel_live as live;
+import smp.runtime as smp;
+import smp.context as sc;
+import boot.service_memory as resources;
+import boot.memory_startup as startup;
+import mm.paging as paging;
+import runtime_probe as runtime;
+import user.services as services;
+import irq.platform as irq;
+import arch.x86_64 as arch;
+pub error Invalid=0x060b_0020;pub error Held=0x060b_0021;
+pub struct Report{pub ready:u64,pub failed:u64,pub published:u64,pub count:u64,pub online:u64,pub domain:u64,pub headers:u64,pub contexts:u64,pub root:u64,pub tsc_hz:u64}
+var INFO:*Report=null;
+unsafe extern "sysv64" fn user_boot_live_report()*const live.Report;
+unsafe extern "sysv64" fn user_boot_rate(lapic:u64,frequency:u64)u64;
+unsafe extern "sysv64" fn user_boot_publish(headers:u64,count:u64)u64;
+unsafe extern "sysv64" fn user_boot_pause()void;
+unsafe fn guard(address:u64)!void{unsafe{
+ var retired=paging.EMPTY_RETIRED;try paging.unmap_live(startup.space_pointer(),address,&retired);
+ runtime.runtime_flush_root();try paging.reclaim(startup.space_pointer(),&retired);
+}return;}
+unsafe fn stack(out:*ep.Stacks,c:*const sc.Context)!void{unsafe{
+ var block=resources.Block{physical:0,virtual:0,pages:0};try resources.allocate(6,1,&block);
+ try guard(block.virtual);try guard(block.virtual+5*4096);
+ *out=ep.Stacks{bottom:block.virtual+4096,top:block.virtual+5*4096,
+  df_bottom:(*c).df_bottom,df_top:(*c).df_top,nmi_bottom:(*c).nmi_bottom,nmi_top:(*c).nmi_top,
+  exception_bottom:(*c).exception_bottom,exception_top:(*c).exception_top};
+}return;}
+unsafe fn prepare()!void{unsafe{
+ if INFO!=null{return error.Invalid;}let old=prior.pointer();let evidence=user_boot_live_report();let original=smp.report_pointer();
+ if old==null||evidence==null||(*evidence).phase!=6||(*evidence).error_code!=0||(*old).failed!=0||(*(*old).engine).count!=0
+  ||(*original).cpu_count<3||(*original).cpu_count>16||(*original).steps!=31{return error.Invalid;}
+ var platform=irq.EMPTY_REPORT;try irq.describe(&platform);let count=(*original).cpu_count as usize;
+ let contexts=(*original).context_pointer as *const sc.Context;var id:usize=1;
+ while id<count{if (*((*old).cpus+id)).current!=0||(*((*old).cpus+id)).timer_armed!=0{return error.Invalid;}id+=1;}
+ var meta=resources.Block{physical:0,virtual:0,pages:0};try resources.allocate(1,1,&meta);INFO=meta.virtual as *Report;
+ (*INFO).ready=0;(*INFO).failed=0;(*INFO).published=0;(*INFO).count=count as u64;(*INFO).online=(1<<count as u64)-1;
+ (*INFO).headers=meta.virtual+256;(*INFO).contexts=contexts as u64;(*INFO).tsc_hz=platform.tsc_hz;
+ (*INFO).root=try paging.root_physical(startup.space_pointer());
+ var arena=meta;try resources.allocate(((ud.required_bytes()+4095)/4096) as usize,1,&arena);
+ var d:*ud.Domain=null;try ud.initialize(arena.virtual,arena.pages as u64*4096,(*INFO).online,(*INFO).root,&d);(*INFO).domain=d as u64;
+ var b=meta;try resources.allocate(1,1,&b);try bridge.initialize(b.virtual,4096,d,(*INFO).headers as *u64);
+ id=0;while id<count{
+  let context=contexts+id;if (*context).self!=context as u64||(*context).logical_id!=id as u64||(*context).state!=sc.ONLINE{return error.Invalid;}
+  var storage=meta;try resources.allocate(2,1,&storage);
+  var stacks=ep.Stacks{bottom:0,top:0,df_bottom:0,df_top:0,nmi_bottom:0,nmi_top:0,exception_bottom:0,exception_top:0};try stack(&stacks,context);
+  var rate:u64=0;if id==0{rate=user_boot_rate((*context).lapic_va,platform.tsc_hz);}else{rate=(*evidence).rates[id];}
+  var header:*ep.Cpu=null;try ep.configure(storage.virtual,8192,d,id,contexts as u64,count as u64,&stacks,platform.tsc_hz,rate,&header);
+  *(((*INFO).headers as *u64)+id)=header as u64;id+=1;
+ }
+ compiler_fence();(*INFO).ready=1;
+}return;}
+pub export("dong_user_smp_boot_prepare") fn build()u64{unsafe{
+ match prepare(){ok=>{return 0;},err(e)=>{if INFO!=null{(*INFO).failed=e;}return e;},}
+}}
+// Called after BSP activation installs its Header GS but before AP publication.
+pub export("dong_user_smp_boot_publish") fn publish()u64{unsafe{
+ if INFO==null||(*INFO).ready!=1||(*INFO).failed!=0||(*INFO).published!=0{return 0x060b_0020;}
+ let d=(*INFO).domain as *ud.Domain;let until=arch.read_tsc()+(*INFO).tsc_hz*2;
+ let acquired=ud.acquire(d,0,until);match acquired{ok=>{},err(e)=>{return e;},}
+ let enabled=services.enable_smp();match enabled{ok=>{},err(e)=>{return e;},}
+ // No user is admitted until all AP GDT/TSS/MSR installations are complete.
+ if user_boot_publish((*INFO).headers,(*INFO).count)!=0{(*INFO).failed=0x060b_0021;return 0x060b_0021;}(*INFO).published=1;
+ var id:usize=1;while id<(*INFO).count as usize{
+  let h=(*((*INFO).headers as *u64+id)) as *ep.Cpu;
+  while atomic_load(&(*h).ready)!=2{if arch.read_tsc()>=until{(*INFO).failed=0x060b_0021;return 0x060b_0021;}user_boot_pause();}id+=1;
+ }
+ let projected=user_boot_project();if projected!=0{(*INFO).failed=projected;return projected;}
+ let unlocked=ud.unlock(d,0);match unlocked{ok=>{},err(e)=>{return e;},}return 0;
+}}
+unsafe extern "sysv64" fn user_boot_project()u64;
+pub export("dong_user_smp_boot_report") fn report()*const Report{return INFO;}
+pub export("dong_user_entry_mapped") fn mapped(base:u64,bytes:u64,writable:u64)u64{unsafe{
+ if startup.space_pointer()==null||base==0||bytes==0||bytes>0xffff_ffff_ffff_f000||base>0xffff_ffff_ffff_ffff-bytes-4095{return 0;}
+ let first=base&~4095;let end=(base+bytes+4095)&~4095;var at=first;
+ while at<end{var m=paging.Mapping{physical:0,flags:0};let result=paging.query(startup.space_pointer(),at,&m);
+  match result{ok=>{},err(e)=>{return 0;},}
+  if (m.flags&(paging.USER|paging.EXECUTE|paging.UNCACHED))!=0||(writable==1&&(m.flags&paging.WRITE)==0){return 0;}at+=4096;
+ }return 1;
+}}
+pub export("dong_user_entry_guard") fn unmapped(base:u64)u64{unsafe{
+ var m=paging.Mapping{physical:0,flags:0};match paging.query(startup.space_pointer(),base,&m){ok=>{return 0;},err(e)=>{if e==0x0203_0002{return 1;}return 0;},}
+}}

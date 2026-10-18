@@ -1,0 +1,127 @@
+// Caller-owned ARGB8888 RAM. Inputs are stable, live, aligned unsafe borrows.
+// No allocation, MMIO, framebuffer policy, implicit ownership or synchronization.
+module gfx.raster;
+import gfx.geometry as geo;
+import gfx.errors as errors;
+
+pub struct Surface { pub pixels: []u32, pub width: usize, pub height: usize, pub stride: usize }
+const MAX: u64 = 0xffff_ffff_ffff_ffff;
+
+pub unsafe fn validate(value: *const Surface) !void {
+    unsafe {
+        if value == null { return error.errors.InvalidSurface; }
+        if (*value).width == 0 || (*value).height == 0 || (*value).width > 8192 || (*value).height > 8192
+            || (*value).stride < (*value).width || (*value).stride > 16384
+            || (*value).pixels.ptr == null || (((*value).pixels.ptr as u64) & 3) != 0
+            || (*value).pixels.len < (*value).stride * (*value).height
+            || (*value).pixels.len > (MAX / 4) as usize
+            || ((*value).pixels.ptr as u64) > MAX - ((*value).pixels.len as u64) * 4 { return error.errors.InvalidSurface; }
+    }
+    return;
+}
+pub unsafe fn disjoint(a: *const Surface, b: *const Surface) !void {
+    unsafe {
+        try validate(a); try validate(b);
+        let ab = (*a).pixels.ptr as u64;
+        let bb = (*b).pixels.ptr as u64;
+        if ab < bb + ((*b).pixels.len as u64) * 4 && bb < ab + ((*a).pixels.len as u64) * 4 {
+            return error.errors.Aliased;
+        }
+    }
+    return;
+}
+pub unsafe fn bounds(value: *const Surface, out: *geo.Rect) void {
+    unsafe { *out = geo.Rect { left: 0, top: 0, right: (*value).width as i64, bottom: (*value).height as i64 }; }
+    return;
+}
+fn channel(dst: u64, src: u64, inverse: u64) u64 {
+    let result = src + (dst * inverse + 127) / 255;
+    if result > 255 { return 255; }
+    return result;
+}
+pub fn over(dst: u32, src: u32) u32 {
+    let d = dst as u64; let s = src as u64; let inv = 255 - (s >> 24);
+    return (channel(d & 255,s & 255,inv)
+        | (channel((d >> 8) & 255,(s >> 8) & 255,inv) << 8)
+        | (channel((d >> 16) & 255,(s >> 16) & 255,inv) << 16)
+        | (channel(d >> 24,s >> 24,inv) << 24)) as u32;
+}
+pub fn coverage(color: u32, alpha: u8) u32 {
+    let value = color as u64; let a = alpha as u64;
+    return (((value & 255) * a + 127) / 255
+        | ((((value >> 8) & 255) * a + 127) / 255 << 8)
+        | ((((value >> 16) & 255) * a + 127) / 255 << 16)
+        | (((value >> 24) * a + 127) / 255 << 24)) as u32;
+}
+pub unsafe fn fill(dst: *Surface, area: *const geo.Rect, color: u32) !void {
+    unsafe {
+        try validate(dst);
+        var view = geo.EMPTY; bounds(dst,&view);
+        var clipped = geo.EMPTY;
+        let visible = try geo.intersect(&view,area,&clipped);
+        if !visible { return; }
+        var y = clipped.top as usize;
+        while y < clipped.bottom as usize {
+            var x = clipped.left as usize;
+            while x < clipped.right as usize { (*dst).pixels[y * (*dst).stride + x] = color; x += 1; }
+            y += 1;
+        }
+    }
+    return;
+}
+pub unsafe fn blit(dst: *Surface, x: i64, y: i64, src: *const Surface,
+                   area: *const geo.Rect, opacity: u8) !void {
+    unsafe {
+        try disjoint(dst,src);
+        var source = geo.EMPTY; bounds(src,&source);
+        if !geo.contains(&source,area) { return error.errors.InvalidRect; }
+        var destination = geo.EMPTY;
+        try geo.from_xywh(x,y,((*area).right - (*area).left) as usize,((*area).bottom - (*area).top) as usize,&destination);
+        var view = geo.EMPTY; bounds(dst,&view);
+        var clipped = geo.EMPTY;
+        let visible = try geo.intersect(&view,&destination,&clipped);
+        if !visible || opacity == 0 { return; }
+        var row = clipped.top;
+        while row < clipped.bottom {
+            let sy = ((*area).top + row - y) as usize;
+            var column = clipped.left;
+            while column < clipped.right {
+                let sx = ((*area).left + column - x) as usize;
+                let index = (row as usize) * (*dst).stride + column as usize;
+                (*dst).pixels[index] = over((*dst).pixels[index],coverage((*src).pixels[sy * (*src).stride + sx],opacity));
+                column += 1;
+            }
+            row += 1;
+        }
+    }
+    return;
+}
+pub unsafe fn mask(dst: *Surface, x: i64, y: i64, bytes: []const u8,
+                   width: usize, height: usize, stride: usize, color: u32) !void {
+    unsafe {
+        try validate(dst);
+        if width == 0 || height == 0 || width > 8192 || height > 8192 || stride < width || stride > 16384
+            || bytes.ptr == null || bytes.len < stride * height || (bytes.ptr as u64) > MAX - bytes.len as u64 {
+            return error.errors.InvalidSurface;
+        }
+        let db = (*dst).pixels.ptr as u64; let sb = bytes.ptr as u64;
+        if db < sb + bytes.len as u64 && sb < db + ((*dst).pixels.len as u64) * 4 { return error.errors.Aliased; }
+        var destination = geo.EMPTY; try geo.from_xywh(x,y,width,height,&destination);
+        var view = geo.EMPTY; bounds(dst,&view);
+        var clipped = geo.EMPTY;
+        let visible = try geo.intersect(&view,&destination,&clipped);
+        if !visible { return; }
+        var row = clipped.top;
+        while row < clipped.bottom {
+            var column = clipped.left;
+            while column < clipped.right {
+                let index = (row as usize) * (*dst).stride + column as usize;
+                let a = bytes[((row - y) as usize) * stride + (column - x) as usize];
+                (*dst).pixels[index] = over((*dst).pixels[index],coverage(color,a));
+                column += 1;
+            }
+            row += 1;
+        }
+    }
+    return;
+}

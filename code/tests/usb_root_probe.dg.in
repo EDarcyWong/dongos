@@ -1,0 +1,30 @@
+module usb_root_probe;
+import lib.abi as sys;import ipc.handles as handles;import ipc.core as ipc;
+import lib.process_abi as proc;import lib.desktop as gui;
+import user.memory as memory;import user.devices as devices;import user.desktop as desktop;
+import user.device_host as device_host;import user.processes as procs;
+import boot.power_startup as power;import input.console as console;
+const COUNT:usize=16;const ACTIVE:usize=16;const BOOT_ADDRESS:u64=0x70000000;
+const MANAGER_OBJECT:u64=0x500;const DEVICE_MANAGER_OBJECT:u64=0x501;
+var CURRENT:usize=0;var GRAPHICS:bool=true;var CLOCK_HZ:u64=1000;
+struct State{table:handles.Table,reply_pointer:u64,receive_pointer:u64,ticket:u64,waiting:u64,started:u64}
+const EMPTY_STATE:State=State{table:handles.EMPTY_TABLE,reply_pointer:0,receive_pointer:0,ticket:0,waiting:0,started:0};
+const EMPTY_BOOT:sys.Boot=sys.Boot{version:1,process:0,endpoint:0,filesystem:0,block:0,channel:0,channel_address:0,channel_bytes:65536,configuration:0,dma:0,console:0,service_count:3,reserved0:0,reserved1:0,reserved2:0,reserved3:0};
+var STATES:[16]State=[EMPTY_STATE;16];var BOOTS:[16]sys.Boot=[EMPTY_BOOT;16];
+var ENDPOINTS:[16]ipc.Endpoint=[ipc.EMPTY_ENDPOINT;16];var FS_RIGHTS:[16]u64=[0;16];
+struct XState{bytes:[1024]u8}var XSTATES:[16]XState=[XState{bytes:[0;1024]};16];var KERNEL_XSTATE:XState=XState{bytes:[0;1024]};
+var MODEL:procs.Catalog=procs.EMPTY;var CATALOG:*procs.Catalog=null;var KEYBOARD:*console.Queue=null;
+pub error Protocol=0x050b0002;
+// EXACT_PRODUCTION_FUNCTIONS
+export("ur_reset") fn reset(graphics:bool)void{unsafe{
+ GRAPHICS=graphics;CATALOG=&MODEL;var i:usize=0;while i<16{STATES[i]=EMPTY_STATE;BOOTS[i]=EMPTY_BOOT;ENDPOINTS[i]=ipc.EMPTY_ENDPOINT;FS_RIGHTS[i]=0;i+=1;}
+}return;}
+export("ur_install") fn install(id:usize,cfg:usize,generation:u64)u64{unsafe{
+ match install_identity(id,cfg,generation,17){ok=>{return 0;},err(e)=>{return e;},}
+}}
+export("ur_boot") fn boot(id:usize)*const sys.Boot{unsafe{return &BOOTS[id];}}
+export("ur_entry") fn entry(id:usize,slot:usize,out:*handles.Entry)void{unsafe{*out=STATES[id].table.entries[slot];}return;}
+export("ur_endpoint") fn resolve(id:usize,token:u64,rights:u64)u64{unsafe{
+ CURRENT=id;match endpoint(token,rights){ok(value)=>{return value as u64;},err(e)=>{return e;},}
+}}
+export("ur_channels") fn wire(id:usize)u64{unsafe{match channels(id,1,17){ok=>{return 0;},err(e)=>{return e;},}}}

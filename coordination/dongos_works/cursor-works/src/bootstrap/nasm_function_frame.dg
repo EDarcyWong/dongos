@@ -1,0 +1,163 @@
+// Emit restricted SysV NASM function prologue / epilogue text.
+// Decimal adjust amounts come from CR4 decimal_integer into stack scratch
+// first so failures never leave a half-written line. INVALID precedes CAPACITY.
+module bootstrap.nasm_function_frame;
+import bootstrap.decimal_integer as dec;
+pub const OK:u64=0;pub const INVALID:u64=1;pub const CAPACITY:u64=2;
+const MAX:u64=0xffff_ffff_ffff_ffff;
+const HDR:usize=22; // "push rbp\nmov rbp, rsp\n"
+const FTR:usize=12; // "pop rbp\nret\n"
+const PUSH_ONE:usize=9;
+const POP_ONE:usize=8;
+const ADJ_PREFIX:usize=9; // "sub rsp, " / "add rsp, "
+fn span(p:u64,n:u64)bool{return n==0||(p!=0&&n<=MAX-p);}
+fn overlap(a:u64,n:u64,b:u64,m:u64)bool{return n!=0&&m!=0&&a<b+m&&b<a+n;}
+fn frame_ok(frame_bytes:usize)bool{return frame_bytes<=4096&&(frame_bytes&15)==0;}
+fn mask_ok(mask:u64)bool{return (mask>>5)==0;}
+fn popcount5(mask:u64)usize{
+ var n:usize=0;var i:u64=0;
+ while i<5{if (mask&(1<<i))!=0{n+=1;}i+=1;}
+ return n;
+}
+fn write_reg(out:[]u8,at:usize,bit:u64)usize{
+ if bit==0{out[at]=114;out[at+1]=98;out[at+2]=120;return at+3;}
+ if bit==1{out[at]=114;out[at+1]=49;out[at+2]=50;return at+3;}
+ if bit==2{out[at]=114;out[at+1]=49;out[at+2]=51;return at+3;}
+ if bit==3{out[at]=114;out[at+1]=49;out[at+2]=52;return at+3;}
+ out[at]=114;out[at+1]=49;out[at+2]=53;return at+3;
+}
+fn write_push(out:[]u8,at:usize,bit:u64)usize{
+ out[at]=112;out[at+1]=117;out[at+2]=115;out[at+3]=104;out[at+4]=32;
+ var p=write_reg(out,at+5,bit);out[p]=10;return p+1;
+}
+fn write_pop(out:[]u8,at:usize,bit:u64)usize{
+ out[at]=112;out[at+1]=111;out[at+2]=112;out[at+3]=32;
+ var p=write_reg(out,at+4,bit);out[p]=10;return p+1;
+}
+fn copy(out:[]u8,at:usize,text:[]const u8)usize{
+ var i:usize=0;while i<text.len{out[at+i]=text[i];i+=1;}return at+text.len;
+}
+fn write_hdr(out:[]u8)usize{
+ // "push rbp\n"
+ out[0]=112;out[1]=117;out[2]=115;out[3]=104;out[4]=32;
+ out[5]=114;out[6]=98;out[7]=112;out[8]=10;
+ // "mov rbp, rsp\n"
+ out[9]=109;out[10]=111;out[11]=118;out[12]=32;
+ out[13]=114;out[14]=98;out[15]=112;out[16]=44;out[17]=32;
+ out[18]=114;out[19]=115;out[20]=112;out[21]=10;
+ return HDR;
+}
+fn write_ftr(out:[]u8,at:usize)usize{
+ // "pop rbp\n"
+ out[at]=112;out[at+1]=111;out[at+2]=112;out[at+3]=32;
+ out[at+4]=114;out[at+5]=98;out[at+6]=112;out[at+7]=10;
+ // "ret\n"
+ out[at+8]=114;out[at+9]=101;out[at+10]=116;out[at+11]=10;
+ return at+FTR;
+}
+fn plan(frame_bytes:usize,saved_mask:u64,adjust_out:*usize,n_out:*usize)u64{unsafe{
+ if !frame_ok(frame_bytes)||!mask_ok(saved_mask){return INVALID;}
+ let n=popcount5(saved_mask);
+ var pad:usize=0;if (n&1)!=0{pad=8;}
+ if frame_bytes>MAX-pad{return INVALID;}
+ let adjust=frame_bytes+pad;
+ if n>(MAX/8){return INVALID;}
+ let saved=8*n;
+ if saved>MAX-8{return INVALID;}
+ let base=8+saved;
+ if adjust>MAX-base{return INVALID;}
+ if base+adjust>4096{return INVALID;}
+ *adjust_out=adjust;*n_out=n;return OK;
+}}
+fn need_prologue(n:usize,adjust:usize,dw:usize)usize{
+ var total=HDR;
+ if n>MAX/PUSH_ONE{return MAX;}
+ let pushes=PUSH_ONE*n;
+ if pushes>MAX-total{return MAX;}
+ total+=pushes;
+ if adjust!=0{
+  if ADJ_PREFIX>MAX-total{return MAX;}total+=ADJ_PREFIX;
+  if dw>MAX-total{return MAX;}total+=dw;
+  if 1>MAX-total{return MAX;}total+=1;
+ }
+ return total;
+}
+fn need_epilogue(n:usize,adjust:usize,dw:usize)usize{
+ var total:usize=0;
+ if adjust!=0{
+  if ADJ_PREFIX>MAX-total{return MAX;}total+=ADJ_PREFIX;
+  if dw>MAX-total{return MAX;}total+=dw;
+  if 1>MAX-total{return MAX;}total+=1;
+ }
+ if n>MAX/POP_ONE{return MAX;}
+ let pops=POP_ONE*n;
+ if pops>MAX-total{return MAX;}
+ total+=pops;
+ if FTR>MAX-total{return MAX;}
+ return total+FTR;
+}
+pub unsafe fn prologue(frame_bytes:usize,saved_mask:u64,out:[]u8,written:*usize)u64{unsafe{
+ let wp=written as u64;let op=out.ptr as u64;
+ if written==null||(wp&7)!=0||!span(wp,8){return INVALID;}
+ if !span(op,out.len){return INVALID;}
+ if overlap(wp,8,op,out.len){return INVALID;}
+ var adjust:usize=0;var n:usize=0;
+ let ps=plan(frame_bytes,saved_mask,&adjust,&n);
+ if ps!=OK{return ps;}
+ var db:[20]u8=[0;20];var dw:usize=0;
+ if adjust!=0{
+  let dsl=slice_from_raw_parts(&db[0],20);
+  let sd=dec.encode(adjust as u64,64,false,dsl,&dw);
+  if sd!=OK{return sd;}
+ }
+ let total=need_prologue(n,adjust,dw);
+ if total==MAX{return INVALID;}
+ if total>out.len{return CAPACITY;}
+ var at=write_hdr(out);
+ var bit:u64=0;
+ while bit<5{
+  if (saved_mask&(1<<bit))!=0{at=write_push(out,at,bit);}
+  bit+=1;
+ }
+ if adjust!=0{
+  // "sub rsp, "
+  out[at]=115;out[at+1]=117;out[at+2]=98;out[at+3]=32;
+  out[at+4]=114;out[at+5]=115;out[at+6]=112;out[at+7]=44;out[at+8]=32;at+=9;
+  at=copy(out,at,slice_from_raw_parts(&db[0],dw));
+  out[at]=10;at+=1;
+ }
+ *written=total;return OK;
+}}
+pub unsafe fn epilogue(frame_bytes:usize,saved_mask:u64,out:[]u8,written:*usize)u64{unsafe{
+ let wp=written as u64;let op=out.ptr as u64;
+ if written==null||(wp&7)!=0||!span(wp,8){return INVALID;}
+ if !span(op,out.len){return INVALID;}
+ if overlap(wp,8,op,out.len){return INVALID;}
+ var adjust:usize=0;var n:usize=0;
+ let ps=plan(frame_bytes,saved_mask,&adjust,&n);
+ if ps!=OK{return ps;}
+ var db:[20]u8=[0;20];var dw:usize=0;
+ if adjust!=0{
+  let dsl=slice_from_raw_parts(&db[0],20);
+  let sd=dec.encode(adjust as u64,64,false,dsl,&dw);
+  if sd!=OK{return sd;}
+ }
+ let total=need_epilogue(n,adjust,dw);
+ if total==MAX{return INVALID;}
+ if total>out.len{return CAPACITY;}
+ var at:usize=0;
+ if adjust!=0{
+  // "add rsp, "
+  out[at]=97;out[at+1]=100;out[at+2]=100;out[at+3]=32;
+  out[at+4]=114;out[at+5]=115;out[at+6]=112;out[at+7]=44;out[at+8]=32;at+=9;
+  at=copy(out,at,slice_from_raw_parts(&db[0],dw));
+  out[at]=10;at+=1;
+ }
+ var bit:u64=5;
+ while bit!=0{
+  bit-=1;
+  if (saved_mask&(1<<bit))!=0{at=write_pop(out,at,bit);}
+ }
+ at=write_ftr(out,at);
+ *written=total;return OK;
+}}

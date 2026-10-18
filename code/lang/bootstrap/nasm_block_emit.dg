@@ -1,0 +1,53 @@
+// Emit one NASM basic-block label or unconditional jmp.
+// Decimal block_id digits come from CR4 into stack scratch first.
+// UINT64_MAX is the NONE sentinel and must INVALID. INVALID precedes CAPACITY.
+module bootstrap.nasm_block_emit;
+import bootstrap.decimal_integer as dec;
+pub const OK:u64=0;pub const INVALID:u64=1;pub const CAPACITY:u64=2;
+const MAX:u64=0xffff_ffff_ffff_ffff;
+const LAB:usize=8; // "__dong_b"
+fn span(p:u64,n:u64)bool{return n==0||(p!=0&&n<=MAX-p);}
+fn overlap(a:u64,n:u64,b:u64,m:u64)bool{return n!=0&&m!=0&&a<b+m&&b<a+n;}
+fn copy(out:[]u8,at:usize,text:[]const u8)usize{
+ var i:usize=0;while i<text.len{out[at+i]=text[i];i+=1;}return at+text.len;
+}
+fn write_lab(out:[]u8,at:usize)usize{
+ out[at]=95;out[at+1]=95;out[at+2]=100;out[at+3]=111;out[at+4]=110;out[at+5]=103;out[at+6]=95;out[at+7]=98;
+ return at+8;
+}
+pub unsafe fn emit(kind:u64,block_id:u64,out:[]u8,written:*usize)u64{unsafe{
+ let wp=written as u64;let op=out.ptr as u64;
+ if written==null||(wp&7)!=0||!span(wp,8){return INVALID;}
+ if !span(op,out.len){return INVALID;}
+ if overlap(wp,8,op,out.len){return INVALID;}
+ if kind>1{return INVALID;}
+ if block_id==MAX{return INVALID;}
+ var db:[20]u8=[0;20];var dw:usize=0;
+ let dsl=slice_from_raw_parts(&db[0],20);
+ let sd=dec.encode(block_id,64,false,dsl,&dw);
+ if sd!=OK{return sd;}
+ var total:usize=0;
+ if kind==0{
+  // "__dong_b" + digits + ":" + LF
+  if LAB>MAX-dw{return INVALID;}let a1=LAB+dw;
+  if 2>MAX-a1{return INVALID;}total=a1+2;
+ }else{
+  // "jmp " + "__dong_b" + digits + LF
+  if 4>MAX-LAB{return INVALID;}let a1=4+LAB;
+  if dw>MAX-a1{return INVALID;}let a2=a1+dw;
+  if 1>MAX-a2{return INVALID;}total=a2+1;
+ }
+ if total>out.len{return CAPACITY;}
+ var at:usize=0;
+ if kind==0{
+  at=write_lab(out,0);
+  at=copy(out,at,slice_from_raw_parts(&db[0],dw));
+  out[at]=58;out[at+1]=10;
+ }else{
+  out[0]=106;out[1]=109;out[2]=112;out[3]=32;at=4;
+  at=write_lab(out,at);
+  at=copy(out,at,slice_from_raw_parts(&db[0],dw));
+  out[at]=10;
+ }
+ *written=total;return OK;
+}}

@@ -1,0 +1,19 @@
+module kernel_pool128_probe;
+import boot.memory_policy as policy;
+import boot.arena_fit as fit;
+import mm.memory_map as map;
+import mm.phys_buddy as buddy;
+var ALLOCATOR:buddy.Allocator=buddy.EMPTY_ALLOCATOR;
+var META:[1024]buddy.PageMeta=[buddy.EMPTY_META;1024];
+export("arena_fits") fn fits(ranges:[]const map.PageRange)u64 {if fit.fits(ranges){return 1;}return 0;}
+export("arena_range_size") fn range_size()u64{return sizeof(map.PageRange) as u64;}
+export("arena_range_align") fn range_align()u64{return alignof(map.PageRange) as u64;}
+export("pool_policy") fn config(out:*u64)void {unsafe {out[0]=policy.POOL_ORDER as u64;out[1]=policy.POOL_PAGES as u64;out[2]=policy.POOL_BYTES;}return;}
+export("pool_buddy") fn allocate(out:*u64)u64 {unsafe {
+    ALLOCATOR=buddy.EMPTY_ALLOCATOR;
+    match buddy.init(&ALLOCATOR,0x400000,1024,META[..]) {ok=>{},err(e)=>{return e;},}
+    match buddy.add_usable(&ALLOCATOR,0,1024) {ok=>{},err(e)=>{return e;},}
+    match buddy.alloc(&ALLOCATOR,policy.POOL_ORDER) {ok(v)=>{out[0]=v;},err(e)=>{return e;},}
+    match buddy.alloc(&ALLOCATOR,4) {ok(v)=>{out[1]=v;},err(e)=>{return e;},}
+    match buddy.free_pages(&ALLOCATOR) {ok(v)=>{out[2]=v as u64;return 0;},err(e)=>{return e;},}
+}}

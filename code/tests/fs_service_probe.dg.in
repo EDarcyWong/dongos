@@ -1,0 +1,7 @@
+
+// Native-only exports appended to an unchanged copy of the real service.
+export("fsr_setup") fn fsr_setup()u64{unsafe{match setup(){ok=>{return 0;},err(e)=>{return e;},}}}
+export("fsr_operate") fn fsr_operate(request:*const sys.Message,response:*sys.Message)u64{unsafe{REQUEST=*request;TICKET=123;let status=operate();RESPONSE.words[0]=status;*response=RESPONSE;return status;}}
+export("fsr_generation") fn fsr_generation()u64{unsafe{return GENERATION;}}
+export("fsr_set_generation") fn fsr_set_generation(value:u64)void{unsafe{GENERATION=value;}}
+export("fsr_record") fn fsr_record(entry:*const fat.PathEntry,next:u64,channel:u64,response:*sys.Message)void{unsafe{PATH_ENTRY=*entry;CHANNEL=channel;RESPONSE=sys.EMPTY_MESSAGE;record(next);*response=RESPONSE;}}

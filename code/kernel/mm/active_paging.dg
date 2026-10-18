@@ -1,0 +1,220 @@
+// Synchronous, BSP-only edits of a private live four-level root. The caller
+// supplies a fresh actual control-register snapshot for each operation; this
+// module cannot inspect hardware. Only the BSP may use this root, with IF=0,
+// and no interrupt/NMI/exception handler may touch the managed VA window.
+// The window is disjoint from code, stacks, tables and all runtime resources.
+// Owned frames are ordinary WB RAM, remain held through invalidation, and have
+// no conflicting cache or executable aliases. No resource is freed here.
+module mm.active_paging;
+
+import mm.paging as paging;
+import mm.paging_errors as paging_errors;
+import mm.errors as errors;
+import boot.preflight as preflight;
+
+pub type Flush = unsafe fn(kind: u64, virtual: u64) void;
+pub const INVALIDATE_PAGE: u64 = 1;
+pub const FLUSH_ROOT: u64 = 2;
+pub error InvalidContext = 0x020a_0001;
+pub error InvalidControls = 0x020a_0002;
+pub error Busy = 0x020a_0003;
+
+pub struct Stats { pub invlpg: u64, pub full_flush: u64, pub retired_tables: u64 }
+pub const EMPTY_STATS: Stats = Stats { invlpg: 0, full_flush: 0, retired_tables: 0 };
+
+unsafe fn inactive_flush(kind: u64, virtual: u64) void { return; }
+
+pub struct Context {
+    bound: bool, busy: bool,
+    space: *paging.Space, controls: preflight.State,
+    window_base: u64, window_pages: u64,
+    frame_base: u64, frame_pages: u64,
+    flush: Flush, totals: Stats,
+}
+pub const EMPTY_CONTEXT: Context = Context {
+    bound: false, busy: false, space: null, controls: preflight.EMPTY_STATE,
+    window_base: 0, window_pages: 0, frame_base: 0, frame_pages: 0,
+    flush: inactive_flush, totals: EMPTY_STATS,
+};
+
+fn canonical(address: u64) bool {
+    let upper: u64 = address >> 48;
+    if (address & 0x0000_8000_0000_0000) == 0 { return upper == 0; }
+    return upper == 0xffff;
+}
+
+fn valid_region(base: u64, pages: u64, virtual: bool) bool {
+    if pages == 0 || (base & 4095) != 0 || pages - 1 > (0xffff_ffff_ffff_ffff - base) / 4096 {
+        return false;
+    }
+    let last: u64 = base + (pages - 1) * 4096;
+    if virtual && (!canonical(base) || !canonical(last) || (base >> 63) != (last >> 63)) {
+        return false;
+    }
+    return true;
+}
+
+fn inside(address: u64, base: u64, pages: u64) bool {
+    return (address & 4095) == 0 && address >= base && (address - base) / 4096 < pages;
+}
+
+unsafe fn check_controls(state: *const preflight.State, root: u64) !void {
+    unsafe {
+        let value = *state;
+        if value.cr3 != root || root == 0 || (root & 4095) != 0
+            || (value.cr0 & 0x8001_0001) != 0x8001_0001 || (value.cr0 & 0x6000_0000) != 0
+            || (value.cr4 & 32) == 0 || (value.cr4 & 0x0082_1080) != 0
+            || (value.efer & 0xd00) != 0xd00 || (value.rflags & 0x60600) != 0 || (value.rflags & 2) == 0
+            || (value.pat & 255) != 6 || ((value.pat >> 24) & 255) != 0 {
+            return error.InvalidControls;
+        }
+    }
+    return;
+}
+
+pub unsafe fn bind(context: *Context, space: *paging.Space, state: *const preflight.State,
+                    window_base: u64, window_pages: u64, frame_base: u64, frame_pages: u64,
+                    flush: Flush) !void {
+    unsafe {
+        if (*context).bound { return error.errors.AlreadyInitialized; }
+        let root: u64 = try paging.root_physical(space);
+        let mask: u64 = try paging.physical_address_mask(space);
+        try check_controls(state,root);
+        if !valid_region(window_base,window_pages,true) || !valid_region(frame_base,frame_pages,false)
+            || (frame_base & ~mask) != 0 || (frame_base + (frame_pages - 1) * 4096 & ~mask) != 0 {
+            return error.errors.InvalidArgument;
+        }
+        // Acquire a clean window. Otherwise protect could silently change the
+        // cache policy or ownership of an imported mapping outside this API.
+        // From this point only this Context may mutate entries in the window.
+        var index: u64 = 0;
+        var mapping: paging.Mapping = paging.Mapping { physical: 0, flags: 0 };
+        while index < window_pages {
+            match paging.query(space,window_base + index * 4096,&mapping) {
+                ok => { return error.errors.InvalidArgument; },
+                err(code) => {
+                    // These addresses are canonical and Space is initialized;
+                    // its only other possible walk failure is malformed entry.
+                    if code != 0x0203_0002 { return error.paging_errors.MalformedEntry; }
+                },
+            }
+            index += 1;
+        }
+        *context = Context {
+            bound: true, busy: false, space: space, controls: *state,
+            window_base: window_base, window_pages: window_pages,
+            frame_base: frame_base, frame_pages: frame_pages, flush: flush, totals: EMPTY_STATS,
+        };
+    }
+    return;
+}
+
+unsafe fn check(context: *const Context, state: *const preflight.State, virtual: u64,
+                 physical: u64, flags: u64, has_frame: bool) !void {
+    unsafe {
+        if !(*context).bound { return error.errors.NotInitialized; }
+        if (*context).busy { return error.Busy; }
+        let root: u64 = try paging.root_physical((*context).space);
+        try check_controls(state,root);
+        let previous = (*context).controls;
+        let current = *state;
+        if current.cr0 != previous.cr0 || current.cr3 != previous.cr3 || current.cr4 != previous.cr4
+            || current.efer != previous.efer || current.pat != previous.pat {
+            return error.InvalidControls;
+        }
+        if !inside(virtual,(*context).window_base,(*context).window_pages)
+            || (flags != 0 && flags != paging.WRITE)
+            || (has_frame && !inside(physical,(*context).frame_base,(*context).frame_pages)) {
+            return error.errors.InvalidArgument;
+        }
+        // Every successful request consumes exactly one counter. Reject an
+        // exhausted counter before a mutation, never wrap bookkeeping.
+        if (*context).totals.invlpg == 0xffff_ffff_ffff_ffff
+            || (*context).totals.full_flush == 0xffff_ffff_ffff_ffff
+            || (*context).totals.retired_tables > 0xffff_ffff_ffff_fffc {
+            return error.InvalidContext;
+        }
+    }
+    return;
+}
+
+unsafe fn invalidate_page(context: *Context, virtual: u64) void {
+    unsafe {
+        (*context).busy = true;
+        compiler_fence();
+        (*context).flush(INVALIDATE_PAGE,virtual);
+        compiler_fence();
+        (*context).totals.invlpg += 1;
+        (*context).busy = false;
+    }
+}
+
+pub unsafe fn map(context: *Context, state: *const preflight.State,
+                   virtual: u64, physical: u64, flags: u64) !void {
+    unsafe {
+        try check(context,state,virtual,physical,flags,true);
+        try paging.map_live((*context).space,virtual,physical,flags);
+        invalidate_page(context,virtual);
+    }
+    return;
+}
+
+pub unsafe fn protect(context: *Context, state: *const preflight.State,
+                       virtual: u64, flags: u64) !void {
+    unsafe {
+        try check(context,state,virtual,0,flags,false);
+        try paging.protect_live((*context).space,virtual,flags);
+        invalidate_page(context,virtual);
+    }
+    return;
+}
+
+pub unsafe fn replace(context: *Context, state: *const preflight.State,
+                       virtual: u64, physical: u64, flags: u64) !void {
+    unsafe {
+        try check(context,state,virtual,physical,flags,true);
+        try paging.replace_live((*context).space,virtual,physical,flags);
+        invalidate_page(context,virtual);
+    }
+    return;
+}
+
+pub unsafe fn unmap(context: *Context, state: *const preflight.State, virtual: u64) !void {
+    unsafe {
+        try check(context,state,virtual,0,0,false);
+        var retired: paging.Retired = paging.EMPTY_RETIRED;
+        try paging.unmap_live((*context).space,virtual,&retired);
+        let count: u64 = (paging.retired_tables(&retired)) as u64;
+        (*context).busy = true;
+        compiler_fence();
+        // Full same-root MOV CR3 also invalidates cached parent walks. The
+        // callback MUST complete it before returning and must not edit tables.
+        (*context).flush(FLUSH_ROOT,virtual);
+        compiler_fence();
+        // With exclusive ownership and an honest callback this cannot fail:
+        // the receipt was created above and detached tables cannot be reused.
+        try paging.reclaim((*context).space,&retired);
+        (*context).totals.full_flush += 1;
+        (*context).totals.retired_tables += count;
+        (*context).busy = false;
+    }
+    return;
+}
+
+pub unsafe fn stats(context: *const Context, output: *Stats) !void {
+    unsafe {
+        if !(*context).bound { return error.errors.NotInitialized; }
+        *output = (*context).totals;
+    }
+    return;
+}
+
+pub unsafe fn query(context: *const Context, virtual: u64, output: *paging.Mapping) !void {
+    unsafe {
+        if !(*context).bound { return error.errors.NotInitialized; }
+        if !inside(virtual & ~4095,(*context).window_base,(*context).window_pages) {
+            return error.errors.InvalidArgument;
+        }
+        return paging.query((*context).space,virtual,output);
+    }
+}

@@ -1,0 +1,56 @@
+module globals_defs;
+
+pub var number_u8: u8 = 255;
+pub var number_i8: i8 = -128;
+pub var number_u16: u16 = 65535;
+pub var number_i16: i16 = -32768;
+pub var number_u32: u32 = 4294967295;
+pub var number_i32: i32 = -2147483648;
+pub var number_u64: u64 = 18446744073709551615;
+pub var number_i64: i64 = -9223372036854775808;
+pub var enabled: bool = true;
+
+var hidden: u64 = 19;
+pub fn read_hidden() u64 { return hidden; }
+
+pub struct Natural { pub tag: u8, pub count: u32, pub values: [3]i16 }
+pub packed struct Packed { pub tag: u8, pub word: u32, pub delta: i16 }
+pub struct Nested { pub prefix: u8, pub natural: Natural, pub record: Packed, pub tail: [4]u8 }
+
+pub var packet: Natural = Natural { tag: 0xa5, count: 0x11223344, values: [-2, 300, -4000] };
+pub var packed_record: Packed = Packed { tag: 0x7e, word: 0x10203040, delta: -1234 };
+pub var nested: Nested = Nested {
+    prefix: 0x99,
+    natural: Natural { tag: 3, count: 5, values: [-1, 2, -3] },
+    record: Packed { tag: 4, word: 0xa0b0c0d0, delta: -5 },
+    tail: [9, 0, 8, 7],
+};
+
+pub var bytes: [6]u8 = [0, 1, 2, 255, 4, 5];
+pub var zeros: [64]u8 = [0; 64];
+pub const frozen: [4]u8 = [9, 8, 7, 6];
+pub const frozen_packet: Natural = Natural { tag: 7, count: 11, values: [-1, 2, -3] };
+pub const scalar_constant: u16 = 0x7a9b;
+
+pub const greeting: []const u8 = "董\0A";
+pub const empty: []const u8 = "";
+pub var text: []const u8 = "世界\0!";
+pub var mutable_view: []u8 = bytes[1..5];
+pub const constant_view: []const u8 = frozen[1..3];
+pub const empty_view: []const u8 = bytes[2..2];
+
+pub const count_address: *u32 = &packet.count;
+pub const element_address: *u8 = &bytes[3];
+pub const frozen_address: *const u8 = &frozen[2];
+pub const nested_address: *u8 = &nested.tail[2];
+pub const scalar_address: *const u16 = &scalar_constant;
+pub var indirect: *u8 = &bytes[2];
+
+pub struct Node { pub value: u64, pub next: *Node }
+pub var self_node: Node = Node { value: 123, next: &self_node };
+pub var first: Node = Node { value: 101, next: &second };
+pub var second: Node = Node { value: 202, next: &first };
+pub const node_table: [3]*Node = [&first, &second, &self_node];
+
+pub align(4096) struct Page { pub bytes: [4096]u8 }
+pub var page: Page = Page { bytes: [0; 4096] };

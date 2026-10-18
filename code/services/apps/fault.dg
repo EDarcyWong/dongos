@@ -1,0 +1,9 @@
+module apps.fault;
+import lib.sys as sys;
+unsafe extern "sysv64" fn svc_user_ud2()void;
+const BAD:u64=0x0512_0001;
+export("service_main") fn main()u64 {unsafe {
+    let boot=sys.boot();if boot==null||(*boot).version!=1 {return BAD;}
+    let ready=sys.ready_boot(boot);if ready!=0 {return ready;}
+    svc_user_ud2();return BAD;
+}}

@@ -1,0 +1,29 @@
+module boot.abi;
+
+pub type BootInfoPtr = *const BootInfo;
+pub const ABI_VERSION: u64 = 1;
+pub const ABI_BYTES: usize = sizeof(BootInfo);
+
+pub struct BootInfo {
+    pub magic: u64, pub version: u64, pub size: usize, pub flags: u64,
+    pub memory_map: *const u8, pub memory_map_size: usize,
+    pub descriptor_size: usize, pub descriptor_version: u64,
+    pub framebuffer_base: *u8, pub framebuffer_size: usize,
+    pub width: usize, pub height: usize, pub stride: usize, pub pixel_format: u64,
+    pub rsdp: *const u8, pub kernel_physical: *u8, pub kernel_size: usize,
+    pml4_physical: *u64, pub stack_physical: *u8, pub stack_size: usize,
+}
+
+
+pub unsafe fn read_magic(info: BootInfoPtr) u64 {
+    unsafe {
+        if (*info).size != ABI_BYTES { return 0; }
+        if (*info).descriptor_version != ABI_VERSION { return 0; }
+        return (*info).magic;
+    }
+}
+
+// Exposes the existing v1 field without changing the 160-byte shared layout.
+pub unsafe fn bootstrap_root(info: BootInfoPtr) u64 {
+    unsafe { return (*info).pml4_physical as u64; }
+}

@@ -1,0 +1,92 @@
+// One BSP producer, IRQs masked. A failed hardware request is fail-stop:
+// pending remains set and callers must retain every frame/retirement receipt.
+module smp.tlb;
+import smp.context as context;
+pub const VECTOR:u64=0xf2;
+pub error Invalid=0x0603_0001;
+pub error Busy=0x0603_0002;
+pub error Hardware=0x0603_0003;
+pub error Timeout=0x0603_0004;
+pub error Exhausted=0x0603_0005;
+pub error ProbeMismatch=0x0603_0006;
+pub struct Mailbox { pub sequence:u64,pub virtual:u64,pub scope:u64,pub ack:u64,pub expected:u64,pub observed:u64,pub fault:u64,pub reserved:u64 }
+pub const EMPTY_MAILBOX:Mailbox=Mailbox { sequence:0,virtual:0,scope:0,ack:0,expected:0,observed:0,fault:0,reserved:0 };
+pub type Send=unsafe fn(context:u64,apic:u64,vector:u64)u64;
+pub type Clock=unsafe fn(context:u64)u64;
+pub type Pause=unsafe fn(context:u64)void;
+pub struct Ops { pub context:u64,pub send:Send,pub clock:Clock,pub pause:Pause,pub timeout_ticks:u64 }
+pub struct Domain {
+    pub ready:u64,pub pending:u64,pub cpus:*context.Context,pub count:usize,pub mailboxes:*Mailbox,pub ops:*const Ops,
+    pub epoch:u64,pub broadcasts:u64,pub sent:u64,pub acknowledgements:u64,pub invalidations:u64,
+    pub full_flushes:u64,pub probes:u64,pub failures:u64,
+}
+pub const EMPTY_DOMAIN:Domain=Domain { ready:0,pending:0,cpus:null,count:0,mailboxes:null,ops:null,epoch:0,
+    broadcasts:0,sent:0,acknowledgements:0,invalidations:0,full_flushes:0,probes:0,failures:0 };
+pub unsafe fn initialize(domain:*Domain,cpus:*context.Context,count:usize,mailboxes:*Mailbox,ops:*const Ops)!void {
+    unsafe {
+        if domain==null || cpus==null || mailboxes==null || ops==null || count==0 || count>16 || (*domain).ready!=0
+            || ((mailboxes as u64)&7)!=0 || read_unaligned((&(*ops).send) as *const u64)==0
+            || read_unaligned((&(*ops).clock) as *const u64)==0 || read_unaligned((&(*ops).pause) as *const u64)==0
+            || (*ops).timeout_ticks==0 { return error.Invalid; }
+        var i:usize=1;
+        while i<count {
+            let cpu=*(cpus+i);
+            if cpu.logical_id!=i as u64 || cpu.apic_id>255 || cpu.state!=context.ONLINE || cpu.online_epoch!=cpu.epoch
+                || cpu.epoch==0 || (cpu.cr4&0x20080)!=0 { return error.Invalid; }
+            var j:usize=0; while j<i { if (*(cpus+j)).apic_id==cpu.apic_id { return error.Invalid; } j+=1; }
+            i+=1;
+        }
+        i=0;while i<count { *(mailboxes+i)=EMPTY_MAILBOX;i+=1; }
+        *domain=EMPTY_DOMAIN;(*domain).cpus=cpus;(*domain).count=count;(*domain).mailboxes=mailboxes;(*domain).ops=ops;(*domain).ready=1;
+    }
+    return;
+}
+pub unsafe fn broadcast(domain:*Domain,virtual:u64,scope:u64,expected:u64)!void {
+    unsafe {
+        if domain==null || (*domain).ready!=1 || scope>2 || (scope!=1 && virtual>=0x8000_0000_0000 && virtual<0xffff_8000_0000_0000)
+            || (scope==1 && virtual!=0) { return error.Invalid; }
+        if (*domain).pending!=0 { return error.Busy; }
+        if (*domain).epoch==0xffff_ffff_ffff_ffff { return error.Exhausted; }
+        var i:usize=1;
+        while i<(*domain).count {
+            let cpu=(*domain).cpus+i;let box=(*domain).mailboxes+i;
+            if atomic_load(&(*cpu).state)!=context.ONLINE || atomic_load(&(*box).sequence)!=atomic_load(&(*box).ack) { return error.Busy; }
+            i+=1;
+        }
+        let epoch=(*domain).epoch+1;(*domain).epoch=epoch;(*domain).pending=1;
+        let ops=*(*domain).ops;
+        i=1;
+        while i<(*domain).count {
+            let box=(*domain).mailboxes+i;
+            (*box).virtual=virtual;(*box).scope=scope;(*box).expected=expected;(*box).fault=0;
+            compiler_fence();atomic_store(&(*box).sequence,epoch);
+            (*domain).sent+=1;
+            if ops.send(ops.context,(*((*domain).cpus+i)).apic_id,VECTOR)!=0 { (*domain).failures+=1;return error.Hardware; }
+            i+=1;
+        }
+        let started=ops.clock(ops.context);
+        loop {
+            var complete:bool=true;i=1;
+            while i<(*domain).count {
+                let box=(*domain).mailboxes+i;
+                if atomic_load(&(*box).ack)!=epoch { complete=false; }
+                i+=1;
+            }
+            if complete { break; }
+            let now=ops.clock(ops.context);
+            if now<started || now-started>ops.timeout_ticks { (*domain).failures+=1;return error.Timeout; }
+            ops.pause(ops.context);
+        }
+        i=1;
+        while i<(*domain).count {
+            let box=(*domain).mailboxes+i;
+            if (*box).fault!=0 || (scope==2 && (*box).observed!=expected) { (*domain).failures+=1;return error.ProbeMismatch; }
+            (*domain).acknowledgements+=1;i+=1;
+        }
+        (*domain).pending=0;(*domain).broadcasts+=1;
+        if scope==0 { (*domain).invalidations+=1; }
+        if scope==1 { (*domain).full_flushes+=1; }
+        if scope==2 { (*domain).probes+=1; }
+    }
+    return;
+}

@@ -1,0 +1,26 @@
+// Same Function output and matching order as pci.next, bounded to boot catalog.
+module drivers.pci_inventory;
+import drivers.pci as pci;import lib.pci_inventory_abi as abi;
+pub type Read=unsafe fn(context:u64,cursor:u64,out:*abi.Entry)u64;
+pub unsafe fn next(reader:Read,context:u64,regions:[]const pci.Region,cursor:*pci.Cursor,out:*pci.Function)!bool{unsafe{
+ if cursor==null||out==null||regions.ptr==null||regions.len!=1||(*cursor).region>1||(*cursor).index>32{return error.abi.Invalid;}
+ let region=regions[0];if region.base==0||(region.base&0xf_ffff)!=0||region.base>=0x1_0000_0000||region.segment!=0
+  ||region.start_bus>region.end_bus||region.end_bus>255||(region.end_bus+1)*0x10_0000>0x1_0000_0000-region.base{return error.abi.Invalid;}
+ if (*cursor).region==1{if (*cursor).index!=0{return error.abi.Invalid;}return false;}
+ var response=abi.EMPTY;if reader(context,(*cursor).index,&response)!=0{return error.abi.Transport;}
+ if response.version!=1||response.present>1||response.next_cursor>32||response.next_cursor<(*cursor).index
+  ||response.reserved[0]!=0||response.reserved[1]!=0||response.reserved[2]!=0||response.reserved[3]!=0{return error.abi.Corrupt;}
+ if response.present==0{
+  if response.ecam!=0||response.segment!=0||response.bus!=0||response.device!=0||response.function!=0
+   ||response.vendor!=0||response.device_id!=0||response.class_code!=0||response.header!=0{return error.abi.Corrupt;}
+  (*cursor).region=1;(*cursor).index=0;return false;
+ }
+ if response.next_cursor<=(*cursor).index||response.segment!=region.segment||response.bus<region.start_bus
+  ||response.bus>region.end_bus||response.device>31||response.function>7||response.vendor==0||response.vendor>=65535
+  ||response.device_id>65535||response.class_code>0xff_ffff||response.header>255
+  ||response.ecam!=region.base+(response.bus<<20)+(response.device<<15)+(response.function<<12){return error.abi.Corrupt;}
+ let value=pci.Function{ecam:response.ecam,segment:response.segment,bus:response.bus,device:response.device,
+  function:response.function,vendor:response.vendor,device_id:response.device_id,class:(response.class_code>>16)&255,
+  subclass:(response.class_code>>8)&255,interface:response.class_code&255,header:response.header};
+ (*cursor).index=response.next_cursor;*out=value;return true;
+}}

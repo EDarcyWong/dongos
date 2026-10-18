@@ -1,0 +1,55 @@
+// core.int — usize checked arithmetic and power-of-two alignment helpers.
+// Checked helpers never trigger a debug overflow or divide-by-zero panic: the
+// range test runs before the arithmetic that could overflow.
+
+module core.int;
+
+const MAX_USIZE: usize = 0xffff_ffff_ffff_ffff;
+
+pub fn is_power_of_two(value: usize) bool {
+    if value == 0 { return false; }
+    return (value & (value - 1)) == 0;
+}
+
+// Write a + b to *out on success. Returns false and leaves *out unchanged when
+// the addition overflows usize.
+pub unsafe fn add_checked(a: usize, b: usize, out: *usize) bool {
+    if a > MAX_USIZE - b { return false; }
+    unsafe { *out = a + b; }
+    return true;
+}
+
+// Write a - b to *out on success. Returns false and leaves *out unchanged when
+// b is greater than a.
+pub unsafe fn sub_checked(a: usize, b: usize, out: *usize) bool {
+    if a < b { return false; }
+    unsafe { *out = a - b; }
+    return true;
+}
+
+// Write a * b to *out on success. Returns false and leaves *out unchanged when
+// the multiplication overflows usize.
+pub unsafe fn mul_checked(a: usize, b: usize, out: *usize) bool {
+    if b != 0 && a > MAX_USIZE / b { return false; }
+    unsafe { *out = a * b; }
+    return true;
+}
+
+// Round value up to the next multiple of alignment (a non-zero power of two).
+// Returns false and leaves *out unchanged on an invalid alignment or overflow.
+pub unsafe fn align_up(value: usize, alignment: usize, out: *usize) bool {
+    if !is_power_of_two(alignment) { return false; }
+    let mask: usize = alignment - 1;
+    if value > MAX_USIZE - mask { return false; }
+    unsafe { *out = (value + mask) & ~mask; }
+    return true;
+}
+
+// Round value down to the previous multiple of alignment (a non-zero power of
+// two). Returns false and leaves *out unchanged on an invalid alignment.
+pub unsafe fn align_down(value: usize, alignment: usize, out: *usize) bool {
+    if !is_power_of_two(alignment) { return false; }
+    let mask: usize = alignment - 1;
+    unsafe { *out = value & ~mask; }
+    return true;
+}

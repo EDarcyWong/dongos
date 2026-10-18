@@ -1,0 +1,29 @@
+module user_entry_probe;
+import sched.user_domain as ud;
+import sched.user_entry_plan as ep;
+import sched.user_bridge as bridge;
+import sched.multicore as q;
+var D:*ud.Domain=null;
+export("ue_required") fn required()u64{return ud.required_bytes();}
+export("ue_init") fn initialize(arena:u64,bytes:u64)u64{unsafe{match ud.initialize(arena,bytes,7,0x100000,&D){ok=>{return 0;},err(e)=>{return e;},}}}
+export("ue_domain") fn domain()*ud.Domain{return D;}
+export("ue_plan") fn plan(storage:u64,id:usize,contexts:u64,stacks:*const ep.Stacks,out:**ep.Cpu)u64{unsafe{
+ match ep.configure(storage,8192,D,id,contexts,3,stacks,1000000000,100000000,out){ok=>{return 0;},err(e)=>{return e;},}
+}}
+export("ue_bridge") fn initialize_bridge(storage:u64,headers:*u64)u64{unsafe{
+ match bridge.initialize(storage,704,D,headers){ok=>{return 0;},err(e)=>{return e;},}
+}}
+export("ue_lock") fn lock(cpu:usize)u64{unsafe{match ud.acquire(D,cpu,1000000){ok=>{return 0;},err(e)=>{return e;},}}}
+export("ue_unlock") fn unlock(cpu:usize)u64{unsafe{match ud.unlock(D,cpu){ok=>{return 0;},err(e)=>{return e;},}}}
+export("ue_admit") fn admit(slot:usize,inc:u64,root:u64,frame:u64,xstate:u64,affinity:u64,out:*u64)u64{unsafe{
+ match ud.admit(D,0,slot,inc,root,frame,xstate,8,affinity,out){ok=>{return 0;},err(e)=>{return e;},}
+}}
+export("ue_project_one") fn project_one(slot:usize,waiting:u64)u64{unsafe{
+ let p=(*D).processes+slot;if (*p).token==0{return 0;}
+ if (*(*D).engine).threads[slot].state==q.BLOCKED&&waiting==0{
+  match ud.wake(D,0,slot,(*p).incarnation){ok=>{},err(e)=>{return e;},}
+ }return 0;
+}}
+export("ue_audit") fn audit()u64{unsafe{match q.audit((*D).engine){ok=>{return 0;},err(e)=>{return e;},}}}
+export("ue_poll") fn poll(cpu:usize)u64{unsafe{match ud.poll(D,cpu){ok(value)=>{return value as u64;},err(e)=>{return e;},}}}
+export("ue_cancel") fn cancel(cpu:usize)u64{unsafe{match ud.cancel_return(D,cpu){ok=>{return 0;},err(e)=>{return e;},}}}

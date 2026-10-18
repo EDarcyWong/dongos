@@ -1,0 +1,32 @@
+module acpi_startup_probe;
+
+import boot.acpi_startup as startup;
+import boot.abi as abi;
+import firmware.acpi as acpi;
+
+export("as_report_size") fn report_size() usize { return sizeof(startup.Report); }
+export("as_report_align") fn report_align() usize { return alignof(startup.Report); }
+export("as_inventory_size") fn inventory_size() usize { return sizeof(acpi.Inventory); }
+export("as_inventory_align") fn inventory_align() usize { return alignof(acpi.Inventory); }
+export("as_readable") fn readable(raw: *const u8, length: usize, stride: usize, pa: u64, bytes: usize) u64 {
+    unsafe { if startup.readable(slice_from_raw_parts(raw,length),stride,pa,bytes) { return 1; } }
+    return 0;
+}
+export("as_prepare") fn prepare(info: *const abi.BootInfo) u64 {
+    unsafe { match startup.prepare(info) { ok => { return 0; }, err(code) => { return code; }, } }
+}
+export("as_prepare_with") fn prepare_with(reader: acpi.Reader, context: u64, rsdp: u64) u64 {
+    unsafe { match startup.prepare_with(reader,context,rsdp) { ok => { return 0; }, err(code) => { return code; }, } }
+}
+export("as_inventory_pointer") fn inventory_pointer() *const acpi.Inventory { return startup.inventory_pointer(); }
+export("as_inventory_copy") fn inventory_copy(out: *acpi.Inventory) u64 {
+    unsafe {
+        let source = startup.inventory_pointer();
+        if source == null { return 0x0302_0003; }
+        *out = *source;
+    }
+    return 0;
+}
+export("as_report") fn report(out: *startup.Report) u64 {
+    unsafe { match startup.report(out) { ok => { return 0; }, err(code) => { return code; }, } }
+}

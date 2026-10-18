@@ -1,0 +1,43 @@
+// Three NASM lines turning a 64-bit comparison into a canonical bool in RAX:
+// "cmp <left64>, <right64>\n<setcc> al\nmovzx rax, al\n". The condition codes
+// follow the integrated CR6 predicate numbering (read-only constants). cmp
+// runs before AL is overwritten, so RAX may be either operand. Only RAX and
+// flags change. Built in a local buffer, copied to out after every check.
+module bootstrap.nasm_compare_emit;
+import bootstrap.branch_plan as bp;
+pub const OK:u64=0;pub const INVALID:u64=1;pub const CAPACITY:u64=2;
+const MAX:u64=0xffff_ffff_ffff_ffff;
+fn span(p:u64,n:u64)bool{return n==0||(p!=0&&n<=MAX-p);}
+fn overlap(a:u64,n:u64,b:u64,m:u64)bool{return n!=0&&m!=0&&a<b+m&&b<a+n;}
+fn copy(out:[]u8,at:usize,text:[]const u8)usize{
+ var i:usize=0;while i<text.len{out[at+i]=text[i];i+=1;}return at+text.len;
+}
+fn setcc(condition:u64)[]const u8{
+ if condition==bp.EQ{return "sete";}if condition==bp.NE{return "setne";}
+ if condition==bp.ULT{return "setb";}if condition==bp.ULE{return "setbe";}
+ if condition==bp.UGT{return "seta";}if condition==bp.UGE{return "setae";}
+ if condition==bp.SLT{return "setl";}if condition==bp.SLE{return "setle";}
+ if condition==bp.SGT{return "setg";}return "setge";
+}
+fn register(r:u64)[]const u8{
+ if r==0{return "rax";}if r==1{return "rcx";}if r==2{return "rdx";}if r==3{return "rbx";}
+ if r==4{return "rsp";}if r==5{return "rbp";}if r==6{return "rsi";}if r==7{return "rdi";}
+ if r==8{return "r8";}if r==9{return "r9";}if r==10{return "r10";}if r==11{return "r11";}
+ if r==12{return "r12";}if r==13{return "r13";}if r==14{return "r14";}return "r15";
+}
+pub unsafe fn emit(condition:u64,left:u64,right:u64,out:[]u8,written:*usize)u64{unsafe{
+ let wp=written as u64;let op=out.ptr as u64;
+ if written==null||(wp&7)!=0||!span(wp,8){return INVALID;}
+ if !span(op,out.len){return INVALID;}
+ if overlap(wp,8,op,out.len){return INVALID;}
+ if condition>bp.SGE||left>15||right>15{return INVALID;}
+ // Longest text is 13+9+14=36 bytes: no length arithmetic can overflow.
+ var text:[48]u8=[0;48];let buffer=slice_from_raw_parts(&text[0],48);
+ var at=copy(buffer,0,"cmp ");at=copy(buffer,at,register(left));buffer[at]=44;buffer[at+1]=32;
+ at=copy(buffer,at+2,register(right));buffer[at]=10;
+ at=copy(buffer,at+1,setcc(condition));at=copy(buffer,at," al\n");
+ at=copy(buffer,at,"movzx rax, al\n");
+ if at>out.len{return CAPACITY;}
+ var i:usize=0;while i<at{out[i]=buffer[i];i+=1;}
+ *written=at;return OK;
+}}

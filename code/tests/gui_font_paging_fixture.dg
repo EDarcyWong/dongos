@@ -1,0 +1,12 @@
+var TEST_FONT_MAPS:u64=0;var TEST_FONT_REPLACEMENTS:u64=0;var TEST_FONT_MAP_FAULT:u64=0;var TEST_FONT_REPLACE_FAULT:u64=0;
+export("font_paging_fault") fn font_fault(map:u64,replacement:u64)void {unsafe {
+    TEST_FONT_MAPS=0;TEST_FONT_REPLACEMENTS=0;TEST_FONT_MAP_FAULT=map;TEST_FONT_REPLACE_FAULT=replacement;
+}return;}
+pub unsafe fn map_live(space:*Space,virtual:u64,physical:u64,flags:u64)!void {unsafe {
+    TEST_FONT_MAPS+=1;if TEST_FONT_MAP_FAULT!=0&&TEST_FONT_MAPS==TEST_FONT_MAP_FAULT {return error.paging_errors.MalformedEntry;}
+    return font_real_map_live(space,virtual,physical,flags);
+}}
+pub unsafe fn replace_live(space:*Space,virtual:u64,physical:u64,flags:u64)!void {unsafe {
+    TEST_FONT_REPLACEMENTS+=1;if TEST_FONT_REPLACE_FAULT!=0&&TEST_FONT_REPLACEMENTS==TEST_FONT_REPLACE_FAULT {return error.paging_errors.MalformedEntry;}
+    return font_real_replace_live(space,virtual,physical,flags);
+}}

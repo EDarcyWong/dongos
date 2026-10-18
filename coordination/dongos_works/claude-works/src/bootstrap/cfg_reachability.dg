@@ -1,0 +1,49 @@
+// Control-flow graph validation and reachability from one entry node.
+// Every node's edge range and every referenced target is validated, reachable
+// or not; only after all checks pass is out written, using work as an
+// explicit stack (no recursion).
+module bootstrap.cfg_reachability;
+pub const OK:u64=0;pub const INVALID:u64=1;pub const CAPACITY:u64=2;pub const WORKSPACE:u64=3;
+pub struct Node{pub first:usize,pub count:usize}
+const MAX:u64=0xffff_ffff_ffff_ffff;
+fn span(p:u64,n:u64)bool{return n==0||(p!=0&&n<=MAX-p);}
+fn overlap(a:u64,n:u64,b:u64,m:u64)bool{return n!=0&&m!=0&&a<b+m&&b<a+n;}
+unsafe fn valid(nodes:[]const Node,edges:[]const usize,out:[]u8,work:[]usize,used:*usize)bool{unsafe{
+ if used==null||nodes.len>MAX/sizeof(Node)||edges.len>MAX/8||work.len>MAX/8{return false;}
+ let np=nodes.ptr as u64;let ep=edges.ptr as u64;let op=out.ptr as u64;let wp=work.ptr as u64;let up=used as u64;
+ let nn=nodes.len*sizeof(Node);let en=edges.len*8;let on=out.len;let wn=work.len*8;
+ if !span(np,nn)||!span(ep,en)||!span(op,on)||!span(wp,wn)||!span(up,8){return false;}
+ if (nn!=0&&(np&7)!=0)||(en!=0&&(ep&7)!=0)||(wn!=0&&(wp&7)!=0)||(up&7)!=0{return false;}
+ if overlap(op,on,np,nn)||overlap(op,on,ep,en)||overlap(wp,wn,np,nn)||overlap(wp,wn,ep,en)
+  ||overlap(up,8,np,nn)||overlap(up,8,ep,en)||overlap(op,on,wp,wn)||overlap(op,on,up,8)||overlap(wp,wn,up,8){return false;}
+ return true;
+}}
+// O(nodes + sum of count): the unreferenced edges tail is never read.
+fn graph(nodes:[]const Node,edges:[]const usize)bool{
+ var i:usize=0;
+ while i<nodes.len{
+  let node=nodes[i];if node.first>edges.len||node.count>edges.len-node.first{return false;}
+  var e=node.first;while e<node.first+node.count{if edges[e]>=nodes.len{return false;}e+=1;}
+  i+=1;
+ }
+ return true;
+}
+pub unsafe fn reachable(nodes:[]const Node,edges:[]const usize,entry:usize,out:[]u8,work:[]usize,used:*usize)u64{unsafe{
+ if !valid(nodes,edges,out,work,used)||nodes.len==0||entry>=nodes.len{return INVALID;}
+ if !graph(nodes,edges){return INVALID;}
+ if out.len<nodes.len{return CAPACITY;}
+ if work.len<nodes.len{return WORKSPACE;}
+ // Nothing below can fail, so out doubles as the visited set.
+ var i:usize=0;while i<nodes.len{out[i]=0;i+=1;}
+ out[entry]=1;work[0]=entry;var top:usize=1;var count:usize=1;
+ while top!=0{
+  top-=1;let node=nodes[work[top]];var e=node.first;
+  while e<node.first+node.count{
+   let target=edges[e];
+   // Each node is pushed at most once, so the stack never exceeds nodes.len.
+   if out[target]==0{out[target]=1;work[top]=target;top+=1;count+=1;}
+   e+=1;
+  }
+ }
+ *used=count;return OK;
+}}

@@ -1,0 +1,77 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "id": "empty",
+      "hex": "",
+      "valid": true,
+      "scalar_count": 0
+    },
+    {
+      "id": "nul",
+      "hex": "00",
+      "valid": true,
+      "scalar_count": 1
+    },
+    {
+      "id": "ascii",
+      "hex": "41",
+      "valid": true,
+      "scalar_count": 1
+    },
+    {
+      "id": "han",
+      "hex": "e6b189",
+      "valid": true,
+      "scalar_count": 1
+    },
+    {
+      "id": "emoji",
+      "hex": "f09f9880",
+      "valid": true,
+      "scalar_count": 1
+    },
+    {
+      "id": "max",
+      "hex": "f48fbfbf",
+      "valid": true,
+      "scalar_count": 1
+    },
+    {
+      "id": "overlong",
+      "hex": "c0af",
+      "valid": false,
+      "scalar_count": null
+    },
+    {
+      "id": "continuation",
+      "hex": "80",
+      "valid": false,
+      "scalar_count": null
+    },
+    {
+      "id": "surrogate",
+      "hex": "eda080",
+      "valid": false,
+      "scalar_count": null
+    },
+    {
+      "id": "too_high",
+      "hex": "f4908080",
+      "valid": false,
+      "scalar_count": null
+    },
+    {
+      "id": "truncated",
+      "hex": "e282",
+      "valid": false,
+      "scalar_count": null
+    },
+    {
+      "id": "bad_continuation",
+      "hex": "e228a1",
+      "valid": false,
+      "scalar_count": null
+    }
+  ]
+}

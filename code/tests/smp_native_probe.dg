@@ -1,0 +1,32 @@
+module smp_native_probe;
+import smp.policy as policy;
+import smp.context as context;
+import smp.tlb as tlb;
+import firmware.acpi as acpi;
+export("sp_sizes") fn sizes(out:*u64)void { unsafe { *out=sizeof(context.Context) as u64;*(out+1)=sizeof(policy.Topology) as u64;*(out+2)=sizeof(tlb.Mailbox) as u64;*(out+3)=sizeof(tlb.Domain) as u64; } return; }
+export("sp_topology") fn topology(inv:*const acpi.Inventory,bsp:u64,out:*policy.Topology)u64 {
+ unsafe { match policy.topology(inv,bsp,out) { ok=>{return 0;},err(e)=>{return e;}, } }
+}
+export("sp_prepare") fn prepare(input:*const context.Context,out:*context.Context)u64 {
+ unsafe { match policy.prepare(input,out) { ok=>{return 0;},err(e)=>{return e;}, } }
+}
+export("sp_transition") fn transition(cpu:*context.Context,action:u64,sequence:u64)u64 {
+ unsafe {
+  if action==0 { match policy.arm(cpu,sequence) { ok=>{return 0;},err(e)=>{return e;}, } }
+  if action==1 { match policy.acknowledge_online(cpu,sequence) { ok=>{return 0;},err(e)=>{return e;}, } }
+  if action==2 { match policy.ping(cpu,sequence) { ok=>{return 0;},err(e)=>{return e;}, } }
+  if action==3 { match policy.acknowledge_ping(cpu,sequence) { ok=>{return 0;},err(e)=>{return e;}, } }
+  if action==4 { match policy.stop(cpu,sequence) { ok=>{return 0;},err(e)=>{return e;}, } }
+  if action==5 { match policy.acknowledge_stop(cpu,sequence) { ok=>{return 0;},err(e)=>{return e;}, } }
+  match policy.timeout(cpu) { ok=>{return 0;},err(e)=>{return e;}, }
+ }
+}
+export("sp_startup") fn startup(ops:*const policy.Ops,target:u64,low:u64)u64 {
+ unsafe { match policy.startup(ops,target,low) { ok=>{return 0;},err(e)=>{return e;}, } }
+}
+export("sp_tlb_init") fn tlb_init(domain:*tlb.Domain,cpus:*context.Context,count:usize,boxes:*tlb.Mailbox,ops:*const tlb.Ops)u64 {
+ unsafe { match tlb.initialize(domain,cpus,count,boxes,ops) { ok=>{return 0;},err(e)=>{return e;}, } }
+}
+export("sp_broadcast") fn broadcast(domain:*tlb.Domain,virtual:u64,scope:u64,value:u64)u64 {
+ unsafe { match tlb.broadcast(domain,virtual,scope,value) { ok=>{return 0;},err(e)=>{return e;}, } }
+}

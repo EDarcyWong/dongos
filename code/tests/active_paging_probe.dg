@@ -1,0 +1,57 @@
+module active_paging_probe;
+import mm.paging as pg;
+import mm.active_paging as ap;
+import boot.preflight as preflight;
+
+export("ap_context_size") fn context_size()usize{return sizeof(ap.Context);}
+export("ap_context_align") fn context_align()usize{return alignof(ap.Context);}
+export("ap_space_size") fn space_size()usize{return sizeof(pg.Space);}
+export("ap_space_align") fn space_align()usize{return alignof(pg.Space);}
+export("ap_retired_size") fn retired_size()usize{return sizeof(pg.Retired);}
+export("ap_retired_align") fn retired_align()usize{return alignof(pg.Retired);}
+export("ap_context_reset") fn context_reset(context:*ap.Context)void{unsafe{*context=ap.EMPTY_CONTEXT;}}
+export("ap_space_reset") fn space_reset(space:*pg.Space)void{unsafe{*space=pg.EMPTY_SPACE;}}
+export("ap_retired_reset") fn retired_reset(retired:*pg.Retired)void{unsafe{*retired=pg.EMPTY_RETIRED;}}
+export("ap_init") fn initialize(space:*pg.Space,pool:*pg.Table,count:usize,physical:u64,meta:*u8,bits:usize)u64{
+    unsafe{match pg.init(space,slice_from_raw_parts(pool,count),physical,slice_from_raw_parts(meta,count),bits,true){ok=>{return 0;},err(code)=>{return code;},}}
+}
+export("ap_bind") fn bind(context:*ap.Context,space:*pg.Space,state:*const preflight.State,
+                        va:u64,pages:u64,pa:u64,frames:u64,flush:ap.Flush)u64{
+    unsafe{match ap.bind(context,space,state,va,pages,pa,frames,flush){ok=>{return 0;},err(code)=>{return code;},}}
+}
+export("ap_map") fn map(context:*ap.Context,state:*const preflight.State,va:u64,pa:u64,flags:u64)u64{
+    unsafe{match ap.map(context,state,va,pa,flags){ok=>{return 0;},err(code)=>{return code;},}}
+}
+export("ap_protect") fn protect(context:*ap.Context,state:*const preflight.State,va:u64,flags:u64)u64{
+    unsafe{match ap.protect(context,state,va,flags){ok=>{return 0;},err(code)=>{return code;},}}
+}
+export("ap_replace") fn replace(context:*ap.Context,state:*const preflight.State,va:u64,pa:u64,flags:u64)u64{
+    unsafe{match ap.replace(context,state,va,pa,flags){ok=>{return 0;},err(code)=>{return code;},}}
+}
+export("ap_unmap") fn unmap(context:*ap.Context,state:*const preflight.State,va:u64)u64{
+    unsafe{match ap.unmap(context,state,va){ok=>{return 0;},err(code)=>{return code;},}}
+}
+export("ap_stats") fn stats(context:*const ap.Context,output:*ap.Stats)u64{
+    unsafe{match ap.stats(context,output){ok=>{return 0;},err(code)=>{return code;},}}
+}
+export("ap_query") fn query(context:*const ap.Context,va:u64,output:*pg.Mapping)u64{
+    unsafe{match ap.query(context,va,output){ok=>{return 0;},err(code)=>{return code;},}}
+}
+export("ap_used") fn used(space:*const pg.Space,output:*usize)u64{
+    unsafe{match pg.used_tables(space){ok(value)=>{*output=value;return 0;},err(code)=>{return code;},}}
+}
+export("ap_map_live") fn map_live(space:*pg.Space,va:u64,pa:u64,flags:u64)u64{
+    unsafe{match pg.map_live(space,va,pa,flags){ok=>{return 0;},err(code)=>{return code;},}}
+}
+export("ap_protect_live") fn protect_live(space:*pg.Space,va:u64,flags:u64)u64{
+    unsafe{match pg.protect_live(space,va,flags){ok=>{return 0;},err(code)=>{return code;},}}
+}
+export("ap_replace_live") fn replace_live(space:*pg.Space,va:u64,pa:u64,flags:u64)u64{
+    unsafe{match pg.replace_live(space,va,pa,flags){ok=>{return 0;},err(code)=>{return code;},}}
+}
+export("ap_unmap_live") fn unmap_live(space:*pg.Space,va:u64,retired:*pg.Retired)u64{
+    unsafe{match pg.unmap_live(space,va,retired){ok=>{return 0;},err(code)=>{return code;},}}
+}
+export("ap_reclaim") fn reclaim(space:*pg.Space,retired:*pg.Retired)u64{
+    unsafe{match pg.reclaim(space,retired){ok=>{return 0;},err(code)=>{return code;},}}
+}

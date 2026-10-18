@@ -1,0 +1,11 @@
+module ipc.handles;
+pub const READ:u64=1;
+pub const WRITE:u64=2;
+pub const MAP:u64=128;
+pub const DEVICE:u64=5;
+pub struct Table {pub used:u64}
+pub error Failed=0x0980_0001;
+unsafe extern "sysv64" ("broker_install") fn host_install(kind:u64,object:u64,rights:u64)u64;
+pub unsafe fn install(table:*Table,kind:u64,object:u64,rights:u64)!u64 {unsafe {
+    let result=host_install(kind,object,rights);if result==0 {return error.Failed;}(*table).used+=1;return result;
+}}

@@ -1,0 +1,15 @@
+var TEST_STAGE_KERNEL:[64]paging.Table=[paging.Table{entries:[0;512]};64];
+export("stage_kernel_setup") fn test_stage_setup()u64{unsafe{
+    WORK.ready=false;WORK.space=paging.EMPTY_SPACE;WORK.runtime=runtime.EMPTY_VIEW;
+    match paging.init(&WORK.space,TEST_STAGE_KERNEL[..],0x80_0000,WORK.table_meta[..],48,true){ok=>{},err(e)=>{return e;},}
+    WORK.runtime.pool=&TEST_STAGE_KERNEL[0] as u64;WORK.ready=true;
+}return 0;}
+export("stage_kernel_flags") fn test_stage_flags(alias:u64)u64{unsafe{
+    var m=paging.Mapping{physical:0,flags:0};match paging.query(&WORK.space,alias,&m){ok=>{return m.flags;},err(e)=>{return e;},}
+}}
+export("stage_drop_alias") fn test_drop(alias:u64)u64{unsafe{
+    var retired=paging.EMPTY_RETIRED;match paging.unmap_live(&WORK.space,alias,&retired){ok=>{},err(e)=>{return e;},}
+}return 0;}
+export("stage_alias_collision") fn test_alias_collision(alias:u64)u64{unsafe{
+    match paging.map_live(&WORK.space,alias,0x70_0000,paging.WRITE){ok=>{return 0;},err(e)=>{return e;},}
+}}

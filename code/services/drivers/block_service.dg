@@ -1,0 +1,335 @@
+// Independent CPL3 VirtIO/AHCI/NVMe block service. All hardware grants originate
+// in kernel handles; the protocol libraries never convert a PA into a pointer.
+module drivers.block_service;
+import lib.sys as sys;
+import lib.device as device;
+import lib.device_abi as dev;
+import fs.protocol as protocol;
+import drivers.pci as pci;
+import drivers.pci_inventory as pci_inventory;
+import lib.pci_inventory_abi as pci_inventory_abi;
+import drivers.virtio_pci as vp;
+import drivers.virtio_blk as blk;
+import drivers.ahci as ahci;
+import drivers.ahci_core as core;
+import drivers.nvme as nvme;
+import drivers.usb_block_proxy as usb;
+var USB:usb.State=usb.EMPTY;
+pub error Setup = 0x0506_0001;
+var STATE: blk.State = blk.EMPTY_STATE;
+var AHCI:ahci.State=ahci.EMPTY_STATE;
+var NVME:nvme.State=nvme.EMPTY_STATE;
+var NVME_PCI_IDENTITY:u64=0;
+var BACKEND:u64=0;
+// A true MSI is an independent wakeup receipt. DMA/FIS/CI completion is still
+// decided once by the unchanged AHCI adapter, never inferred from this IRQ.
+pub var MSI_IRQ:dev.Irq=dev.EMPTY_IRQ;
+pub var MSI_SEQUENCE:u64=0;
+pub var MSI_COMPLETED:u64=0;
+var MSI_ENABLED:bool=false;
+var AHCI_PCI_IDENTITY:u64=0;
+var AHCI_COMPLETION_POLICY:u64=0;
+// Failure-only observation: version/header followed by the exact 40-qword
+// Sample used for the last completion decision. No new hardware reads.
+var AHCI_DIAGNOSTIC:[52]u64=[0;52];
+var TRANSPORT: vp.Transport = vp.EMPTY_TRANSPORT;
+var BARS: [6]vp.Bar = [vp.Bar { physical: 0, length: 0, handle: 0 };6];
+var VIRTUAL: [6]u64 = [0;6];
+var OPS: blk.Ops = blk.Ops { read: mmio_read, write: mmio_write, fence: fence, acquire: acquire, release: release };
+var AHCI_OPS:ahci.Ops=ahci.Ops {read:mmio_read,write:mmio_write,fence:fence,acquire:acquire,release:release,enable:enable_ahci,now:milliseconds};
+var NVME_OPS:nvme.Ops=nvme.Ops {read:mmio_read,write:mmio_write,fence:fence,acquire:acquire,release:release,enable:enable_nvme,now:milliseconds};
+var REQUEST: sys.Message = sys.EMPTY_MESSAGE;
+var RESPONSE: sys.Message = sys.EMPTY_MESSAGE;
+var TICKET: u64 = 0;
+var BOOT: *const sys.Boot = null;
+unsafe fn configuration(context: u64, physical: u64, out: *u32) u64 {
+    unsafe { return sys.svc_call(0x60,context,physical,out as u64,0,0,0); }
+}
+unsafe fn mmio_read(context: u64, handle: u64, offset: u64, width: u64, out: *u64) u64 {
+    unsafe {
+        var i: usize = 0;
+        while i < 6 {
+            if BARS[i].handle == handle && handle != 0 && offset <= BARS[i].length && width <= BARS[i].length - offset {
+                let p = VIRTUAL[i] + offset;
+                if width == 1 { *out = volatile_load(p as *const u8) as u64; }
+                else if width == 2 { *out = volatile_load(p as *const u16) as u64; }
+                else if width == 4 { *out = volatile_load(p as *const u32) as u64; }
+                else if width == 8 { *out = volatile_load(p as *const u64); }
+                else { return 1; }
+                return 0;
+            }
+            i += 1;
+        }
+    }
+    return 1;
+}
+unsafe fn mmio_write(context: u64, handle: u64, offset: u64, width: u64, value: u64) u64 {
+    unsafe {
+        var i: usize = 0;
+        while i < 6 {
+            if BARS[i].handle == handle && handle != 0 && offset <= BARS[i].length && width <= BARS[i].length - offset {
+                let p = VIRTUAL[i] + offset;
+                if width == 1 { volatile_store(p as *u8,value as u8); }
+                else if width == 2 { volatile_store(p as *u16,value as u16); }
+                else if width == 4 { volatile_store(p as *u32,value as u32); }
+                else if width == 8 { volatile_store(p as *u64,value); }
+                else { return 1; }
+                return 0;
+            }
+            i += 1;
+        }
+    }
+    return 1;
+}
+unsafe fn fence(context: u64, kind: u64) u64 {
+    unsafe { compiler_fence(); sys.svc_fence(); compiler_fence(); }
+    return 0;
+}
+unsafe fn acquire(context: u64, bytes: usize, alignment: usize, out: *blk.Lease) u64 {
+    unsafe { return sys.svc_call(0x63,(*BOOT).dma,bytes as u64,alignment as u64,out as u64,0,0); }
+}
+unsafe fn release(context: u64, lease: *const blk.Lease) u64 {
+    unsafe { return sys.svc_call(0x64,(*BOOT).dma,lease as u64,0,0,0,0); }
+}
+unsafe fn enable_ahci(context:u64,port:u64)u64 {
+    unsafe {return sys.svc_call(0x65,(*BOOT).configuration,port,0,0,0,0);}
+}
+unsafe fn enable_nvme(context:u64)u64 {
+    unsafe {return sys.svc_call(0x66,(*BOOT).configuration,0,0,0,0,0);}
+}
+unsafe fn milliseconds(context:u64,out:*u64)u64 {
+    unsafe {
+        let hz=(*BOOT).reserved3;
+        if hz<1_000_000 || hz>16_000_000_000 || out==null {return 1;}
+        let ticks=sys.svc_call(0x73,0,0,0,0,0,0);
+        *out=(ticks/hz)*1000+(ticks%hz)*1000/hz;return 0;
+    }
+}
+unsafe fn log_hex(label:[]const u8,value:u64)void {
+    unsafe {
+        if label.len>46 {return;}
+        var line:[64]u8=[0;64];let digits="0123456789abcdef";
+        var i:usize=0;while i<label.len {line[i]=label[i];i+=1;}
+        i=0;while i<16 {line[label.len+i]=digits[((value>>((15-i)*4))&15) as usize];i+=1;}
+        line[label.len+16]=13;line[label.len+17]=10;
+        let written=sys.log(slice_from_raw_parts(&line[0],label.len+18));
+    }return;
+}
+unsafe fn ahci_diagnostic(code:u64)void {
+    unsafe {
+        AHCI_DIAGNOSTIC[0]=1;AHCI_DIAGNOSTIC[1]=code;AHCI_DIAGNOSTIC[2]=AHCI.port;
+        AHCI_DIAGNOSTIC[3]=AHCI.cap;AHCI_DIAGNOSTIC[4]=AHCI.pi;
+        AHCI_DIAGNOSTIC[5]=AHCI.lease.token;AHCI_DIAGNOSTIC[6]=AHCI.lease.physical;
+        AHCI_DIAGNOSTIC[7]=AHCI.lease.length as u64;AHCI_DIAGNOSTIC[8]=AHCI.transfer.opcode;
+        AHCI_DIAGNOSTIC[9]=AHCI.transfer.expected;AHCI_DIAGNOSTIC[10]=AHCI.transfer.generation;
+        AHCI_DIAGNOSTIC[11]=(*BOOT).reserved3;
+        let words=(&AHCI.last_sample) as *const u64;
+        var i:usize=0;while i<40 {AHCI_DIAGNOSTIC[12+i]=*(words+i);i+=1;}
+        let begin=sys.log("DONGOS_AHCI_DIAGNOSTIC_BEGIN\r\n");
+        i=0;while i<52 {log_hex("ahci_diag_word=0x",AHCI_DIAGNOSTIC[i]);i+=1;}
+        let end=sys.log("DONGOS_AHCI_DIAGNOSTIC_END\r\n");
+        // Separate observation after the immutable decision sample. This can
+        // distinguish delayed DMA publication from a permanently missing FIS;
+        // it never changes completion state, retries a command or frees DMA.
+        if AHCI.enabled==1&&AHCI.lease.token!=0&&AHCI.lease.pointer!=null&&AHCI.lease.length==131072 {
+            let late=sys.log("DONGOS_AHCI_LATE_DMA_BEGIN\r\n");
+            sys.svc_fence();i=0;while i<32 {
+                log_hex("ahci_late_fis=0x",volatile_load((AHCI.lease.pointer+0x400+i*8) as *const u64));i+=1;
+            }
+            var value:u64=0;let base=0x100+AHCI.port*0x80;
+            if mmio_read(0,AHCI.bar.handle,base+0x38,4,&value)==0 {log_hex("ahci_late_ci=0x",value);}
+            if mmio_read(0,AHCI.bar.handle,base+0x10,4,&value)==0 {log_hex("ahci_late_is=0x",value);}
+            if mmio_read(0,AHCI.bar.handle,base+0x20,4,&value)==0 {log_hex("ahci_late_tfd=0x",value);}
+            let done=sys.log("DONGOS_AHCI_LATE_DMA_END\r\n");
+        }
+    }return;
+}
+unsafe fn nvme_diagnostic(code:u64)void {
+    unsafe {
+        log_hex("nvme_error=0x",code);log_hex("nvme_phase=0x",NVME.phase);
+        log_hex("nvme_cap=0x",NVME.caps.cap);log_hex("nvme_version=0x",NVME.caps.version);
+        log_hex("nvme_csts=0x",NVME.last_csts);log_hex("nvme_last_kind=0x",NVME.last_kind);
+        log_hex("nvme_cqe_low=0x",read_unaligned((&NVME.last_cqe[0]) as *const u64));
+        log_hex("nvme_cqe_high=0x",read_unaligned((&NVME.last_cqe[8]) as *const u64));
+        if NVME.phase>=6 && NVME.lease.pointer!=null && NVME.lease.length==131072 {
+            let begin=sys.log("DONGOS_NVME_IDENTIFY_70_BEGIN\r\n");var i:usize=0;
+            while i<70 {log_hex("nvme_identify_word=0x",read_unaligned((NVME.lease.pointer+0x5000+i*8) as *const u64));i+=1;}
+            let end=sys.log("DONGOS_NVME_IDENTIFY_70_END\r\n");
+        }
+    }return;
+}
+unsafe fn setup() !void {
+    unsafe {
+        BOOT = sys.boot();
+        if BOOT == null || (*BOOT).version != 1 || (*BOOT).channel_bytes != protocol.CHANNEL_BYTES { return error.Setup; }
+        var regions: [1]pci.Region = [pci.Region { base: (*BOOT).reserved0, segment: 0,
+            start_bus: (*BOOT).reserved1, end_bus: (*BOOT).reserved2 }];
+        var cursor = pci.EMPTY_CURSOR;
+        var function = pci.EMPTY_FUNCTION;
+        var sata=pci.EMPTY_FUNCTION;
+        var nvm=pci.EMPTY_FUNCTION;
+        var found: bool = false;
+        while try next_configuration(regions[..],&cursor,&function) {
+            if function.vendor == 0x1af4 && function.device_id == 0x1042 { found = true; break; }
+            if sata.ecam==0 && function.class==1 && function.subclass==6 && function.interface==1 && (function.header&127)==0 {sata=function;}
+            if nvm.ecam==0 && function.class==1 && function.subclass==8 && function.interface==2 && (function.header&127)==0 {nvm=function;}
+        }
+        BACKEND=1;
+        if !found {if nvm.ecam!=0 {function=nvm;BACKEND=3;}else{if sata.ecam==0 {
+            if (*BOOT).block==0 {return error.Setup;}
+            let initialized=usb.initialize(&USB,(*BOOT).block);if initialized!=0 {return error.Setup;}
+            BACKEND=4;if sys.log("DONGOS_USB_BLOCK_READY\r\n")!=0 {return error.Setup;}return;
+        }function=sata;BACKEND=2;}}
+        if sys.svc_call(0x61,(*BOOT).configuration,function.ecam,&BARS[0] as u64,0,0,0) != 0 { return error.Setup; }
+        var i: usize = 0;
+        while i < 6 {
+            if BARS[i].length != 0 {
+                VIRTUAL[i] = sys.svc_call(0x62,BARS[i].handle,0,0,0,0,0);
+                if VIRTUAL[i] < 0x6000_0000 || VIRTUAL[i] >= 0x7000_0000 { return error.Setup; }
+            }
+            i += 1;
+        }
+        if BACKEND==1 {
+            try vp.discover(configuration,(*BOOT).configuration,&function,BARS[..],&TRANSPORT);
+            OPS = blk.Ops { read: mmio_read, write: mmio_write, fence: fence, acquire: acquire, release: release };
+            try blk.initialize(&STATE,&TRANSPORT,&OPS,0);
+        }else {if BACKEND==3 {
+            NVME_PCI_IDENTITY=function.vendor|(function.device_id<<16)|(function.class<<32)
+                |(function.subclass<<40)|(function.interface<<48)|(function.header<<56);
+            log_hex("nvme_pci_identity=0x",NVME_PCI_IDENTITY);
+            let initialized=nvme.initialize(&NVME,&BARS[0],&NVME_OPS,0);
+            match initialized {ok=>{},err(code)=>{nvme_diagnostic(code);return initialized;},}
+            if sys.log("DONGOS_NVME_READY\r\n")!=0 {return error.Setup;}
+        }else {
+            AHCI_PCI_IDENTITY=function.vendor|(function.device_id<<16)|(function.class<<32)
+                |(function.subclass<<40)|(function.interface<<48)|(function.header<<56);
+            AHCI_COMPLETION_POLICY=core.completion_policy(function.vendor,function.device_id,
+                function.class,function.subclass,function.interface,function.header);
+            log_hex("ahci_pci_identity=0x",AHCI_PCI_IDENTITY);
+            log_hex("ahci_completion_policy=0x",AHCI_COMPLETION_POLICY);
+            let initialized=ahci.initialize_with_policy(&AHCI,&BARS[5],&AHCI_OPS,0,AHCI_COMPLETION_POLICY);
+            match initialized {ok=>{},err(code)=>{ahci_diagnostic(code);return initialized;},}
+            if (*BOOT).service_count>=7{try setup_msi();}
+            if sys.log("DONGOS_AHCI_READY\r\n")!=0 {return error.Setup;}
+        }}
+    }
+    return;
+}
+unsafe fn operation_inner() u64 {
+    unsafe {
+        RESPONSE = sys.EMPTY_MESSAGE;
+        let op = REQUEST.words[0]; let lba = REQUEST.words[1]; let count = REQUEST.words[2]; let offset = REQUEST.words[4];
+        if BACKEND==4{return usb.execute(&USB,&REQUEST,&RESPONSE);}
+        if op == protocol.READY { return 0; }
+        if op == protocol.FLUSH {
+            if BACKEND==3 {match nvme.flush(&NVME) {ok=>{return 0;},err(code)=>{return code;},}}
+            if BACKEND==2 {match ahci.flush(&AHCI) {ok=>{return 0;},err(code)=>{return code;},}}
+            match blk.flush(&STATE) { ok => { return 0; }, err(code) => { return code; }, }
+        }
+        if (op != protocol.READ && op != protocol.WRITE) || count == 0 || count > 128
+            || offset > (*BOOT).channel_bytes || count * 512 > (*BOOT).channel_bytes - offset { return 0x0506_0002; }
+        let data = ((*BOOT).channel_address + offset) as *u8;
+        if op == protocol.READ {
+            if BACKEND==3 {match nvme.read_sectors(&NVME,lba,count as usize,data) {ok=>{RESPONSE.words[1]=count;return 0;},err(code)=>{return code;},}}
+            if BACKEND==2 {match ahci.read_sectors(&AHCI,lba,count as usize,data) {ok=>{RESPONSE.words[1]=count;return 0;},err(code)=>{return code;},}}
+            match blk.read_sectors(&STATE,lba,count as usize,data) { ok => { RESPONSE.words[1] = count; return 0; }, err(code) => { return code; }, }
+        }
+        if BACKEND==3 {match nvme.write_sectors(&NVME,lba,count as usize,data) {ok=>{RESPONSE.words[1]=count;return 0;},err(code)=>{return code;},}}
+        if BACKEND==2 {match ahci.write_sectors(&AHCI,lba,count as usize,data) {ok=>{RESPONSE.words[1]=count;return 0;},err(code)=>{return code;},}}
+        match blk.write_sectors(&STATE,lba,count as usize,data) { ok => { RESPONSE.words[1] = count; return 0; }, err(code) => { return code; }, }
+    }
+}
+unsafe fn setup_msi()!void{unsafe{
+    let epoch=sys.incarnation((*BOOT).endpoint);
+    let bound=device.bind_pci_irq((*BOOT).configuration,epoch,&MSI_IRQ);
+    if bound==0x0512_000a{
+        if sys.log("DONGOS_AHCI_MSI_UNSUPPORTED_POLLING\r\n")!=0{return error.Setup;}return;
+    }
+    if bound!=0||MSI_IRQ.version!=1||MSI_IRQ.irq!=dev.MSI_SOURCE||MSI_IRQ.vector!=0x60
+        ||MSI_IRQ.generation!=epoch||MSI_IRQ.flags!=dev.MSI||MSI_IRQ.sequence!=0{return error.Setup;}
+    let port=0x100+AHCI.port*0x80;var ghc:u64=0;var value:u64=0;
+    // Stopped/owned lease validation and initial IDENTIFY already succeeded.
+    // Clear old status before unmasking only the selected port's D2H FIS bit.
+    if mmio_write(0,AHCI.bar.handle,port+0x10,4,0xfdc0_00ff)!=0
+        ||mmio_write(0,AHCI.bar.handle,8,4,1<<AHCI.port)!=0
+        ||mmio_write(0,AHCI.bar.handle,port+0x14,4,1)!=0
+        ||mmio_read(0,AHCI.bar.handle,port+0x14,4,&value)!=0||value!=1
+        ||mmio_read(0,AHCI.bar.handle,4,4,&ghc)!=0{return error.Setup;}
+    if (ghc&0x8000_0001)!=0x8000_0000{return error.Setup;}
+    if mmio_write(0,AHCI.bar.handle,4,4,(ghc&0x8000_0000)|2)!=0
+        ||mmio_read(0,AHCI.bar.handle,4,4,&value)!=0||(value&0x8000_0003)!=0x8000_0002{return error.Setup;}
+    MSI_ENABLED=true;
+    if sys.log("DONGOS_AHCI_MSI_READY\r\n")!=0{return error.Setup;}
+}return;}
+unsafe fn finish_msi()u64{unsafe{
+    if !MSI_ENABLED{return 0;}let port=0x100+AHCI.port*0x80;var status:u64=0;
+    // The command was validated by the original AHCI sample. Drain its source
+    // before ACK, while no second request can publish another command.
+    if mmio_read(0,AHCI.bar.handle,port+0x10,4,&status)!=0
+        ||mmio_write(0,AHCI.bar.handle,port+0x10,4,status&0xfdc0_00ff)!=0
+        ||mmio_write(0,AHCI.bar.handle,8,4,1<<AHCI.port)!=0{return 0x0512_0009;}
+    let start=sys.svc_call(0x73,0,0,0,0,0,0);let hz=(*BOOT).reserved3;
+    if hz<1_000_000||hz>16_000_000_000{return 0x0512_0001;}
+    loop{
+        let polled=device.wait_irq(MSI_IRQ.token,MSI_SEQUENCE,&MSI_IRQ,dev.NONBLOCK,0);
+        if polled==0{
+            if MSI_IRQ.flags!=(dev.MSI|dev.PENDING)||MSI_IRQ.sequence<=MSI_SEQUENCE{return 0x0512_0001;}
+            let ack=device.acknowledge(MSI_IRQ.token,MSI_IRQ.sequence);
+            if ack==0{
+                MSI_SEQUENCE=MSI_IRQ.sequence;MSI_COMPLETED+=1;
+                if MSI_COMPLETED==1{let logged=sys.log("DONGOS_AHCI_MSI_IRQ\r\n");if logged!=0{return logged;}}
+                return 0;
+            }
+            // Only a newer hardware IRQ can invalidate this exact ACK. Poll
+            // again; accepted disk operations are never reissued.
+            if ack!=0x0512_0004{return ack;}
+        }else if polled!=0x0512_0006{return polled;}
+        let now=sys.svc_call(0x73,0,0,0,0,0,0);if now<start||now-start>=hz/10{return 0x0512_0007;}
+        let yielded=sys.yield_now();
+    }
+}}
+unsafe fn operation()u64{unsafe{
+    let previous=AHCI.info.completed;let result=operation_inner();
+    if result==0&&BACKEND==2&&AHCI.info.completed>previous{return finish_msi();}return result;
+}}
+export("service_main") fn main() u64 {
+    unsafe {
+        match setup() { ok => {}, err(code) => { return code; }, }
+        let ready=sys.ready_boot(BOOT);if ready!=0{return ready;}
+        let logged = sys.log("DONGOS_BLK_READY\r\n");
+        if logged != 0 { return logged; }
+        var status = sys.svc_receive((*BOOT).endpoint,&REQUEST,&TICKET);
+        var failure_logged=false;
+        loop {
+            if status != 0 { return status; }
+            RESPONSE.words[0] = operation();
+            if RESPONSE.words[0]!=0&&!failure_logged {
+                failure_logged=true;
+                log_hex("block_failed_op=0x",REQUEST.words[0]);
+                log_hex("block_failed_lba=0x",REQUEST.words[1]);
+                log_hex("block_failed_count=0x",REQUEST.words[2]);
+                log_hex("block_failed_status=0x",RESPONSE.words[0]);
+                if BACKEND==2 {ahci_diagnostic(RESPONSE.words[0]);}
+                if BACKEND==3 {nvme_diagnostic(RESPONSE.words[0]);}
+            }
+            RESPONSE.words[2] = STATE.info.capacity_sectors;
+            RESPONSE.words[3] = STATE.info.readonly;
+            RESPONSE.words[4] = STATE.info.completed;
+            if BACKEND==2 {
+                RESPONSE.words[2]=AHCI.info.capacity_sectors;RESPONSE.words[3]=AHCI.info.readonly;RESPONSE.words[4]=AHCI.info.completed;
+            }
+            if BACKEND==3 {
+                RESPONSE.words[2]=NVME.info.capacity_sectors;RESPONSE.words[3]=NVME.info.readonly;RESPONSE.words[4]=NVME.info.completed;
+            }
+            if BACKEND==4{RESPONSE.words[2]=USB.capacity;RESPONSE.words[3]=USB.readonly;RESPONSE.words[4]=USB.completed;}
+            status = sys.svc_reply_wait((*BOOT).endpoint,TICKET,&RESPONSE,&REQUEST,&TICKET);
+        }
+    }
+}
+unsafe fn inventory_read(context:u64,cursor:u64,out:*pci_inventory_abi.Entry)u64{unsafe{
+ return sys.svc_call(pci_inventory_abi.ENUMERATE,context,cursor,out as u64,0,0,0);
+}}
+unsafe fn next_configuration(regions:[]const pci.Region,cursor:*pci.Cursor,out:*pci.Function)!bool{unsafe{
+ if (*BOOT).service_count>=7{return try pci_inventory.next(inventory_read,(*BOOT).configuration,regions,cursor,out);}
+ return try pci.next(configuration,(*BOOT).configuration,regions,cursor,out);
+}}

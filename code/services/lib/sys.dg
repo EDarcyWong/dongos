@@ -1,0 +1,30 @@
+// Stable integer-only userspace syscall ABI. Nonzero statuses are errors;
+// callers never dereference kernel/physical addresses returned as metadata.
+module lib.sys;
+import lib.abi as abi;
+pub type Message = abi.Message;
+pub const EMPTY_MESSAGE:Message = abi.EMPTY_MESSAGE;
+pub type Boot = abi.Boot;
+pub unsafe extern "sysv64" fn svc_call(number: u64,a: u64,b: u64,c: u64,d: u64,e: u64,f: u64) u64;
+pub unsafe extern "sysv64" fn svc_receive(endpoint: u64,message: *Message,ticket: *u64) u64;
+pub unsafe extern "sysv64" fn svc_reply_wait(endpoint: u64,ticket: u64,response: *const Message,next: *Message,next_ticket: *u64) u64;
+pub unsafe extern "sysv64" fn svc_fence() void;
+pub fn boot() *const Boot { unsafe { return svc_call(2,0,0,0,0,0,0) as *const Boot; } }
+pub fn log(text: []const u8) u64 { unsafe { return svc_call(0x70,text.ptr as u64,text.len as u64,0,0,0,0); } }
+pub unsafe fn call(endpoint: u64,message: *const Message,response: *Message) u64 {
+    unsafe { return svc_call(0x22,endpoint,message as u64,response as u64,0,0,0); }
+}
+pub fn character(console: u64) u64 { unsafe { return svc_call(0x71,console,0,0,0,0,0); } }
+pub fn yield_now() u64 { unsafe { return svc_call(3,0,0,0,0,0,0); } }
+// Returns the kernel-authenticated caller for this accepted endpoint ticket.
+pub fn peer(endpoint:u64,ticket:u64)u64 { unsafe { return svc_call(0x29,endpoint,ticket,0,0,0,0); } }
+pub fn incarnation(endpoint:u64)u64 {unsafe{return svc_call(0x86,endpoint,0,0,0,0,0);}}
+pub fn ready_boot(boot:*const Boot)u64 {unsafe{
+    if boot==null{return 0x0511_0001;}
+    let generation=incarnation((*boot).endpoint);
+    if generation==0{return 0x0511_0001;}if generation>0x0fff_ffff{return generation;}
+    return svc_call(0x84,(*boot).endpoint,generation,0,0,0,0);
+}}
+// Capability token is caller-owned Boot.reserved3; action1 reset/action2 S5.
+// A return is always an error because a completed operation leaves this boot.
+pub fn power(token: u64,action: u64) u64 { unsafe { return svc_call(0x78,token,action,0,0,0,0); } }

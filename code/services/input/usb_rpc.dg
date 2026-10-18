@@ -1,0 +1,69 @@
+// Only authenticated accepted endpoint tickets call apply. Message epoch is
+// compared to trusted peer_session; it never confers authority on its own.
+module input.usb_rpc;
+import input.events as ev;
+import input.sources as sources;
+import usb.hid_boot as hid;
+import lib.usb_hid_abi as abi;
+import lib.abi as sys;
+pub error Invalid=0x081e_0003;
+pub error Stale=0x081e_0004;
+pub error Denied=0x081e_0005;
+pub struct State {pub self_epoch:u64,pub peer_epoch:u64,pub retired:u64,pub sequence:[3]u64,pub kind:[3]u64,
+ pub keyboard:[3]hid.Keyboard,pub mouse:[3]hid.Mouse}
+pub const EMPTY:State=State{self_epoch:0,peer_epoch:0,retired:0,sequence:[0;3],kind:[0;3],keyboard:[hid.EMPTY_KEYBOARD;3],mouse:[hid.EMPTY_MOUSE;3]};
+// Input4 serializes all producers; this unpublished transaction storage never
+// crosses a syscall/yield and keeps large queues off the private user stack.
+var candidate:State=EMPTY;
+var mix:sources.State=sources.EMPTY;
+var output:ev.Queue=ev.EMPTY_QUEUE;
+var decoded:ev.Queue=ev.EMPTY_QUEUE;
+pub unsafe fn initialize(s:*State,epoch:u64)!void{unsafe{
+ if s==null||(*s).self_epoch!=0||epoch==0||epoch>0x0fff_ffff{return error.Invalid;}*s=EMPTY;(*s).self_epoch=epoch;
+}return;}
+unsafe fn validate(r:*const abi.Report,raw:*u8)!bool{unsafe{
+ var rollover=false;
+ var i:usize=0;while i<(*r).bytes as usize{*(raw+i)=((*r).raw>>(i*8)) as u8;i+=1;}
+ if (*r).kind==abi.KEYBOARD{
+  if *(raw+1)!=0{return error.Invalid;}i=0;while i<6{
+   let usage=*(raw+i+2);if usage>=1&&usage<=3{rollover=true;}else if usage>=224{return error.Invalid;}
+   var j:usize=0;while j<i{if usage>3&&*(raw+j+2)==usage{return error.Invalid;}j+=1;}i+=1;
+  }
+ }
+ return rollover;
+}}
+pub unsafe fn apply(s:*State,merged:*sources.State,peer:u64,session:u64,message:*const sys.Message,response:*sys.Message,out:*ev.Queue)!void{unsafe{
+ if s==null||merged==null||response==null||(*s).self_epoch==0{return error.Invalid;}
+ try ev.validate(out);
+ let caller=session&0xffff_ffff;if peer!=14||session>>32!=(*s).self_epoch||caller==0||caller>0x0fff_ffff{return error.Denied;}
+ var r=abi.EMPTY;try abi.decode(message,&r);if r.epoch!=caller{return error.Denied;}
+ var bytes:[8]u8=[0;8];let rollover=try validate(&r,&bytes[0]);let index=(r.source-1) as usize;
+ if caller<(*s).peer_epoch||caller<=(*s).retired{return error.Stale;}
+ if caller==(*s).peer_epoch&&(r.sequence<=(*s).sequence[index]||((*s).kind[index]!=0&&(*s).kind[index]!=r.kind)){return error.Stale;}
+ // The complete packet transaction stays private until every decode/merge and
+ // bounded output reservation succeeds. Invalid/replayed input changes none.
+ candidate=*s;mix=*merged;output=*out;
+ if caller!=candidate.peer_epoch{
+  var source:usize=1;while source<4{try sources.lost(&mix,source,&output);source+=1;}
+  candidate=EMPTY;candidate.self_epoch=(*s).self_epoch;candidate.peer_epoch=caller;candidate.retired=(*s).retired;
+ }
+ decoded=ev.EMPTY_QUEUE;
+ if rollover{try sources.lost(&mix,index+1,&output);candidate.keyboard[index]=hid.EMPTY_KEYBOARD;}
+ else if r.kind==abi.KEYBOARD{try hid.keyboard(&candidate.keyboard[index],&decoded,bytes[..]);}
+ else{try hid.mouse(&candidate.mouse[index],&decoded,bytes[0..r.bytes as usize]);}
+ var e=ev.EMPTY_EVENT;while try ev.pop(&decoded,&e){try sources.event(&mix,index+1,&e,&output);}
+ candidate.sequence[index]=r.sequence;candidate.kind[index]=r.kind;
+ var reply=sys.EMPTY_MESSAGE;try abi.acknowledge(&r,0,&reply);
+ *s=candidate;*merged=mix;*out=output;*response=reply;
+}return;}
+// Kernel query reports the greatest departed incarnation. Retain the watermark
+// so a delayed report/notification cannot revive or release a newer producer.
+pub unsafe fn departed(s:*State,merged:*sources.State,through:u64,out:*ev.Queue)!void{unsafe{
+ if s==null||merged==null||(*s).self_epoch==0||through>0x0fff_ffff{return error.Invalid;}try ev.validate(out);
+ if through==0||through<=(*s).retired{return;}candidate=*s;mix=*merged;output=*out;candidate.retired=through;
+ if candidate.peer_epoch!=0&&candidate.peer_epoch<=through{
+  var source:usize=1;while source<4{try sources.lost(&mix,source,&output);source+=1;}
+  candidate.keyboard=[hid.EMPTY_KEYBOARD;3];candidate.mouse=[hid.EMPTY_MOUSE;3];candidate.sequence=[0;3];candidate.kind=[0;3];
+ }
+ *s=candidate;*merged=mix;*out=output;
+}return;}

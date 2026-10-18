@@ -1,0 +1,386 @@
+module desktop.widgets;
+import gfx.geometry as geo;
+import input.events as ev;
+import desktop.theme as theme;
+pub error InvalidText = 0x0722_0001;
+pub error Capacity = 0x0722_0002;
+pub error Aliased = 0x0722_0003;
+pub error InvalidModel = 0x0722_0004;
+pub const TEXT: u64 = 16;
+pub const BUTTON: u64 = 1; pub const TEXTBOX: u64 = 2; pub const LIST: u64 = 3; pub const TASKBAR: u64 = 4;
+pub const VISIBLE: u64 = 1; pub const ENABLED: u64 = 2;
+pub const ACTIVATE: u64 = 1; pub const SELECT: u64 = 2; pub const EDIT: u64 = 3; pub const FOCUS: u64 = 4; pub const SCROLLED: u64 = 5;
+pub struct Text { pub bytes: *u8, pub capacity: usize, pub len: usize, pub caret: usize, pub anchor: usize, pub revision: u64 }
+pub const EMPTY_TEXT: Text = Text { bytes: null, capacity: 0, len: 0, caret: 0, anchor: 0, revision: 0 };
+pub struct Label { pub bytes: *const u8, pub len: usize }
+pub struct Control {
+    pub id: u64, pub kind: u64, pub rect: geo.Rect, pub flags: u64, pub value: i64,
+    pub scroll: usize, pub row_height: i64, pub labels: *const Label, pub count: usize, pub text: *Text,
+    pub hover: theme.Animation,
+}
+pub const EMPTY_CONTROL: Control = Control { id: 0, kind: 0, rect: geo.EMPTY, flags: 0, value: -1, scroll: 0,
+    row_height: 20, labels: null, count: 0, text: null, hover: theme.STILL };
+pub struct Model {
+    pub controls: [32]Control, pub count: usize, pub focus: u64, pub hot: u64, pub pressed: u64,
+    pub pointer_x: i64, pub pointer_y: i64, pub duration_ms: u64, pub bounds: geo.Rect, pub damage: geo.Damage,
+}
+pub const EMPTY_MODEL: Model = Model { controls: [EMPTY_CONTROL; 32], count: 0, focus: 0, hot: 0, pressed: 0,
+    pointer_x: 0, pointer_y: 0, duration_ms: 140, bounds: geo.EMPTY, damage: geo.EMPTY_DAMAGE };
+pub struct Action { pub kind: u64, pub id: u64, pub value: i64, pub revision: u64 }
+pub const NO_ACTION: Action = Action { kind: 0, id: 0, value: 0, revision: 0 };
+const MAX: u64 = 0xffff_ffff_ffff_ffff;
+pub unsafe fn next(bytes: []const u8, at: usize, cp: *u32) !usize {
+    unsafe {
+        if at >= bytes.len || bytes.ptr == null { return error.InvalidText; }
+        let first = bytes[at] as u32; var value = first; var n: usize = 1; var minimum: u32 = 0;
+        if first >= 128 {
+            if first >= 0xc2 && first <= 0xdf { n = 2; value = first & 31; minimum = 128; }
+            else { if first >= 0xe0 && first <= 0xef { n = 3; value = first & 15; minimum = 2048; }
+            else { if first >= 0xf0 && first <= 0xf4 { n = 4; value = first & 7; minimum = 65536; }
+            else { return error.InvalidText; } } }
+        }
+        if n > bytes.len - at { return error.InvalidText; }
+        var i: usize = 1; while i < n {
+            let b = bytes[at + i] as u32; if (b & 0xc0) != 0x80 { return error.InvalidText; }
+            value = (value << 6) | (b & 63); i += 1;
+        }
+        if value < minimum || value > 0x10ffff || (value >= 0xd800 && value <= 0xdfff) { return error.InvalidText; }
+        *cp = value; return at + n;
+    }
+}
+pub unsafe fn utf8(bytes: []const u8) !void {
+    unsafe {
+        if bytes.len > 65536 || (bytes.len != 0 && bytes.ptr == null) || (bytes.ptr as u64) > MAX - bytes.len as u64 { return error.InvalidText; }
+        var at: usize = 0; var cp: u32 = 0; while at < bytes.len { at = try next(bytes,at,&cp); }
+    }
+    return;
+}
+unsafe fn boundary(t: *const Text, at: usize) bool {
+    unsafe { return at <= (*t).len && (at == (*t).len || (((*t).bytes[at] & 0xc0) != 0x80)); }
+}
+pub unsafe fn validate_text(t: *const Text) !void {
+    unsafe {
+        if t == null || (*t).bytes == null || (*t).capacity == 0 || (*t).capacity > 65536 || (*t).len > (*t).capacity
+            || ((*t).bytes as u64) > MAX - (*t).capacity as u64 || !boundary(t,(*t).caret) || !boundary(t,(*t).anchor) { return error.InvalidText; }
+        try utf8(slice_from_raw_parts((*t).bytes,(*t).len));
+    }
+    return;
+}
+pub unsafe fn init_text(out: *Text, bytes: *u8, capacity: usize) !void {
+    unsafe {
+        if bytes == null || capacity == 0 || capacity > 65536 || (bytes as u64) > MAX - capacity as u64 { return error.InvalidText; }
+        *out = Text { bytes: bytes, capacity: capacity, len: 0, caret: 0, anchor: 0, revision: 0 };
+    }
+    return;
+}
+unsafe fn replace(t: *Text, low: usize, high: usize, bytes: []const u8) !void {
+    unsafe {
+        try validate_text(t); try utf8(bytes);
+        if low > high || high > (*t).len || !boundary(t,low) || !boundary(t,high) { return error.InvalidText; }
+        let base = (*t).bytes as u64; let source = bytes.ptr as u64;
+        if bytes.len != 0 && base < source + bytes.len as u64 && source < base + (*t).capacity as u64 { return error.Aliased; }
+        let removed = high - low;
+        if bytes.len > (*t).capacity - ((*t).len - removed) || (*t).revision == MAX { return error.Capacity; }
+        if removed == 0 && bytes.len == 0 { return; }
+        let newlen = (*t).len - removed + bytes.len;
+        if bytes.len > removed {
+            var i = (*t).len; while i > high { i -= 1; (*t).bytes[i - removed + bytes.len] = (*t).bytes[i]; }
+        } else {
+            var i = high; while i < (*t).len { (*t).bytes[i - removed + bytes.len] = (*t).bytes[i]; i += 1; }
+        }
+        var i: usize = 0; while i < bytes.len { (*t).bytes[low + i] = bytes[i]; i += 1; }
+        i = newlen; while i < (*t).len { (*t).bytes[i] = 0; i += 1; }
+        (*t).len = newlen; (*t).caret = low + bytes.len; (*t).anchor = (*t).caret; (*t).revision += 1;
+    }
+    return;
+}
+pub unsafe fn insert(t: *Text, bytes: []const u8) !void {
+    unsafe {
+        try validate_text(t); var low = (*t).caret; var high = (*t).anchor;
+        if low > high { let swap = low; low = high; high = swap; }
+        try replace(t,low,high,bytes);
+    }
+    return;
+}
+pub unsafe fn set_text(t: *Text, bytes: []const u8) !void {
+    unsafe { try replace(t,0,(*t).len,bytes); }
+    return;
+}
+pub unsafe fn scalar(t: *Text, cp: u32) !void {
+    if cp > 0x10ffff || (cp >= 0xd800 && cp <= 0xdfff) { return error.InvalidText; }
+    var data: [4]u8 = [0; 4]; var n: usize = 1;
+    if cp < 128 { data[0] = cp as u8; }
+    else { if cp < 2048 { n = 2; data[0] = (0xc0 | (cp >> 6)) as u8; data[1] = (0x80 | (cp & 63)) as u8; }
+    else { if cp < 65536 { n = 3; data[0] = (0xe0 | (cp >> 12)) as u8; data[1] = (0x80 | ((cp >> 6) & 63)) as u8; data[2] = (0x80 | (cp & 63)) as u8; }
+    else { n = 4; data[0] = (0xf0 | (cp >> 18)) as u8; data[1] = (0x80 | ((cp >> 12) & 63)) as u8;
+        data[2] = (0x80 | ((cp >> 6) & 63)) as u8; data[3] = (0x80 | (cp & 63)) as u8; } } }
+    unsafe { try insert(t,data[0..n]); }
+    return;
+}
+pub unsafe fn caret(t: *Text, at: usize, extend: bool) !void {
+    unsafe { try validate_text(t); if !boundary(t,at) { return error.InvalidText; } (*t).caret = at; if !extend { (*t).anchor = at; } }
+    return;
+}
+const KEY_BASE: [58]u8 = [0,0,49,50,51,52,53,54,55,56,57,48,45,61,0,0,113,119,101,114,116,121,117,105,111,112,91,93,
+    0,0,97,115,100,102,103,104,106,107,108,59,39,96,0,92,122,120,99,118,98,110,109,44,46,47,0,0,0,32];
+pub fn us_key(code: u64, modifiers: u64) u32 {
+    if code >= 58 || (modifiers & 252) != 0 { return 0; }
+    var c = KEY_BASE[code as usize] as u32; let shift = (modifiers & 3) != 0;
+    if c >= 97 && c <= 122 { if shift != ((modifiers & ev.CAPS) != 0) { c -= 32; } return c; }
+    if !shift { return c; }
+    if c == 49 { return 33; } if c == 50 { return 64; } if c == 51 { return 35; } if c == 52 { return 36; }
+    if c == 53 { return 37; } if c == 54 { return 94; } if c == 55 { return 38; } if c == 56 { return 42; }
+    if c == 57 { return 40; } if c == 48 { return 41; } if c == 45 { return 95; } if c == 61 { return 43; }
+    if c == 91 { return 123; } if c == 93 { return 125; } if c == 59 { return 58; } if c == 39 { return 34; }
+    if c == 96 { return 126; } if c == 92 { return 124; } if c == 44 { return 60; } if c == 46 { return 62; } if c == 47 { return 63; }
+    return c;
+}
+pub unsafe fn edit(t: *Text, event: *const ev.Event, multiline: bool) !bool {
+    unsafe {
+        try validate_text(t); if event == null { return error.InvalidText; }
+        if (*event).kind == TEXT { if (*event).a <= 0 || (*event).a > 0x10ffff { return error.InvalidText; } try scalar(t,(*event).a as u32); return true; }
+        if (*event).kind != ev.KEY || (*event).a == 0 { return false; }
+        if (*event).a < 1 || (*event).a > 2 { return error.InvalidText; }
+        let code = (*event).code; let modifiers = (*event).b as u64; let extend = (modifiers & 3) != 0;
+        if code == 30 && (modifiers & 12) != 0 { (*t).anchor = 0; (*t).caret = (*t).len; return true; }
+        if code == 105 || code == 106 || code == 102 || code == 107 {
+            var at = (*t).caret;
+            if code == 105 { if at != 0 { at -= 1; while at != 0 && (((*t).bytes[at] & 0xc0) == 0x80) { at -= 1; } } }
+            if code == 106 && at < (*t).len { var cp: u32 = 0; at = try next(slice_from_raw_parts((*t).bytes,(*t).len),at,&cp); }
+            if code == 102 { while at != 0 && (*t).bytes[at - 1] != 10 { at -= 1; } }
+            if code == 107 { while at < (*t).len && (*t).bytes[at] != 10 { at += 1; } }
+            try caret(t,at,extend); return true;
+        }
+        if code == 14 || code == 111 {
+            var low = (*t).caret; var high = (*t).anchor; if low > high { let swap = low; low = high; high = swap; }
+            if low == high {
+                if code == 14 && low != 0 { low -= 1; while low != 0 && (((*t).bytes[low] & 0xc0) == 0x80) { low -= 1; } }
+                if code == 111 && high < (*t).len { var cp: u32 = 0; high = try next(slice_from_raw_parts((*t).bytes,(*t).len),high,&cp); }
+            }
+            try replace(t,low,high,slice_from_raw_parts((*t).bytes,0)); return true;
+        }
+        if code == 28 { if multiline { try scalar(t,10); return true; } return false; }
+        let cp = us_key(code,modifiers); if cp != 0 { try scalar(t,cp); return true; }
+    }
+    return false;
+}
+unsafe fn same(a: *const geo.Rect, b: *const geo.Rect) bool {
+    unsafe { return (*a).left == (*b).left && (*a).top == (*b).top && (*a).right == (*b).right && (*a).bottom == (*b).bottom; }
+}
+unsafe fn control(model: *const Model, c: *const Control) !void {
+    unsafe {
+        if (*c).id == 0 || (*c).kind < BUTTON || (*c).kind > TASKBAR || (*c).flags > 3
+            || !geo.contains(&(*model).bounds,&(*c).rect) || geo.empty(&(*c).rect)
+            || (*c).row_height < 1 || (*c).row_height > 8192 || (*c).count > 256
+            || ((*c).count != 0 && (*c).labels == null) || (*c).value < -1 || (*c).value >= (*c).count as i64 { return error.InvalidModel; }
+        if (*c).kind == BUTTON && (*c).count > 1 { return error.InvalidModel; }
+        if (*c).kind == TASKBAR && (*c).count > 16 { return error.InvalidModel; }
+        if (*c).kind == TEXTBOX {
+            if (*c).count != 0 { return error.InvalidModel; } try validate_text((*c).text);
+            if !boundary((*c).text,(*c).scroll) { return error.InvalidModel; }
+        } else { if (*c).scroll > (*c).count { return error.InvalidModel; } }
+        var i: usize = 0; while i < (*c).count {
+            if (*c).labels[i].len > 4096 { return error.InvalidModel; }
+            try utf8(slice_from_raw_parts((*c).labels[i].bytes,(*c).labels[i].len)); i += 1;
+        }
+        let q = try theme.sample(&(*c).hover,0);
+        if (*c).hover.from < 0 || (*c).hover.from > 256 || (*c).hover.to < 0 || (*c).hover.to > 256 { return error.InvalidModel; }
+    }
+    return;
+}
+unsafe fn locate(model: *const Model, id: u64) !usize {
+    unsafe { var i: usize = 0; while i < (*model).count { if (*model).controls[i].id == id { return i; } i += 1; } }
+    return error.InvalidModel;
+}
+pub unsafe fn validate(model: *const Model) !void {
+    unsafe {
+        if model == null || (*model).count > 32 || (*model).bounds.left != 0 || (*model).bounds.top != 0
+            || (*model).bounds.right < 1 || (*model).bounds.right > 8192 || (*model).bounds.bottom < 1 || (*model).bounds.bottom > 8192
+            || (*model).duration_ms > 1000 || (*model).pointer_x < -16384 || (*model).pointer_x > 16384
+            || (*model).pointer_y < -16384 || (*model).pointer_y > 16384 { return error.InvalidModel; }
+        try geo.validate_damage(&(*model).damage); if !same(&(*model).bounds,&(*model).damage.bounds) { return error.InvalidModel; }
+        var i: usize = 0; while i < (*model).count {
+            try control(model,&(*model).controls[i]); var j: usize = 0;
+            while j < i { if (*model).controls[j].id == (*model).controls[i].id { return error.InvalidModel; } j += 1; } i += 1;
+        }
+        if (*model).focus != 0 { let at = try locate(model,(*model).focus); if (*model).controls[at].flags != 3 { return error.InvalidModel; } }
+        if (*model).hot != 0 { let at = try locate(model,(*model).hot); if (*model).controls[at].flags != 3 { return error.InvalidModel; } }
+        if (*model).pressed != 0 { let at = try locate(model,(*model).pressed); if (*model).controls[at].flags != 3 { return error.InvalidModel; } }
+    }
+    return;
+}
+pub unsafe fn init(out: *Model, width: usize, height: usize, duration_ms: u64) !void {
+    if width == 0 || width > 8192 || height == 0 || height > 8192 || duration_ms > 1000 { return error.InvalidModel; }
+    unsafe {
+        *out = EMPTY_MODEL; (*out).bounds = geo.Rect { left: 0, top: 0, right: width as i64, bottom: height as i64 };
+        (*out).duration_ms = duration_ms; try geo.init_damage(&(*out).bounds,&(*out).damage);
+        try geo.damage_add(&(*out).damage,&(*out).bounds);
+    }
+    return;
+}
+pub unsafe fn add(model: *Model, item: *const Control) !void {
+    unsafe {
+        try validate(model); if item == null { return error.InvalidModel; } try control(model,item);
+        if (*model).count == 32 { return error.Capacity; }
+        var i: usize = 0; while i < (*model).count { if (*model).controls[i].id == (*item).id { return error.InvalidModel; } i += 1; }
+        (*model).controls[(*model).count] = *item; (*model).count += 1; try geo.damage_add(&(*model).damage,&(*model).bounds);
+    }
+    return;
+}
+unsafe fn dirty(model: *Model, id: u64) !void {
+    if id == 0 { return; }
+    unsafe { let at = try locate(model,id); try geo.damage_add(&(*model).damage,&(*model).controls[at].rect); }
+    return;
+}
+unsafe fn hit(model: *const Model) u64 {
+    unsafe { var i = (*model).count; while i != 0 { i -= 1; let c = &(*model).controls[i];
+        if (*c).flags == 3 && (*model).pointer_x >= (*c).rect.left && (*model).pointer_x < (*c).rect.right
+            && (*model).pointer_y >= (*c).rect.top && (*model).pointer_y < (*c).rect.bottom { return (*c).id; }
+    } }
+    return 0;
+}
+unsafe fn focus(model: *Model, id: u64) !void {
+    unsafe { try dirty(model,(*model).focus); try dirty(model,id); (*model).focus = id; }
+    return;
+}
+fn clamp(value: i64, high: i64) i64 { if value < 0 { return 0; } if value > high { return high; } return value; }
+fn position(value: i64) i64 { if value < -16384 { return -16384; } if value > 16384 { return 16384; } return value; }
+pub unsafe fn input(model: *Model, event: *const ev.Event, origin_x: i64, origin_y: i64, now_ms: u64, out: *Action) !void {
+    unsafe {
+        try validate(model); if event == null || origin_x < 0 || origin_x > 8192 || origin_y < 0 || origin_y > 8192 { return error.InvalidModel; }
+        var action = NO_ACTION;
+        if (*event).kind == ev.LOST { try dirty(model,(*model).pressed); (*model).pressed = 0; *out = action; return; }
+        if (*event).kind == ev.ABSOLUTE || (*event).kind == ev.RELATIVE {
+            var x = (*event).a; var y = (*event).b;
+            if (*event).kind == ev.ABSOLUTE {
+                x = position(x) - origin_x; y = position(y) - origin_y;
+            } else {
+                if x < -8192 { x = -8192; } if x > 8192 { x = 8192; }
+                if y < -8192 { y = -8192; } if y > 8192 { y = 8192; }
+                x += (*model).pointer_x; y += (*model).pointer_y;
+            }
+            (*model).pointer_x = position(x); (*model).pointer_y = position(y);
+            let hot = hit(model);
+            if hot != (*model).hot {
+                if (*model).hot != 0 {
+                    let at = try locate(model,(*model).hot); let q = try theme.sample(&(*model).controls[at].hover,now_ms);
+                    (*model).controls[at].hover = theme.Animation { from: q, to: 0, start_ms: now_ms, duration_ms: (*model).duration_ms };
+                }
+                if hot != 0 {
+                    let at = try locate(model,hot); let q = try theme.sample(&(*model).controls[at].hover,now_ms);
+                    (*model).controls[at].hover = theme.Animation { from: q, to: 256, start_ms: now_ms, duration_ms: (*model).duration_ms };
+                }
+                try dirty(model,(*model).hot); try dirty(model,hot); (*model).hot = hot;
+            }
+        } else { if (*event).kind == ev.SCROLL {
+            let id = hit(model);
+            if id != 0 {
+                let at = try locate(model,id); let c = &(*model).controls[at];
+                if (*c).kind == LIST {
+                    var delta = (*event).b; if delta < -256 { delta = -256; } if delta > 256 { delta = 256; }
+                    var rows = ((*c).rect.bottom - (*c).rect.top) / (*c).row_height; if rows < 1 { rows = 1; }
+                    var maximum = (*c).count as i64 - rows; if maximum < 0 { maximum = 0; }
+                    (*c).scroll = clamp((*c).scroll as i64 - delta,maximum) as usize; try dirty(model,id);
+                    action = Action { kind: SCROLLED, id: id, value: (*c).scroll as i64, revision: 0 };
+                } else { if (*c).kind == TEXTBOX {
+                    let t = (*c).text; var delta = (*event).b; if delta < -256 { delta = -256; } if delta > 256 { delta = 256; }
+                    var at = (*c).scroll;
+                    while delta < 0 && at < (*t).len { while at < (*t).len && (*t).bytes[at] != 10 { at += 1; } if at < (*t).len { at += 1; } delta += 1; }
+                    while delta > 0 && at != 0 { at -= 1; while at != 0 && (*t).bytes[at - 1] != 10 { at -= 1; } delta -= 1; }
+                    (*c).scroll = at; try dirty(model,id); action = Action { kind: SCROLLED, id: id, value: at as i64, revision: 0 };
+                } }
+            }
+        } else { if (*event).kind == ev.KEY || (*event).kind == TEXT {
+            if (*event).kind == ev.KEY && ((*event).a < 0 || (*event).a > 2 || (*event).code == 0 || (*event).code >= 768) { return error.InvalidModel; }
+            if (*event).kind == ev.KEY && (*event).code == 272 {
+                if (*event).a == 1 {
+                    let id = hit(model); try focus(model,id); (*model).pressed = id;
+                    if id != 0 {
+                        let at = try locate(model,id); let c = &(*model).controls[at];
+                        if (*c).kind == LIST || (*c).kind == TASKBAR {
+                            var selected: i64 = -1;
+                            if (*c).kind == LIST { selected = (*c).scroll as i64 + ((*model).pointer_y - (*c).rect.top) / (*c).row_height; }
+                            else { if (*c).count != 0 { selected = ((*model).pointer_x - (*c).rect.left) * (*c).count as i64 / ((*c).rect.right - (*c).rect.left); } }
+                            if selected < (*c).count as i64 { (*c).value = selected; try dirty(model,id); action = Action { kind: SELECT, id: id, value: selected, revision: 0 }; }
+                        } else { action = Action { kind: FOCUS, id: id, value: 0, revision: 0 }; }
+                    }
+                } else { if (*event).a == 0 {
+                    let id = (*model).pressed; (*model).pressed = 0; try dirty(model,id);
+                    if id != 0 && id == hit(model) {
+                        let at = try locate(model,id); let c = &(*model).controls[at];
+                        if (*c).kind == BUTTON || ((*c).kind == TASKBAR && (*c).value >= 0) { action = Action { kind: ACTIVATE, id: id, value: (*c).value, revision: 0 }; }
+                    }
+                } }
+            } else { if (*event).kind == ev.KEY && (*event).code == 15 && (*event).a == 1 {
+                let reverse = ((*event).b & 3) != 0;
+                var start: usize = 0; if (*model).focus != 0 { start = try locate(model,(*model).focus); if !reverse { start += 1; } }
+                var n: usize = 0; while n < (*model).count {
+                    var at = (start + n) % (*model).count;
+                    if reverse { at = (start + (*model).count - 1 - n) % (*model).count; }
+                    if (*model).controls[at].flags == 3 { try focus(model,(*model).controls[at].id); action = Action { kind: FOCUS, id: (*model).focus, value: 0, revision: 0 }; n = (*model).count; }
+                    else { n += 1; }
+                }
+            } else { if (*model).focus != 0 {
+                let at = try locate(model,(*model).focus); let c = &(*model).controls[at];
+                if (*c).kind == TEXTBOX {
+                    let handled = try edit((*c).text,event,false);
+                    if handled {
+                        // A deletion can invalidate the old first visible byte.
+                        if (*c).scroll > (*(*c).text).len { (*c).scroll = (*(*c).text).len; }
+                        while (*c).scroll != 0 && !boundary((*c).text,(*c).scroll) { (*c).scroll -= 1; }
+                        try dirty(model,(*c).id); action = Action { kind: EDIT, id: (*c).id, value: 0, revision: (*(*c).text).revision };
+                    }
+                } else { if (*event).kind == ev.KEY && (*event).a != 0 {
+                    if ((*event).code == 28 || (*event).code == 57) && (*event).a == 1 && ((*c).kind == BUTTON || (*c).value >= 0) {
+                        action = Action { kind: ACTIVATE, id: (*c).id, value: (*c).value, revision: 0 };
+                    }
+                    if (*c).kind == LIST && ((*event).code == 103 || (*event).code == 108) && (*c).count != 0 {
+                        var selected = (*c).value; if (*event).code == 103 { selected -= 1; } else { selected += 1; }
+                        (*c).value = clamp(selected,(*c).count as i64 - 1); try dirty(model,(*c).id);
+                        var rows = ((*c).rect.bottom - (*c).rect.top) / (*c).row_height; if rows < 1 { rows = 1; }
+                        if (*c).value < (*c).scroll as i64 { (*c).scroll = (*c).value as usize; }
+                        if (*c).value >= (*c).scroll as i64 + rows { (*c).scroll = ((*c).value - rows + 1) as usize; }
+                        action = Action { kind: SELECT, id: (*c).id, value: (*c).value, revision: 0 };
+                    }
+                } }
+            } } }
+        } else { return error.InvalidModel; } } }
+        *out = action;
+    }
+    return;
+}
+pub unsafe fn tick(model: *Model, now_ms: u64) !void {
+    unsafe {
+        try validate(model); var i: usize = 0;
+        while i < (*model).count {
+            let a = &(*model).controls[i].hover;
+            if (*a).from != (*a).to {
+                try dirty(model,(*model).controls[i].id);
+                if now_ms >= (*a).start_ms && now_ms - (*a).start_ms >= (*a).duration_ms { (*a).from = (*a).to; (*a).duration_ms = 0; }
+            }
+            i += 1;
+        }
+        if (*model).focus != 0 { let at = try locate(model,(*model).focus); if (*model).controls[at].kind == TEXTBOX { try dirty(model,(*model).focus); } }
+    }
+    return;
+}
+pub unsafe fn take_damage(model: *Model, out: *geo.Damage) !void {
+    unsafe { try validate(model); *out = (*model).damage; try geo.init_damage(&(*model).bounds,&(*model).damage); }
+    return;
+}
+pub unsafe fn invalidate(model: *Model) !void {
+    unsafe { try validate(model); try geo.damage_add(&(*model).damage,&(*model).bounds); }
+    return;
+}
+pub unsafe fn flags(model: *Model, id: u64, value: u64) !void {
+    unsafe {
+        try validate(model); if value > 3 { return error.InvalidModel; } let at = try locate(model,id);
+        (*model).controls[at].flags = value;
+        if value != 3 {
+            if (*model).focus == id { (*model).focus = 0; } if (*model).hot == id { (*model).hot = 0; }
+            if (*model).pressed == id { (*model).pressed = 0; } (*model).controls[at].hover = theme.STILL;
+        }
+        try geo.damage_add(&(*model).damage,&(*model).bounds);
+    }
+    return;
+}

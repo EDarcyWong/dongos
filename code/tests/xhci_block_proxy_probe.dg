@@ -1,0 +1,10 @@
+module xhci_block_proxy_probe;
+import usb.block_proxy as block;
+import usb.bot as bot;
+import usb.transport as io;
+import lib.abi as abi;
+import xhci_async_probe as hardware;
+export("xp_init") fn initialize(s:*block.State,storage:*bot.State,channel:*u8,bytes:u64,epoch:u64,bounce:*const io.Buffer)u64 {unsafe {
+    match block.initialize(s,storage,channel,bytes,epoch,bounce) {ok=>{return 0;},err(e)=>{return e;},}
+}}
+export("xp_request") fn request(s:*block.State,input:*const abi.Message,peer:u64,epochs:u64,out:*abi.Message)u64 {unsafe {return block.request(s,input,peer,epochs,out);}}

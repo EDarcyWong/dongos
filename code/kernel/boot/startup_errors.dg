@@ -1,0 +1,9 @@
+module boot.startup_errors;
+
+pub error AlreadyStarted = 0x0206_0001;
+pub error NxRequired = 0x0206_0002;
+pub error InvalidHandoff = 0x0206_0003;
+pub error NoArena = 0x0206_0004;
+pub error InvalidOfflineMapping = 0x0206_0005;
+pub error OwnershipMismatch = 0x0206_0006;
+pub error UnsupportedCache = 0x0206_0007;

@@ -1,0 +1,8 @@
+var READER_KERNEL:[64]paging.Table=[paging.Table{entries:[0;512]};64];
+export("reader_kernel_setup") fn reader_kernel_setup(alias:u64)u64{unsafe{
+    WORK.ready=false;WORK.space=paging.EMPTY_SPACE;
+    match paging.init(&WORK.space,READER_KERNEL[..],0x80_0000,WORK.table_meta[..],48,true){ok=>{},err(e)=>{return e;},}
+    var i:usize=0;while i<12{
+        match paging.map_live(&WORK.space,alias+i as u64*4096,0x20_0000+i as u64*4096,paging.WRITE){ok=>{},err(e)=>{return e;},}i+=1;
+    }WORK.ready=true;
+}return 0;}

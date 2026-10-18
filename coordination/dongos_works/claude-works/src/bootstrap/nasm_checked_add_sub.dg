@@ -1,0 +1,44 @@
+// Two NASM lines for a 64-bit add/sub followed by its machine overflow branch:
+// "<add|sub> <dest64>, <src64>\n<jo|jc> __dong_b<trap_block>\n" (jo for signed,
+// jc for unsigned carry/borrow). The block label uses the integrated CR4
+// decimal encoder and matches CR10's "__dong_b<decimal>" form; the trap block
+// itself is owned and defined upstream. Nothing sits between the arithmetic
+// and the branch. Built in a local buffer, copied to out after every check.
+module bootstrap.nasm_checked_add_sub;
+import bootstrap.decimal_integer as dec;
+pub const OK:u64=0;pub const INVALID:u64=1;pub const CAPACITY:u64=2;
+pub const ADD:u64=0;pub const SUB:u64=1;
+pub const NONE:u64=0xffff_ffff_ffff_ffff;
+const MAX:u64=0xffff_ffff_ffff_ffff;
+fn span(p:u64,n:u64)bool{return n==0||(p!=0&&n<=MAX-p);}
+fn overlap(a:u64,n:u64,b:u64,m:u64)bool{return n!=0&&m!=0&&a<b+m&&b<a+n;}
+fn copy(out:[]u8,at:usize,text:[]const u8)usize{
+ var i:usize=0;while i<text.len{out[at+i]=text[i];i+=1;}return at+text.len;
+}
+fn register(r:u64)[]const u8{
+ if r==0{return "rax";}if r==1{return "rcx";}if r==2{return "rdx";}if r==3{return "rbx";}
+ if r==4{return "rsp";}if r==5{return "rbp";}if r==6{return "rsi";}if r==7{return "rdi";}
+ if r==8{return "r8";}if r==9{return "r9";}if r==10{return "r10";}if r==11{return "r11";}
+ if r==12{return "r12";}if r==13{return "r13";}if r==14{return "r14";}return "r15";
+}
+pub unsafe fn emit(operation:u64,signed:bool,destination:u64,source:u64,trap_block:u64,out:[]u8,written:*usize)u64{unsafe{
+ let wp=written as u64;let op=out.ptr as u64;
+ if written==null||(wp&7)!=0||!span(wp,8){return INVALID;}
+ if !span(op,out.len){return INVALID;}
+ if overlap(wp,8,op,out.len){return INVALID;}
+ if operation>SUB||destination>15||source>15||trap_block==NONE{return INVALID;}
+ // CR4 unsigned decimal into local scratch; at most 20 digits.
+ var digits:[24]u8=[0;24];var count:usize=0;
+ let status=dec.encode(trap_block,64,false,slice_from_raw_parts(&digits[0],24),&count);
+ if status!=dec.OK{return INVALID;}
+ // Longest text: "sub r15, r15\n" (13) + "jo __dong_b" (11) + 20 digits + "\n" = 45 bytes.
+ var text:[64]u8=[0;64];let buffer=slice_from_raw_parts(&text[0],64);
+ var at:usize=0;if operation==ADD{at=copy(buffer,0,"add ");}else{at=copy(buffer,0,"sub ");}
+ at=copy(buffer,at,register(destination));buffer[at]=44;buffer[at+1]=32;
+ at=copy(buffer,at+2,register(source));buffer[at]=10;at+=1;
+ if signed{at=copy(buffer,at,"jo __dong_b");}else{at=copy(buffer,at,"jc __dong_b");}
+ at=copy(buffer,at,slice_from_raw_parts(&digits[0],count));buffer[at]=10;at+=1;
+ if at>out.len{return CAPACITY;}
+ var i:usize=0;while i<at{out[i]=buffer[i];i+=1;}
+ *written=at;return OK;
+}}

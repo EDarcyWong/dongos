@@ -1,0 +1,258 @@
+// Isolated polling adapter prototype. All authority remains in kernel grants.
+module drivers.ahci;
+import drivers.ahci_core as core;
+import drivers.virtio_pci as vp;
+import drivers.virtio_blk as blk;
+pub error InvalidInput=0x0902_0001;
+pub error AlreadyInitialized=0x0902_0002;
+pub error Busy=0x0902_0003;
+pub error NotReady=0x0902_0004;
+pub error IoFailure=0x0902_0005;
+pub error Unsupported=0x0902_0006;
+pub error ClockFailure=0x0902_0007;
+pub error Timeout=0x0902_0008;
+pub error BadCompletion=0x0902_0009;
+pub error CleanupRequired=0x0902_000a;
+pub const DMA_BYTES:usize=131072;
+pub const MAX_SECTORS:u64=128;
+const MAX:u64=0xffff_ffff_ffff_ffff;
+const IS_VALID:u64=0xfdc0_00ff;
+const SERR_VALID:u64=0x07ff_0f03;
+pub type Enable=unsafe fn(context:u64,port:u64)u64;
+// Trusted kernel-derived monotonic milliseconds; it must keep advancing while
+// polling. A callback that stops time violates this unsafe adapter contract.
+pub type Now=unsafe fn(context:u64,out_ms:*u64)u64;
+pub struct Ops {pub read:vp.Read,pub write:vp.Write,pub fence:vp.Fence,pub acquire:blk.Acquire,pub release:blk.Release,pub enable:Enable,pub now:Now}
+pub struct Info {pub capacity_sectors:u64,pub max_transfer_sectors:u64,pub readonly:u64,pub ready:u64,pub faulted:u64,pub held:u64,pub completed:u64}
+pub const EMPTY_INFO:Info=Info {capacity_sectors:0,max_transfer_sectors:0,readonly:0,ready:0,faulted:0,held:0,completed:0};
+pub struct State {
+    pub info:Info,pub lease:blk.Lease,pub bar:vp.Bar,pub ops:*const Ops,pub context:u64,
+    pub port:u64,pub cap:u64,pub pi:u64,pub transfer:core.State,pub drive:core.Info,pub caps:core.Caps,
+    pub busy:u64,pub enabled:u64,pub last_ms:u64,pub clock_seen:u64,pub published:u64,
+    pub last_sample:core.Sample,
+    pub completion_policy:u64,
+}
+pub const EMPTY_STATE:State=State {info:EMPTY_INFO,lease:blk.EMPTY_LEASE,bar:vp.Bar {physical:0,length:0,handle:0},
+    ops:null,context:0,port:0,cap:0,pi:0,transfer:core.EMPTY_STATE,drive:core.EMPTY_INFO,caps:core.Caps {physical_bits:32,s64a:0},
+    busy:0,enabled:0,last_ms:0,clock_seen:0,published:0,
+    last_sample:core.Sample {generation:0,ci:0,sact:0,interrupts:0,tfd:0,serr:0,prdbc:0,now_ms:0,fis:[0;256]},completion_policy:0};
+unsafe fn read(s:*State,offset:u64)!u64 {unsafe {
+    let area=vp.Area {handle:(*s).bar.handle,offset:0,length:(*s).bar.length,bar:5};
+    return try vp.read((*(*s).ops).read,(*s).context,&area,offset,4);
+}}
+unsafe fn write(s:*State,offset:u64,value:u64)!void {unsafe {
+    let area=vp.Area {handle:(*s).bar.handle,offset:0,length:(*s).bar.length,bar:5};
+    try vp.write((*(*s).ops).write,(*s).context,&area,offset,4,value);
+}return;}
+unsafe fn fence(s:*State,kind:u64)!void {unsafe {
+    compiler_fence();if (*(*s).ops).fence((*s).context,kind)!=0 {return error.IoFailure;}compiler_fence();
+}return;}
+unsafe fn now(s:*State)!u64 {unsafe {
+    var value:u64=0;if (*(*s).ops).now((*s).context,&value)!=0 {return error.ClockFailure;}
+    if (*s).clock_seen!=0 && value<(*s).last_ms {return error.ClockFailure;}
+    (*s).clock_seen=1;(*s).last_ms=value;return value;
+}}
+fn port_offset(port:u64,register:u64)u64 {return 0x100+port*0x80+register;}
+// Only ST/FRE and existing spin/power state are writable in this subset.
+// No ICC/CLO, power-management, ATAPI or port-multiplier command is echoed.
+fn command_bits(cmd:u64)u64 {return cmd&0x17;}
+unsafe fn fault(s:*State)void {unsafe {
+    (*s).info.ready=0;(*s).info.faulted=1;(*s).busy=0;
+    if (*s).info.held!=0 {(*s).transfer.held=1;(*s).transfer.pending=1;(*s).transfer.faulted=1;}
+}return;}
+unsafe fn ownership(s:*State,boh:u64)!void {unsafe {
+    if boh==0 {return;}
+    let start=try now(s);
+    loop {
+        let observed=try read(s,0x28);let tick=try now(s);
+        let input=core.EngineInput {phase:0,elapsed_ms:tick-start,boh:1,bohc:observed,cmd:0,ci:0,sact:0};
+        var a=core.Action {target:0,clear_mask:0,set_mask:0,wait_mask:0,next_phase:0};try core.engine(&input,&a);
+        if a.next_phase==1 {return;}
+        if a.target==1 {try write(s,0x28,(observed&4)|2);try fence(s,3);}
+    }
+}}
+unsafe fn stop_port(s:*State,port:u64)!void {unsafe {
+    try write(s,port_offset(port,0x14),0);
+    if (try read(s,port_offset(port,0x14)))!=0 {return error.IoFailure;}
+    var phase:u64=1;var start=try now(s);
+    while phase<6 {
+        let tick=try now(s);let cmd=try read(s,port_offset(port,0x18));
+        let input=core.EngineInput {phase:phase,elapsed_ms:tick-start,boh:0,bohc:0,cmd:cmd,
+            ci:try read(s,port_offset(port,0x38)),sact:try read(s,port_offset(port,0x34))};
+        var a=core.Action {target:0,clear_mask:0,set_mask:0,wait_mask:0,next_phase:phase};try core.engine(&input,&a);
+        if a.target==2 {try write(s,port_offset(port,0x18),command_bits(cmd)&~a.clear_mask);try fence(s,3);}
+        if a.next_phase!=phase {phase=a.next_phase;start=try now(s);}
+    }
+}return;}
+unsafe fn wait_engine(s:*State,mask:u64)!void {unsafe {
+    let start=try now(s);
+    loop {
+        if ((try read(s,port_offset((*s).port,0x18)))&mask)==mask {return;}
+        if (try now(s))-start>=500 {return error.Timeout;}
+    }
+}}
+unsafe fn live(s:*State)!void {unsafe {
+    let status=try read(s,port_offset((*s).port,0x28));
+    if (status&15)!=3 || ((status>>8)&15)!=1 || (try read(s,port_offset((*s).port,0x24)))!=0x101 {return error.Unsupported;}
+}return;}
+unsafe fn clear_status(s:*State)!void {unsafe {
+    let base=port_offset((*s).port,0);let interrupts=try read(s,base+0x10);let serr=try read(s,base+0x30);
+    if interrupts!=0 {try write(s,base+0x10,interrupts&IS_VALID);}
+    if serr!=0 {try write(s,base+0x30,serr&SERR_VALID);}
+    if (try read(s,base+0x10))!=0 || (try read(s,base+0x30))!=0 {return error.BadCompletion;}
+}return;}
+unsafe fn address(s:*State,offset:u64,value:u64)!void {unsafe {
+    try write(s,offset,value&0xffff_ffff);try write(s,offset+4,value>>32);
+    if (try read(s,offset))!=(value&0xffff_ffff) || (try read(s,offset+4))!=(value>>32) {return error.IoFailure;}
+}return;}
+
+// CI may clear before DHRS is published (AHCI 1.3.1 5.3.8). This
+// register-only observation is pending, never a forged CI=1 core sample.
+// The adapter still applies the original command's error and time budget.
+unsafe fn snapshot_wait(s:*State,sample:*const core.Sample)!void{unsafe{
+    let v=*sample;
+    if v.generation!=(*s).transfer.generation||v.ci>1||v.sact!=0||v.interrupts>0xffff_ffff
+        ||v.tfd>0xffff||v.serr>0xffff_ffff||v.now_ms<(*s).transfer.last_ms{return error.core.BadCompletion;}
+    if (v.interrupts&0x7d00_0010)!=0||(v.tfd&0x21)!=0||v.serr!=0{return error.core.DeviceError;}
+    if v.now_ms-(*s).transfer.start_ms>=(*s).transfer.timeout_ms{return error.core.Timeout;}
+    (*s).transfer.last_ms=v.now_ms;
+}return;}
+unsafe fn submit(s:*State,opcode:u64,lba:u64,count:usize,input:*const u8,output:*u8)!void {unsafe {
+    try live(s);let base=port_offset((*s).port,0);let raw=(*s).lease.pointer;
+    if ((try read(s,base+0x18))&0xc011)!=0xc011 || (try read(s,base+0x38))!=0 || (try read(s,base+0x34))!=0
+        || ((try read(s,base+0x20))&0xa9)!=0 {return error.BadCompletion;}
+    let lease=core.Lease {token:(*s).lease.token,physical:(*s).lease.physical,length:(*s).lease.length as u64};
+    let request=core.Request {opcode:opcode,lba:lba,sectors:count as u64};var plan=core.EMPTY_COMMAND;
+    try core.build(&lease,&(*s).caps,&(*s).drive,&request,&plan);
+    try clear_status(s);
+    var i:usize=0;while i<256 {volatile_store(raw+0x400+i,0 as u8);i+=1;}
+    i=0;while i<32 {*(raw+i)=plan.header[i];i+=1;}
+    i=0;while i<144 {*(raw+0x800+i)=plan.table[i];i+=1;}
+    i=0;while i<plan.bytes as usize {
+        if opcode==core.WRITE {*(raw+0x1000+i)=*(input+i);}else{*(raw+0x1000+i)=0;}i+=1;
+    }
+    let start=try now(s);try core.arm(&(*s).transfer,opcode,plan.bytes,start,5000);
+    try fence(s,1);(*s).published=1;try write(s,base+0x38,1);try fence(s,3);
+    loop {
+        try live(s);
+        var sample=core.Sample {generation:(*s).transfer.generation,ci:try read(s,base+0x38),
+            sact:try read(s,base+0x34),interrupts:try read(s,base+0x10),tfd:try read(s,base+0x20),
+            serr:try read(s,base+0x30),prdbc:0,now_ms:0,fis:[0;256]};
+        var stable=false;var rising_ci=false;
+        if sample.ci==0&&(sample.interrupts&3)!=0 {
+            // A completion-class marker precedes DMA acquisition. The core
+            // retains its operation-specific D2H/IDENTIFY PIO validation.
+            try fence(s,2);sample.prdbc=volatile_load((raw+4) as *const u32) as u64;
+            i=0;while i<256 {sample.fis[i]=volatile_load((raw+0x400+i) as *const u8);i+=1;}
+            let ci=try read(s,base+0x38);let sact=try read(s,base+0x34);
+            let interrupts=try read(s,base+0x10);let tfd=try read(s,base+0x20);let serr=try read(s,base+0x30);
+            rising_ci=ci!=0;
+            if ci==sample.ci&&sact==sample.sact&&interrupts==sample.interrupts&&tfd==sample.tfd&&serr==sample.serr {
+                stable=true;
+            }else{
+                // Do not graft a later status onto an older DMA copy. The
+                // discarded bytes have no authority; the next loop reacquires.
+                sample=core.Sample {generation:(*s).transfer.generation,ci:ci,sact:sact,interrupts:interrupts,
+                    tfd:tfd,serr:serr,prdbc:0,now_ms:0,fis:[0;256]};
+            }
+        }
+        if stable&&(sample.tfd&0x88)!=0 {
+            // CI0/completion marker and even a valid received FIS can precede
+            // the final ready TFD snapshot. Neither BSY nor DRQ is a completed
+            // command. Preserve the exact sample and original deadline until
+            // ready; snapshot_wait still rejects ERR/DF/SERR immediately.
+            // A permanent busy device times out held, never completes here.
+            stable=false;
+        }
+        sample.now_ms=try now(s);
+        // Preserve exactly the observation checked by pending/core policy, including pending
+        // and rejected completions. This performs no extra device reads.
+        (*s).last_sample=sample;
+        if rising_ci{return error.BadCompletion;}
+        if sample.ci==0&&!stable{try snapshot_wait(s,&sample);continue;}
+        if try core.poll_with_policy(&(*s).transfer,&sample,(*s).completion_policy) {
+            (*s).published=0;
+            if opcode==core.READ {i=0;while i<plan.bytes as usize {*(output+i)=volatile_load((raw+0x1000+i) as *const u8);i+=1;}}
+            return;
+        }
+    }
+}}
+unsafe fn initialize_inner(s:*State)!void {unsafe {
+    let version=try read(s,0x10);
+    if version!=0x10000 && version!=0x10100 && version!=0x10200 && version!=0x10300 && version!=0x10301 {return error.Unsupported;}
+    (*s).cap=try read(s,0);(*s).pi=try read(s,0x0c);let ports=((*s).cap&31)+1;
+    if (*s).pi==0 || ((*s).pi>>ports)!=0 || (*s).bar.length<0x100+ports*0x80 {return error.Unsupported;}
+    if ((try read(s,4))&1)!=0 {return error.Unsupported;}
+    var lease=blk.EMPTY_LEASE;let acquired=(*(*s).ops).acquire((*s).context,DMA_BYTES,4096,&lease);
+    (*s).lease=lease;
+    if lease.token!=0 || lease.pointer!=null || lease.physical!=0 || lease.length!=0 {(*s).info.held=1;}
+    if acquired!=0 {return error.IoFailure;}
+    (*s).info.held=1;
+    if lease.token==0 || lease.pointer==null || ((lease.pointer as u64)&4095)!=0 || (lease.pointer as u64)>MAX-DMA_BYTES as u64 {return error.InvalidInput;}
+    var first=core.EMPTY_COMMAND;let core_lease=core.Lease {token:lease.token,physical:lease.physical,length:lease.length as u64};
+    let identify=core.Request {opcode:core.IDENTIFY,lba:0,sectors:0};
+    try core.build(&core_lease,&(*s).caps,&(*s).drive,&identify,&first);
+    var boh:u64=0;if version>=0x10200 {boh=(try read(s,0x24))&1;}
+    try ownership(s,boh);
+    try write(s,4,0x8000_0000);try fence(s,3);
+    if ((try read(s,4))&0x8000_0003)!=0x8000_0000 {return error.IoFailure;}
+    var port:u64=0;var chosen:u64=32;
+    while port<ports {
+        if ((*s).pi&(1<<port))!=0 {
+            try stop_port(s,port);
+            let status=try read(s,port_offset(port,0x28));
+            if chosen==32 && (status&15)==3 && ((status>>8)&15)==1
+                && (try read(s,port_offset(port,0x24)))==0x101 {chosen=port;}
+        }
+        port+=1;
+    }
+    if chosen==32 {return error.Unsupported;}(*s).port=chosen;
+    if ((*s).cap&0x1_0000)!=0 && ((try read(s,port_offset(chosen,0x40)))&1)!=0 {return error.Unsupported;}
+    var i:usize=0;while i<DMA_BYTES {*(lease.pointer+i)=0;i+=1;}
+    let base=port_offset(chosen,0);try address(s,base,first.clb);try address(s,base+8,first.fb);try clear_status(s);try fence(s,1);
+    // Kernel independently verifies every implemented port idle, all interrupt
+    // enables zero, trusted selected CLB/FB and current lease before enabling BME.
+    if (*(*s).ops).enable((*s).context,chosen)!=0 {return error.IoFailure;}(*s).enabled=1;
+    let cmd=command_bits(try read(s,base+0x18));try write(s,base+0x18,(cmd&6)|0x10);try fence(s,3);try wait_engine(s,0x4010);
+    try live(s);if ((try read(s,base+0x20))&0xa9)!=0 {return error.BadCompletion;}
+    try write(s,base+0x18,(cmd&6)|0x11);try fence(s,3);try wait_engine(s,0xc011);
+    try submit(s,core.IDENTIFY,0,0,null,null);
+    try core.identify(slice_from_raw_parts(lease.pointer+0x1000,512) as []const u8,&(*s).drive);
+    if (*s).drive.flush_ext==0 {return error.Unsupported;}
+    (*s).info.capacity_sectors=(*s).drive.sectors;(*s).info.max_transfer_sectors=MAX_SECTORS;(*s).info.ready=1;
+}return;}
+// The caller must derive policy from the actual trusted PCI identity through
+// core.completion_policy. BAR contents never choose a vendor workaround.
+pub unsafe fn initialize_with_policy(s:*State,bar:*const vp.Bar,ops:*const Ops,context:u64,policy:u64)!void {unsafe {
+    if s==null || bar==null || ops==null || policy>1 {return error.InvalidInput;}
+    if (*s).busy!=0 {return error.Busy;}
+    if (*s).info.ready!=0 || (*s).info.held!=0 || (*s).info.faulted!=0 {return error.AlreadyInitialized;}
+    if (*bar).handle==0 || (*bar).physical==0 || ((*bar).physical&4095)!=0 || (*bar).length<0x180
+        || (*bar).physical>MAX-(*bar).length {return error.InvalidInput;}
+    (*s).bar=*bar;(*s).ops=ops;(*s).context=context;(*s).completion_policy=policy;(*s).busy=1;
+    let result=initialize_inner(s);match result {ok=>{(*s).busy=0;return;},err(code)=>{fault(s);return result;},}
+}}
+pub unsafe fn initialize(s:*State,bar:*const vp.Bar,ops:*const Ops,context:u64)!void {unsafe {
+    try initialize_with_policy(s,bar,ops,context,core.STRICT);
+}return;}
+fn overlap(a:u64,n:u64,b:u64,m:u64)bool {return a<b+m && b<a+n;}
+unsafe fn operation(s:*State,opcode:u64,lba:u64,count:usize,input:*const u8,output:*u8)!void {unsafe {
+    if s==null {return error.InvalidInput;}if (*s).busy!=0 {return error.Busy;}
+    if (*s).info.faulted!=0 {return error.CleanupRequired;}if (*s).info.ready!=1 {return error.NotReady;}
+    if (*s).info.completed==MAX {return error.InvalidInput;}
+    if opcode!=core.FLUSH {
+        if count==0 || count as u64>MAX_SECTORS || lba>=(*s).info.capacity_sectors
+            || count as u64>(*s).info.capacity_sectors-lba {return error.InvalidInput;}
+        let bytes=count as u64*512;var pointer=input as u64;if opcode==core.READ {pointer=output as u64;}
+        if pointer==0 || pointer>MAX-bytes || overlap(pointer,bytes,(*s).lease.pointer as u64,(*s).lease.length as u64)
+            || overlap(pointer,bytes,s as u64,sizeof(State) as u64) || overlap(pointer,bytes,(*s).ops as u64,sizeof(Ops) as u64) {return error.InvalidInput;}
+    }
+    (*s).busy=1;let result=submit(s,opcode,lba,count,input,output);
+    match result {ok=>{(*s).info.completed+=1;(*s).busy=0;return;},err(code)=>{fault(s);return result;},}
+}}
+pub unsafe fn read_sectors(s:*State,lba:u64,count:usize,out:*u8)!void {unsafe {try operation(s,core.READ,lba,count,null,out);}return;}
+pub unsafe fn write_sectors(s:*State,lba:u64,count:usize,input:*const u8)!void {unsafe {try operation(s,core.WRITE,lba,count,input,null);}return;}
+pub unsafe fn flush(s:*State)!void {unsafe {try operation(s,core.FLUSH,0,0,null,null);}return;}
+pub unsafe fn describe(s:*const State,out:*Info)!void {unsafe {
+    if s==null || out==null {return error.InvalidInput;}if (*s).busy!=0 {return error.Busy;}*out=(*s).info;
+}return;}

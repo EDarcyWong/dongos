@@ -1,0 +1,166 @@
+// Emit one NASM integer truncate / sign-normalize cast line between
+// registers. Stack-local length planning only; failures never leave a
+// half-written instruction. INVALID precedes CAPACITY.
+module bootstrap.nasm_integer_cast;
+pub const OK:u64=0;pub const INVALID:u64=1;pub const CAPACITY:u64=2;
+const MAX:u64=0xffff_ffff_ffff_ffff;
+fn span(p:u64,n:u64)bool{return n==0||(p!=0&&n<=MAX-p);}
+fn overlap(a:u64,n:u64,b:u64,m:u64)bool{return n!=0&&m!=0&&a<b+m&&b<a+n;}
+fn width_ok(width:u64)bool{return width==8||width==16||width==32||width==64;}
+fn reg64_len(r:u64)usize{
+ if r<=7{return 3;}
+ if r<=9{return 2;}
+ return 3;
+}
+fn reg32_len(r:u64)usize{
+ if r<=9{return 3;}
+ return 4;
+}
+fn reg16_len(r:u64)usize{
+ if r<=7{return 2;}
+ if r<=9{return 3;}
+ return 4;
+}
+fn reg8_len(r:u64)usize{
+ if r<=3{return 2;}
+ if r<=9{return 3;}
+ return 4;
+}
+fn write_reg64(out:[]u8,at:usize,r:u64)usize{
+ if r==0{out[at]=114;out[at+1]=97;out[at+2]=120;return at+3;}
+ if r==1{out[at]=114;out[at+1]=99;out[at+2]=120;return at+3;}
+ if r==2{out[at]=114;out[at+1]=100;out[at+2]=120;return at+3;}
+ if r==3{out[at]=114;out[at+1]=98;out[at+2]=120;return at+3;}
+ if r==4{out[at]=114;out[at+1]=115;out[at+2]=112;return at+3;}
+ if r==5{out[at]=114;out[at+1]=98;out[at+2]=112;return at+3;}
+ if r==6{out[at]=114;out[at+1]=115;out[at+2]=105;return at+3;}
+ if r==7{out[at]=114;out[at+1]=100;out[at+2]=105;return at+3;}
+ if r==8{out[at]=114;out[at+1]=56;return at+2;}
+ if r==9{out[at]=114;out[at+1]=57;return at+2;}
+ if r==10{out[at]=114;out[at+1]=49;out[at+2]=48;return at+3;}
+ if r==11{out[at]=114;out[at+1]=49;out[at+2]=49;return at+3;}
+ if r==12{out[at]=114;out[at+1]=49;out[at+2]=50;return at+3;}
+ if r==13{out[at]=114;out[at+1]=49;out[at+2]=51;return at+3;}
+ if r==14{out[at]=114;out[at+1]=49;out[at+2]=52;return at+3;}
+ out[at]=114;out[at+1]=49;out[at+2]=53;return at+3;
+}
+fn write_reg32(out:[]u8,at:usize,r:u64)usize{
+ if r==0{out[at]=101;out[at+1]=97;out[at+2]=120;return at+3;}
+ if r==1{out[at]=101;out[at+1]=99;out[at+2]=120;return at+3;}
+ if r==2{out[at]=101;out[at+1]=100;out[at+2]=120;return at+3;}
+ if r==3{out[at]=101;out[at+1]=98;out[at+2]=120;return at+3;}
+ if r==4{out[at]=101;out[at+1]=115;out[at+2]=112;return at+3;}
+ if r==5{out[at]=101;out[at+1]=98;out[at+2]=112;return at+3;}
+ if r==6{out[at]=101;out[at+1]=115;out[at+2]=105;return at+3;}
+ if r==7{out[at]=101;out[at+1]=100;out[at+2]=105;return at+3;}
+ if r==8{out[at]=114;out[at+1]=56;out[at+2]=100;return at+3;}
+ if r==9{out[at]=114;out[at+1]=57;out[at+2]=100;return at+3;}
+ if r==10{out[at]=114;out[at+1]=49;out[at+2]=48;out[at+3]=100;return at+4;}
+ if r==11{out[at]=114;out[at+1]=49;out[at+2]=49;out[at+3]=100;return at+4;}
+ if r==12{out[at]=114;out[at+1]=49;out[at+2]=50;out[at+3]=100;return at+4;}
+ if r==13{out[at]=114;out[at+1]=49;out[at+2]=51;out[at+3]=100;return at+4;}
+ if r==14{out[at]=114;out[at+1]=49;out[at+2]=52;out[at+3]=100;return at+4;}
+ out[at]=114;out[at+1]=49;out[at+2]=53;out[at+3]=100;return at+4;
+}
+fn write_reg16(out:[]u8,at:usize,r:u64)usize{
+ if r==0{out[at]=97;out[at+1]=120;return at+2;}
+ if r==1{out[at]=99;out[at+1]=120;return at+2;}
+ if r==2{out[at]=100;out[at+1]=120;return at+2;}
+ if r==3{out[at]=98;out[at+1]=120;return at+2;}
+ if r==4{out[at]=115;out[at+1]=112;return at+2;}
+ if r==5{out[at]=98;out[at+1]=112;return at+2;}
+ if r==6{out[at]=115;out[at+1]=105;return at+2;}
+ if r==7{out[at]=100;out[at+1]=105;return at+2;}
+ if r==8{out[at]=114;out[at+1]=56;out[at+2]=119;return at+3;}
+ if r==9{out[at]=114;out[at+1]=57;out[at+2]=119;return at+3;}
+ if r==10{out[at]=114;out[at+1]=49;out[at+2]=48;out[at+3]=119;return at+4;}
+ if r==11{out[at]=114;out[at+1]=49;out[at+2]=49;out[at+3]=119;return at+4;}
+ if r==12{out[at]=114;out[at+1]=49;out[at+2]=50;out[at+3]=119;return at+4;}
+ if r==13{out[at]=114;out[at+1]=49;out[at+2]=51;out[at+3]=119;return at+4;}
+ if r==14{out[at]=114;out[at+1]=49;out[at+2]=52;out[at+3]=119;return at+4;}
+ out[at]=114;out[at+1]=49;out[at+2]=53;out[at+3]=119;return at+4;
+}
+fn write_reg8(out:[]u8,at:usize,r:u64)usize{
+ if r==0{out[at]=97;out[at+1]=108;return at+2;}
+ if r==1{out[at]=99;out[at+1]=108;return at+2;}
+ if r==2{out[at]=100;out[at+1]=108;return at+2;}
+ if r==3{out[at]=98;out[at+1]=108;return at+2;}
+ if r==4{out[at]=115;out[at+1]=112;out[at+2]=108;return at+3;}
+ if r==5{out[at]=98;out[at+1]=112;out[at+2]=108;return at+3;}
+ if r==6{out[at]=115;out[at+1]=105;out[at+2]=108;return at+3;}
+ if r==7{out[at]=100;out[at+1]=105;out[at+2]=108;return at+3;}
+ if r==8{out[at]=114;out[at+1]=56;out[at+2]=98;return at+3;}
+ if r==9{out[at]=114;out[at+1]=57;out[at+2]=98;return at+3;}
+ if r==10{out[at]=114;out[at+1]=49;out[at+2]=48;out[at+3]=98;return at+4;}
+ if r==11{out[at]=114;out[at+1]=49;out[at+2]=49;out[at+3]=98;return at+4;}
+ if r==12{out[at]=114;out[at+1]=49;out[at+2]=50;out[at+3]=98;return at+4;}
+ if r==13{out[at]=114;out[at+1]=49;out[at+2]=51;out[at+3]=98;return at+4;}
+ if r==14{out[at]=114;out[at+1]=49;out[at+2]=52;out[at+3]=98;return at+4;}
+ out[at]=114;out[at+1]=49;out[at+2]=53;out[at+3]=98;return at+4;
+}
+// kind: 0 movsx+src8, 1 movzx+src8, 2 movsx+src16, 3 movzx+src16,
+//       4 movsxd+src32, 5 mov+dest32+src32, 6 mov+dest64+src64
+fn kind_of(width:u64,signed:bool)u64{
+ if width==8{if signed{return 0;}return 1;}
+ if width==16{if signed{return 2;}return 3;}
+ if width==32{if signed{return 4;}return 5;}
+ return 6;
+}
+fn mnem_len(kind:u64)usize{
+ if kind==4{return 7;}
+ if kind==5||kind==6{return 4;}
+ return 6;
+}
+fn dest_len(kind:u64,dest:u64)usize{
+ if kind==5{return reg32_len(dest);}
+ return reg64_len(dest);
+}
+fn src_len(kind:u64,src:u64)usize{
+ if kind==0||kind==1{return reg8_len(src);}
+ if kind==2||kind==3{return reg16_len(src);}
+ if kind==4||kind==5{return reg32_len(src);}
+ return reg64_len(src);
+}
+fn write_mnem(out:[]u8,kind:u64)usize{
+ if kind==0||kind==2{
+  out[0]=109;out[1]=111;out[2]=118;out[3]=115;out[4]=120;out[5]=32;return 6;
+ }
+ if kind==1||kind==3{
+  out[0]=109;out[1]=111;out[2]=118;out[3]=122;out[4]=120;out[5]=32;return 6;
+ }
+ if kind==4{
+  out[0]=109;out[1]=111;out[2]=118;out[3]=115;out[4]=120;out[5]=100;out[6]=32;return 7;
+ }
+ out[0]=109;out[1]=111;out[2]=118;out[3]=32;return 4;
+}
+fn write_dest(out:[]u8,at:usize,kind:u64,dest:u64)usize{
+ if kind==5{return write_reg32(out,at,dest);}
+ return write_reg64(out,at,dest);
+}
+fn write_src(out:[]u8,at:usize,kind:u64,src:u64)usize{
+ if kind==0||kind==1{return write_reg8(out,at,src);}
+ if kind==2||kind==3{return write_reg16(out,at,src);}
+ if kind==4||kind==5{return write_reg32(out,at,src);}
+ return write_reg64(out,at,src);
+}
+pub unsafe fn emit(destination:u64,source:u64,width:u64,signed:bool,out:[]u8,written:*usize)u64{unsafe{
+ let wp=written as u64;let op=out.ptr as u64;
+ if written==null||(wp&7)!=0||!span(wp,8){return INVALID;}
+ if !span(op,out.len){return INVALID;}
+ if overlap(wp,8,op,out.len){return INVALID;}
+ if destination>15||source>15{return INVALID;}
+ if !width_ok(width){return INVALID;}
+ let kind=kind_of(width,signed);
+ let ml=mnem_len(kind);let dl=dest_len(kind,destination);let sl=src_len(kind,source);
+ if ml>MAX-dl{return INVALID;}let a1=ml+dl;
+ if 2>MAX-a1{return INVALID;}let a2=a1+2;
+ if sl>MAX-a2{return INVALID;}let a3=a2+sl;
+ if 1>MAX-a3{return INVALID;}let total=a3+1;
+ if total>out.len{return CAPACITY;}
+ var at=write_mnem(out,kind);
+ at=write_dest(out,at,kind,destination);
+ out[at]=44;out[at+1]=32;at+=2;
+ at=write_src(out,at,kind,source);
+ out[at]=10;
+ *written=total;return OK;
+}}

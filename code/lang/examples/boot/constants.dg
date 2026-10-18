@@ -1,0 +1,19 @@
+module boot.constants;
+
+import boot.abi as abi;
+
+pub type Counter = u16;
+pub const COUNT: usize = 3;
+pub const ELEMENT_BYTES: usize = sizeof(Counter);
+pub const BLOCK_ALIGN: usize = alignof(u64);
+pub type Values = [COUNT]Counter;
+
+pub align(BLOCK_ALIGN) struct Batch { pub tag: u8, pub values: Values }
+pub type BatchAlias = Batch;
+
+pub const LAYOUT_SUM: usize = sizeof(Batch) + alignof(Batch) + offsetof(Batch, values);
+pub const ABI_BYTES: usize = sizeof(abi.BootInfo);
+pub const FIELD_OFFSET: usize = offsetof(abi.BootInfo, memory_map);
+pub const ENABLED: bool = true;
+pub const NARROW: u8 = (300 as u16) as u8;
+pub const MASK: u8 = (128 << 1) + 1;

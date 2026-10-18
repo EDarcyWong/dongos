@@ -1,0 +1,21 @@
+// Compositor startup reads only. The independent Settings app owns writes.
+module desktop.preference_store;
+import lib.files as files;
+import desktop.preferences as preferences;
+import desktop.theme as theme;
+var SESSION:files.Session=files.EMPTY;
+var DATA:[2][129]u8=[[0;129];2];
+var RECORD:preferences.Record=preferences.EMPTY_RECORD;
+unsafe fn read(slot:usize,out:*usize)u64{unsafe{
+ var name:[]const u8="/DESK0.CFG";if slot==1{name="/DESK1.CFG";}var token:u64=0;
+ var status=files.open(&SESSION,SESSION.root,name,files.READ,&token);if status==0x0504_0006{*out=0;return 0;}if status!=0{return status;}
+ status=files.read(&SESSION,token,0,129);let count=SESSION.response.words[1];
+ if status==0{if count>129{status=files.BAD;}else{var i:usize=0;while i<count as usize{DATA[slot][i]=*((SESSION.channel+4096) as *const u8+i);i+=1;}}}
+ let closed=files.close(&SESSION,token);if status!=0{return status;}if closed!=0{return closed;}*out=count as usize;return 0;
+}}
+pub unsafe fn load(endpoint:u64,channel:u64,out:*theme.Theme,found:*bool)u64{unsafe{
+ if out==null||found==null{return files.BAD;}*found=false;var status=files.init(&SESSION,endpoint,channel,395);if status!=0{return status;}
+ var first:usize=0;var second:usize=0;status=read(0,&first);if status==0{status=read(1,&second);}let closed=files.close(&SESSION,SESSION.root);
+ if status!=0{return status;}if closed!=0{return closed;}
+ match preferences.select(DATA[0][0..first],DATA[1][0..second],&RECORD){ok(slot)=>{*out=RECORD.theme;*found=true;return 0;},err(e)=>{if e==0x0724_0005{return 0;}return e;},}
+}}

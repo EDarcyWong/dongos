@@ -1,0 +1,1115 @@
+// Exclusive BSP user address spaces. The first three table pools are kernel BSS; fresh
+// user RAM is held from buddy and accessed only through supervisor aliases.
+// No AP/IRQ may race construction or copying. Failure during initial setup is
+// fail-stop; held memory is never returned while a translation can exist.
+module user.memory;
+import boot.memory_startup as startup;
+import boot.device_memory as devices;
+import mm.paging as paging;
+import mm.paging_errors as paging_errors;
+import mm.phys_buddy as buddy;
+import exec.elf as elf;
+import user.abi as abi;
+import boot.service_memory as resources;
+import user.entropy as entropy;
+import ipc.shared_core as object_core;
+import lib.shared_abi as object_abi;
+
+pub const LIMIT: usize = 16;
+const STATIC_LIMIT:usize=3;
+pub const POOL_PAGES: usize = 32;
+pub const COMPOSITOR_POOL_PAGES:usize=128;
+pub const FRAME_LIMIT: usize = 512;
+pub const ALIASES: u64 = 0xffff_d000_0000_0000;
+pub const STACK_TOP: u64 = 0x0000_007f_fff0_0000;
+const KERNEL: u64 = 0xffff_ffff_8000_0000;
+pub error InvalidState = 0x0406_0001;
+pub error Capacity = 0x0406_0002;
+pub error InvalidAddress = 0x0406_0003;
+pub error InvalidAccess = 0x0406_0004;
+pub error NotOwned = 0x0406_0005;
+pub struct Frame { pub physical: u64, pub virtual: u64, pub writable: u64 }
+pub struct Process { pub ready: u64, pub root: u64, pub frame: abi.Frame, pub plan: elf.Plan }
+const EMPTY_RAM: Frame = Frame { physical: 0, virtual: 0, writable: 0 };
+const EMPTY_PROCESS: Process = Process { ready: 0, root: 0, frame: abi.EMPTY_FRAME, plan: elf.EMPTY_PLAN };
+const EMPTY_TABLE: paging.Table = paging.Table { entries: [0;512] };
+var TABLES: [STATIC_LIMIT][POOL_PAGES]paging.Table = [[EMPTY_TABLE;POOL_PAGES];STATIC_LIMIT];
+var DYNAMIC_TABLES:[LIMIT]*paging.Table=[null;LIMIT];
+var DYNAMIC_PHYSICAL:[LIMIT]u64=[0;LIMIT];
+var POOL_LIMITS:[LIMIT]usize=[POOL_PAGES;LIMIT];
+var META: [LIMIT][COMPOSITOR_POOL_PAGES]u8 = [[0;COMPOSITOR_POOL_PAGES];LIMIT];
+var SPACES: [LIMIT]paging.Space = [paging.EMPTY_SPACE;LIMIT];
+var PROCESSES: [LIMIT]Process = [EMPTY_PROCESS;LIMIT];
+var FRAMES: [FRAME_LIMIT]Frame = [EMPTY_RAM;FRAME_LIMIT];
+var FRAME_COUNT: usize = 0;
+// Lowest index that may still be reusable. Publication of a recycled page
+// rewinds this bound only after the existing withdrawal/zeroing contract.
+var REUSE_FROM:usize=0;
+var EXTENDED: *Frame = null;
+var EXTENDED_LIMIT: usize = 0;
+var KERNEL_PHYSICAL: u64 = 0;
+// Side metadata preserves the published Process/Frame ABI. Retired pages stay
+// owned by this allocator and may only return through fresh(), never to DMA.
+var RECYCLED: [FRAME_LIMIT]u8 = [0;FRAME_LIMIT];
+var EXTENDED_RECYCLED: *u8 = null;
+var GENERATIONS: [LIMIT]u64 = [0;LIMIT];
+var PINNED: [LIMIT]bool = [false;LIMIT];
+// One exclusive BSP loader transaction. A journal includes fresh RAM before
+// either supervisor or USER publication can fail, including unmapped orphans.
+// The desktop journal lives in the arena, keeping the raw kernel bounded.
+var JOURNAL:[FRAME_LIMIT]u16=[0;FRAME_LIMIT];
+var EXTENDED_JOURNAL:*u16=null;
+// Arena-only batch scratch. Frame identities never disappear on reuse.
+// Rebuild before each reference sweep; a new Frame-count invalidates lookup.
+var FRAME_BUCKETS:*u16=null;
+var FRAME_REFERENCES:*u8=null;
+var FRAME_BUCKET_COUNT:usize=0;
+var FRAME_INDEX_COUNT:usize=0;
+var FRAME_INDEX_READY:bool=false;
+var STAGE_ID:usize=LIMIT;
+var STAGE_COUNT:usize=0;
+var STAGE_ROOT:u64=0;
+var STAGE_BOUND:bool=false;
+var STAGE_TABLES:bool=false;
+pub var STAGE_FAILED:bool=false;
+pub var UNSHARE_FAILED:bool=false;
+const UNSHARE_LIMIT:usize=768;
+var UNSHARE_RECEIPTS:*paging.Retired=null;
+var UNSHARE_FRAMES:*u16=null;
+var UNSHARE_ACTIVE:bool=false;
+var UNSHARE_ALLOCATING:bool=false;
+var UNSHARE_COUNT:usize=0;
+pub unsafe extern "sysv64" fn user_pcid_bind(slot:u64,root:u64,generation:u64)u64;
+pub unsafe extern "sysv64" fn user_pcid_unbind(slot:u64,root:u64)u64;
+pub unsafe extern "sysv64" fn user_pcid_flush_all()void;
+pub unsafe extern "sysv64" fn user_pcid_invalidate_root(root:u64)void;
+unsafe extern "sysv64" fn user_current_root()u64;
+pub fn pool_pages(id:usize)usize {unsafe{if id>=LIMIT{return 0;}return POOL_LIMITS[id];}}
+fn uses_static_tables(id:usize)bool {unsafe{return id<STATIC_LIMIT&&POOL_LIMITS[id]==POOL_PAGES;}}
+unsafe fn table_at(id:usize,index:usize)*paging.Table {
+    unsafe { if uses_static_tables(id) { return &TABLES[id][index]; }return DYNAMIC_TABLES[id]+index; }
+}
+unsafe fn prepare_tables(id:usize)!void {
+    unsafe {
+        if id>=LIMIT{return error.InvalidState;}
+        let pages=pool_pages(id);
+        if pages!=POOL_PAGES&&(id!=3||pages!=COMPOSITOR_POOL_PAGES){return error.InvalidState;}
+        if !uses_static_tables(id) && DYNAMIC_TABLES[id]==null {
+            var block=resources.Block { physical:0,virtual:0,pages:0 };
+            try resources.allocate(pages,1,&block);
+            DYNAMIC_TABLES[id]=block.virtual as *paging.Table;DYNAMIC_PHYSICAL[id]=block.physical;
+            user_pcid_flush_all();
+        }
+    }return;
+}
+
+pub unsafe extern "sysv64" fn runtime_copy_bytes(dst: *u8, src: *const u8, bytes: usize) void;
+
+pub fn processes() *Process { unsafe { return &PROCESSES[0]; } }
+pub fn frames() *const Frame { unsafe { if EXTENDED!=null { return EXTENDED; } return &FRAMES[0]; } }
+unsafe fn record(index: usize) *Frame { unsafe { if EXTENDED!=null { return EXTENDED+index; } return &FRAMES[index]; } }
+fn capacity() usize { unsafe { if EXTENDED!=null { return EXTENDED_LIMIT; } return FRAME_LIMIT; } }
+unsafe fn recycled(index:usize)*u8 { unsafe { if EXTENDED_RECYCLED!=null { return EXTENDED_RECYCLED+index; } return &RECYCLED[index]; } }
+unsafe fn available_frames()usize {
+    unsafe {
+        var total=capacity()-FRAME_COUNT;var index:usize=0;
+        while index<FRAME_COUNT { if *recycled(index)==1 { total+=1; }index+=1; }
+        return total;
+    }
+}
+pub fn frame_count() usize { unsafe { return FRAME_COUNT; } }
+unsafe fn journal_at(index:usize)*u16 {unsafe{if EXTENDED_JOURNAL!=null{return EXTENDED_JOURNAL+index;}return &JOURNAL[index];}}
+unsafe fn journal(index:usize)!void {unsafe{
+    if UNSHARE_ALLOCATING{
+        if UNSHARE_FAILED||STAGE_FAILED||STAGE_ID!=LIMIT||UNSHARE_COUNT>=UNSHARE_LIMIT||index>=capacity(){return error.InvalidState;}
+        *(UNSHARE_FRAMES+UNSHARE_COUNT)=index as u16;UNSHARE_COUNT+=1;return;
+    }
+    if STAGE_ID==LIMIT{return;}
+    if UNSHARE_FAILED||STAGE_FAILED||STAGE_COUNT>=capacity()||index>=capacity(){STAGE_FAILED=true;return error.InvalidState;}
+    *journal_at(STAGE_COUNT)=index as u16;STAGE_COUNT+=1;
+}return;}
+fn frame_hash(physical:u64)usize {unsafe{
+    var key=physical>>12;key^=key>>17;
+    key=wrapping_mul(key,0x9e37_79b9_7f4a_7c15);key^=key>>29;
+    return (key&((FRAME_BUCKET_COUNT as u64)-1)) as usize;
+}}
+unsafe fn lookup_frame(physical:u64,out:*usize)!bool {unsafe{
+    if FRAME_BUCKETS==null||out==null||!FRAME_INDEX_READY||FRAME_INDEX_COUNT!=FRAME_COUNT
+        ||FRAME_BUCKET_COUNT<capacity()*2||FRAME_BUCKET_COUNT>32768
+        ||(FRAME_BUCKET_COUNT&(FRAME_BUCKET_COUNT-1))!=0{return error.InvalidState;}
+    var slot=frame_hash(physical);var probes:usize=0;
+    while probes<FRAME_BUCKET_COUNT{
+        let token=*(FRAME_BUCKETS+slot);if token==0{return false;}
+        let index=(token-1) as usize;if index>=FRAME_COUNT{return error.InvalidState;}
+        if (*record(index)).physical==physical{*out=index;return true;}
+        slot=(slot+1)&(FRAME_BUCKET_COUNT-1);probes+=1;
+    }return error.InvalidState;
+}}
+unsafe fn index_frames()!void {unsafe{
+    FRAME_INDEX_READY=false;
+    if FRAME_BUCKETS==null||FRAME_REFERENCES==null||FRAME_COUNT>capacity()
+        ||FRAME_BUCKET_COUNT<capacity()*2||FRAME_BUCKET_COUNT>32768
+        ||(FRAME_BUCKET_COUNT&(FRAME_BUCKET_COUNT-1))!=0{return error.InvalidState;}
+    var slot:usize=0;while slot<FRAME_BUCKET_COUNT{*(FRAME_BUCKETS+slot)=0;slot+=1;}
+    var index:usize=0;while index<FRAME_COUNT{
+        let physical=(*record(index)).physical;if (physical&4095)!=0{return error.InvalidState;}
+        slot=frame_hash(physical);var probes:usize=0;
+        while probes<FRAME_BUCKET_COUNT{
+            let token=*(FRAME_BUCKETS+slot);
+            if token==0{*(FRAME_BUCKETS+slot)=(index+1) as u16;break;}
+            let earlier=(token-1) as usize;
+            if earlier>=index||(*record(earlier)).physical==physical{return error.InvalidState;}
+            slot=(slot+1)&(FRAME_BUCKET_COUNT-1);probes+=1;
+        }
+        if probes==FRAME_BUCKET_COUNT{return error.Capacity;}index+=1;
+    }
+    FRAME_INDEX_COUNT=FRAME_COUNT;FRAME_INDEX_READY=true;
+}return;}
+unsafe fn ensure_frame_index()!void {unsafe{
+    if FRAME_BUCKETS==null{return;}
+    if FRAME_INDEX_READY&&FRAME_INDEX_COUNT==FRAME_COUNT{return;}
+    let indexed=index_frames();match indexed{ok=>{},err(code)=>{
+        FRAME_INDEX_READY=false;UNSHARE_FAILED=true;return indexed;
+    },}
+}return;}
+unsafe fn reference_batch_inner()!void {unsafe{
+    try index_frames();var index:usize=0;
+    while index<FRAME_COUNT{*(FRAME_REFERENCES+index)=0;index+=1;}
+    var id:usize=0;while id<LIMIT{
+        if PROCESSES[id].ready!=0{
+            var table:usize=1;while table<pool_pages(id){
+                if META[id][table]!=0{
+                    var slot:usize=0;while slot<512{
+                        let entry=(*table_at(id,table)).entries[slot];
+                        if (entry&5)==5{
+                            if try lookup_frame(entry&0x000f_ffff_ffff_f000,&index){*(FRAME_REFERENCES+index)=1;}
+                        }slot+=1;
+                    }
+                }table+=1;
+            }
+        }id+=1;
+    }
+}return;}
+unsafe fn reference_batch()!void {unsafe{
+    if FRAME_BUCKETS==null{return;}
+    let scanned=reference_batch_inner();match scanned{ok=>{},err(code)=>{
+        FRAME_INDEX_READY=false;UNSHARE_FAILED=true;return scanned;
+    },}
+}return;}
+unsafe fn referenced_frame(index:usize)bool {unsafe{
+    if index>=FRAME_COUNT{return true;}
+    if FRAME_BUCKETS!=null&&FRAME_REFERENCES!=null&&FRAME_INDEX_READY&&FRAME_INDEX_COUNT==FRAME_COUNT{
+        return *(FRAME_REFERENCES+index)!=0;
+    }
+    return referenced((*record(index)).physical);
+}}
+pub fn staging(id:usize)bool {unsafe{return id<LIMIT&&STAGE_ID==id;}}
+
+// Desktop profile only, before loading the first process. Metadata and RAM
+// come from the loader-owned arena; the legacy bounded profile is unchanged.
+pub unsafe fn enable_arena(limit: usize) !void {
+    unsafe {
+        if KERNEL_PHYSICAL==0 || FRAME_COUNT!=0 || EXTENDED!=null || limit<FRAME_LIMIT || limit>16384 { return error.InvalidState; }
+        var buckets:usize=1;while buckets<limit*2{buckets*=2;}
+        let journal_offset=(limit*(sizeof(Frame)+1)+1)&~1;
+        let bucket_offset=journal_offset+limit*sizeof(u16);
+        let reference_offset=bucket_offset+buckets*sizeof(u16);
+        var block=resources.Block { physical:0,virtual:0,pages:0 };
+        try resources.allocate((reference_offset+limit+4095)/4096,1,&block);
+        EXTENDED=block.virtual as *Frame;EXTENDED_LIMIT=limit;
+        EXTENDED_RECYCLED=(block.virtual+limit as u64*sizeof(Frame) as u64) as *u8;
+        EXTENDED_JOURNAL=(block.virtual+journal_offset as u64) as *u16;
+        FRAME_BUCKETS=(block.virtual+bucket_offset as u64) as *u16;
+        FRAME_REFERENCES=(block.virtual+reference_offset as u64) as *u8;
+        FRAME_BUCKET_COUNT=buckets;FRAME_INDEX_COUNT=0;FRAME_INDEX_READY=false;
+        // Only the desktop profile owns a large compositor pool. It is held
+        // in the arena and retained across process retirement; legacy roots
+        // and ordinary process pools keep their original 32-page contract.
+        POOL_LIMITS[3]=COMPOSITOR_POOL_PAGES;
+    }
+    return;
+}
+
+unsafe fn own_frame(physical: u64) !usize {
+    unsafe {
+        if FRAME_COUNT >= capacity() { return error.Capacity; }
+        let virtual = ALIASES + (FRAME_COUNT as u64) * 4096;
+        let index=FRAME_COUNT;
+        (*record(index))=Frame { physical:physical,virtual:virtual,writable:1 };
+        *recycled(index)=0;FRAME_COUNT+=1;try journal(index);
+        let space = startup.space_pointer();
+        if space == null { return error.InvalidState; }
+        try paging.map_live(space,virtual,physical,paging.WRITE);
+        devices.runtime_invalidate(virtual);
+        user_pcid_flush_all();
+        var offset: usize = 0;
+        while offset < 512 { *((virtual as *u64) + offset) = 0; offset += 1; }
+        return index;
+    }
+}
+
+unsafe fn fresh() !usize {
+    unsafe {
+        if UNSHARE_FAILED{return error.InvalidState;}
+        if REUSE_FROM>FRAME_COUNT{return error.InvalidState;}
+        var reusable:usize=REUSE_FROM;
+        while reusable<FRAME_COUNT {
+            if *recycled(reusable)==1 {
+                var word:usize=0;
+                while word<512 { *(((*record(reusable)).virtual as *u64)+word)=0;word+=1; }
+                *recycled(reusable)=0;REUSE_FROM=reusable+1;try journal(reusable);return reusable;
+            }
+            reusable+=1;
+        }
+        REUSE_FROM=FRAME_COUNT;
+        if FRAME_COUNT >= capacity() || startup.allocator_pointer() == null { return error.Capacity; }
+        var physical:u64=0;
+        if EXTENDED!=null {
+            var held=resources.Block { physical:0,virtual:0,pages:0 };
+            try resources.reserve(1,1,&held);physical=held.physical;
+        } else { physical=try buddy.alloc(startup.allocator_pointer(),0); }
+        return try own_frame(physical);
+    }
+}
+
+unsafe fn frame_index(physical: u64) !usize {
+    unsafe {
+        if FRAME_BUCKETS!=null&&FRAME_INDEX_READY&&FRAME_INDEX_COUNT==FRAME_COUNT{
+            var index:usize=0;if try lookup_frame(physical,&index){return index;}return error.NotOwned;
+        }
+        var i: usize = 0;
+        while i < FRAME_COUNT {
+            if (*record(i)).physical == physical { return i; }
+            i += 1;
+        }
+    }
+    return error.NotOwned;
+}
+
+unsafe fn page(id: usize, virtual: u64, flags: u64) !usize {
+    unsafe {
+        let index = try fresh();
+        try paging.map_live(&SPACES[id],virtual,(*record(index)).physical,flags | paging.USER);
+        devices.runtime_invalidate(virtual);
+        user_pcid_invalidate_root(PROCESSES[id].root);
+        return index;
+    }
+}
+
+pub unsafe fn initialize(kernel_physical: u64) !void {
+    unsafe {
+        if KERNEL_PHYSICAL != 0 || kernel_physical == 0 || (kernel_physical & 4095) != 0 || kernel_physical >= 0x1_0000_0000 {
+            return error.InvalidState;
+        }
+        KERNEL_PHYSICAL = kernel_physical;
+    }
+    return;
+}
+
+// Load a complete validated static/PIE ELF. Code's temporary writable kernel
+// alias is removed before any executable user alias is published to a CPU.
+unsafe fn load_candidate(id: usize, image: []const u8, bias: u64, stack_top: u64) !void {
+    unsafe {
+        if id >= LIMIT || KERNEL_PHYSICAL == 0 || PROCESSES[id].ready != 0 || GENERATIONS[id]==0xffff_ffff_ffff_ffff
+            || stack_top < 0x10_0000 || stack_top >= elf.USER_LIMIT || (stack_top & 4095) != 0 {
+            return error.InvalidState;
+        }
+        try elf.validate(image,bias,&PROCESSES[id].plan);
+        if PROCESSES[id].plan.page_count + 4 > available_frames() as u64 { return error.Capacity; }
+        // Reserve both guard pages as well as the full four-page stack before
+        // allocating any memory. An ELF may not pre-map a guard on its own.
+        var candidate: usize = 0;
+        while candidate < PROCESSES[id].plan.segment_count as usize {
+            let part = PROCESSES[id].plan.segments[candidate];
+            if part.map_start < stack_top + 4096 && stack_top - 5 * 4096 < part.map_start + part.map_size {
+                return error.InvalidAddress;
+            }
+            candidate += 1;
+        }
+        try prepare_tables(id);
+        STAGE_TABLES=true;
+        let pool = slice_from_raw_parts(table_at(id,0),pool_pages(id));
+        var pool_physical=DYNAMIC_PHYSICAL[id];
+        if uses_static_tables(id) { pool_physical=KERNEL_PHYSICAL+((pool.ptr as u64)-KERNEL); }
+        STAGE_ROOT=pool_physical;
+        try paging.init(&SPACES[id],pool,pool_physical,META[id][..],48,true);
+        var segment: usize = 0;
+        while segment < PROCESSES[id].plan.segment_count as usize {
+            let part = PROCESSES[id].plan.segments[segment];
+            var address = part.map_start;
+            while address < part.map_start + part.map_size {
+                var flags: u64 = 0;
+                if (part.flags & 2) != 0 { flags |= paging.WRITE; }
+                if (part.flags & 1) != 0 { flags |= paging.EXECUTE; }
+                let index = try page(id,address,flags);
+                var first = part.virtual;
+                if address > first { first = address; }
+                let limit = address + 4096;
+                let file_end = part.virtual + part.file_size;
+                var last = file_end;
+                if limit < last { last = limit; }
+                if first < last {
+                    runtime_copy_bytes(((*record(index)).virtual + first - address) as *u8,
+                        image.ptr + ((part.file_offset + first - part.virtual) as usize),(last - first) as usize);
+                }
+                if (flags & paging.WRITE) == 0 {
+                    try paging.protect_live(startup.space_pointer(),(*record(index)).virtual,0);
+                    devices.runtime_invalidate((*record(index)).virtual);
+                    user_pcid_flush_all();
+                    (*record(index)).writable = 0;
+                }
+                address += 4096;
+            }
+            segment += 1;
+        }
+        var relocation: u64 = 0;
+        while relocation < PROCESSES[id].plan.relocation_count {
+            var value = elf.Reloc { target: 0, value: 0 };
+            try elf.relocation(image,&PROCESSES[id].plan,relocation,&value);
+            var mapping = paging.Mapping { physical: 0, flags: 0 };
+            try paging.query(&SPACES[id],value.target,&mapping);
+            let index = try frame_index(mapping.physical & ~4095);
+            if (mapping.flags & paging.WRITE) == 0 || (*record(index)).writable == 0 { return error.InvalidAccess; }
+            write_unaligned(((*record(index)).virtual + (value.target & 4095)) as *u64,value.value);
+            relocation += 1;
+        }
+        var at = stack_top - 4 * 4096;
+        while at < stack_top { let index = try page(id,at,paging.WRITE); at += 4096; }
+        // Kernel aliases now exist. Clone supervisor branches only after that
+        // first shared branch was created; all subsequent aliases share it.
+        let view = startup.runtime_pointer();
+        let source = (*view).pool as *const u64;
+        var slot: usize = 1;
+        while slot < 512 { (*table_at(id,0)).entries[slot] = *(source + slot); slot += 1; }
+        PROCESSES[id].root = pool_physical;
+        PROCESSES[id].frame = abi.EMPTY_FRAME;
+        PROCESSES[id].frame.rip = PROCESSES[id].plan.entry;
+        PROCESSES[id].frame.rsp = stack_top - 8;
+        PROCESSES[id].frame.cr3 = pool_physical;
+        PROCESSES[id].frame.rdi = id as u64;
+        GENERATIONS[id]+=1;
+        if user_pcid_bind(id as u64,pool_physical,GENERATIONS[id])!=1 { return error.InvalidState; }
+        STAGE_BOUND=true;
+        PROCESSES[id].ready = 1;
+    }
+    return;
+}
+
+// A candidate may be used by trusted setup-only mapping/copy APIs. It must not
+// enter a runnable catalog before commit. The caller owns the complete stage.
+pub unsafe fn stage(id:usize,image:[]const u8,bias:u64,stack_top:u64)!void {unsafe{
+    if UNSHARE_FAILED||STAGE_FAILED||STAGE_ID!=LIMIT||id>=LIMIT||KERNEL_PHYSICAL==0
+        ||PROCESSES[id].ready!=0||PINNED[id]{return error.InvalidState;}
+    STAGE_ID=id;STAGE_COUNT=0;STAGE_ROOT=0;STAGE_BOUND=false;STAGE_TABLES=false;
+    let loaded=load_candidate(id,image,bias,stack_top);
+    match loaded{ok=>{},err(code)=>{
+        try stage_abort(id);return loaded;
+    },}
+}return;}
+pub unsafe fn stage_commit(id:usize)!void {unsafe{
+    if UNSHARE_FAILED||STAGE_FAILED||id>=LIMIT||STAGE_ID!=id||!STAGE_BOUND||PROCESSES[id].ready!=1{return error.InvalidState;}
+    STAGE_ID=LIMIT;STAGE_COUNT=0;STAGE_ROOT=0;STAGE_BOUND=false;STAGE_TABLES=false;
+}return;}
+unsafe fn abort_candidate(id:usize)!void {unsafe{
+    if PINNED[id]||(STAGE_ROOT!=0&&user_current_root()==STAGE_ROOT){return error.InvalidState;}
+    PROCESSES[id].ready=0;
+    if STAGE_TABLES{atomic_store(&(*table_at(id,0)).entries[0],0);}
+    compiler_fence();user_pcid_flush_all();compiler_fence();
+    if STAGE_BOUND&&user_pcid_unbind(id as u64,STAGE_ROOT)!=1{return error.InvalidState;}
+    try reference_batch();
+    // Prove all reclaimable aliases before changing permissions or publishing
+    // a reusable frame. A kept shared/DMA page is never zeroed or made writable.
+    var at:usize=0;
+    while at<STAGE_COUNT{
+        let index=(*journal_at(at)&0x3fff) as usize;
+        if index>=FRAME_COUNT{return error.InvalidState;}
+        if *recycled(index)==2||referenced_frame(index){
+            *journal_at(at)=(index as u16)|0x8000;
+        }else{
+            var m=paging.Mapping{physical:0,flags:0};
+            try paging.query(startup.space_pointer(),(*record(index)).virtual,&m);
+            if m.physical!=(*record(index)).physical||(m.flags!=0&&m.flags!=paging.WRITE)
+                ||((m.flags&paging.WRITE)!=0)!=((*record(index)).writable!=0){return error.NotOwned;}
+        }at+=1;
+    }
+    at=0;while at<STAGE_COUNT{
+        let entry=*journal_at(at);let index=(entry&0x3fff) as usize;
+        if (entry&0x8000)==0&&(*record(index)).writable==0{
+            try paging.protect_live(startup.space_pointer(),(*record(index)).virtual,paging.WRITE);
+            devices.runtime_invalidate((*record(index)).virtual);user_pcid_flush_all();(*record(index)).writable=1;
+        }at+=1;
+    }
+    at=0;while at<STAGE_COUNT{
+        let entry=*journal_at(at);let index=(entry&0x3fff) as usize;
+        if (entry&0x8000)==0{
+            var word:usize=0;while word<512{*(((*record(index)).virtual as *u64)+word)=0;word+=1;}
+            *recycled(index)=1;
+            if index<REUSE_FROM{REUSE_FROM=index;}
+        }at+=1;
+    }
+    if STAGE_TABLES{var table:usize=0;while table<pool_pages(id){
+        var slot:usize=0;while slot<512{(*table_at(id,table)).entries[slot]=0;slot+=1;}
+        META[id][table]=0;table+=1;
+    }}
+    SPACES[id]=paging.EMPTY_SPACE;PROCESSES[id]=EMPTY_PROCESS;
+    object_abort_owner(id);STAGE_ID=LIMIT;STAGE_COUNT=0;STAGE_ROOT=0;STAGE_BOUND=false;STAGE_TABLES=false;
+}return;}
+pub unsafe fn stage_abort(id:usize)!void {unsafe{
+    if UNSHARE_FAILED||STAGE_FAILED||id>=LIMIT||STAGE_ID!=id{return error.InvalidState;}
+    let aborted=abort_candidate(id);
+    match aborted{ok=>{},err(code)=>{STAGE_FAILED=true;return aborted;},}
+}return;}
+pub unsafe fn load(id:usize,image:[]const u8,bias:u64,stack_top:u64)!void {unsafe{
+    try stage(id,image,bias,stack_top);try stage_commit(id);
+}return;}
+// Entropy failure is explicit; timing and process IDs are never substitutes.
+pub unsafe fn stage_random(id:usize,image:[]const u8)!void {
+    unsafe {
+        if UNSHARE_FAILED||STAGE_FAILED||STAGE_ID!=LIMIT{return error.InvalidState;}
+        var layout=entropy.EMPTY_LAYOUT;try entropy.generate(&layout);
+        // ET_EXEC retains its linked addresses while still requiring strong
+        // entropy for the independent stack. The complete ELF validator owns
+        // every header/range check, including malformed static candidates.
+        if image.ptr!=null&&image.len>=18&&(image.ptr as u64)<=0xffff_ffff_ffff_ffff-image.len as u64{
+            if read_unaligned((image.ptr+16) as *const u16)==2{layout.bias=0;}
+        }
+        try stage(id,image,layout.bias,layout.stack);
+    }return;
+}
+pub unsafe fn load_random(id:usize,image:[]const u8)!void {unsafe{
+    try stage_random(id,image);try stage_commit(id);
+}return;}
+
+// Trusted lease broker only. BSP/IF=0, a noncurrent root, and no parallel user
+// mutation. The broker supplies its exact recorded aperture, never a user VA.
+// Every pending paging receipt is retained until the full translation barrier.
+unsafe fn unshare_precheck(id:usize,base:u64,pages:usize)!void{unsafe{
+    var page:usize=0;while page<pages{
+        var m=paging.Mapping{physical:0,flags:0};
+        try paging.query(&SPACES[id],base+page as u64*4096,&m);
+        if (m.flags&(paging.USER|paging.EXECUTE|paging.UNCACHED))!=paging.USER{return error.InvalidAccess;}
+        let index=try frame_index(m.physical);
+        if *recycled(index)!=0||((m.flags&paging.WRITE)!=0&&(*record(index)).writable!=1){return error.InvalidAccess;}
+        var alias=paging.Mapping{physical:0,flags:0};
+        try paging.query(startup.space_pointer(),(*record(index)).virtual,&alias);
+        if alias.physical!=m.physical||(alias.flags!=0&&alias.flags!=paging.WRITE)
+            ||((alias.flags&paging.WRITE)!=0)!=((*record(index)).writable!=0){return error.NotOwned;}
+        page+=1;
+    }
+}return;}
+unsafe fn unshare_scratch()!void{unsafe{
+    if UNSHARE_RECEIPTS==null{
+        var block=resources.Block{physical:0,virtual:0,pages:0};
+        try resources.allocate((UNSHARE_LIMIT*(sizeof(paging.Retired)+sizeof(u16))+4095)/4096,1,&block);
+        // allocate() supplies ordinary zeroed arena storage; it is retained and
+        // reused. No pending receipt is overwritten to prepare a later call.
+        UNSHARE_RECEIPTS=block.virtual as *paging.Retired;
+        UNSHARE_FRAMES=(block.virtual+UNSHARE_LIMIT as u64*sizeof(paging.Retired) as u64) as *u16;
+    }
+}return;}
+unsafe fn unshare_unmap(id:usize,base:u64,pages:usize)!void{unsafe{
+    var page:usize=0;while page<pages{
+        try paging.unmap_live(&SPACES[id],base+page as u64*4096,UNSHARE_RECEIPTS+page);page+=1;
+    }
+    compiler_fence();user_pcid_invalidate_root(PROCESSES[id].root);user_pcid_flush_all();compiler_fence();
+    page=0;while page<pages{
+        // A zero-table receipt is still pending and must be consumed here.
+        try paging.reclaim(&SPACES[id],UNSHARE_RECEIPTS+page);page+=1;
+    }
+}return;}
+unsafe fn unshare_recycle(pages:usize)!void{unsafe{
+    var page:usize=0;while page<pages{
+        let index=*(UNSHARE_FRAMES+page) as usize;
+        if index>=FRAME_COUNT{return error.InvalidState;}
+        var alias=paging.Mapping{physical:0,flags:0};
+        try paging.query(startup.space_pointer(),(*record(index)).virtual,&alias);
+        if alias.physical!=(*record(index)).physical||(alias.flags!=0&&alias.flags!=paging.WRITE)
+            ||((alias.flags&paging.WRITE)!=0)!=((*record(index)).writable!=0){return error.NotOwned;}
+        page+=1;
+    }
+    try reference_batch();
+    page=0;while page<pages{
+        let index=*(UNSHARE_FRAMES+page) as usize;
+        if *recycled(index)==0{*recycled(index)=4;}else if *recycled(index)!=4{return error.InvalidState;}
+        page+=1;
+    }
+    page=0;while page<pages{
+        let index=*(UNSHARE_FRAMES+page) as usize;
+        if *recycled(index)==4&&referenced_frame(index){*recycled(index)=0;}
+        page+=1;
+    }
+    // Complete all fallible permission work before publishing any reusable
+    // frame. Other live USER aliases and DMA pins cannot reach this branch.
+    page=0;while page<pages{
+        let index=*(UNSHARE_FRAMES+page) as usize;
+        if *recycled(index)==4&&(*record(index)).writable==0{
+            try paging.protect_live(startup.space_pointer(),(*record(index)).virtual,paging.WRITE);
+            devices.runtime_invalidate((*record(index)).virtual);(*record(index)).writable=1;
+        }page+=1;
+    }
+    compiler_fence();user_pcid_flush_all();compiler_fence();
+    page=0;while page<pages{
+        let index=*(UNSHARE_FRAMES+page) as usize;
+        if *recycled(index)==4{
+            var word:usize=0;while word<512{*(((*record(index)).virtual as *u64)+word)=0;word+=1;}
+            *recycled(index)=1;
+            if index<REUSE_FROM{REUSE_FROM=index;}
+        }page+=1;
+    }
+}return;}
+unsafe fn unshare_withdraw(id:usize,base:u64,pages:usize)!void{unsafe{
+    try unshare_unmap(id,base,pages);try unshare_recycle(pages);
+}return;}
+pub unsafe fn unshare_range(id:usize,base:u64,pages:usize)!void{unsafe{
+    if UNSHARE_FAILED||STAGE_FAILED||UNSHARE_ACTIVE||STAGE_ID!=LIMIT||id>=LIMIT
+        ||PROCESSES[id].ready!=1||PINNED[id]||user_current_root()==PROCESSES[id].root{return error.InvalidState;}
+    if pages==0||pages>UNSHARE_LIMIT||base<elf.USER_MIN||base>=elf.USER_LIMIT
+        ||(base&4095)!=0||pages as u64>(elf.USER_LIMIT-base)/4096{return error.InvalidAddress;}
+    try ensure_frame_index();try unshare_precheck(id,base,pages);try unshare_scratch();
+    var page:usize=0;while page<pages{
+        var m=paging.Mapping{physical:0,flags:0};try paging.query(&SPACES[id],base+page as u64*4096,&m);
+        *(UNSHARE_FRAMES+page)=(try frame_index(m.physical)) as u16;page+=1;
+    }
+    UNSHARE_ACTIVE=true;
+    let detached=unshare_withdraw(id,base,pages);
+    match detached{ok=>{},err(code)=>{UNSHARE_FAILED=true;return detached;},}
+    UNSHARE_ACTIVE=false;
+}return;}
+
+pub fn dma_pinned(id:usize)bool { unsafe { return id>=LIMIT || PINNED[id]; } }
+pub fn generation(id:usize)u64 { unsafe { if id>=LIMIT { return 0; }return GENERATIONS[id]; } }
+
+// Scan only the private user branch. All present entries there have U/S=1;
+// intermediate-table PAs are disjoint held BSS/arena table allocations and
+// cannot equal an owned user-RAM frame.
+unsafe fn referenced(physical:u64)bool {
+    unsafe {
+        var id:usize=0;
+        while id<LIMIT {
+            if PROCESSES[id].ready!=0 {
+                var table:usize=1;
+                while table<pool_pages(id) {
+                    if META[id][table]!=0 {
+                        var slot:usize=0;
+                        while slot<512 {
+                            let entry=(*table_at(id,table)).entries[slot];
+                            if (entry&5)==5 && (entry&0x000f_ffff_ffff_f000)==physical { return true; }
+                            slot+=1;
+                        }
+                    }
+                    table+=1;
+                }
+            }
+            id+=1;
+        }
+    }return false;
+}
+
+// BSP/IF=0 only. No AP executes these roots. The caller first removes the
+// process from scheduling and revokes its capabilities/IPC. Drivers with a
+// live DMA lease are deliberately ineligible: keeping their RAM is mandatory.
+// The current root may not be destroyed. A failure remains fail-stop/held.
+pub unsafe fn destroy(id:usize)!void {
+    unsafe {
+        if UNSHARE_FAILED||STAGE_FAILED||STAGE_ID!=LIMIT||id>=LIMIT || PROCESSES[id].ready!=1 || PINNED[id] || user_current_root()==PROCESSES[id].root { return error.InvalidState; }
+        let root=PROCESSES[id].root;
+        PROCESSES[id].ready=0;
+        atomic_store(&(*table_at(id,0)).entries[0],0);
+        compiler_fence();user_pcid_flush_all();compiler_fence();
+        if user_pcid_unbind(id as u64,root)!=1 { return error.InvalidState; }
+        try reference_batch();
+        // The detached private tables still contain the retiring root's USER
+        // leaves. Only RAM referenced by those entries can lose its final
+        // reference in this operation. Do not scan every desktop/cache frame
+        // against every live tree. Intermediate table PAs and external device
+        // or bundle pages are disjoint from owned Frame allocations.
+        var table:usize=1;
+        while table<pool_pages(id) {
+            if META[id][table]!=0 {
+                var slot:usize=0;
+                while slot<512 {
+                    let entry=(*table_at(id,table)).entries[slot];
+                    if (entry&5)==5 {
+                        match frame_index(entry&0x000f_ffff_ffff_f000) {
+                            ok(index)=>{if *recycled(index)==0{*recycled(index)=4;}},
+                            err(code)=>{},
+                        }
+                    }
+                    slot+=1;
+                }
+            }
+            table+=1;
+        }
+        var index:usize=0;
+        while index<FRAME_COUNT {
+            if *recycled(index)==4 {
+                if referenced_frame(index) {
+                    *recycled(index)=0;index+=1;continue;
+                }
+                // Executable USER aliases are gone and their translations
+                // retired before restoring a writable supervisor alias.
+                if (*record(index)).writable==0 {
+                    try paging.protect_live(startup.space_pointer(),(*record(index)).virtual,paging.WRITE);
+                    devices.runtime_invalidate((*record(index)).virtual);
+                    user_pcid_flush_all();(*record(index)).writable=1;
+                }
+                *recycled(index)=1;
+            if index<REUSE_FROM{REUSE_FROM=index;}
+            }
+            index+=1;
+        }
+        table=0;
+        while table<pool_pages(id) {
+            var slot:usize=0;
+            while slot<512 { (*table_at(id,table)).entries[slot]=0;slot+=1; }
+            META[id][table]=0;table+=1;
+        }
+        SPACES[id]=paging.EMPTY_SPACE;PROCESSES[id]=EMPTY_PROCESS;
+    }return;
+}
+
+pub unsafe fn check_range(id: usize, address: u64, bytes: usize, write: bool) !void {
+    unsafe {
+        if OBJECT_FAILED || id >= LIMIT || PROCESSES[id].ready == 0 || address < elf.USER_MIN || address >= elf.USER_LIMIT
+            || (bytes as u64) > elf.USER_LIMIT - address { return error.InvalidAddress; }
+        if bytes == 0 { return; }
+        var page = address & ~4095;
+        let last = (address + bytes as u64 - 1) & ~4095;
+        loop {
+            var m = paging.Mapping { physical: 0, flags: 0 };
+            try paging.query(&SPACES[id],page,&m);
+            if (m.flags & paging.USER) == 0 || (write && (m.flags & paging.WRITE) == 0) { return error.InvalidAccess; }
+            let checked_alias = try copy_alias(id,page,&m,write);
+            if page == last { break; }
+            page += 4096;
+        }
+    }
+    return;
+}
+
+// Trusted BSP borrow only: the owner remains live and its mapping cannot be
+// changed/destroyed for this borrow's lifetime. No MMIO/resource mapping can
+// manufacture an alias; only an owned RAM Frame is eligible. Callers caching
+// this pointer must revoke it before process retirement or permission change.
+pub unsafe fn owned_alias(id:usize,virtual:u64,write:bool)!u64 {
+    unsafe {
+        try check_range(id,virtual,1,write);
+        var mapping=paging.Mapping { physical:0,flags:0 };
+        try paging.query(&SPACES[id],virtual&~4095,&mapping);
+        return try copy_alias(id,virtual,&mapping,write);
+    }
+}
+
+// Complete-range prevalidation precedes all copies. Kernel dereferences only
+// owned supervisor aliases, so SMAP stays enabled and AC stays zero.
+pub unsafe fn copy_in(id: usize, address: u64, output: []u8) !void {
+    unsafe {
+        try check_range(id,address,output.len,false);
+        var offset: usize = 0;
+        while offset < output.len {
+            let current = address + offset as u64;
+            var m = paging.Mapping { physical: 0, flags: 0 };
+            try paging.query(&SPACES[id],current & ~4095,&m);
+            let alias = try copy_alias(id,current,&m,false);
+            let available = 4096 - ((current & 4095) as usize);
+            let left = output.len - offset;
+            var count = available;
+            if left < count { count = left; }
+            runtime_copy_bytes(output.ptr + offset,alias as *const u8,count);
+            offset += count;
+        }
+    }
+    return;
+}
+pub unsafe fn copy_out(id: usize, address: u64, input: []const u8) !void {
+    unsafe {
+        try check_range(id,address,input.len,true);
+        var offset: usize = 0;
+        while offset < input.len {
+            let current = address + offset as u64;
+            var m = paging.Mapping { physical: 0, flags: 0 };
+            try paging.query(&SPACES[id],current & ~4095,&m);
+            let alias = try copy_alias(id,current,&m,true);
+            let available = 4096 - ((current & 4095) as usize);
+            let left = input.len - offset;
+            var count = available;
+            if left < count { count = left; }
+            runtime_copy_bytes(alias as *u8,input.ptr + offset,count);
+            offset += count;
+        }
+    }
+    return;
+}
+
+// Privileged setup-only shared data mapping. The caller has not entered any
+// of these roots yet; they are never changed behind a running CPU.
+pub unsafe fn anonymous(id: usize, virtual: u64) !u64 {
+    unsafe {
+        if id >= LIMIT || PROCESSES[id].ready == 0 || virtual < elf.USER_MIN || virtual >= elf.USER_LIMIT || (virtual & 4095) != 0 {
+            return error.InvalidAddress;
+        }
+        let index = try page(id,virtual,paging.WRITE);
+        return (*record(index)).physical;
+    }
+}
+pub unsafe fn share(source: usize, target: usize, virtual: u64, write: bool) !void {
+    unsafe { return share_at(source,target,virtual,virtual,write); }
+}
+
+// Owned data only, BSP/IF=0. Both roots and the source allocation remain
+// stable throughout publication. The target must be absent; map_live performs
+// that complete preflight before allocating tables or publishing any entry.
+pub unsafe fn share_at(source:usize,target:usize,source_virtual:u64,target_virtual:u64,write:bool)!void {
+    unsafe {
+        if source >= LIMIT || target >= LIMIT || PROCESSES[source].ready == 0 || PROCESSES[target].ready == 0
+            || source_virtual < elf.USER_MIN || source_virtual >= elf.USER_LIMIT || (source_virtual & 4095) != 0
+            || target_virtual < elf.USER_MIN || target_virtual >= elf.USER_LIMIT || (target_virtual & 4095) != 0
+            || 4096>elf.USER_LIMIT-source_virtual || 4096>elf.USER_LIMIT-target_virtual { return error.InvalidAddress; }
+        var mapping = paging.Mapping { physical: 0, flags: 0 };
+        try paging.query(&SPACES[source],source_virtual,&mapping);
+        if (mapping.flags & (paging.USER | paging.EXECUTE | paging.UNCACHED)) != paging.USER
+            || (write && (mapping.flags & paging.WRITE) == 0) { return error.InvalidAccess; }
+        let index = try frame_index(mapping.physical);
+        if write&&(*record(index)).writable!=1 { return error.InvalidAccess; }
+        var flags = paging.USER;
+        if write { flags |= paging.WRITE; }
+        try paging.map_live(&SPACES[target],target_virtual,mapping.physical,flags);
+        devices.runtime_invalidate(target_virtual);
+        user_pcid_invalidate_root(PROCESSES[target].root);
+    }
+    return;
+}
+
+// Exclusive BSP publication of a device grant. The privileged caller must
+// verify the physical MMIO range and lifetime; ordinary user-copy rejects it
+// because this mapping has no owned RAM Frame record.
+pub unsafe fn map_device(id: usize, virtual: u64, physical: u64, bytes: u64) !void {
+    unsafe {
+        if id >= LIMIT || PROCESSES[id].ready == 0 || virtual < elf.USER_MIN || virtual >= elf.USER_LIMIT
+            || bytes == 0 || (virtual & 4095) != 0 || (physical & 4095) != 0 || (bytes & 4095) != 0
+            || bytes > elf.USER_LIMIT - virtual || physical == 0 || physical >= 0x1_0000_0000_0000
+            || bytes > 0x1_0000_0000_0000 - physical { return error.InvalidAddress; }
+        var offset: u64 = 0;
+        while offset < bytes {
+            try paging.map_live(&SPACES[id],virtual + offset,physical + offset,paging.USER | paging.WRITE | paging.UNCACHED);
+            devices.runtime_invalidate(virtual + offset);
+            offset += 4096;
+        }
+        user_pcid_invalidate_root(PROCESSES[id].root);
+    }
+    return;
+}
+
+// Setup-only immutable bundle view; the trusted bridge has already validated
+// the whole payload hash and zero padding. No RAM owner or writable alias is
+// manufactured, and ordinary syscall copy rejects these external frames.
+pub unsafe fn map_resource(id:usize,virtual:u64,physical:u64,bytes:u64)!void {
+    unsafe {
+        if id>=LIMIT || PROCESSES[id].ready==0 || virtual<elf.USER_MIN || virtual>=elf.USER_LIMIT
+            || bytes==0 || (virtual&4095)!=0 || (physical&4095)!=0 || (bytes&4095)!=0
+            || bytes>elf.USER_LIMIT-virtual || physical==0 || physical>=0x1_0000_0000
+            || bytes>0x1_0000_0000-physical { return error.InvalidAddress; }
+        var offset:u64=0;
+        while offset<bytes {
+            try paging.map_live(&SPACES[id],virtual+offset,physical+offset,paging.USER);
+            devices.runtime_invalidate(virtual+offset);offset+=4096;
+        }
+        user_pcid_invalidate_root(PROCESSES[id].root);
+    }
+    return;
+}
+
+// A bounded coherent DMA allocation. The whole power-of-two block remains
+// held for the service lifetime; no page can be recycled behind a live device.
+pub unsafe fn contiguous(id: usize, virtual: u64, requested: usize) !u64 {
+    unsafe {
+        if id >= LIMIT || PROCESSES[id].ready == 0 || requested == 0 || requested > 32
+            || virtual < elf.USER_MIN || virtual >= elf.USER_LIMIT || (virtual & 4095) != 0 {
+            return error.InvalidAddress;
+        }
+        var order: usize = 0; var pages: usize = 1;
+        while pages < requested { pages *= 2; order += 1; }
+        if pages > capacity() - FRAME_COUNT || (pages as u64) * 4096 > elf.USER_LIMIT - virtual { return error.Capacity; }
+        var physical:u64=0;
+        if EXTENDED!=null {
+            var held=resources.Block { physical:0,virtual:0,pages:0 };
+            try resources.reserve(pages,pages,&held);physical=held.physical;
+        } else { physical=try buddy.alloc(startup.allocator_pointer(),order); }
+        var offset: usize = 0;
+        PINNED[id]=true;
+        while offset < pages {
+            let index = try own_frame(physical + offset as u64 * 4096);
+            *recycled(index)=2;
+            try paging.map_live(&SPACES[id],virtual + offset as u64 * 4096,(*record(index)).physical,paging.USER | paging.WRITE);
+            devices.runtime_invalidate(virtual + offset as u64 * 4096);
+            offset += 1;
+        }
+        user_pcid_invalidate_root(PROCESSES[id].root);
+        return physical;
+    }
+}
+
+pub unsafe fn readonly_data(id: usize,virtual: u64) !void {
+    unsafe {
+        if id>=LIMIT || PROCESSES[id].ready==0 || (virtual&4095)!=0 { return error.InvalidState; }
+        try check_range(id,virtual,4096,true);
+        try paging.protect_live(&SPACES[id],virtual,paging.USER);
+        devices.runtime_invalidate(virtual);
+        user_pcid_invalidate_root(PROCESSES[id].root);
+    }
+    return;
+}
+
+// Trusted desktop bridge only: external bundle pages remain immutable/held.
+// No user address or PA is accepted by the public syscall selecting this path.
+pub var RESOURCE_FAILED:bool=false;
+fn resource_page(physical:u64,bytes:u64,offset:u64)u64 {
+    let rounded=((bytes+4095)/4096)*4096;
+    if offset<rounded { return physical+offset; }return physical+rounded-4096;
+}
+pub unsafe fn resource_aperture(id:usize,virtual:u64,physical:u64,bytes:u64)!void {
+    unsafe {
+        if id!=3 || virtual!=0x7200_0000 || bytes<48 || bytes>0x80_0000 || (physical&4095)!=0
+            || physical==0 || physical>=0x1_0000_0000 || bytes>0x1_0000_0000-physical { return error.InvalidAddress; }
+        var offset:u64=0;while offset<0x80_0000 {
+            try paging.map_live(&SPACES[id],virtual+offset,resource_page(physical,bytes,offset),paging.USER);
+            devices.runtime_invalidate(virtual+offset);offset+=4096;
+        }
+        user_pcid_invalidate_root(PROCESSES[id].root);
+    }return;
+}
+pub unsafe fn readonly_alias(id:usize,virtual:u64)!u64 {
+    unsafe {
+        if id!=3 || virtual!=0x7000_1000 { return error.InvalidAddress; }
+        var m=paging.Mapping { physical:0,flags:0 };try paging.query(&SPACES[id],virtual,&m);
+        if m.flags!=paging.USER { return error.InvalidAccess; }
+        let index=try frame_index(m.physical);if (*record(index)).writable!=1 { return error.InvalidAccess; }
+        return (*record(index)).virtual;
+    }
+}
+pub unsafe fn replace_resource_aperture(id:usize,virtual:u64,old_physical:u64,old_bytes:u64,physical:u64,bytes:u64)!void {
+    unsafe {
+        if id!=3 || virtual!=0x7200_0000 || RESOURCE_FAILED || PROCESSES[id].ready!=1
+            || old_bytes<48 || old_bytes>0x80_0000 || bytes<48 || bytes>0x80_0000
+            || physical==0 || old_physical==0 || (physical&4095)!=0 || (old_physical&4095)!=0
+            || physical>=0x1_0000_0000 || bytes>0x1_0000_0000-physical
+            || old_physical>=0x1_0000_0000 || old_bytes>0x1_0000_0000-old_physical { return error.InvalidAddress; }
+        var offset:u64=0;while offset<0x80_0000 {
+            var m=paging.Mapping { physical:0,flags:0 };try paging.query(&SPACES[id],virtual+offset,&m);
+            if m.flags!=paging.USER || m.physical!=resource_page(old_physical,old_bytes,offset) { return error.InvalidAccess; }
+            offset+=4096;
+        }
+        // All structure/PA preflight is complete. An unexpected commit error
+        // must stop the service runtime; it may never resume a mixed aperture.
+        RESOURCE_FAILED=true;offset=0;
+        while offset<0x80_0000 {
+            try paging.replace_live(&SPACES[id],virtual+offset,resource_page(physical,bytes,offset),paging.USER);offset+=4096;
+        }
+        compiler_fence();devices.runtime_flush_root();user_pcid_flush_all();compiler_fence();RESOURCE_FAILED=false;
+    }return;
+}
+
+// The GUI broker alone supplies held immutable font bundle spans. Ordinary
+// callers cannot choose PA/VA or use this mapping as owned RAM. Initial map
+// belongs to the active ELF stage and abort_candidate withdraws its complete
+// private branch; a later update is an all-page precheck then fail-stop commit.
+pub unsafe fn gui_resource_aperture(id:usize,old_physical:u64,old_bytes:u64,physical:u64,bytes:u64)!void {unsafe {
+    if RESOURCE_FAILED||UNSHARE_FAILED||STAGE_FAILED||id<7||id>=LIMIT||id==13||PROCESSES[id].ready!=1
+        ||GENERATIONS[id]==0||PINNED[id]||user_current_root()==PROCESSES[id].root {return error.InvalidState;}
+    if bytes<48||bytes>0x80_0000||physical==0||(physical&4095)!=0||physical>=0x1_0000_0000
+        ||bytes>0x1_0000_0000-physical {return error.InvalidAddress;}
+    let initial=old_physical==0;
+    if initial {
+        if old_bytes!=0||!staging(id) {return error.InvalidState;}
+        // All 2048 pages must be absent before any table entry is changed.
+        try shared_absent(id,0x7200_0000,2048);
+    }else {
+        if STAGE_ID!=LIMIT||old_bytes<48||old_bytes>0x80_0000||(old_physical&4095)!=0
+            ||old_physical>=0x1_0000_0000||old_bytes>0x1_0000_0000-old_physical {return error.InvalidAddress;}
+        var offset:u64=0;while offset<0x80_0000 {
+            var m=paging.Mapping {physical:0,flags:0};try paging.query(&SPACES[id],0x7200_0000+offset,&m);
+            if m.flags!=paging.USER||m.physical!=resource_page(old_physical,old_bytes,offset) {return error.InvalidAccess;}
+            offset+=4096;
+        }
+    }
+    // Bundle bytes are outside the Frame allocator. Catch accidental reuse of
+    // an owned RAM span even if a privileged broker supplies the wrong span.
+    var offset:u64=0;let rounded=((bytes+4095)/4096)*4096;
+    while offset<rounded {
+        match frame_index(physical+offset) {ok(index)=>{return error.InvalidAccess;},err(code)=>{if code!=0x0406_0005 {return error.NotOwned;}},}
+        offset+=4096;
+    }
+    if !initial&&old_physical==physical&&old_bytes==bytes {return;}
+    if !initial {RESOURCE_FAILED=true;}
+    offset=0;while offset<0x80_0000 {
+        if initial {try paging.map_live(&SPACES[id],0x7200_0000+offset,resource_page(physical,bytes,offset),paging.USER);}
+        else {try paging.replace_live(&SPACES[id],0x7200_0000+offset,resource_page(physical,bytes,offset),paging.USER);}
+        offset+=4096;
+    }
+    compiler_fence();devices.runtime_flush_root();user_pcid_flush_all();compiler_fence();
+    // An error in the replacement loop never reaches this clear. Initial
+    // failures remain abortable stages, before scheduling/catalog publication.
+    if !initial {RESOURCE_FAILED=false;}
+}return;}
+
+// Exclusive two-root allocation transaction. journal() records each recycled
+// selection/new owner before supervisor or USER publication can fail. The
+// broker publishes its lease only after this returns success.
+unsafe fn shared_absent(id:usize,base:u64,pages:usize)!void{unsafe{
+    var page:usize=0;while page<pages{
+        var m=paging.Mapping{physical:0,flags:0};
+        let queried=paging.query(&SPACES[id],base+page as u64*4096,&m);
+        match queried{ok=>{return error.InvalidAccess;},err(code)=>{if code!=0x0203_0002{return queried;}},}
+        page+=1;
+    }
+}return;}
+unsafe fn shared_cleanup(source:usize,target:usize,source_base:u64,target_base:u64,source_pages:usize,target_pages:usize)!void{unsafe{
+    if source_pages!=0{try unshare_unmap(source,source_base,source_pages);}
+    if target_pages!=0{try unshare_unmap(target,target_base,target_pages);}
+    // Even a fresh supervisor alias failure may leave a journaled orphan.
+    // Its alias must be proven before it can be zeroed/reused; otherwise hold.
+    if UNSHARE_COUNT!=0{try unshare_recycle(UNSHARE_COUNT);}
+}return;}
+unsafe fn shared_candidate(source:usize,target:usize,source_base:u64,target_base:u64,pages:usize,source_pages:*usize,target_pages:*usize)!void{unsafe{
+    var page:usize=0;while page<pages{
+        let index=try fresh();
+        try paging.map_live(&SPACES[source],source_base+page as u64*4096,(*record(index)).physical,paging.USER|paging.WRITE);
+        *source_pages+=1;
+        try paging.map_live(&SPACES[target],target_base+page as u64*4096,(*record(index)).physical,paging.USER|paging.WRITE);
+        *target_pages+=1;page+=1;
+    }
+}return;}
+pub unsafe fn allocate_shared(source:usize,target:usize,source_base:u64,target_base:u64,pages:usize)!void{unsafe{
+    if UNSHARE_FAILED||STAGE_FAILED||UNSHARE_ACTIVE||STAGE_ID!=LIMIT||source>=LIMIT||target>=LIMIT||source==target
+        ||PROCESSES[source].ready!=1||PROCESSES[target].ready!=1||PINNED[source]||PINNED[target]
+        ||user_current_root()==PROCESSES[source].root||user_current_root()==PROCESSES[target].root{return error.InvalidState;}
+    if pages==0||pages>UNSHARE_LIMIT||source_base<elf.USER_MIN||source_base>=elf.USER_LIMIT||target_base<elf.USER_MIN||target_base>=elf.USER_LIMIT
+        ||(source_base&4095)!=0||(target_base&4095)!=0||pages as u64>(elf.USER_LIMIT-source_base)/4096
+        ||pages as u64>(elf.USER_LIMIT-target_base)/4096{return error.InvalidAddress;}
+    try shared_absent(source,source_base,pages);try shared_absent(target,target_base,pages);
+    if pages>available_frames(){return error.Capacity;}try unshare_scratch();
+    UNSHARE_ACTIVE=true;UNSHARE_ALLOCATING=true;UNSHARE_COUNT=0;
+    var source_pages:usize=0;var target_pages:usize=0;
+    let created=shared_candidate(source,target,source_base,target_base,pages,&source_pages,&target_pages);
+    UNSHARE_ALLOCATING=false;
+    match created{ok=>{},err(code)=>{
+        let cleanup=shared_cleanup(source,target,source_base,target_base,source_pages,target_pages);
+        match cleanup{ok=>{UNSHARE_ACTIVE=false;return created;},err(failure)=>{UNSHARE_FAILED=true;return cleanup;},}
+    },}
+    compiler_fence();user_pcid_invalidate_root(PROCESSES[source].root);user_pcid_invalidate_root(PROCESSES[target].root);user_pcid_flush_all();compiler_fence();
+    UNSHARE_ACTIVE=false;
+}return;}
+
+
+// Generic object-owned RAM aperture, distinct from creator FRAMES and resources.
+pub var OBJECT_FAILED:bool=false;
+var OBJECT_REGISTRY:*object_core.Registry=null;
+var OBJECT_RECEIPTS:*paging.Retired=null;
+unsafe extern "sysv64" fn user_shared_barrier()u64;
+pub unsafe fn object_failed()void{unsafe{OBJECT_FAILED=true;}return;}
+pub unsafe fn object_attach(reg:*object_core.Registry)!void{unsafe{
+ if OBJECT_REGISTRY!=null||reg==null||(*reg).ready!=1||OBJECT_FAILED{return error.InvalidState;}
+ var page:usize=0;while page<128{var m=paging.Mapping{physical:0,flags:0};
+  try paging.query(startup.space_pointer(),(*reg).pool_alias+page as u64*4096,&m);
+  if m.physical!=(*reg).pool_physical+page as u64*4096||m.flags!=paging.WRITE{return error.NotOwned;}page+=1;
+ }
+ var block=resources.Block{physical:0,virtual:0,pages:0};
+ try resources.allocate((16*sizeof(paging.Retired)+4095)/4096,1,&block);
+ OBJECT_RECEIPTS=block.virtual as *paging.Retired;OBJECT_REGISTRY=reg;
+}return;}
+pub unsafe fn object_slot_precheck(index:usize,pages:usize)!void{unsafe{
+ if OBJECT_REGISTRY==null||OBJECT_FAILED||index>=8||pages==0||pages>16{return error.InvalidState;}
+ var p:usize=0;while p<pages{var m=paging.Mapping{physical:0,flags:0};
+  try paging.query(startup.space_pointer(),object_core.alias(OBJECT_REGISTRY,index)+p as u64*4096,&m);
+  if m.physical!=object_core.physical(OBJECT_REGISTRY,index)+p as u64*4096||m.flags!=paging.WRITE{return error.NotOwned;}p+=1;
+ }
+}return;}
+unsafe fn object_alias(id:usize,address:u64,mapping:*const paging.Mapping,write:bool)!u64{unsafe{
+ if OBJECT_FAILED||OBJECT_REGISTRY==null||id>=LIMIT||PROCESSES[id].ready!=1
+  ||address<object_core.BASE||address>=object_core.BASE+4*object_core.STRIDE{return error.NotOwned;}
+ let index=((address-object_core.BASE)/object_core.STRIDE) as usize;let map=(*OBJECT_REGISTRY).maps[id][index];
+ let owner=(*OBJECT_REGISTRY).owners[id];
+ let confirmed=try object_core.map_get(OBJECT_REGISTRY,id,owner,GENERATIONS[id],(map.generation<<8)|index as u64+1);
+ if confirmed!=index||address<map.address||address-map.address>=map.pages as u64*4096
+  ||(write&&(map.rights&2)==0){return error.InvalidAccess;}
+ let object=try object_core.get(OBJECT_REGISTRY,map.object);let offset=(address-map.address)&~4095;
+ var flags=paging.USER;if (map.rights&2)!=0{flags|=paging.WRITE;}
+ if (*mapping).physical!=object_core.physical(OBJECT_REGISTRY,object)+offset||(*mapping).flags!=flags{object_core.hold_map(OBJECT_REGISTRY,id,index);OBJECT_FAILED=true;return error.NotOwned;}
+ var alias=paging.Mapping{physical:0,flags:0};let supervisor=object_core.alias(OBJECT_REGISTRY,object)+offset;
+ try paging.query(startup.space_pointer(),supervisor,&alias);
+ if alias.physical!=(*mapping).physical||alias.flags!=paging.WRITE{object_core.hold_map(OBJECT_REGISTRY,id,index);OBJECT_FAILED=true;return error.NotOwned;}
+ return supervisor+(address&4095);
+}}
+unsafe fn copy_alias(id:usize,address:u64,mapping:*const paging.Mapping,write:bool)!u64{unsafe{
+ let index=frame_index((*mapping).physical);
+ match index{ok(i)=>{
+  if write&&(*record(i)).writable==0{return error.InvalidAccess;}
+  return (*record(i)).virtual+(address&4095);
+ },err(code)=>{return try object_alias(id,address,mapping,write);},}
+}}
+unsafe fn object_precheck(id:usize,map:*const object_core.Map)!void{unsafe{
+ let object=try object_core.get(OBJECT_REGISTRY,(*map).object);try object_slot_precheck(object,(*map).pages);
+ var flags=paging.USER;if ((*map).rights&2)!=0{flags|=paging.WRITE;}
+ var p:usize=0;while p<(*map).pages{var m=paging.Mapping{physical:0,flags:0};
+  try paging.query(&SPACES[id],(*map).address+p as u64*4096,&m);
+  if m.physical!=object_core.physical(OBJECT_REGISTRY,object)+p as u64*4096||m.flags!=flags{return error.NotOwned;}p+=1;
+ }
+}return;}
+unsafe fn object_map_commit(id:usize,index:usize)!void{unsafe{
+ let map=(*OBJECT_REGISTRY).maps[id][index];let object=try object_core.get(OBJECT_REGISTRY,map.object);
+ var flags=paging.USER;if (map.rights&2)!=0{flags|=paging.WRITE;}
+ var p:usize=0;while p<map.pages{
+  try paging.map_live(&SPACES[id],map.address+p as u64*4096,object_core.physical(OBJECT_REGISTRY,object)+p as u64*4096,flags);p+=1;
+ }
+ compiler_fence();if user_shared_barrier()!=1{return error.InvalidState;}compiler_fence();
+ object_core.publish_map(OBJECT_REGISTRY,id,index);
+}return;}
+pub unsafe fn object_map(id:usize,owner:u64,object:u64,rights:u64,out:*object_abi.Mapping)!void{unsafe{
+ if OBJECT_FAILED||UNSHARE_FAILED||STAGE_FAILED||STAGE_ID!=LIMIT||id>=LIMIT||PROCESSES[id].ready!=1
+  ||PINNED[id]||user_current_root()==PROCESSES[id].root||out==null||OBJECT_REGISTRY==null{return error.InvalidState;}
+ if !object_core.owner_valid(id,owner)||(*OBJECT_REGISTRY).owners[id]!=owner{return error.InvalidState;}
+ let obj=try object_core.get(OBJECT_REGISTRY,object);let pages=(*OBJECT_REGISTRY).objects[obj].pages;
+ try object_slot_precheck(obj,pages);var index:usize=0;
+ while index<4{let m=(*OBJECT_REGISTRY).maps[id][index];if m.state==0&&m.generation<0x00ff_ffff_ffff_ffff{break;}index+=1;}
+ if index==4{return error.Capacity;}try shared_absent(id,object_core.BASE+index as u64*object_core.STRIDE,pages);
+ let reserved=try object_core.reserve_map(OBJECT_REGISTRY,id,owner,GENERATIONS[id],object,rights);
+ if reserved!=index{OBJECT_FAILED=true;object_core.hold_map(OBJECT_REGISTRY,id,reserved);return error.InvalidState;}
+ let installed=object_map_commit(id,index);match installed{ok=>{},err(code)=>{object_core.hold_map(OBJECT_REGISTRY,id,index);OBJECT_FAILED=true;return installed;},}
+ let map=(*OBJECT_REGISTRY).maps[id][index];
+ *out=object_abi.Mapping{version:1,token:(map.generation<<8)|index as u64+1,address:map.address,bytes:map.pages as u64*4096,rights:map.rights,reserved:[0;3]};
+}return;}
+unsafe fn object_withdraw(id:usize,index:usize)!void{unsafe{
+ let map=(*OBJECT_REGISTRY).maps[id][index];var p:usize=0;
+ while p<map.pages{try paging.unmap_live(&SPACES[id],map.address+p as u64*4096,OBJECT_RECEIPTS+p);p+=1;}
+ compiler_fence();if user_shared_barrier()!=1{return error.InvalidState;}compiler_fence();
+ p=0;while p<map.pages{try paging.reclaim(&SPACES[id],OBJECT_RECEIPTS+p);p+=1;}
+}return;}
+pub unsafe fn object_unmap(id:usize,owner:u64,token:u64,out:*u64)!void{unsafe{
+ if OBJECT_FAILED||UNSHARE_FAILED||STAGE_FAILED||STAGE_ID!=LIMIT||id>=LIMIT||PROCESSES[id].ready!=1
+  ||PINNED[id]||user_current_root()==PROCESSES[id].root||OBJECT_RECEIPTS==null||out==null{return error.InvalidState;}
+ let index=try object_core.map_get(OBJECT_REGISTRY,id,owner,GENERATIONS[id],token);
+ let prechecked=object_precheck(id,&(*OBJECT_REGISTRY).maps[id][index]);
+ match prechecked{ok=>{},err(code)=>{object_core.hold_map(OBJECT_REGISTRY,id,index);OBJECT_FAILED=true;return prechecked;},}
+ (*OBJECT_REGISTRY).maps[id][index].state=3;let removed=object_withdraw(id,index);
+ match removed{ok=>{},err(code)=>{object_core.hold_map(OBJECT_REGISTRY,id,index);OBJECT_FAILED=true;return removed;},}
+ *out=object_core.release_map(OBJECT_REGISTRY,id,index);
+}return;}
+pub unsafe fn object_owner_gone(id:usize,owner:u64,out:*u64)!void{unsafe{
+ if OBJECT_FAILED||id>=LIMIT||PROCESSES[id].ready!=0||PROCESSES[id].root!=0||out==null
+  ||OBJECT_REGISTRY==null||!object_core.owner_valid(id,owner)||(*OBJECT_REGISTRY).owners[id]!=owner{return error.InvalidState;}
+ var i:usize=0;var count:usize=0;while i<4{let map=(*OBJECT_REGISTRY).maps[id][i];
+  if map.state!=0{let verified=try object_core.map_get(OBJECT_REGISTRY,id,owner,GENERATIONS[id],(map.generation<<8)|i as u64+1);count+=1;}i+=1;
+ }
+ compiler_fence();if count!=0&&user_shared_barrier()!=1{
+  i=0;while i<4{if (*OBJECT_REGISTRY).maps[id][i].state!=0{object_core.hold_map(OBJECT_REGISTRY,id,i);}i+=1;}
+  OBJECT_FAILED=true;return error.InvalidState;
+ }compiler_fence();
+ i=0;while i<4{*(out+i)=0;if (*OBJECT_REGISTRY).maps[id][i].state!=0{*(out+i)=object_core.release_map(OBJECT_REGISTRY,id,i);}i+=1;}
+ (*OBJECT_REGISTRY).owners[id]=0;
+}return;}
+
+unsafe fn object_abort_owner(id:usize)void{unsafe{
+ if OBJECT_REGISTRY==null{return;}var m:usize=0;
+ while m<4{if (*OBJECT_REGISTRY).maps[id][m].state!=0{object_core.hold_map(OBJECT_REGISTRY,id,m);OBJECT_FAILED=true;return;}m+=1;}
+ (*OBJECT_REGISTRY).owners[id]=0;
+}return;}

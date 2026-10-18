@@ -1,0 +1,15 @@
+module user_probe;
+import runtime_probe;
+import user.runtime as user;
+import user.abi as abi;
+
+export("dong_user_prepare") fn prepare(kernel_physical: u64, client: *const u8, client_bytes: usize,
+    server: *const u8, server_bytes: usize, rounds: u64, tsc_hz: u64) u64 {
+    unsafe {
+        let a = slice_from_raw_parts(client,client_bytes);
+        let b = slice_from_raw_parts(server,server_bytes);
+        match user.prepare(kernel_physical,a,b,rounds,tsc_hz) { ok => { return 0; }, err(code) => { return code; }, }
+    }
+}
+export("dong_user_first") fn first() *abi.Frame { return user.first(); }
+export("dong_user_report") fn report() *const user.Report { return user.report_pointer(); }

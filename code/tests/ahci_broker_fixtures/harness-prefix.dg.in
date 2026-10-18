@@ -1,0 +1,33 @@
+// Fixture envelope only; the complete formal grant body is inserted verbatim.
+module broker_probe;
+import drivers.virtio_pci as vp;
+import ipc.handles as handles;
+import user.memory as memory;
+pub error Invalid=0x050a_0001;
+pub error Denied=0x050a_0002;
+pub error Busy=0x050a_0003;
+const BAR_BASE:u64=0x6000_0000;
+var SELECTED:u64=0;
+var SELECTED_KIND:u64=0;
+var INPUT_SELECTED:u64=0;
+var BLOCK_GRANT_ATTEMPTED:bool=false;
+var INPUT_GRANT_ATTEMPTED:bool=false;
+const EMPTY_BAR:vp.Bar=vp.Bar {physical:0,length:0,handle:0};
+var BARS:[6]vp.Bar=[EMPTY_BAR;6];
+var VIRTUAL:[6]u64=[0;6];
+var INPUT_BARS:[6]vp.Bar=[EMPTY_BAR;6];
+var INPUT_VIRTUAL:[6]u64=[0;6];
+var TABLE:handles.Table=handles.Table {used:0};
+unsafe extern "sysv64" ("broker_read32") fn host_read(address:u64,out:*u32)u64;
+unsafe extern "sysv64" ("broker_write32") fn host_write(address:u64,value:u32)u64;
+unsafe extern "sysv64" ("broker_command") fn host_command(ecam:u64,value:u16)u64;
+unsafe extern "sysv64" ("broker_mmio_range") fn host_range(physical:u64,bytes:u64,ecam:u64)u64;
+unsafe extern "sysv64" ("broker_negative_hit") fn negative_hit(kind:u64)void;
+unsafe fn read32(address:u64)!u32 {unsafe {var value:u32=0;if host_read(address,&value)!=0 {return error.Invalid;}return value;}}
+unsafe fn write32(address:u64,value:u32)!void {unsafe {if host_write(address,value)!=0 {return error.Invalid;}}return;}
+unsafe fn command(ecam:u64,value:u16)!void {unsafe {if host_command(ecam,value)!=0 {return error.Invalid;}}return;}
+unsafe fn mmio_range(physical:u64,bytes:u64,ecam:bool)!void {unsafe {var kind:u64=0;if ecam {kind=1;}if host_range(physical,bytes,kind)!=0 {return error.Denied;}}return;}
+// AHCI/VirtIO-only oracle: entering the unrelated NVMe capability path must
+// fail closed. The dedicated NVMe broker test executes its complete real body.
+unsafe fn interrupt_caps(ecam:u64,disable:bool)!u64 {return error.Invalid;}
+

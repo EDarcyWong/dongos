@@ -1,0 +1,136 @@
+// Modern VirtIO input: two bounded split queues, polling, retained DMA lease.
+// Bus addresses and CPU pointers are separate. Malformed completion is fail-stop.
+module drivers.virtio_tablet;
+import drivers.virtio_pci as vp;
+import drivers.virtio_blk as dma;
+import input.events as ev;
+import input.virtio_input as decoder;
+pub error Invalid=0x0733_0001;
+pub error Unsupported=0x0733_0002;
+pub error Completion=0x0733_0003;
+pub error Io=0x0733_0004;
+pub const DMA_BYTES:usize=16384;
+pub const SIZE:u64=64;
+pub const AVAIL:usize=1024;
+pub const USED:usize=2048;
+pub const DATA:usize=4096;
+pub struct State {
+    pub transport:vp.Transport,pub ops:*const dma.Ops,pub lease:dma.Lease,
+    pub ready:u64,pub fault:u64,pub used:u64,pub available:u64,pub notify:u64,pub completed:u64,
+    pub decoder:decoder.State,
+}
+pub const EMPTY_STATE:State=State { transport:vp.EMPTY_TRANSPORT,ops:null,lease:dma.EMPTY_LEASE,
+    ready:0,fault:0,used:0,available:0,notify:0,completed:0,decoder:decoder.EMPTY_STATE };
+unsafe fn read(s:*State,offset:u64,width:u64)!u64 {
+    unsafe { return vp.read((*(*s).ops).read,0,&(*s).transport.common,offset,width); }
+}
+unsafe fn write(s:*State,offset:u64,width:u64,value:u64)!void {
+    unsafe { try vp.write((*(*s).ops).write,0,&(*s).transport.common,offset,width,value); }return;
+}
+unsafe fn fence(s:*State,kind:u64)!void {
+    unsafe { compiler_fence();if (*(*s).ops).fence(0,kind)!=0 { return error.Io; }compiler_fence(); }return;
+}
+unsafe fn address(s:*State,offset:u64,value:u64)!void {
+    unsafe { try write(s,offset,4,value&0xffff_ffff);try write(s,offset+4,4,value>>32); }return;
+}
+unsafe fn axis(s:*State,axis:u64,low:*i64,high:*i64)!void {
+    unsafe {
+        let area=&(*s).transport.device;
+        try vp.write((*(*s).ops).write,0,area,0,1,0x12);
+        try vp.write((*(*s).ops).write,0,area,1,1,axis);
+        try fence(s,3);
+        if (try vp.read((*(*s).ops).read,0,area,2,1))!=20 { return error.Unsupported; }
+        *low=(try vp.read((*(*s).ops).read,0,area,8,4)) as i32 as i64;
+        *high=(try vp.read((*(*s).ops).read,0,area,12,4)) as i32 as i64;
+    }return;
+}
+unsafe fn start(s:*State,width:i64,height:i64)!void {
+    unsafe {
+        try write(s,20,1,0);var tries:usize=0;
+        while (try read(s,20,1))!=0 { tries+=1;if tries==1024 { return error.Io; } }
+        try write(s,20,1,1);try write(s,20,1,3);
+        try write(s,0,4,1);let high=try read(s,4,4);
+        if (high&1)==0 || (high&2)!=0 { return error.Unsupported; }
+        try write(s,8,4,0);try write(s,12,4,0);try write(s,8,4,1);try write(s,12,4,1);
+        try write(s,20,1,11);if (try read(s,20,1))!=11 || (try read(s,18,2))<2 { return error.Unsupported; }
+        var xmin:i64=0;var xmax:i64=0;var ymin:i64=0;var ymax:i64=0;
+        let generation=try read(s,21,1);
+        try axis(s,0,&xmin,&xmax);try axis(s,1,&ymin,&ymax);
+        if generation!=(try read(s,21,1)) { return error.Io; }
+        try decoder.configure_absolute(&(*s).decoder,xmin,xmax,ymin,ymax,width,height);
+        var lease=dma.EMPTY_LEASE;
+        if (*(*s).ops).acquire(0,DMA_BYTES,4096,&lease)!=0 { return error.Io; }
+        (*s).lease=lease;
+        if lease.token==0 || lease.pointer==null || (lease.pointer as u64&4095)!=0 || (lease.physical&4095)!=0
+            || lease.length!=DMA_BYTES || lease.physical==0 || lease.physical>=0x10_0000_0000_0000-DMA_BYTES as u64
+            || lease.pointer as u64>0xffff_ffff_ffff_ffff-DMA_BYTES as u64 { return error.Invalid; }
+        var i:usize=0;while i<DMA_BYTES { *(lease.pointer+i)=0;i+=1; }
+        var q:u64=0;while q<2 {
+            try write(s,22,2,q);let size=try read(s,24,2);
+            if size<SIZE || size>32768 || (size&(size-1))!=0 || (try read(s,28,2))!=0 { return error.Unsupported; }
+            try write(s,24,2,SIZE);if (try read(s,24,2))!=SIZE { return error.Io; }
+            try write(s,16,2,65535);try write(s,26,2,65535);
+            let notify=(try read(s,30,2))*(*s).transport.multiplier;
+            if notify>(*s).transport.notify.length || 2>(*s).transport.notify.length-notify { return error.Invalid; }
+            if q==0 { (*s).notify=notify; }
+            let base=(q*8192) as usize;let raw=lease.pointer+base;
+            if q==0 {
+                i=0;while i<SIZE as usize {
+                    write_unaligned((raw+i*16) as *u64,lease.physical+DATA as u64+i as u64*8);
+                    write_unaligned((raw+i*16+8) as *u32,8);
+                    write_unaligned((raw+i*16+12) as *u16,2);
+                    write_unaligned((raw+AVAIL+4+i*2) as *u16,i as u16);i+=1;
+                }
+                write_unaligned((raw+AVAIL+2) as *u16,SIZE as u16);(*s).available=SIZE;
+            }
+            write_unaligned((raw+AVAIL) as *u16,1);
+            try address(s,32,lease.physical+base as u64);
+            try address(s,40,lease.physical+base as u64+AVAIL as u64);
+            try address(s,48,lease.physical+base as u64+USED as u64);
+            try fence(s,1);try write(s,28,2,1);if (try read(s,28,2))!=1 { return error.Io; }q+=1;
+        }
+        try write(s,20,1,15);if (try read(s,20,1))!=15 { return error.Io; }
+        try vp.write((*(*s).ops).write,0,&(*s).transport.notify,(*s).notify,2,0);(*s).ready=1;
+    }return;
+}
+pub unsafe fn initialize(s:*State,transport:*const vp.Transport,ops:*const dma.Ops,width:i64,height:i64)!void {
+    unsafe {
+        if s==null || transport==null || ops==null || (*s).ready!=0 || (*s).fault!=0 || (*s).lease.token!=0
+            || (*transport).device.length<28 || (*transport).common.length<56 { return error.Invalid; }
+        (*s).transport=*transport;(*s).ops=ops;
+        let result=start(s,width,height);match result { ok=>{},err(code)=>{(*s).fault=1;(*s).ready=0;}, }return result;
+    }
+}
+unsafe fn drain(s:*State,q:*ev.Queue)!void {
+    unsafe {
+        if (try read(s,20,1))!=15 { return error.Io; }
+        let raw=(*s).lease.pointer;let next=volatile_load((raw+USED+2) as *const u16) as u64;
+        let count=(next+65536-(*s).used)&65535;if count>SIZE { return error.Completion; }
+        if count==0 { return; }try fence(s,2);
+        // Validate the whole batch before recycling any descriptor, so the
+        // device cannot overwrite a buffer still being decoded in this batch.
+        var seen:u64=0;var i:u64=0;
+        while i<count {
+            let pos=USED+4+(((*s).used+i)%SIZE) as usize*8;
+            let id=volatile_load((raw+pos) as *const u32) as u64;
+            let length=volatile_load((raw+pos+4) as *const u32);
+            if id>=SIZE || length!=8 || (seen&(1<<id))!=0 { return error.Completion; }
+            seen|=1<<id;i+=1;
+        }
+        i=0;while i<count {
+            let pos=USED+4+(((*s).used+i)%SIZE) as usize*8;
+            let id=volatile_load((raw+pos) as *const u32) as usize;
+            try decoder.feed_bytes(&(*s).decoder,q,slice_from_raw_parts((raw+DATA+id*8) as *const u8,8));
+            write_unaligned((raw+AVAIL+4+(((*s).available+i)%SIZE) as usize*2) as *u16,id as u16);i+=1;
+        }
+        (*s).used=next;(*s).available=((*s).available+count)&65535;(*s).completed+=count;
+        try fence(s,1);volatile_store((raw+AVAIL+2) as *u16,(*s).available as u16);try fence(s,3);
+        try vp.write((*(*s).ops).write,0,&(*s).transport.notify,(*s).notify,2,0);
+    }return;
+}
+pub unsafe fn poll(s:*State,q:*ev.Queue)!void {
+    unsafe {
+        if s==null || (*s).ready!=1 || (*s).fault!=0 { return error.Invalid; }
+        let result=drain(s,q);match result { ok=>{},err(code)=>{(*s).ready=0;(*s).fault=1;}, }return result;
+    }
+}

@@ -1,0 +1,157 @@
+// Kernel-owned boot timing. Caller serializes writers; no allocation or I/O.
+module boot.trace;
+pub const MAGIC:u64=0x3145_4341_5254_4244;
+pub const VERSION:u64=1;
+pub const BYTES:usize=4096;
+pub const CAPACITY:usize=80;
+pub const LOADER_ENTRY:u64=1;pub const LOADER_EBS:u64=2;pub const KERNEL_ENTRY:u64=3;
+pub const KERNEL_PREPARED:u64=4;pub const SMP_ONLINE:u64=5;
+pub const SERVICE_START:u64=6;pub const SERVICE_READY:u64=7;pub const SERVICE_STOP:u64=8;
+pub const SHELL_INTERACTIVE:u64=9;pub const DESKTOP_PRESENTED:u64=10;
+pub const CLIENTS_PRESENTED:u64=12;pub const CLOCK_BOUND:u64=13;
+pub const SEALED:u64=6;pub const FAILED:u64=7;
+pub const INVARIANT:u64=1;pub const RATIO:u64=2;pub const BRACKETED:u64=4;
+pub error Invalid=0x0610_0001;pub error Order=0x0610_0002;pub error Clock=0x0610_0003;
+pub error Capacity=0x0610_0004;pub error Failed=0x0610_0005;pub error Closed=0x0610_0006;
+pub error Denied=0x0610_0007;pub error Duplicate=0x0610_0008;
+pub struct Header{
+ pub magic:u64,pub version:u64,pub bytes:u64,pub record_bytes:u64,pub capacity:u64,pub count:u64,pub state:u64,pub failure:u64,
+ pub boot_id:u64,pub loader_cpu:u64,pub writer_cpu:u64,pub online_mask:u64,
+ pub clock_source:u64,pub clock_hz:u64,pub clock_lower:u64,pub clock_upper:u64,pub clock_samples:u64,pub clock_flags:u64,
+ pub last_tsc:u64,pub last_sequence:u64,pub shell_sequence:u64,pub desktop_sequence:u64,pub clients_sequence:u64,
+ pub configuration_count:u64,pub ready_mask:u64,pub started_mask:u64,pub required_client_mask:u64,pub client_mask:u64,
+ pub checksum:u64,pub clock_sequence:u64,pub reserved:[2]u64,
+}
+pub struct Record{pub sequence:u64,pub tsc:u64,pub kind:u64,pub subject:u64,pub stamp:u64,pub detail:u64}
+pub struct Trace{pub header:Header,pub records:[80]Record}
+pub struct Event{pub kind:u64,pub subject:u64,pub generation:u64,pub detail:u64}
+pub struct ClockInfo{pub source:u64,pub hz:u64,pub lower:u64,pub upper:u64,pub samples:u64,pub flags:u64}
+pub struct Stamp{pub tsc:u64,pub cpu:u64,pub flags:u64}
+const MAX:u64=0xffff_ffff_ffff_ffff;
+unsafe fn checksum(t:*Trace)void{unsafe{
+ (*t).header.checksum=0;var sum:u64=0;var i:usize=0;
+ while i<512{sum=wrapping_add(sum,*((t as *const u64)+i));i+=1;}
+ (*t).header.checksum=wrapping_sub(0,sum);
+}return;}
+unsafe fn valid(t:*const Trace)bool{unsafe{
+ return t!=null&&((t as u64)&63)==0&&(*t).header.magic==MAGIC&&(*t).header.version==VERSION
+  &&(*t).header.bytes==BYTES as u64&&(*t).header.record_bytes==48&&(*t).header.capacity==CAPACITY as u64
+  &&(*t).header.count<=CAPACITY as u64&&(*t).header.reserved[0]==0&&(*t).header.reserved[1]==0;
+}}
+unsafe fn fail(t:*Trace,code:u64)void{unsafe{(*t).header.state=FAILED;(*t).header.failure=code;checksum(t);}return;}
+pub unsafe fn invalidate(t:*Trace,code:u64)void{unsafe{if valid(t)&&code!=0{fail(t,code);}}return;}
+unsafe fn latest(t:*const Trace,count:u64,subject:u64)u64{unsafe{
+ var i=count;while i!=0{i-=1;let r=&(*t).records[i as usize];
+  if (*r).kind==SERVICE_START&&(*r).subject==subject{return (*r).stamp&0xffff_ffff;}}
+ return 0;
+}}
+unsafe fn clock_valid(h:*const Header)bool{unsafe{
+ if (*h).clock_source<1||(*h).clock_source>4||(*h).clock_hz<1_000_000||(*h).clock_hz>16_000_000_000
+  ||(*h).clock_lower<1_000_000||(*h).clock_lower>(*h).clock_hz||(*h).clock_upper<(*h).clock_hz
+  ||(*h).clock_upper>16_000_000_000||((*h).clock_flags&~7)!=0{return false;}
+ if (*h).clock_source==1{return ((*h).clock_flags&RATIO)!=0&&(*h).clock_samples==0
+  &&(*h).clock_lower==(*h).clock_hz&&(*h).clock_upper==(*h).clock_hz;}
+ return ((*h).clock_flags&BRACKETED)!=0&&(*h).clock_samples>=3&&(*h).clock_samples<=7;
+}}
+unsafe fn advance(t:*const Trace,h:*Header,r:*const Record)!void{unsafe{
+ if (*r).sequence!=(*h).count+1||(*r).tsc<=(*h).last_tsc||((*r).stamp>>32)!=(*h).writer_cpu{return error.Clock;}
+ let kind=(*r).kind;let id=(*r).subject;let epoch=(*r).stamp&0xffff_ffff;let detail=(*r).detail;
+ if kind==LOADER_ENTRY{
+  if (*h).count!=0||(*h).state!=0||id!=0||epoch!=0||detail!=0{return error.Order;}(*h).state=1;
+ }else if kind==LOADER_EBS{
+  if (*h).state!=1||id!=0||epoch!=0||detail!=0{return error.Order;}(*h).state=2;
+ }else if kind==KERNEL_ENTRY{
+  if (*h).state!=2||id!=0||epoch!=0||detail!=0{return error.Order;}(*h).state=3;
+ }else if kind==CLOCK_BOUND{
+  if (*h).state!=3||(*h).clock_sequence!=0||id!=(*h).clock_source||detail!=(*h).clock_hz||epoch!=0||!clock_valid(h){return error.Order;}
+  (*h).clock_sequence=(*r).sequence;
+ }else if kind==KERNEL_PREPARED{
+  if (*h).state!=3||(*h).clock_sequence==0||id!=0||epoch!=0||detail!=0{return error.Order;}(*h).state=4;
+ }else if kind==SMP_ONLINE{
+  if (*h).state!=4||id!=0||epoch!=0||detail==0||(detail&1)==0||(detail&~0xffff)!=0{return error.Order;}
+  (*h).online_mask=detail;(*h).state=5;
+ }else{
+  if (*h).state!=5||(*h).configuration_count==0||(*h).configuration_count>32{return error.Order;}
+  if kind==SERVICE_START||kind==SERVICE_READY||kind==SERVICE_STOP{
+   if id>=(*h).configuration_count||epoch==0||epoch>0x0fff_ffff{return error.Order;}let bit:u64=1<<id;
+   let previous=latest(t,(*h).count,id);
+   if kind==SERVICE_START{
+    if ((*h).started_mask&bit)!=0||epoch<=previous||detail>>(*h).configuration_count!=0||(detail&bit)!=0
+     ||(detail&(*h).ready_mask)!=detail{return error.Order;}(*h).started_mask|=bit;
+   }else{
+    if ((*h).started_mask&bit)==0||epoch!=previous||detail!=0{return error.Order;}
+    if kind==SERVICE_READY{if ((*h).ready_mask&bit)!=0{return error.Duplicate;}(*h).ready_mask|=bit;}
+    else{(*h).ready_mask&=~bit;(*h).started_mask&=~bit;}
+   }
+  }else if kind==SHELL_INTERACTIVE{
+   if id!=0||epoch!=latest(t,(*h).count,0)||((*h).ready_mask&1)==0||(*h).shell_sequence!=0||detail!=0{return error.Order;}
+   (*h).shell_sequence=(*r).sequence;
+  }else if kind==DESKTOP_PRESENTED{
+   if id!=3||epoch!=latest(t,(*h).count,3)||((*h).started_mask&8)==0||(*h).desktop_sequence!=0||detail!=0{return error.Order;}
+   (*h).desktop_sequence=(*r).sequence;
+  }else if kind==CLIENTS_PRESENTED{
+   if id!=3||epoch!=latest(t,(*h).count,3)||((*h).ready_mask&8)==0||(*h).desktop_sequence==0||(*h).clients_sequence!=0
+    ||(*h).required_client_mask==0||detail!=(*h).required_client_mask||(detail&(*h).ready_mask)!=detail{return error.Order;}
+   (*h).client_mask=detail;(*h).clients_sequence=(*r).sequence;
+  }else{return error.Invalid;}
+  if (*h).shell_sequence!=0&&((*h).required_client_mask==0||(*h).clients_sequence!=0){(*h).state=SEALED;}
+ }
+ (*h).count+=1;(*h).last_tsc=(*r).tsc;(*h).last_sequence=(*r).sequence;
+}return;}
+pub unsafe fn record(t:*Trace,event:*const Event,tsc:u64,cpu:u64)!void{unsafe{
+ if !valid(t)||event==null{return error.Invalid;}if (*t).header.state==FAILED{return error.Failed;}
+ if (*t).header.state==SEALED{return error.Closed;}
+ if (*t).header.count==CAPACITY as u64{fail(t,0x0610_0004);return error.Capacity;}
+ if cpu!=(*t).header.writer_cpu||cpu>0xffff_ffff||(*event).generation>0xffff_ffff{fail(t,0x0610_0003);return error.Clock;}
+ var h=(*t).header;let r=Record{sequence:h.count+1,tsc:tsc,kind:(*event).kind,subject:(*event).subject,
+  stamp:(cpu<<32)|(*event).generation,detail:(*event).detail};
+ let moved=advance(t,&h,&r);match moved{ok=>{},err(e)=>{fail(t,e);return moved;},}
+ (*t).records[(*t).header.count as usize]=r;(*t).header=h;checksum(t);
+}return;}
+pub unsafe fn initialize(t:*Trace,boot_id:u64,tsc:u64,cpu:u64)!void{unsafe{
+ if t==null||((t as u64)&63)!=0||boot_id==0||tsc==0||cpu>0xffff_ffff{return error.Invalid;}
+ if (*t).header.magic!=0{return error.Duplicate;}
+ var i:usize=0;while i<512{*((t as *u64)+i)=0;i+=1;}
+ (*t).header.magic=MAGIC;(*t).header.version=VERSION;(*t).header.bytes=BYTES as u64;
+ (*t).header.record_bytes=48;(*t).header.capacity=CAPACITY as u64;(*t).header.boot_id=boot_id;
+ (*t).header.loader_cpu=cpu;(*t).header.writer_cpu=cpu;
+ let e=Event{kind:LOADER_ENTRY,subject:0,generation:0,detail:0};try record(t,&e,tsc,cpu);
+}return;}
+pub unsafe fn configure(t:*Trace,count:u64,client_mask:u64)!void{unsafe{
+ if !valid(t)||(*t).header.state!=5||(*t).header.configuration_count!=0||count==0||count>32
+  ||client_mask>>count!=0||(client_mask!=0&&client_mask!=0x3c000){return error.Invalid;}
+ (*t).header.configuration_count=count;(*t).header.required_client_mask=client_mask;checksum(t);
+}return;}
+pub unsafe fn bind_clock(t:*Trace,clock:*const ClockInfo,tsc:u64,cpu:u64)!void{unsafe{
+ if !valid(t)||clock==null||(*t).header.state!=3||(*t).header.clock_sequence!=0{return error.Invalid;}
+ var h=(*t).header;h.clock_source=(*clock).source;h.clock_hz=(*clock).hz;h.clock_lower=(*clock).lower;
+ h.clock_upper=(*clock).upper;h.clock_samples=(*clock).samples;h.clock_flags=(*clock).flags;
+ if !clock_valid(&h){fail(t,0x0610_0003);return error.Clock;}
+ (*t).header=h;let e=Event{kind:CLOCK_BOUND,subject:h.clock_source,generation:0,detail:h.clock_hz};try record(t,&e,tsc,cpu);
+}return;}
+// Role and generation come from the kernel's current trusted Catalog slot.
+// No untrusted argument reaches record() until this one-shot preflight passes.
+pub unsafe fn mark(t:*Trace,configuration:u64,generation:u64,kind:u64,tsc:u64,cpu:u64)!void{unsafe{
+ if !valid(t){return error.Invalid;}if (configuration!=0||kind!=SHELL_INTERACTIVE)
+  &&(configuration!=3||(kind!=DESKTOP_PRESENTED&&kind!=CLIENTS_PRESENTED)){return error.Denied;}
+ if generation==0||generation!=latest(t,(*t).header.count,configuration){return error.Denied;}
+ if (kind==SHELL_INTERACTIVE&&(*t).header.shell_sequence!=0)||(kind==DESKTOP_PRESENTED&&(*t).header.desktop_sequence!=0)
+  ||(kind==CLIENTS_PRESENTED&&(*t).header.clients_sequence!=0){return error.Duplicate;}
+ let e=Event{kind:kind,subject:configuration,generation:generation,detail:0};var event=e;
+ if kind==CLIENTS_PRESENTED{event.detail=(*t).header.required_client_mask;}try record(t,&event,tsc,cpu);
+}return;}
+pub unsafe fn validate(t:*const Trace)!void{unsafe{
+ if !valid(t)||(*t).header.boot_id==0||(*t).header.writer_cpu!=(*t).header.loader_cpu||(*t).header.count==0{return error.Invalid;}
+ var sum:u64=0;var i:usize=0;while i<512{sum=wrapping_add(sum,*((t as *const u64)+i));i+=1;}if sum!=0{return error.Invalid;}
+ if (*t).header.failure!=0||(*t).header.state==FAILED{return error.Failed;}
+ i=(*t).header.count as usize;while i<CAPACITY{let r=&(*t).records[i];
+  if (*r).sequence!=0||(*r).tsc!=0||(*r).kind!=0||(*r).subject!=0||(*r).stamp!=0||(*r).detail!=0{return error.Invalid;}i+=1;}
+ var h=(*t).header;h.count=0;h.state=0;h.failure=0;h.last_tsc=0;h.last_sequence=0;h.shell_sequence=0;
+ h.desktop_sequence=0;h.clients_sequence=0;h.online_mask=0;h.ready_mask=0;h.started_mask=0;h.client_mask=0;h.clock_sequence=0;
+ i=0;while i<(*t).header.count as usize{if h.state==SEALED{return error.Order;}try advance(t,&h,&(*t).records[i]);i+=1;}
+ if h.state!=(*t).header.state||h.last_tsc!=(*t).header.last_tsc||h.last_sequence!=(*t).header.last_sequence
+  ||h.shell_sequence!=(*t).header.shell_sequence||h.desktop_sequence!=(*t).header.desktop_sequence
+  ||h.clients_sequence!=(*t).header.clients_sequence||h.online_mask!=(*t).header.online_mask
+  ||h.ready_mask!=(*t).header.ready_mask||h.started_mask!=(*t).header.started_mask
+  ||h.client_mask!=(*t).header.client_mask||h.clock_sequence!=(*t).header.clock_sequence{return error.Invalid;}
+}return;}

@@ -1,0 +1,189 @@
+// Untyped pure integer/boolean constant evaluation over bootstrap.expression
+// trees. Integers are arbitrary precision through bootstrap.bigint and the
+// accepted C1/C2 components; nothing is truncated to a 64-bit target type.
+// Three passes: structure (INVALID/DEPTH), kinds and types (UNSUPPORTED/TYPE),
+// then evaluation. Only the third pass writes, and only into work, until the
+// final value is published to out/result.
+module bootstrap.constant_arithmetic;
+import bootstrap.lexer as lex;
+import bootstrap.expression as ex;
+import bootstrap.bigint as big;
+import bootstrap.bigint_div as dv;
+import bootstrap.bigint_bits as bits;
+pub const OK:u64=0;pub const INVALID:u64=1;pub const CAPACITY:u64=2;pub const WORKSPACE:u64=3;
+pub const DIVZERO:u64=4;pub const TYPE:u64=5;pub const SHIFT:u64=6;pub const UNSUPPORTED:u64=7;
+pub const DEPTH:u64=8;
+pub const INTEGER:u64=1;pub const BOOLEAN:u64=2;
+pub struct Value{pub kind:u64,pub negative:bool,pub used:usize}
+const MAX:u64=0xffff_ffff_ffff_ffff;
+struct Context{source:[]const u8,tokens:[]const lex.Token,nodes:[]const ex.Node,work:[]u32,limit:usize}
+fn span(p:u64,n:u64)bool{return n==0||(p!=0&&n<=MAX-p);}
+fn overlap(a:u64,n:u64,b:u64,m:u64)bool{return n!=0&&m!=0&&a<b+m&&b<a+n;}
+unsafe fn valid(source:[]const u8,tokens:[]const lex.Token,nodes:[]const ex.Node,out:[]u32,work:[]u32,result:*Value)bool{unsafe{
+ if result==null||tokens.len>MAX/sizeof(lex.Token)||nodes.len>MAX/sizeof(ex.Node)||out.len>MAX/4||work.len>MAX/4{return false;}
+ let sp=source.ptr as u64;let tp=tokens.ptr as u64;let np=nodes.ptr as u64;let op=out.ptr as u64;let wp=work.ptr as u64;let rp=result as u64;
+ let sn=source.len;let tn=tokens.len*sizeof(lex.Token);let nn=nodes.len*sizeof(ex.Node);let on=out.len*4;let wn=work.len*4;let rn=sizeof(Value);
+ if !span(sp,sn)||!span(tp,tn)||!span(np,nn)||!span(op,on)||!span(wp,wn)||!span(rp,rn){return false;}
+ if (tn!=0&&(tp&7)!=0)||(nn!=0&&(np&7)!=0)||(on!=0&&(op&3)!=0)||(wn!=0&&(wp&3)!=0)||(rp&7)!=0{return false;}
+ if overlap(sp,sn,op,on)||overlap(tp,tn,op,on)||overlap(np,nn,op,on)
+  ||overlap(sp,sn,wp,wn)||overlap(tp,tn,wp,wn)||overlap(np,nn,wp,wn)
+  ||overlap(sp,sn,rp,rn)||overlap(tp,tn,rp,rn)||overlap(np,nn,rp,rn)
+  ||overlap(op,on,wp,wn)||overlap(op,on,rp,rn)||overlap(wp,wn,rp,rn){return false;}
+ return true;
+}}
+fn binary(op:u64)bool{
+ return op==519||op==518||op==514||op==515||op==516||op==517||op==1084||op==1086||op==1148||op==1118
+  ||op==1062||op==520||op==521||op==1067||op==1069||op==1066||op==1071||op==1061;
+}
+// Pass 1: indices, token kinds and tree shape. Operands must be laid out
+// as the bootstrap parser emits them: every node after all nodes of its
+// operand subtrees, and a left subtree entirely before the right one. The
+// index ranges are disjoint, so sharing and cycles are impossible and the
+// pass is linear. lo receives the lowest index of the subtree.
+unsafe fn structure(c:*Context,id:usize,depth:usize,lo:*usize)u64{unsafe{
+ if depth>(*c).limit{return DEPTH;}
+ if id>=(*c).nodes.len{return INVALID;}*lo=id;
+ let n=(*c).nodes[id];if n.token>=(*c).tokens.len{return INVALID;}let token=(*c).tokens[n.token];
+ if n.kind==ex.INTEGER{
+  if token.kind!=lex.INTEGER||token.start>token.end||token.end>(*c).source.len{return INVALID;}return OK;
+ }
+ if n.kind==ex.BOOLEAN{if token.kind!=286&&token.kind!=287{return INVALID;}return OK;}
+ if n.kind==ex.UNARY{
+  if n.op!=token.kind||n.a>=id{return INVALID;}return structure(c,n.a,depth+1,lo);
+ }
+ if n.kind==ex.BINARY{
+  if n.op!=token.kind||!binary(n.op)||n.b>=id{return INVALID;}
+  var right:usize=0;var status=structure(c,n.b,depth+1,&right);if status!=OK{return status;}
+  if n.a>=right{return INVALID;}return structure(c,n.a,depth+1,lo);
+ }
+ return OK;
+}}
+// Pass 2: the static kind of every node, including short-circuited operands.
+unsafe fn typing(c:*Context,id:usize,kind:*u64)u64{unsafe{
+ let n=(*c).nodes[id];
+ if n.kind==ex.INTEGER{*kind=INTEGER;return OK;}
+ if n.kind==ex.BOOLEAN{*kind=BOOLEAN;return OK;}
+ if n.kind==ex.UNARY{
+  if n.op!=1069&&n.op!=1150&&n.op!=1057{return UNSUPPORTED;}
+  var inner:u64=0;let status=typing(c,n.a,&inner);if status!=OK{return status;}
+  if n.op==1057{if inner!=BOOLEAN{return TYPE;}}else if inner!=INTEGER{return TYPE;}
+  *kind=inner;return OK;
+ }
+ if n.kind!=ex.BINARY{return UNSUPPORTED;}
+ var left:u64=0;var right:u64=0;
+ var status=typing(c,n.a,&left);if status!=OK{return status;}
+ status=typing(c,n.b,&right);if status!=OK{return status;}
+ let op=n.op;
+ if op==518||op==519{if left!=BOOLEAN||right!=BOOLEAN{return TYPE;}*kind=BOOLEAN;return OK;}
+ if op==514||op==515{if left!=right{return TYPE;}*kind=BOOLEAN;return OK;}
+ if left!=INTEGER||right!=INTEGER{return TYPE;}
+ if op==516||op==517||op==1084||op==1086{*kind=BOOLEAN;}else{*kind=INTEGER;}return OK;
+}}
+unsafe fn room(c:*Context,start:usize,n:usize)bool{unsafe{let len=(*c).work.len;return n<=len&&start<=len-n;}}
+unsafe fn moved(c:*Context,to:usize,from:usize,n:usize)void{unsafe{
+ var i:usize=0;while i<n{(*c).work[to+i]=(*c).work[from+i];i+=1;}
+}}
+unsafe fn relation(c:*Context,na:bool,a:usize,la:usize,nb:bool,b:usize,lb:usize)i64{unsafe{
+ if na!=nb{if na{return -1;}return 1;}
+ var r:i64=0;
+ if la<lb{r=-1;}else if la>lb{r=1;}else{
+  var i=la;while i!=0{i-=1;let x=(*c).work[a+i];let y=(*c).work[b+i];
+   if x<y{r=-1;break;}if x>y{r=1;break;}
+  }
+ }
+ if na{return -r;}return r;
+}}
+// Pass 3: the value of id is left in work[base..base+used). See
+// constant_arithmetic.md for the exact scratch reservations per node.
+unsafe fn evaluate_node(c:*Context,id:usize,base:usize,v:*Value)u64{unsafe{
+ let n=(*c).nodes[id];
+ if n.kind==ex.INTEGER{
+  let token=(*c).tokens[n.token];let text=(*c).source[token.start..token.end];let cap=text.len/8+1;
+  if !room(c,base,cap)||!room(c,base+cap,cap){return WORKSPACE;}
+  var r=big.Result{negative:false,used:0};
+  let status=big.parse(text,(*c).work[base..base+cap],(*c).work[base+cap..base+2*cap],&r);
+  if status!=big.OK{return INVALID;}
+  *v=Value{kind:INTEGER,negative:false,used:r.used};return OK;
+ }
+ if n.kind==ex.BOOLEAN{
+  if (*c).tokens[n.token].kind==287{*v=Value{kind:BOOLEAN,negative:false,used:0};return OK;}
+  if !room(c,base,1){return WORKSPACE;}(*c).work[base]=1;*v=Value{kind:BOOLEAN,negative:false,used:1};return OK;
+ }
+ if n.kind==ex.UNARY{
+  var a=Value{kind:0,negative:false,used:0};let status=evaluate_node(c,n.a,base,&a);if status!=OK{return status;}
+  if n.op==1069{*v=Value{kind:INTEGER,negative:!a.negative&&a.used!=0,used:a.used};return OK;}
+  if n.op==1057{
+   if a.used!=0{*v=Value{kind:BOOLEAN,negative:false,used:0};return OK;}
+   if !room(c,base,1){return WORKSPACE;}(*c).work[base]=1;*v=Value{kind:BOOLEAN,negative:false,used:1};return OK;
+  }
+  let at=base+a.used;let cap=a.used+1;if !room(c,at,cap)||!room(c,at+cap,cap){return WORKSPACE;}
+  var r=big.Result{negative:false,used:0};
+  let s=bits.invert(a.negative,(*c).work[base..at],(*c).work[at..at+cap],(*c).work[at+cap..at+2*cap],&r);
+  if s!=big.OK{return s;}
+  moved(c,base,at,r.used);*v=Value{kind:INTEGER,negative:r.negative,used:r.used};return OK;
+ }
+ let op=n.op;var a=Value{kind:0,negative:false,used:0};var b=Value{kind:0,negative:false,used:0};
+ var status=evaluate_node(c,n.a,base,&a);if status!=OK{return status;}
+ if op==518||op==519{
+  // The left boolean is no longer needed: the right operand reuses base.
+  if (op==518&&a.used==0)||(op==519&&a.used!=0){*v=a;return OK;}
+  return evaluate_node(c,n.b,base,v);
+ }
+ let rb=base+a.used;status=evaluate_node(c,n.b,rb,&b);if status!=OK{return status;}
+ let at=rb+b.used;let la=a.used;let lb=b.used;
+ let ia=(*c).work[base..rb];let ib=(*c).work[rb..at];
+ if op==514||op==515||op==516||op==517||op==1084||op==1086{
+  let rel=relation(c,a.negative,base,la,b.negative,rb,lb);
+  var truth=rel==0;
+  if op==515{truth=rel!=0;}else if op==516{truth=rel<=0;}else if op==517{truth=rel>=0;}
+  else if op==1084{truth=rel<0;}else if op==1086{truth=rel>0;}
+  if !truth{*v=Value{kind:BOOLEAN,negative:false,used:0};return OK;}
+  if !room(c,base,1){return WORKSPACE;}(*c).work[base]=1;*v=Value{kind:BOOLEAN,negative:false,used:1};return OK;
+ }
+ var wide=la;if lb>wide{wide=lb;}
+ var cap:usize=0;var scratch:usize=0;
+ if op==1067||op==1069||op==1148||op==1118||op==1062{cap=wide+1;scratch=wide+1;}
+ else if op==1066{cap=la+lb;scratch=la+lb;}
+ else if op==1071||op==1061{if lb==0{return DIVZERO;}cap=la;scratch=2*la+2;}
+ else{
+  // Shift amount: a nonnegative integer representable as usize.
+  if b.negative||lb>2{return SHIFT;}
+  var amount:usize=0;if lb>=1{amount=(*c).work[rb]as usize;}if lb==2{amount|=((*c).work[rb+1]as usize)<<32;}
+  if op==520{
+   if la!=0{cap=la+amount/32+1;scratch=cap;}
+   if !room(c,at,cap)||!room(c,at+cap,scratch){return WORKSPACE;}
+   var r=big.Result{negative:false,used:0};
+   let s=bits.shift(true,a.negative,ia,amount,(*c).work[at..at+cap],(*c).work[at+cap..at+cap+scratch],&r);
+   if s!=big.OK{return s;}moved(c,base,at,r.used);*v=Value{kind:INTEGER,negative:r.negative,used:r.used};return OK;
+  }
+  cap=la;scratch=la+1;
+  if !room(c,at,cap)||!room(c,at+cap,scratch){return WORKSPACE;}
+  var r=big.Result{negative:false,used:0};
+  let s=bits.shift(false,a.negative,ia,amount,(*c).work[at..at+cap],(*c).work[at+cap..at+cap+scratch],&r);
+  if s!=big.OK{return s;}moved(c,base,at,r.used);*v=Value{kind:INTEGER,negative:r.negative,used:r.used};return OK;
+ }
+ if !room(c,at,cap)||!room(c,at+cap,scratch){return WORKSPACE;}
+ let o=(*c).work[at..at+cap];let w=(*c).work[at+cap..at+cap+scratch];
+ var r=big.Result{negative:false,used:0};var s:u64=0;
+ if op==1067{s=big.calculate(big.ADD,a.negative,ia,b.negative,ib,o,w,&r);}
+ else if op==1069{s=big.calculate(big.SUB,a.negative,ia,b.negative,ib,o,w,&r);}
+ else if op==1066{s=big.calculate(big.MUL,a.negative,ia,b.negative,ib,o,w,&r);}
+ else if op==1071{s=dv.calculate(dv.DIV,a.negative,ia,b.negative,ib,o,w,&r);}
+ else if op==1061{s=dv.calculate(dv.REM,a.negative,ia,b.negative,ib,o,w,&r);}
+ else if op==1062{s=bits.bitwise(bits.AND,a.negative,ia,b.negative,ib,o,w,&r);}
+ else if op==1148{s=bits.bitwise(bits.OR,a.negative,ia,b.negative,ib,o,w,&r);}
+ else{s=bits.bitwise(bits.XOR,a.negative,ia,b.negative,ib,o,w,&r);}
+ if s!=big.OK{return s;}
+ moved(c,base,at,r.used);*v=Value{kind:INTEGER,negative:r.negative,used:r.used};return OK;
+}}
+pub unsafe fn evaluate(source:[]const u8,tokens:[]const lex.Token,nodes:[]const ex.Node,root:usize,
+ out:[]u32,work:[]u32,max_depth:usize,result:*Value)u64{unsafe{
+ if max_depth==0||max_depth>256||!valid(source,tokens,nodes,out,work,result)||root>=nodes.len{return INVALID;}
+ var c=Context{source:source,tokens:tokens,nodes:nodes,work:work,limit:max_depth};
+ var lowest:usize=0;var status=structure(&c,root,1,&lowest);if status!=OK{return status;}
+ var kind:u64=0;status=typing(&c,root,&kind);if status!=OK{return status;}
+ var v=Value{kind:0,negative:false,used:0};status=evaluate_node(&c,root,0,&v);if status!=OK{return status;}
+ if v.used>out.len{return CAPACITY;}
+ var i:usize=0;while i<v.used{out[i]=work[i];i+=1;}
+ *result=Value{kind:v.kind,negative:v.negative&&v.used!=0,used:v.used};return OK;
+}}

@@ -1,0 +1,25 @@
+module cpu_capabilities_probe;
+
+import cpu.capabilities as capabilities;
+
+export("caps_size") fn size() usize { return sizeof(capabilities.Capabilities); }
+export("caps_align") fn alignment() usize { return alignof(capabilities.Capabilities); }
+export("caps_reset") fn reset(out: *capabilities.Capabilities) void {
+    unsafe { *out = capabilities.EMPTY_CAPABILITIES; }
+}
+export("caps_decode") fn decode(
+    maximum: u32, features: u32, addresses: u32, out: *capabilities.Capabilities
+) u64 {
+    match capabilities.decode(maximum, features, addresses, out) {
+        ok => { return 0; },
+        err(code) => { return code; },
+    }
+}
+export("caps_detect") fn detect(out: *capabilities.Capabilities) u64 {
+    unsafe {
+        match capabilities.detect(out) {
+            ok => { return 0; },
+            err(code) => { return code; },
+        }
+    }
+}

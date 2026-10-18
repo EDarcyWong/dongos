@@ -1,0 +1,129 @@
+// Allocation-free x86-64 layout of resolved, alias-free type descriptors,
+// matching lang/dongc/typesys.py. Metadata is validated before any scratch
+// write (INVALID); layouts are then computed in scratch with visit states and
+// published to layouts/offsets only after every type succeeded.
+module bootstrap.type_layout;
+pub const OK:u64=0;pub const INVALID:u64=1;pub const CAPACITY:u64=2;pub const CYCLE:u64=3;
+pub const OVERFLOW:u64=4;pub const ALIGNMENT:u64=5;pub const DEPTH:u64=6;
+pub const U8:u64=1;pub const U16:u64=2;pub const U32:u64=3;pub const U64:u64=4;pub const BOOL:u64=5;
+pub const POINTER:u64=6;pub const FUNCTION:u64=7;pub const SLICE:u64=8;pub const OPTIONAL:u64=9;
+pub const RESULT:u64=10;pub const ARRAY:u64=11;pub const STRUCT:u64=12;pub const ENUM:u64=13;
+pub const NONE:usize=0xffff_ffff_ffff_ffff;
+pub const MAX_SIZE:usize=0x7fff_ffff_ffff_ffff;
+pub struct Type{pub kind:u64,pub element:usize,pub count:usize,
+ pub first:usize,pub length:usize,pub alignment:usize,pub is_packed:bool}
+pub struct Field{pub typ:usize}
+pub struct Layout{pub size:usize,pub alignment:usize}
+const MAX:u64=0xffff_ffff_ffff_ffff;
+const OPEN:u8=1;const DONE:u8=2;
+struct Context{types:[]const Type,fields:[]const Field,work:[]Layout,work_offsets:[]usize,states:[]u8,limit:usize}
+fn span(p:u64,n:u64)bool{return n==0||(p!=0&&n<=MAX-p);}
+fn overlap(a:u64,n:u64,b:u64,m:u64)bool{return n!=0&&m!=0&&a<b+m&&b<a+n;}
+unsafe fn valid(types:[]const Type,fields:[]const Field,layouts:[]Layout,offsets:[]usize,
+ work:[]Layout,work_offsets:[]usize,states:[]u8)bool{unsafe{
+ if types.len>MAX/sizeof(Type)||fields.len>MAX/8||layouts.len>MAX/sizeof(Layout)||offsets.len>MAX/8
+  ||work.len>MAX/sizeof(Layout)||work_offsets.len>MAX/8{return false;}
+ let tp=types.ptr as u64;let fp=fields.ptr as u64;let lp=layouts.ptr as u64;let op=offsets.ptr as u64;
+ let wp=work.ptr as u64;let xp=work_offsets.ptr as u64;let sp=states.ptr as u64;
+ let tn=types.len*sizeof(Type);let fieldn=fields.len*8;let ln=layouts.len*sizeof(Layout);let on=offsets.len*8;
+ let wn=work.len*sizeof(Layout);let xn=work_offsets.len*8;let sn=states.len;
+ if !span(tp,tn)||!span(fp,fieldn)||!span(lp,ln)||!span(op,on)||!span(wp,wn)||!span(xp,xn)||!span(sp,sn){return false;}
+ if (tn!=0&&(tp&7)!=0)||(fieldn!=0&&(fp&7)!=0)||(ln!=0&&(lp&7)!=0)||(on!=0&&(op&7)!=0)
+  ||(wn!=0&&(wp&7)!=0)||(xn!=0&&(xp&7)!=0){return false;}
+ // Five written regions: disjoint from each other and from both inputs.
+ if overlap(lp,ln,tp,tn)||overlap(lp,ln,fp,fieldn)||overlap(op,on,tp,tn)||overlap(op,on,fp,fieldn)
+  ||overlap(wp,wn,tp,tn)||overlap(wp,wn,fp,fieldn)||overlap(xp,xn,tp,tn)||overlap(xp,xn,fp,fieldn)
+  ||overlap(sp,sn,tp,tn)||overlap(sp,sn,fp,fieldn)
+  ||overlap(lp,ln,op,on)||overlap(lp,ln,wp,wn)||overlap(lp,ln,xp,xn)||overlap(lp,ln,sp,sn)
+  ||overlap(op,on,wp,wn)||overlap(op,on,xp,xn)||overlap(op,on,sp,sn)
+  ||overlap(wp,wn,xp,xn)||overlap(wp,wn,sp,sn)||overlap(xp,xn,sp,sn){return false;}
+ return true;
+}}
+unsafe fn packed_byte(types:[]const Type,i:usize)u8{unsafe{
+ let p=(types.ptr as u64+i*sizeof(Type)+offsetof(Type,is_packed))as *const u8;return *p;
+}}
+// Metadata only; never touches scratch.
+unsafe fn metadata(types:[]const Type,fields:[]const Field)bool{unsafe{
+ var i:usize=0;
+ while i<types.len{
+  let t=types[i];let k=t.kind;let pk=packed_byte(types,i);
+  if k<U8||k>ENUM||pk>1{return false;}
+  if k!=STRUCT&&(t.alignment!=0||pk!=0){return false;}
+  if k!=ARRAY&&t.count!=0{return false;}
+  if k==STRUCT||k==ENUM{
+   if t.length==0||t.first>fields.len||t.length>fields.len-t.first||t.element!=NONE{return false;}
+   var f=t.first;while f<t.first+t.length{
+    let typ=fields[f].typ;if typ>=types.len&&!(k==ENUM&&typ==NONE){return false;}f+=1;
+   }
+  }else{
+   if t.first!=0||t.length!=0{return false;}
+   if k==POINTER||k==SLICE||k==OPTIONAL||k==ARRAY{if t.element>=types.len{return false;}}
+   else if k==RESULT{if t.element>=types.len&&t.element!=NONE{return false;}}
+   else if t.element!=NONE{return false;}
+   if k==ARRAY&&t.count==0{return false;}
+  }
+  i+=1;
+ }
+ // Each field belongs to at most one aggregate: pairwise range disjointness.
+ i=0;
+ while i<types.len{
+  let a=types[i];
+  if a.kind==STRUCT||a.kind==ENUM{
+   var j=i+1;
+   while j<types.len{let b=types[j];
+    if (b.kind==STRUCT||b.kind==ENUM)&&overlap(a.first as u64,a.length as u64,b.first as u64,b.length as u64){return false;}j+=1;
+   }
+  }i+=1;
+ }
+ return true;
+}}
+fn power(a:usize)bool{return a!=0&&(a&(a-1))==0;}
+fn round(x:usize,a:usize)usize{return (x+a-1)&~(a-1);}
+unsafe fn compute(c:*Context,id:usize,depth:usize)u64{unsafe{
+ if depth>(*c).limit{return DEPTH;}
+ let state=(*c).states[id];if state==DONE{return OK;}if state==OPEN{return CYCLE;}
+ let t=(*c).types[id];let k=t.kind;
+ if k<=U64{var size:usize=1;if k==U16{size=2;}else if k==U32{size=4;}else if k==U64{size=8;}(*c).work[id]=Layout{size:size,alignment:size};}
+ else if k==BOOL{(*c).work[id]=Layout{size:1,alignment:1};}
+ else if k==POINTER||k==FUNCTION{(*c).work[id]=Layout{size:8,alignment:8};}
+ else if k==SLICE||k==OPTIONAL||k==RESULT{(*c).work[id]=Layout{size:16,alignment:8};}
+ else if k==ENUM{
+  var size:usize=8;var f=t.first;while f<t.first+t.length{if (*c).fields[f].typ!=NONE{size=16;}f+=1;}
+  (*c).work[id]=Layout{size:size,alignment:8};
+ }else if k==ARRAY{
+  (*c).states[id]=OPEN;let status=compute(c,t.element,depth+1);if status!=OK{return status;}
+  let e=(*c).work[t.element];if t.count>MAX_SIZE/e.size{return OVERFLOW;}
+  (*c).work[id]=Layout{size:t.count*e.size,alignment:e.alignment};
+ }else{
+  let explicit=t.alignment;
+  if explicit!=0&&(t.is_packed||!power(explicit)||explicit>4096){return ALIGNMENT;}
+  (*c).states[id]=OPEN;var offset:usize=0;var alignment:usize=1;var f=t.first;
+  while f<t.first+t.length{
+   let typ=(*c).fields[f].typ;let status=compute(c,typ,depth+1);if status!=OK{return status;}
+   let child=(*c).work[typ];var fa=child.alignment;if t.is_packed{fa=1;}
+   offset=round(offset,fa);if offset>MAX_SIZE{return OVERFLOW;}
+   (*c).work_offsets[f]=offset;
+   if child.size>MAX_SIZE-offset{return OVERFLOW;}offset+=child.size;
+   if fa>alignment{alignment=fa;}f+=1;
+  }
+  if explicit!=0{if explicit<alignment{return ALIGNMENT;}alignment=explicit;}
+  let size=round(offset,alignment);if size>MAX_SIZE{return OVERFLOW;}
+  (*c).work[id]=Layout{size:size,alignment:alignment};
+ }
+ (*c).states[id]=DONE;return OK;
+}}
+pub unsafe fn calculate(types:[]const Type,fields:[]const Field,
+ layouts:[]Layout,offsets:[]usize,work:[]Layout,work_offsets:[]usize,
+ states:[]u8,max_depth:usize)u64{unsafe{
+ if max_depth==0||max_depth>256||!valid(types,fields,layouts,offsets,work,work_offsets,states){return INVALID;}
+ if !metadata(types,fields){return INVALID;}
+ if layouts.len<types.len||work.len<types.len||states.len<types.len
+  ||offsets.len<fields.len||work_offsets.len<fields.len{return CAPACITY;}
+ var i:usize=0;while i<types.len{states[i]=0;i+=1;}
+ i=0;while i<fields.len{work_offsets[i]=0;i+=1;}
+ var c=Context{types:types,fields:fields,work:work,work_offsets:work_offsets,states:states,limit:max_depth};
+ i=0;while i<types.len{let status=compute(&c,i,1);if status!=OK{return status;}i+=1;}
+ i=0;while i<types.len{layouts[i]=work[i];i+=1;}
+ i=0;while i<fields.len{offsets[i]=work_offsets[i];i+=1;}
+ return OK;
+}}

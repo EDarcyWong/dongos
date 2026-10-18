@@ -1,0 +1,6 @@
+module lib.shared;
+import lib.sys as sys;import lib.shared_abi as abi;
+pub unsafe fn create(bytes:u64,rights:u64,out:*u64)u64{unsafe{return sys.svc_call(abi.CREATE,bytes,rights,out as u64,0,0,0);}}
+pub unsafe fn map(token:u64,rights:u64,out:*abi.Mapping)u64{unsafe{return sys.svc_call(abi.MAP,token,rights,out as u64,0,0,0);}}
+pub fn unmap(token:u64)u64{unsafe{return sys.svc_call(abi.UNMAP,token,0,0,0,0,0);}}
+pub unsafe fn info(token:u64,out:*abi.Info)u64{unsafe{return sys.svc_call(abi.INFO,token,out as u64,0,0,0,0);}}

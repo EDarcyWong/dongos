@@ -1,0 +1,393 @@
+// Serial direct-root xHCI execution over the admitted controller's actual DMA
+// rings. PA is never dereferenced. A fatal/uncertain outcome retains all DMA;
+// the service owner must exit into kernel quarantine, never reset this State.
+module usb.xhci_transport;
+import usb.xhci_controller as hc;
+import usb.xhci_ring as ring;
+import usb.xhci_trb as wire;
+import usb.transport as io;
+pub error Invalid=0x0819_0001;
+pub error Stall=0x0819_0002;
+pub error Timeout=0x0819_0003;
+pub error IoFailure=0x0819_0004;
+pub error Removed=0x0819_0005;
+pub error Unsupported=0x0819_0006;
+pub error Protocol=0x0819_0007;
+pub error Busy=0x0819_0008;
+const MAX:u64=0xffff_ffff_ffff_ffff;
+const LIMIT:usize=1000000;
+const PENDING:usize=12;
+pub struct Report {pub cookie:u64,pub slot:u64,pub address:u64,pub bytes:u64,pub actual:u64,pub status:u64,pub generation:u64,pub epoch:u64,pub pointer:*u8}
+pub const EMPTY_REPORT:Report=Report {cookie:0,slot:0,address:0,bytes:0,actual:0,status:0,generation:0,epoch:0,pointer:null};
+pub struct Pending {
+    pub active:u64,pub asynchronous:u64,pub producer:*ring.Producer,pub generation:u64,pub bytes:u64,pub inward:u64,pub control:u64,
+    pub actual:u64,pub shortened:u64,pub done:u64,pub status:u64,pub cookie:u64,pub pointer:*u8,pub sequence:u64,
+}
+pub const EMPTY_PENDING:Pending=Pending {active:0,asynchronous:0,producer:null,generation:0,bytes:0,inward:0,control:0,
+    actual:0,shortened:0,done:0,status:0,cookie:0,pointer:null,sequence:0};
+pub struct State {
+    pub held:u64,pub ready:u64,pub fault:u64,pub busy:u64,pub epoch:u64,pub token:u64,
+    pub physical:u64,pub pointer:*u8,pub bytes:u64,pub last_tsc:u64,pub controller:*hc.State,
+    pub slots:[9]u64,pub ports:[9]u64,pub bases:[9]u64,pub stalled:[9]u64,
+    pub plan:ring.Plan,pub commands:u64,pub transfers:u64,pub shorts:u64,
+    pub pending:[12]Pending,pub sequence:u64,pub command_wait:u64,pub command_generation:u64,pub command_done:u64,pub command_slot:u64,
+    pub resets:u64,pub dequeues:u64,
+}
+pub const EMPTY:State=State {held:0,ready:0,fault:0,busy:0,epoch:0,token:0,physical:0,pointer:null,bytes:0,last_tsc:0,controller:null,
+    slots:[0;9],ports:[0;9],bases:[0;9],stalled:[0;9],plan:ring.EMPTY_PLAN,commands:0,transfers:0,shorts:0,
+    pending:[EMPTY_PENDING;12],sequence:0,command_wait:0,command_generation:0,command_done:0,command_slot:0,resets:0,dequeues:0};
+pub var OPS:io.Ops=io.Ops {reset_port:reset_port,command:command,control:control,bulk:bulk,recover_endpoint:recover,now:clock,fence:barrier};
+unsafe fn read(s:*State,offset:u64)!u64 {unsafe {
+    let c=(*s).controller;if (offset&3)!=0||offset>(*c).setup.bar_bytes||4>(*c).setup.bar_bytes-offset {return error.Invalid;}
+    var value:u32=0;if (*(*c).ops).read((*c).context,(*c).setup.bar,offset,&value)!=0 {return error.IoFailure;}return value as u64;
+}}
+unsafe fn write(s:*State,offset:u64,value:u32)!void {unsafe {
+    let c=(*s).controller;if (offset&3)!=0||offset>(*c).setup.bar_bytes||4>(*c).setup.bar_bytes-offset {return error.Invalid;}
+    if (*(*c).ops).write((*c).context,(*c).setup.bar,offset,value)!=0 {return error.IoFailure;}
+}return;}
+unsafe fn write64(s:*State,offset:u64,value:u64)!void {unsafe {
+    try write(s,offset,value as u32);if (*(*s).controller).caps.ac64!=0 {try write(s,offset+4,(value>>32) as u32);}
+}return;}
+unsafe fn read64(s:*State,offset:u64)!u64 {unsafe {
+    let low=try read(s,offset);var high:u64=0;if (*(*s).controller).caps.ac64!=0 {high=try read(s,offset+4);}return low|(high<<32);
+}}
+unsafe fn available(s:*State)!void {unsafe {
+    if s==null||(*s).held!=1||(*s).ready!=1||(*s).fault!=0||(*s).controller==null||(*s).busy!=0 {return error.Busy;}
+    let c=(*s).controller;
+    if (*c).info.held!=1||(*c).info.ready!=1||(*c).info.fault!=0||(*c).enabled!=1||(*c).busy!=2||(*c).ops==null
+        ||(*c).setup.epoch!=(*s).epoch||(*c).setup.lease_token!=(*s).token||(*c).setup.physical!=(*s).physical
+        ||(*c).setup.pointer!=(*s).pointer||(*c).setup.bytes!=(*s).bytes {return error.Protocol;}
+}return;}
+unsafe fn now(s:*State)!u64 {unsafe {
+    let c=(*s).controller;var value:u64=0;if (*(*c).ops).now((*c).context,&value)!=0 {return error.IoFailure;}
+    if value<(*s).last_tsc||value<(*c).info.last_tsc {return error.Protocol;}(*s).last_tsc=value;(*c).info.last_tsc=value;return value;
+}}
+unsafe fn healthy(s:*State)!void {unsafe {
+    let c=(*s).controller;let value=try read(s,(*c).caps.operational+4);(*c).info.last_status=value;
+    if (value&0x1805)!=0||(try read(s,(*c).caps.operational))!=1 {return error.IoFailure;}
+}return;}
+unsafe fn within(s:*State,physical:u64,bytes:u64,alignment:u64)!void {unsafe {
+    let region=wire.Region {physical:(*s).physical,bytes:(*s).bytes,physical_bits:(*(*s).controller).setup.physical_bits};
+    match wire.span(&region,physical,bytes,alignment) {ok=>{},err(e)=>{return error.Invalid;},}
+}return;}
+unsafe fn scope(s:*State,slot:u64)!u64 {unsafe {
+    if slot==0||slot>8||(*s).slots[slot as usize]!=1||(*s).bases[slot as usize]==0 {return error.Invalid;}
+    return (*s).bases[slot as usize];
+}}
+unsafe fn buffer(s:*State,slot:u64,b:*const io.Buffer,zero:bool)!void {unsafe {
+    if b==null {return error.Invalid;}if (*b).bytes==0 {if zero&&(*b).physical==0&&(*b).pointer==null {return;}return error.Invalid;}
+    let base=try scope(s,slot);try within(s,(*b).physical,(*b).bytes,1);
+    // Controlled 32KiB/device layout. The data area is disjoint from all
+    // input/output contexts and EP0/IN/OUT rings, even before TD publication.
+    if (*b).physical<base+20480||(*b).physical>base+32768||(*b).bytes>base+32768-(*b).physical
+        ||(*b).pointer!=(*s).pointer+((*b).physical-(*s).physical) as usize
+        ||(*b).bytes>65536-((*b).physical&65535) {return error.Invalid;}
+}return;}
+unsafe fn producer(s:*State,slot:u64,r:*const ring.Producer,endpoint:u64,stalled:bool)!void {unsafe {
+    let base=try scope(s,slot);var expected=base+12288;if endpoint==1 {expected=base+8192;}else if (endpoint&1)==0 {expected=base+16384;}
+    if r==null||endpoint==0||endpoint>31||(*r).ready!=1||(*r).held!=1||(*r).kind!=ring.TRANSFER||(*r).slot!=slot||(*r).endpoint!=endpoint
+        ||(*r).physical!=expected||(*r).pointer!=(*s).pointer+(expected-(*s).physical) as usize||(*r).entries!=256
+        ||(*r).epoch!=(*s).epoch||(*r).busy!=0||(!stalled&&((*r).pending!=0||(*r).fault!=0)) {return error.Invalid;}
+}return;}
+unsafe fn ring_fence(context:u64,phase:u64)u64 {unsafe {
+    let s=context as *State;let c=(*s).controller;return (*(*c).ops).fence((*c).context,phase);
+}}
+var RING_OPS:ring.Ops=ring.Ops {fence:ring_fence};
+unsafe fn consume(s:*State,event:*const wire.Event)!void {unsafe {
+    let c=(*s).controller;var pointer:u64=0;match ring.erdp(&(*c).events,true) {ok(value)=>{pointer=value;},err(e)=>{return error.Protocol;},}
+    try write64(s,(*c).caps.runtime+0x38,pointer);
+    if ((try read64(s,(*c).caps.runtime+0x38))&~15)!=(pointer&~15) {return error.Protocol;}
+    try write(s,(*c).caps.runtime+0x20,1);try write(s,(*c).caps.operational+4,8);
+    if (*c).info.events==MAX {return error.Protocol;}(*c).info.events+=1;
+    if (*event).kind==34 {
+        if (*event).port==0||(*event).port>(*c).caps.ports {return error.Protocol;}
+        (*c).info.port_changes|=1<<((*event).port-1);
+    }
+}return;}
+unsafe fn event(s:*State,out:*wire.Event)!bool {unsafe {
+    let c=(*s).controller;var found=false;
+    match ring.poll(&(*c).events,&RING_OPS,s as u64,out) {ok(value)=>{found=value;},err(e)=>{return error.Protocol;},}
+    if found {try consume(s,out);}return found;
+}}
+unsafe fn ended(s:*State,end:u64)!void {unsafe {
+    if end==0||(try now(s))>=end {return error.Timeout;}try healthy(s);
+}return;}
+unsafe fn fail(s:*State,code:u64)u64 {unsafe {
+    if code==0x0819_0002 {return 1;}if code==0x0819_0008 {return 6;}
+    (*s).fault=1;(*s).ready=0;let c=(*s).controller;(*c).info.fault=1;(*c).info.ready=0;
+    if code==0x0819_0003 {return 2;}if code==0x0819_0005 {return 4;}if code==0x0819_0006 {return 5;}
+    if code==0x0819_0004 {return 3;}return 6;
+}}
+unsafe fn completed(s:*State,p:*Pending,status:u64)!void {unsafe {
+    if (*s).sequence==MAX||(*s).transfers==MAX {return error.Protocol;}
+    (*s).sequence+=1;(*p).sequence=(*s).sequence;(*p).status=status;(*p).done=1;(*s).transfers+=1;
+}return;}
+unsafe fn dispatch(s:*State,e:*const wire.Event)!void {unsafe {
+    let c=(*s).controller;
+    if (*e).kind==34 {
+        var i:usize=1;while i<9 {
+            if (*s).slots[i]==1&&(*s).ports[i]==(*e).port {
+                let value=try read(s,(*c).caps.operational+0x400+((*e).port-1)*16);if (value&1)==0 {return error.Removed;}
+            }i+=1;
+        }return;
+    }
+    if (*e).kind==33 {
+        if (*s).command_wait!=1||(*s).command_done!=0 {return error.Protocol;}
+        var completion=ring.Completion {generation:0,index:0,code:0,residual:0,final:0};
+        match ring.complete(&(*c).command,(*s).epoch,(*s).command_generation,e,&completion) {ok=>{},err(code)=>{return error.Protocol;},}
+        if completion.final!=1||completion.residual!=0 {return error.Protocol;}
+        (*s).command_done=1;(*s).command_slot=(*e).slot;return;
+    }
+    if (*e).kind!=32 {return error.Protocol;}var found:usize=PENDING;var i:usize=0;
+    while i<PENDING {
+        let p=&(*s).pending[i];let r=(*p).producer;
+        if (*p).active==1&&r!=null&&(*r).slot==(*e).slot&&(*r).endpoint==(*e).endpoint {
+            if found!=PENDING {return error.Protocol;}found=i;
+        }i+=1;
+    }
+    if found==PENDING {return error.Protocol;}let p=&(*s).pending[found];let r=(*p).producer;
+    if (*p).done!=0||(*r).epoch!=(*s).epoch||(*r).generation!=(*p).generation||(*r).pending!=1 {return error.Protocol;}
+    if (*e).code==6 {
+        var matched:usize=8;i=0;while i<(*r).count {if (*e).parameter==(*r).physical+(*r).slots[i]*16 {matched=i;}i+=1;}
+        if matched==8||(*e).residual>(((*r).trbs[matched].status&0x1_ffff) as u64) {return error.Protocol;}(*p).actual=0;
+        (*r).fault=1;(*s).stalled[(*r).slot as usize]|=1<<(*r).endpoint;try completed(s,p,1);return;
+    }
+    var completion=ring.Completion {generation:0,index:0,code:0,residual:0,final:0};
+    let count=(*r).count;match ring.complete(r,(*s).epoch,(*p).generation,e,&completion) {ok=>{},err(code)=>{return error.Protocol;},}
+    if completion.final==0 {
+        if (*p).control!=1||(*p).inward!=1||count!=3||completion.index!=1||completion.code!=13||(*p).shortened!=0||completion.residual>(*p).bytes {return error.Protocol;}
+        (*p).actual=(*p).bytes-completion.residual;(*p).shortened=1;return;
+    }
+    if (*p).control==1 {if completion.index+1!=count||completion.code!=1||completion.residual!=0 {return error.Protocol;}}
+    else {(*p).actual=(*p).bytes-completion.residual;}
+    if (*p).shortened!=0 {if (*s).shorts==MAX {return error.Protocol;}(*s).shorts+=1;}
+    try completed(s,p,0);
+}return;}
+unsafe fn pump_one(s:*State)!bool {unsafe {
+    var e=wire.EMPTY_EVENT;if !(try event(s,&e)) {return false;}try dispatch(s,&e);return true;
+}}
+unsafe fn submit(s:*State,encoded:*const wire.Trb,end:u64,out:*u64)!void {unsafe {
+    let c=(*s).controller;if (*s).command_wait!=0 {return error.Busy;}try ended(s,end);
+    match ring.plan(&(*c).command,slice_from_raw_parts(encoded,1),&(*s).plan) {ok=>{},err(e)=>{return error.Protocol;},}
+    (*s).command_wait=1;(*s).command_done=0;(*s).command_slot=0;(*s).command_generation=(*s).plan.generation;
+    match ring.publish(&(*c).command,&(*s).plan,&RING_OPS,s as u64) {ok=>{},err(e)=>{return error.IoFailure;},}
+    try write(s,(*c).caps.doorbells,0);var loops:usize=0;
+    while loops<LIMIT {
+        let pumped=try pump_one(s);if (*s).command_done==1 {
+            try healthy(s);if (*s).commands==MAX||(*c).info.commands==MAX {return error.Protocol;}
+            (*s).commands+=1;(*c).info.commands+=1;*out=(*s).command_slot;(*s).command_wait=0;return;
+        }
+        try ended(s,end);loops+=1;
+    }
+}return error.Timeout;}
+unsafe fn check_context(s:*State,input:*const wire.Command)!void {unsafe {
+    let c=*input;let controller=(*s).controller;
+    if c.kind==9||c.kind==23 {return;}
+    if c.slot==0||c.slot>(*controller).caps.enabled_slots||c.slot>8||(*s).slots[c.slot as usize]!=1 {return error.Invalid;}
+    if c.kind==10 {var p:usize=0;while p<PENDING {if (*s).pending[p].active==1&&(*(*s).pending[p].producer).slot==c.slot {return error.Busy;}p+=1;}return;}
+    if c.context_bytes!=33*(*controller).caps.context_bytes||c.context<(*s).physical+16384||(c.context&4095)!=0 {return error.Invalid;}
+    try within(s,c.context,c.context_bytes,64);
+    if c.kind==11 {
+        if c.block_set_address!=0||(*s).bases[c.slot as usize]!=0 {return error.Unsupported;}
+        let offset=c.context-(*s).physical-16384;
+        if offset%32768!=0||offset/32768>=3||c.context>(*s).physical+(*s).bytes-32768 {return error.Unsupported;}
+        var i:usize=1;while i<9 {if i!=c.slot as usize&&(*s).bases[i]==c.context {return error.Invalid;}i+=1;}
+        let output=volatile_load(((*s).pointer+(c.slot*8) as usize) as *const u64);
+        if output!=c.context+4096 {return error.Invalid;}
+    }else if c.context!=(*s).bases[c.slot as usize] {return error.Invalid;}
+    let p=(*s).pointer+(c.context-(*s).physical) as usize;
+    let flags=read_unaligned((p+4) as *const u32) as u64;
+    if read_unaligned(p as *const u32)!=0||flags==0 {return error.Invalid;}
+    if c.kind==11&&flags!=3 {return error.Invalid;}if c.kind==13&&flags!=2 {return error.Invalid;}
+    let port=((read_unaligned((p+(*controller).caps.context_bytes as usize+4) as *const u32)>>16)&255) as u64;
+    if port==0||port>(*controller).caps.ports||((*s).ports[c.slot as usize]!=0&&port!=(*s).ports[c.slot as usize]) {return error.Invalid;}
+}return;}
+unsafe fn command(context:u64,input:*const wire.Command,end:u64,out:*u64)u64 {unsafe {
+    let s=context as *State;if input==null||out==null {return 6;}let checked=available(s);match checked {ok=>{},err(e)=>{return 6;},}
+    let c=(*s).controller;let region=wire.Region {physical:(*s).physical,bytes:(*s).bytes,physical_bits:(*c).setup.physical_bits};var encoded=wire.EMPTY;
+    match wire.command(&region,input,&encoded) {ok=>{},err(e)=>{return 5;},}
+    match check_context(s,input) {ok=>{},err(e)=>{return 6;},}
+    (*s).busy=1;var slot:u64=0;let result=submit(s,&encoded,end,&slot);(*s).busy=0;
+    match result {ok=>{},err(e)=>{return fail(s,e);},}
+    if (*input).kind==9 {
+        if slot==0||slot>(*c).caps.enabled_slots||slot>8||(*s).slots[slot as usize]!=0 {return fail(s,0x0819_0007);}
+        (*s).slots[slot as usize]=1;
+    }else if (*input).kind==11 {
+        (*s).bases[slot as usize]=(*input).context;let pointer=(*s).pointer+((*input).context-(*s).physical) as usize;
+        (*s).ports[slot as usize]=((read_unaligned((pointer+(*c).caps.context_bytes as usize+4) as *const u32)>>16)&255) as u64;
+    }else if (*input).kind==10 {(*s).slots[slot as usize]=0;(*s).bases[slot as usize]=0;(*s).ports[slot as usize]=0;}
+    *out=slot;return 0;
+}}
+unsafe fn reset_inner(s:*State,port:u64,end:u64,out:*io.Port)!void {unsafe {
+    let c=(*s).controller;let offset=(*c).caps.operational+0x400+(port-1)*16;try ended(s,end);
+    let before=try read(s,offset);if (before&1)==0 {return error.Removed;}if (before&8)!=0 {return error.IoFailure;}
+    // Do not echo PED/RW1CS, PLS/LWS or W1C change fields as ordinary RW bits.
+    let neutral=before&0x0e00_c200;let protocol=(*c).caps.protocols[(port-1) as usize];var reset:u64=16;var completed:u64=1<<21;
+    if protocol==3 {reset=1<<31;completed=1<<19;}else if protocol!=2 {return error.Unsupported;}
+    try write(s,offset,(neutral|reset) as u32);var loops:usize=0;
+    while loops<LIMIT {
+        let value=try read(s,offset);if (value&1)==0 {return error.Removed;}
+        if (value&8)!=0 {return error.IoFailure;}
+        if (value&reset)==0&&(value&2)!=0&&(value&0x1e0)==0&&(value&completed)!=0 {
+            let speed=(value>>10)&15;if speed==0||speed>4||(protocol==2&&speed==4)||(protocol==3&&speed!=4) {return error.Unsupported;}
+            try write(s,offset,((value&0x0e00_c200)|(value&0x00fe_0000)) as u32);
+            let after=try read(s,offset);if (after&3)!=3||(after&0x1e0)!=0 {return error.Protocol;}
+            *out=io.Port {connected:1,speed:speed};return;
+        }
+        try ended(s,end);loops+=1;
+    }
+}return error.Timeout;}
+unsafe fn reset_port(context:u64,port:u64,end:u64,out:*io.Port)u64 {unsafe {
+    let s=context as *State;if out==null {return 6;}match available(s) {ok=>{},err(e)=>{return 6;},}
+    let c=(*s).controller;if port==0||port>(*c).caps.ports {return 6;}
+    var i:usize=1;while i<9 {if (*s).slots[i]==1&&(*s).ports[i]==port {return 6;}i+=1;}
+    (*s).busy=1;let result=reset_inner(s,port,end,out);(*s).busy=0;match result {ok=>{return 0;},err(e)=>{return fail(s,e);},}
+}}
+unsafe fn canonical(s:*State,input:*const wire.ControlPlan,b:*const io.Buffer)!void {unsafe {
+    if input==null||b==null {return error.Invalid;}
+    let parameter=(*input).trbs[0].parameter;let request=wire.Control {request_type:parameter&255,request:(parameter>>8)&255,value:(parameter>>16)&65535,
+        index:(parameter>>32)&65535,bytes:parameter>>48,data:(*b).physical};
+    if request.bytes!=(*b).bytes {return error.Invalid;}
+    let region=wire.Region {physical:(*s).physical,bytes:(*s).bytes,physical_bits:(*(*s).controller).setup.physical_bits};var expected=wire.EMPTY_CONTROL;
+    match wire.control(&region,&request,&expected) {ok=>{},err(e)=>{return error.Invalid;},}
+    if (*input).count!=expected.count {return error.Invalid;}
+    var i:usize=0;while i<3 {
+        if (*input).trbs[i].parameter!=expected.trbs[i].parameter||(*input).trbs[i].status!=expected.trbs[i].status||(*input).trbs[i].control!=expected.trbs[i].control {return error.Invalid;}i+=1;
+    }
+}return;}
+unsafe fn register(s:*State,r:*ring.Producer,trbs:[]const wire.Trb,bytes:u64,inward:bool,control:bool,asynchronous:bool,cookie:u64,pointer:*u8)!usize {unsafe {
+    var free:usize=PENDING;var i:usize=0;
+    while i<PENDING {
+        let p=&(*s).pending[i];if (*p).active==0 {if free==PENDING {free=i;}}
+        else if (*p).producer==r||((*(*p).producer).slot==(*r).slot&&(*(*p).producer).endpoint==(*r).endpoint)||(cookie!=0&&(*p).cookie==cookie) {return error.Busy;}i+=1;
+    }
+    if free==PENDING {return error.Busy;}
+    match ring.plan(r,trbs,&(*s).plan) {ok=>{},err(e)=>{return error.Protocol;},}
+    let p=&(*s).pending[free];*p=EMPTY_PENDING;(*p).active=1;(*p).producer=r;(*p).generation=(*s).plan.generation;(*p).bytes=bytes;(*p).actual=bytes;(*p).cookie=cookie;(*p).pointer=pointer;
+    if inward {(*p).inward=1;}if control {(*p).control=1;}if asynchronous {(*p).asynchronous=1;}
+    match ring.publish(r,&(*s).plan,&RING_OPS,s as u64) {ok=>{},err(e)=>{return error.IoFailure;},}
+    try write(s,(*(*s).controller).caps.doorbells+(*r).slot*4,(*r).endpoint as u32);return free;
+}}
+unsafe fn transfer(s:*State,slot:u64,r:*ring.Producer,trbs:[]const wire.Trb,bytes:u64,inward:bool,control:bool,end:u64,out:*u64)!void {unsafe {
+    try ended(s,end);let index=try register(s,r,trbs,bytes,inward,control,false,0,null);let p=&(*s).pending[index];var loops:usize=0;
+    while loops<LIMIT {
+        let pumped=try pump_one(s);if (*p).done==1 {
+            if (*p).status==1 {return error.Stall;}try healthy(s);*out=(*p).actual;*p=EMPTY_PENDING;return;
+        }
+        try ended(s,end);loops+=1;
+    }
+}return error.Timeout;}
+unsafe fn control(context:u64,slot:u64,r:*ring.Producer,input:*const wire.ControlPlan,b:*const io.Buffer,end:u64,out:*u64)u64 {unsafe {
+    let s=context as *State;if out==null {return 6;}match available(s) {ok=>{},err(e)=>{return 6;},}
+    match producer(s,slot,r,1,false) {ok=>{},err(e)=>{return 6;},}
+    match buffer(s,slot,b,true) {ok=>{},err(e)=>{return 6;},}
+    match canonical(s,input,b) {ok=>{},err(e)=>{return 6;},}
+    (*s).busy=1;var actual:u64=0;let inward=((*input).trbs[0].parameter&128)!=0;
+    let result=transfer(s,slot,r,(*input).trbs[0..(*input).count],(*b).bytes,inward,true,end,&actual);(*s).busy=0;
+    match result {ok=>{*out=actual;return 0;},err(e)=>{return fail(s,e);},}
+}}
+unsafe fn bulk(context:u64,slot:u64,address:u64,r:*ring.Producer,b:*const io.Buffer,end:u64,out:*u64)u64 {unsafe {
+    // The same bounded executor serves a single normal bulk/interrupt TD.
+    let s=context as *State;if out==null||address>255||(address&0x70)!=0||(address&15)==0 {return 6;}
+    match available(s) {ok=>{},err(e)=>{return 6;},}let endpoint=(address&15)*2+(address>>7);
+    match producer(s,slot,r,endpoint,false) {ok=>{},err(e)=>{return 6;},}match buffer(s,slot,b,false) {ok=>{},err(e)=>{return 6;},}
+    let region=wire.Region {physical:(*s).physical,bytes:(*s).bytes,physical_bits:(*(*s).controller).setup.physical_bits};var encoded=wire.EMPTY;
+    match wire.normal(&region,(*b).physical,(*b).bytes,(address&128)!=0,&encoded) {ok=>{},err(e)=>{return 6;},}
+    (*s).busy=1;var actual:u64=0;let result=transfer(s,slot,r,slice_from_raw_parts(&encoded,1),(*b).bytes,(address&128)!=0,false,end,&actual);(*s).busy=0;
+    match result {ok=>{*out=actual;return 0;},err(e)=>{return fail(s,e);},}
+}}
+unsafe fn endpoint_state(s:*State,slot:u64,endpoint:u64,dequeue:*u64)!u64 {unsafe {
+    let base=try scope(s,slot);let c=(*s).controller;
+    if endpoint==0||endpoint>31 {return error.Invalid;}if ring_fence(s as u64,3)!=0 {return error.IoFailure;}
+    let pointer=(*s).pointer+(base-(*s).physical+4096+endpoint*(*c).caps.context_bytes) as usize;
+    *dequeue=volatile_load((pointer+8) as *const u64);return (volatile_load(pointer as *const u32)&7) as u64;
+}}
+unsafe fn recover_inner(s:*State,slot:u64,address:u64,r:*ring.Producer,end:u64)!void {unsafe {
+    var endpoint:u64=1;if address!=0 {endpoint=(address&15)*2+(address>>7);}
+    try producer(s,slot,r,endpoint,true);var pending:usize=PENDING;var i:usize=0;
+    while i<PENDING {if (*s).pending[i].active==1&&(*s).pending[i].producer==r {if pending!=PENDING {return error.Protocol;}pending=i;}i+=1;}
+    let halted=((*s).stalled[slot as usize]&(1<<endpoint))!=0;
+    if halted {
+        if pending==PENDING||(*r).fault!=1||(*r).pending!=1||(*s).pending[pending].done!=1||(*s).pending[pending].status!=1 {return error.Protocol;}
+    }else if pending!=PENDING||(*r).fault!=0||(*r).pending!=0 {return error.Busy;}
+    var dequeue:u64=0;let before=try endpoint_state(s,slot,endpoint,&dequeue);
+    var command:u64=14;
+    if halted {if before!=2 {return error.Protocol;}}
+    else {if before==1 {command=15;}else if before!=3 {return error.Protocol;}}
+    var result:u64=0;
+    if halted||before==1 {
+        let reset=wire.Trb {parameter:0,status:0,control:((command<<10)|(endpoint<<16)|(slot<<24)) as u32};
+        try submit(s,&reset,end,&result);if result!=slot||(try endpoint_state(s,slot,endpoint,&dequeue))!=3 {return error.Protocol;}
+        if (*s).resets==MAX {return error.Protocol;}(*s).resets+=1;
+    }
+    if (*r).enqueue>=(*r).entries-1||(*r).cycle>1 {return error.Protocol;}
+    let expected=(*r).physical+(*r).enqueue*16|(*r).cycle;
+    let set=wire.Trb {parameter:expected,status:0,control:((16<<10)|(endpoint<<16)|(slot<<24)) as u32};
+    try submit(s,&set,end,&result);
+    if result!=slot||(try endpoint_state(s,slot,endpoint,&dequeue))!=3||dequeue!=expected {return error.Protocol;}
+    // Only confirmed hardware Reset/Stop + SetTRDequeue transfers ownership
+    // of the abandoned TD back. Software flags are cleared strictly last.
+    if (*s).dequeues==MAX {return error.Protocol;}(*s).dequeues+=1;
+    (*r).fault=0;(*r).pending=0;(*r).count=0;(*s).stalled[slot as usize]&=~(1<<endpoint);
+    if pending!=PENDING {(*s).pending[pending]=EMPTY_PENDING;}
+}return;}
+unsafe fn recover(context:u64,slot:u64,address:u64,r:*ring.Producer,end:u64)u64 {unsafe {
+    let s=context as *State;if address>255||(address&0x70)!=0||(address!=0&&(address&15)==0) {return 6;}
+    match available(s) {ok=>{},err(e)=>{return 6;},}
+    (*s).busy=1;let result=recover_inner(s,slot,address,r,end);(*s).busy=0;
+    match result {ok=>{return 0;},err(e)=>{return fail(s,e);},}
+}}
+// A posted HID IN has no transaction deadline. It owns its ring and buffer
+// until a real completion (or outer controller quarantine), even when idle.
+pub unsafe fn post(s:*State,slot:u64,address:u64,r:*ring.Producer,b:*const io.Buffer,cookie:u64)!void {unsafe {
+    try available(s);if cookie==0||address<129||address>143||b==null||(*b).bytes==0||(*b).bytes>1024 {return error.Invalid;}
+    let endpoint=(address&15)*2+1;try producer(s,slot,r,endpoint,false);try buffer(s,slot,b,false);try healthy(s);
+    let region=wire.Region {physical:(*s).physical,bytes:(*s).bytes,physical_bits:(*(*s).controller).setup.physical_bits};var encoded=wire.EMPTY;
+    match wire.normal(&region,(*b).physical,(*b).bytes,true,&encoded) {ok=>{},err(e)=>{return error.Invalid;},}
+    (*s).busy=1;let result=register(s,r,slice_from_raw_parts(&encoded,1),(*b).bytes,true,false,true,cookie,(*b).pointer);(*s).busy=0;
+    match result {ok(value)=>{return;},err(e)=>{if e==0x0819_0008 {return error.Busy;}let ignored=fail(s,e);return error.Protocol;},}
+}}
+unsafe fn poll_inner(s:*State,budget:u64,out:*Report)!bool {unsafe {
+    try healthy(s);var i:u64=0;while i<budget {if !(try pump_one(s)) {break;}i+=1;}
+    var chosen:usize=PENDING;var sequence=MAX;var at:usize=0;
+    while at<PENDING {let p=&(*s).pending[at];if (*p).active==1&&(*p).asynchronous==1&&(*p).done==1&&(*p).sequence<sequence {chosen=at;sequence=(*p).sequence;}at+=1;}
+    if chosen==PENDING {return false;}let p=&(*s).pending[chosen];let r=(*p).producer;
+    *out=Report {cookie:(*p).cookie,slot:(*r).slot,address:((*r).endpoint/2)|128,bytes:(*p).bytes,actual:(*p).actual,status:(*p).status,generation:(*p).generation,epoch:(*s).epoch,pointer:(*p).pointer};
+    if (*p).status==0 {*p=EMPTY_PENDING;}else {(*p).asynchronous=0;}return true;
+}}
+pub unsafe fn poll(s:*State,budget:u64,out:*Report)!bool {unsafe {
+    try available(s);if budget==0||budget>256||out==null {return error.Invalid;}
+    (*s).busy=1;let result=poll_inner(s,budget,out);(*s).busy=0;
+    match result {ok(value)=>{return value;},err(e)=>{let ignored=fail(s,e);return result;},}
+}}
+unsafe fn clock(context:u64,out:*u64)u64 {unsafe {
+    let s=context as *State;if out==null {return 6;}match available(s) {ok=>{},err(e)=>{return 6;},}
+    match now(s) {ok(value)=>{*out=value;return 0;},err(e)=>{return fail(s,e);},}
+}}
+unsafe fn barrier(context:u64)u64 {unsafe {
+    let s=context as *State;match available(s) {ok=>{},err(e)=>{return 6;},}
+    compiler_fence();let value=ring_fence(context,4);compiler_fence();if value!=0 {return fail(s,0x0819_0004);}return 0;
+}}
+pub unsafe fn initialize(s:*State,c:*hc.State)!void {unsafe {
+    if s==null||c==null||(*s).held!=0||(*c).busy!=0||(*c).info.held!=1||(*c).info.ready!=1||(*c).info.fault!=0||(*c).enabled!=1||(*c).ops==null
+        ||(*c).setup.bytes!=131072||(*c).setup.pointer==null||(*c).setup.epoch==0||(*c).setup.lease_token==0
+        ||(*c).caps.enabled_slots==0||(*c).caps.enabled_slots>8||(*c).caps.ports==0||(*c).caps.ports>32
+        ||(*c).command.pending!=0||(*c).command.fault!=0||(*c).events.fault!=0 {return error.Invalid;}
+    if (*c).command.physical!=(*c).setup.physical+4096||(*c).command.pointer!=(*c).setup.pointer+4096||(*c).command.epoch!=(*c).setup.epoch
+        ||(*c).events.physical!=(*c).setup.physical+8192||(*c).events.pointer!=(*c).setup.pointer+8192||(*c).events.epoch!=(*c).setup.epoch {return error.Invalid;}
+    *s=EMPTY;(*s).controller=c;(*s).epoch=(*c).setup.epoch;(*s).token=(*c).setup.lease_token;(*s).physical=(*c).setup.physical;
+    (*s).pointer=(*c).setup.pointer;(*s).bytes=(*c).setup.bytes;(*s).last_tsc=(*c).info.last_tsc;(*s).held=1;(*s).ready=1;
+    (*c).busy=2;
+}return;}
+// Discovery does not reset an empty port and does not poison other devices.
+// Root service code probes ports first, then gives each connected device one
+// distinct retained 32KiB scope before invoking enumerate.initialize.
+pub unsafe fn probe_port(s:*State,port:u64,out:*io.Port)!void {unsafe {
+    if out==null {return error.Invalid;}try available(s);let c=(*s).controller;
+    if port==0||port>(*c).caps.ports {return error.Invalid;}try healthy(s);
+    let value=try read(s,(*c).caps.operational+0x400+(port-1)*16);
+    if (value&1)==0 {*out=io.Port {connected:0,speed:0};return;}
+    if (value&8)!=0 {return error.IoFailure;}let protocol=(*c).caps.protocols[(port-1) as usize];
+    if protocol!=2&&protocol!=3 {return error.Unsupported;}
+    *out=io.Port {connected:1,speed:(value>>10)&15};
+}return;}

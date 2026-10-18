@@ -1,0 +1,53 @@
+{
+  "format": "DGFONT01",
+  "source_url": "https://github.com/notofonts/noto-cjk/blob/main/Sans/OTF/SimplifiedChinese/NotoSansCJKsc-Regular.otf",
+  "source_file": "NotoSansCJKsc-Regular.otf",
+  "source_sha256": "2c76254f6fc379fddfce0a7e84fb5385bb135d3e399294f6eeb6680d0365b74b",
+  "license": "SIL-OFL-1.1",
+  "license_sha256": "6a73f9541c2de74158c0e7cf6b0a58ef774f5a780bf191f2d7ec9cc53efe2bf2",
+  "family_names": [
+    "Noto Sans CJK SC",
+    "NotoSansCJKsc-Regular"
+  ],
+  "copyrights": [
+    "\u6f0f 2014-2021 Adobe (http://www.adobe.com/)."
+  ],
+  "trademarks": [
+    "Noto is a trademark of Google Inc."
+  ],
+  "derived_family": "Dong CJK SC",
+  "glyph_repertoire": "ASCII-printable + all 7445 GB2312 characters + U+FFFD",
+  "assets": [
+    {
+      "file": "dong-cjk-sc-20.dgfont",
+      "pixel_size": 20,
+      "glyphs": 7541,
+      "bytes": 3146806,
+      "sha256": "45705bbcb62208ea122bce4ab98d935b580092868e5925f89e885ee4b45dcbe8"
+    },
+    {
+      "file": "dong-cjk-sc-24.dgfont",
+      "pixel_size": 24,
+      "glyphs": 7541,
+      "bytes": 4403269,
+      "sha256": "55bfc24ab4ac5fddab0fd6c9e8d183f416479e9e7075c2848ee6a8b968714903"
+    },
+    {
+      "file": "dong-cjk-sc-28.dgfont",
+      "pixel_size": 28,
+      "glyphs": 7541,
+      "bytes": 5881701,
+      "sha256": "22582aaf09c6e23d032aa9282abe8dd51a6827fd3b2e11f1c49b984768adb1f3"
+    },
+    {
+      "file": "dong-cjk-sc-32.dgfont",
+      "pixel_size": 32,
+      "glyphs": 7541,
+      "bytes": 7577425,
+      "sha256": "e870c59e99c9115dd6074d2dc2f4447b2f69a46ee7711aa28996becda2e8c449"
+    }
+  ],
+  "replacement_glyph": "program-generated box",
+  "source_font_copied": false,
+  "windows_system_fonts_used": false
+}

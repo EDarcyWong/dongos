@@ -1,0 +1,110 @@
+// Pure, bounded lexical paths. This does not traverse a filesystem or do I/O.
+module fs.path;
+pub error InvalidArgument=0x050a_0001;
+pub error InvalidUtf8=0x050a_0002;
+pub error InvalidName=0x050a_0003;
+pub error TooLong=0x050a_0004;
+pub error RootEscape=0x050a_0005;
+pub error InvalidCwd=0x050a_0006;
+pub const MAX_BYTES:usize=1024;
+pub const MAX_INPUT_BYTES:usize=4096;
+pub const MAX_COMPONENTS:usize=128;
+pub const MAX_NAME_UNITS:usize=255;
+pub struct Path {
+    pub length:usize,pub components:usize,pub directory_hint:u64,pub bytes:[1024]u8,
+}
+pub const EMPTY:Path=Path{length:0,components:0,directory_hint:0,bytes:[0;1024]};
+const MAX:u64=0xffff_ffff_ffff_ffff;
+unsafe fn span(bytes:[]const u8,limit:usize)!void {unsafe {
+    if bytes.len>limit {return error.TooLong;}
+    if (bytes.len!=0&&bytes.ptr==null)||(bytes.ptr as u64)>MAX-bytes.len as u64 {return error.InvalidArgument;}
+}return;}
+struct Scalar { value:u32,next:usize }
+unsafe fn scalar(bytes:[]const u8,at:usize,out:*Scalar)!void {unsafe {
+    if at>=bytes.len {return error.InvalidUtf8;}
+    let first=bytes[at] as u32;var value=first;var n:usize=1;var minimum:u32=0;
+    if first>=128 {
+        if first>=0xc2&&first<=0xdf {n=2;value=first&31;minimum=128;}
+        else if first>=0xe0&&first<=0xef {n=3;value=first&15;minimum=2048;}
+        else if first>=0xf0&&first<=0xf4 {n=4;value=first&7;minimum=65536;}
+        else {return error.InvalidUtf8;}
+    }
+    if n>bytes.len-at {return error.InvalidUtf8;}
+    var i:usize=1;while i<n {
+        let b=bytes[at+i] as u32;if (b&0xc0)!=0x80 {return error.InvalidUtf8;}
+        value=(value<<6)|(b&63);i+=1;
+    }
+    if value<minimum||value>0x10ffff||(value>=0xd800&&value<=0xdfff) {return error.InvalidUtf8;}
+    *out=Scalar{value:value,next:at+n};
+}return;}
+unsafe fn dots(name:[]const u8)bool {unsafe {
+    return (name.len==1&&name[0]==46)||(name.len==2&&name[0]==46&&name[1]==46);
+}}
+// Creation/lookup component policy, deliberately stricter than raw LFN recovery.
+// Result counts UTF-16 code units; Unicode spelling/case is never changed.
+pub unsafe fn validate_name(name:[]const u8)!usize {unsafe {
+    try span(name,1020);
+    if name.len==0||dots(name)||name[0]==32||name[name.len-1]==32||name[name.len-1]==46 {return error.InvalidName;}
+    var at:usize=0;var units:usize=0;var item=Scalar{value:0,next:0};
+    while at<name.len {
+        try scalar(name,at,&item);let cp=item.value;
+        if cp<32||cp==34||cp==42||cp==47||cp==58||cp==60||cp==62||cp==63||cp==92||cp==124||cp==0xffff {return error.InvalidName;}
+        units+=1;if cp>0xffff {units+=1;}
+        if units>255 {return error.TooLong;}
+        at=item.next;
+    }
+    return units;
+}}
+unsafe fn cwd_components(cwd:[]const u8)!usize {unsafe {
+    if cwd.len==0||cwd[0]!=47 {return error.InvalidCwd;}
+    if cwd.len==1 {return 0;}
+    if cwd[cwd.len-1]==47 {return error.InvalidCwd;}
+    var at:usize=1;var count:usize=0;
+    while at<cwd.len {
+        let start=at;while at<cwd.len&&cwd[at]!=47 {at+=1;}
+        let name=cwd[start..at];
+        if name.len==0||dots(name) {return error.InvalidCwd;}
+        let units=try validate_name(name);count+=1;
+        if count>128 {return error.TooLong;}
+        if at<cwd.len {at+=1;}
+    }
+    return count;
+}}
+unsafe fn pop(path:*Path)!void {unsafe {
+    if (*path).components==0 {return error.RootEscape;}
+    let old=(*path).length;var end=old;
+    while end>1&&(*path).bytes[end-1]!=47 {end-=1;}
+    if end>1 {end-=1;}
+    var i=end;while i<old {(*path).bytes[i]=0;i+=1;}
+    (*path).length=end;(*path).components-=1;
+}return;}
+unsafe fn append(path:*Path,name:[]const u8)!void {unsafe {
+    let units=try validate_name(name);var slash:usize=0;
+    if (*path).components!=0 {slash=1;}
+    if (*path).components>=128||slash>1024-(*path).length||name.len>1024-(*path).length-slash {return error.TooLong;}
+    if slash!=0 {(*path).bytes[(*path).length]=47;(*path).length+=1;}
+    var i:usize=0;while i<name.len {(*path).bytes[(*path).length+i]=name[i];i+=1;}
+    (*path).length+=name.len;(*path).components+=1;
+}return;}
+// Cwd is always checked, including for absolute input. The entire caller-owned
+// output stays unchanged on failure; input/output overlap is safe on success.
+pub unsafe fn normalize(cwd:[]const u8,input:[]const u8,out:*Path)!void {unsafe {
+    if out==null||(out as u64)%8!=0||(out as u64)>MAX-sizeof(Path) as u64 {return error.InvalidArgument;}
+    try span(cwd,1024);try span(input,4096);let count=try cwd_components(cwd);
+    var candidate=EMPTY;candidate.length=1;candidate.bytes[0]=47;
+    if input.len==0||input[0]!=47 {
+        var i:usize=0;while i<cwd.len {candidate.bytes[i]=cwd[i];i+=1;}
+        candidate.length=cwd.len;candidate.components=count;
+    }
+    var at:usize=0;var directory:bool=input.len==0;
+    while at<input.len {
+        if input[at]==47 {at+=1;continue;}
+        let start=at;while at<input.len&&input[at]!=47 {at+=1;}
+        let name=input[start..at];directory=false;
+        if name.len==1&&name[0]==46 {directory=true;}
+        else if name.len==2&&name[0]==46&&name[1]==46 {try pop(&candidate);directory=true;}
+        else {try append(&candidate,name);}
+    }
+    if candidate.components==0||directory||(input.len!=0&&input[input.len-1]==47) {candidate.directory_hint=1;}
+    *out=candidate;
+}return;}

@@ -1,0 +1,209 @@
+// Candidate user-SMP ownership protocol. Frame/xstate buffers and all metadata
+// are arena owned. A big kernel lock serializes service/core/memory mutations.
+// Raw entry must capture GPRs before begin_entry, then switch to kernel root.
+// Acknowledgement is impossible until private capture and xstate save complete.
+module sched.user_domain;
+import sched.multicore as q;
+pub const IDLE:u64=1;pub const USER:u64=2;pub const ENTERING:u64=3;
+pub const KERNEL:u64=4;pub const LOCKED:u64=5;pub const RETURNING:u64=6;
+pub error Invalid=0x0609_0001;pub error State=0x0609_0002;
+pub error Hardware=0x0609_0003;pub error Held=0x0609_0004;
+pub error Timeout=0x0609_0005;
+const MAX:u64=0xffff_ffff_ffff_ffff;const NONE:u64=16;
+pub struct Seen{pub root:u64,pub incarnation:u64,pub valid:u64}
+pub struct Process{pub token:u64,pub incarnation:u64,pub root:u64,pub frame:u64,pub xstate:u64,pub retiring:u64,pub retirement:u64}
+pub struct Cpu{pub mode:u64,pub token:u64,pub incarnation:u64,pub slot:u64,
+ pub captured_token:u64,pub captured_incarnation:u64,pub captured:u64,pub requested:u64,pub acknowledged:u64,
+ pub capture:u64,pub capture_xstate:u64,pub returned:u64,pub return_xstate:u64,pub return_root:u64,pub seen:*Seen}
+pub struct Domain{pub ready:u64,pub failed:u64,pub lock:u64,pub owner:u64,pub online:u64,
+ pub sequence:u64,pub barrier:u64,pub expected:u64,pub completed:u64,pub kernel_root:u64,
+ pub engine:*q.Engine,pub cpus:*Cpu,pub processes:*Process,pub arena:u64,pub bytes:u64}
+unsafe extern "sysv64" fn user_smp_arch_if0()u64;
+unsafe extern "sysv64" fn user_smp_arch_cpu()u64;
+unsafe extern "sysv64" fn user_smp_arch_root()u64;
+unsafe extern "sysv64" fn user_smp_arch_try_lock(pointer:*u64)u64;
+unsafe extern "sysv64" fn user_smp_arch_unlock(pointer:*u64)void;
+unsafe extern "sysv64" fn user_smp_arch_pause()void;
+unsafe extern "sysv64" fn user_smp_arch_clock()u64;
+unsafe extern "sysv64" fn user_smp_arch_copy(dst:u64,src:u64,bytes:u64)void;
+unsafe extern "sysv64" fn user_smp_arch_save(pointer:u64)void;
+unsafe extern "sysv64" fn user_smp_arch_flush(cpu:u64)u64;
+unsafe extern "sysv64" fn user_smp_arch_kick(cpu:u64)u64;
+unsafe extern "sysv64" fn user_smp_arch_switch(root:u64,tag:u64,retain:u64)u64;
+unsafe extern "sysv64" fn user_smp_arch_validate(frame:u64,root:u64)u64;
+unsafe extern "sysv64" fn user_domain_legacy_poll()u64;
+fn rounded(value:u64)u64{return (value+63)&~63;}
+fn aligned(value:u64,n:u64)bool{return value!=0&&(value&(n-1))==0;}
+pub fn required_bytes()u64{return rounded(sizeof(Domain) as u64)+rounded(sizeof(q.Engine) as u64)+rounded(16*sizeof(Cpu) as u64)+rounded(16*sizeof(Process) as u64)+16*(384+256+1024+256+1024);}
+unsafe fn check(d:*Domain)!void{unsafe{
+ if d==null||(*d).ready!=1||user_smp_arch_if0()!=1{return error.State;}
+ if atomic_load(&(*d).failed)!=0{return error.Held;}
+}return;}
+unsafe fn cpu_at(d:*Domain,cpu:usize)!*Cpu{unsafe{
+ try check(d);if cpu>=16||user_smp_arch_cpu()!=cpu as u64||((*d).online&(1<<cpu as u64))==0{return error.Invalid;}return (*d).cpus+cpu;
+}}
+unsafe fn owned(d:*Domain,cpu:usize)!void{unsafe{
+ let c=try cpu_at(d,cpu);if (*d).lock!=1||(*d).owner!=cpu as u64||(*c).mode!=LOCKED{return error.State;}
+}return;}
+unsafe fn fail(d:*Domain)void{unsafe{atomic_store(&(*d).failed,1);}return;}
+pub unsafe fn initialize(arena:u64,bytes:u64,online:u64,kernel_root:u64,out:**Domain)!void{unsafe{
+ if user_smp_arch_if0()!=1||!aligned(arena,64)||bytes<required_bytes()||bytes>MAX-arena||online==0||(online&~0xffff)!=0
+  ||!aligned(kernel_root,4096)||kernel_root>=0x1_0000_0000||out==null{return error.Invalid;}
+ let d=arena as *Domain;(*d).ready=0;(*d).failed=0;(*d).lock=0;(*d).owner=NONE;(*d).online=online;
+ (*d).sequence=0;(*d).barrier=0;(*d).expected=0;(*d).completed=0;(*d).kernel_root=kernel_root;
+ (*d).arena=arena;(*d).bytes=bytes;(*d).engine=(arena+rounded(sizeof(Domain) as u64)) as *q.Engine;
+ (*d).cpus=(((*d).engine as u64)+rounded(sizeof(q.Engine) as u64)) as *Cpu;
+ (*d).processes=(((*d).cpus as u64)+rounded(16*sizeof(Cpu) as u64)) as *Process;
+ var next=((*d).processes as u64)+rounded(16*sizeof(Process) as u64);
+ (*(*d).engine).ready=0;try q.initialize((*d).engine,online);
+ var id:usize=0;while id<16{
+  let c=(*d).cpus+id;(*c).mode=IDLE;(*c).token=0;(*c).incarnation=0;(*c).slot=NONE;
+  (*c).captured_token=0;(*c).captured_incarnation=0;(*c).captured=0;(*c).requested=0;(*c).acknowledged=0;
+  (*c).seen=next as *Seen;next+=384;(*c).capture=next;next+=256;(*c).capture_xstate=next;next+=1024;
+  (*c).returned=next;next+=256;(*c).return_xstate=next;next+=1024;(*c).return_root=0;
+  let p=(*d).processes+id;(*p).token=0;(*p).incarnation=0;(*p).root=0;(*p).frame=0;(*p).xstate=0;(*p).retiring=0;(*p).retirement=0;
+  var slot:usize=0;while slot<16{let seen=(*c).seen+slot;(*seen).root=0;(*seen).incarnation=0;(*seen).valid=0;slot+=1;}id+=1;
+ }compiler_fence();(*d).ready=1;*out=d;
+}return;}
+// May run while another CPU owns the kernel lock. No global process, queue,
+// saved Frame, handle or memory ownership is changed by this acknowledgement.
+pub unsafe fn poll(d:*Domain,cpu:usize)!bool{unsafe{
+ let c=try cpu_at(d,cpu);
+ if user_smp_arch_root()==(*d).kernel_root&&user_domain_legacy_poll()!=0{fail(d);return error.Hardware;}
+ let requested=atomic_load(&(*c).requested);
+ if requested<=atomic_load(&(*c).acknowledged){return false;}
+ if (*c).mode!=IDLE&&(*c).mode!=KERNEL&&(*c).mode!=LOCKED{return false;}
+ if user_smp_arch_root()!=(*d).kernel_root{return false;}
+ if user_smp_arch_flush(cpu as u64)!=0{fail(d);return error.Hardware;}
+ var slot:usize=0;while slot<16{(*((*c).seen+slot)).valid=0;slot+=1;}
+ compiler_fence();atomic_store(&(*c).acknowledged,requested);return true;
+}}
+pub unsafe fn acquire(d:*Domain,cpu:usize,deadline:u64)!void{unsafe{
+ let c=try cpu_at(d,cpu);if (*c).mode!=IDLE&&(*c).mode!=KERNEL{return error.State;}
+ if user_smp_arch_root()!=(*d).kernel_root||deadline==0{return error.State;}
+ while user_smp_arch_try_lock(&(*d).lock)==0{
+  let progress=try poll(d,cpu);if user_smp_arch_clock()>=deadline{fail(d);return error.Timeout;}user_smp_arch_pause();
+ }if (*d).owner!=NONE{fail(d);return error.Held;}(*d).owner=cpu as u64;(*c).mode=LOCKED;
+ if atomic_load(&(*d).failed)!=0{return error.Held;}
+}return;}
+pub unsafe fn unlock(d:*Domain,cpu:usize)!void{unsafe{
+ let c=try cpu_at(d,cpu);if (*d).owner!=cpu as u64||(*d).lock!=1||(*d).barrier!=0{return error.State;}
+ if (*c).mode==LOCKED{(*c).mode=KERNEL;}else if (*c).mode!=RETURNING{return error.State;}
+ (*d).owner=NONE;compiler_fence();user_smp_arch_unlock(&(*d).lock);
+}return;}
+pub unsafe fn begin_entry(d:*Domain,cpu:usize)!void{unsafe{
+ let c=try cpu_at(d,cpu);if (*c).mode!=USER{return error.State;}
+ (*c).captured_token=(*c).token;(*c).captured_incarnation=(*c).incarnation;(*c).captured=0;(*c).mode=ENTERING;
+}return;}
+pub unsafe fn complete_entry(d:*Domain,cpu:usize)!void{unsafe{
+ let c=try cpu_at(d,cpu);if (*c).mode!=ENTERING||(*c).captured_token==0||user_smp_arch_root()!=(*d).kernel_root{return error.State;}
+ user_smp_arch_save((*c).capture_xstate);compiler_fence();(*c).captured=1;(*c).mode=KERNEL;
+}return;}
+pub unsafe fn drain(d:*Domain,cpu:usize)!bool{unsafe{
+ try owned(d,cpu);let c=(*d).cpus+cpu;if (*c).captured==0{return false;}
+ (*c).captured=0;if (*c).slot>=16{return false;}let p=(*d).processes+(*c).slot as usize;
+ if (*p).token!=(*c).captured_token||(*p).incarnation!=(*c).captured_incarnation||(*p).retiring!=0{return false;}
+ if (*p).token!=(*c).token{fail(d);return error.Held;}
+ user_smp_arch_copy((*p).frame,(*c).capture,200);user_smp_arch_copy((*p).xstate,(*c).capture_xstate,1024);return true;
+}}
+// Classify only a drained capture owned by this CPU under the kernel lock.
+// commit_user still independently validates its private return copy.
+pub unsafe fn captured_return_valid(d:*Domain,cpu:usize)!bool{unsafe{
+ try owned(d,cpu);let c=(*d).cpus+cpu;
+ if (*c).slot>=16||(*c).token==0||(*c).captured!=0{return error.State;}
+ let p=(*d).processes+(*c).slot as usize;
+ if (*p).token!=(*c).token||(*p).incarnation!=(*c).incarnation||(*p).retiring!=0{return error.State;}
+ return user_smp_arch_validate((*p).frame,(*p).root)==1;
+}}
+pub unsafe fn admit(d:*Domain,cpu:usize,slot:usize,incarnation:u64,root:u64,frame:u64,xstate:u64,priority:u64,affinity:u64,out:*u64)!void{unsafe{
+ try owned(d,cpu);if slot>=16||incarnation==0||!aligned(root,4096)||root>=0x1_0000_0000||!aligned(frame,8)||!aligned(xstate,64)||out==null{return error.Invalid;}
+ let p=(*d).processes+slot;if (*p).token!=0||(*p).retiring!=0||incarnation<=(*p).incarnation{return error.State;}
+ var token:u64=0;try q.admit((*d).engine,slot,priority,affinity,frame,&token);
+ (*p).token=token;(*p).incarnation=incarnation;(*p).root=root;(*p).frame=frame;(*p).xstate=xstate;(*p).retirement=0;
+ *out=token;var id:usize=0;while id<16{if (affinity&(1<<id as u64))!=0&&user_smp_arch_kick(id as u64)!=0{fail(d);return error.Hardware;}id+=1;}
+}return;}
+pub unsafe fn release(d:*Domain,cpu:usize,state:u64)!void{unsafe{
+ try owned(d,cpu);let c=(*d).cpus+cpu;if (*c).slot>=16||(*c).captured!=0{return error.State;}let p=(*d).processes+(*c).slot as usize;
+ if (*p).token!=(*c).token||(*p).incarnation!=(*c).incarnation||(*p).retiring!=0{return error.State;}
+ try q.release((*d).engine,cpu,(*c).token,state,(*p).frame);(*c).token=0;(*c).incarnation=0;(*c).slot=NONE;
+ if state==q.READY{let affinity=(*(*d).engine).threads[(((*p).token&255)-1) as usize].affinity;
+  var id:usize=0;while id<16{if id!=cpu&&(affinity&(1<<id as u64))!=0&&atomic_load(&(*((*d).cpus+id)).mode)==IDLE
+    &&user_smp_arch_kick(id as u64)!=0{fail(d);return error.Hardware;}id+=1;}}
+}return;}
+// Called immediately before the raw STI;HLT idle loop. A pending IPI is not
+// lost between this IF0 publication and the architectural STI/HLT pair.
+pub unsafe fn park(d:*Domain,cpu:usize)!void{unsafe{
+ let c=try cpu_at(d,cpu);if (*c).mode!=KERNEL||(*c).token!=0||user_smp_arch_root()!=(*d).kernel_root{return error.State;}
+ compiler_fence();(*c).mode=IDLE;
+}return;}
+pub unsafe fn select(d:*Domain,cpu:usize,out:*u64)!bool{unsafe{
+ try owned(d,cpu);let c=(*d).cpus+cpu;if out==null||(*c).token!=0||(*c).captured!=0{return error.State;}
+ var chosen=q.Dispatch{token:0,frame:0,source_cpu:0,target_cpu:0,priority:0};if !(try q.acquire((*d).engine,cpu,&chosen)){return false;}
+ let slot=((chosen.token&255)-1) as usize;if slot>=16{fail(d);return error.Held;}let p=(*d).processes+slot;
+ if (*p).token!=chosen.token||(*p).retiring!=0{fail(d);return error.Held;}
+ user_smp_arch_copy((*c).returned,(*p).frame,200);user_smp_arch_copy((*c).return_xstate,(*p).xstate,1024);
+ (*c).token=chosen.token;(*c).slot=slot as u64;(*c).incarnation=(*p).incarnation;(*c).return_root=(*p).root;
+ compiler_fence();(*c).mode=RETURNING;*out=(*c).returned;return true;
+}}
+// An already selected deferred syscall is serviced under the same BKL before
+// any return attempt. Only its owning CPU can discard the prepared copy.
+pub unsafe fn selected_kernel(d:*Domain,cpu:usize)!void{unsafe{
+ let c=try cpu_at(d,cpu);
+ if (*d).lock!=1||(*d).owner!=cpu as u64||(*c).mode!=RETURNING||(*c).token==0
+  ||user_smp_arch_root()!=(*d).kernel_root{return error.State;}
+ (*c).mode=LOCKED;
+}return;}
+// IRET/SYSRET boundary calls this on the current CPU, never on a foreign CPU.
+// A request racing the final test cannot free this RETURNING/USER reference;
+// retirement must wait for the subsequent trusted entry and flush ACK.
+pub unsafe fn commit_user(d:*Domain,cpu:usize)!bool{unsafe{
+ let c=try cpu_at(d,cpu);if (*c).mode!=RETURNING||(*c).token==0||(*c).slot>=16{return error.State;}
+ if atomic_load(&(*c).requested)>atomic_load(&(*c).acknowledged){return false;}
+ if user_smp_arch_validate((*c).returned,(*c).return_root)!=1{fail(d);return error.Held;}
+ let seen=(*c).seen+(*c).slot as usize;var retain:u64=0;
+ if (*seen).valid==1&&(*seen).root==(*c).return_root&&(*seen).incarnation==(*c).incarnation{retain=1;}
+ if user_smp_arch_switch((*c).return_root,(*c).slot+1,retain)!=0{fail(d);return error.Hardware;}
+ (*seen).root=(*c).return_root;(*seen).incarnation=(*c).incarnation;(*seen).valid=1;
+ compiler_fence();(*c).mode=USER;return true;
+}}
+pub unsafe fn cancel_return(d:*Domain,cpu:usize)!void{unsafe{
+ let c=try cpu_at(d,cpu);if (*c).mode!=RETURNING||user_smp_arch_root()!=(*d).kernel_root{return error.State;}
+ (*c).captured=0;compiler_fence();(*c).mode=KERNEL;
+}return;}
+pub unsafe fn barrier_begin(d:*Domain,cpu:usize)!u64{unsafe{
+ try owned(d,cpu);if (*d).barrier!=0||(*d).sequence==MAX{return error.State;}
+ (*d).sequence+=1;let sequence=(*d).sequence;(*d).barrier=sequence;(*d).expected=(*d).online;
+ var id:usize=0;while id<16{if ((*d).online&(1<<id as u64))!=0{atomic_store(&(*((*d).cpus+id)).requested,sequence);
+   if id!=cpu&&user_smp_arch_kick(id as u64)!=0{fail(d);return error.Hardware;}
+  }id+=1;}return sequence;
+}}
+pub unsafe fn barrier_finish(d:*Domain,cpu:usize,sequence:u64)!bool{unsafe{
+ try owned(d,cpu);if sequence==0||(*d).barrier!=sequence{return error.State;}
+ var id:usize=0;while id<16{if ((*d).expected&(1<<id as u64))!=0&&atomic_load(&(*((*d).cpus+id)).acknowledged)!=sequence{return false;}id+=1;}
+ (*d).completed=sequence;(*d).barrier=0;(*d).expected=0;return true;
+}}
+pub unsafe fn barrier_wait(d:*Domain,cpu:usize,sequence:u64,deadline:u64)!void{unsafe{
+ try owned(d,cpu);if deadline==0{return error.Invalid;}
+ while true{let progress=try poll(d,cpu);if try barrier_finish(d,cpu,sequence){return;}
+  if user_smp_arch_clock()>=deadline{fail(d);return error.Timeout;}user_smp_arch_pause();}
+}return;}
+pub unsafe fn wake(d:*Domain,cpu:usize,slot:usize,incarnation:u64)!void{unsafe{
+ try owned(d,cpu);if slot>=16{return error.Invalid;}let p=(*d).processes+slot;
+ if (*p).token==0||(*p).incarnation!=incarnation||(*p).retiring!=0{return error.State;}
+ try q.wake((*d).engine,(*p).token);let affinity=(*(*d).engine).threads[slot].affinity;
+ var id:usize=0;while id<16{if (affinity&(1<<id as u64))!=0&&user_smp_arch_kick(id as u64)!=0{fail(d);return error.Hardware;}id+=1;}
+}return;}
+pub unsafe fn retire_begin(d:*Domain,cpu:usize,slot:usize)!u64{unsafe{
+ try owned(d,cpu);if slot>=16||(*d).barrier!=0||(*d).sequence==MAX{return error.State;}let p=(*d).processes+slot;
+ if (*p).token==0||(*p).retiring!=0{return error.State;}(*p).retiring=1;
+ let sequence=try barrier_begin(d,cpu);(*p).retirement=sequence;return sequence;
+}}
+pub unsafe fn retire_finish(d:*Domain,cpu:usize,slot:usize)!void{unsafe{
+ try owned(d,cpu);if slot>=16||(*d).barrier!=0{return error.State;}let p=(*d).processes+slot;
+ if (*p).retiring!=1||(*p).retirement==0||(*d).completed!=(*p).retirement{return error.State;}
+ var id:usize=0;while id<16{let c=(*d).cpus+id;if (*c).token==(*p).token{
+   if ((*c).mode!=KERNEL&&(*c).mode!=LOCKED)||(*c).acknowledged!=(*p).retirement{return error.State;}
+   try q.release((*d).engine,id,(*p).token,q.BLOCKED,(*p).frame);(*c).token=0;(*c).incarnation=0;(*c).slot=NONE;
+  }id+=1;}
+ try q.remove((*d).engine,(*p).token);(*p).token=0;(*p).root=0;(*p).frame=0;(*p).xstate=0;(*p).retiring=0;(*p).retirement=0;
+}return;}

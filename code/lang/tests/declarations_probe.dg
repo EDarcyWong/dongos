@@ -1,0 +1,63 @@
+module declarations_probe;
+import declarations_defs as defs;
+
+const SHADOW:u64=100;
+const REPEAT:usize=defs.LENGTH+sizeof(defs.Byte);
+const FIELD_END:usize=offsetof(defs.Record,values)+sizeof(defs.Array);
+type Local=defs.Record;
+type Bytes=[defs.COMBINED]defs.Byte;
+align(alignof(defs.Record)*sizeof(defs.Word)) struct Cache {first:defs.Byte,payload:Bytes}
+
+fn next(p:*u64)u16 {unsafe{*p+=1;return *p as u16;}}
+fn nothing()defs.Done{}
+fn with_parameter(SHADOW:u64)u64{return SHADOW+1;}
+
+export("declarations_u8") fn unsigned8()defs.Byte{return defs.U8;}
+export("declarations_i8") fn signed8()i8{return defs.I8;}
+export("declarations_u16") fn unsigned16()defs.Forward{return defs.U16;}
+export("declarations_i16") fn signed16()defs.Short{return defs.I16;}
+export("declarations_u32") fn unsigned32()defs.Word{return defs.U32;}
+export("declarations_i32") fn signed32()i32{return defs.I32;}
+export("declarations_u64") fn unsigned64()defs.Wide{return defs.U64;}
+export("declarations_i64") fn signed64()i64{return defs.I64;}
+export("declarations_bool") fn flags(which:bool)defs.Flag{if which{return defs.ENABLED;}return defs.DISABLED;}
+
+export("declarations_layout") fn layout(index:usize)usize {
+    if index==0{return sizeof(defs.Record);} if index==1{return alignof(Local);}
+    if index==2{return offsetof(Local,count);} if index==3{return defs.VALUE_OFFSET;}
+    if index==4{return sizeof(defs.Array);} if index==5{return defs.STRIDE;}
+    if index==6{return defs.COMBINED;} if index==7{return sizeof(Cache);}
+    if index==8{return alignof(Cache);} if index==9{return offsetof(Cache,payload);}
+    if index==10{return FIELD_END;} return defs.NEXT+(defs.COMPLEX as u64);
+}
+
+export("declarations_repeat") fn repeat()u64 {
+    var counter:u64=0;
+    unsafe{
+        let values:[REPEAT]u16=[next(&counter);REPEAT];
+        let record=Cache{first:1,payload:[2;defs.COMBINED]};
+        return counter*1000+(values[0] as u64)*100+(values[3] as u64)*10+record.payload.len;
+    }
+}
+export("declarations_alias_memory") fn alias_memory()i64 {
+    var values:defs.Array=[-10,-20,-30];
+    var record:Local=Local{tag:7,count:100,values:values};
+    var copied=record;
+    unsafe{let ptr:defs.Ptr=&values[0];ptr[1]=-45;}
+    let view:defs.View=values[..];view[2]=-55;
+    let read:defs.ReadView=view;
+    copied.values[0]=-77;
+    return (read[1] as i64)+(read[2] as i64)+(record.values[0] as i64)+(copied.values[0] as i64);
+}
+export("declarations_alias_pointer") fn alias_pointer(ptr:defs.Ptr,n:usize)defs.Short {
+    unsafe{ptr[n]-=1;let immutable:defs.ConstPtr=ptr;return immutable[n];}
+}
+export("declarations_alias_slice") fn alias_slice(values:defs.View)defs.ReadView{return values[1..];}
+export("declarations_shadow") fn shadow()u64 {
+    nothing();let SHADOW=SHADOW+1;var value:u64=0;
+    {let SHADOW=SHADOW+1;value=SHADOW;}
+    return SHADOW*1000+value*10+with_parameter(7);
+}
+export("declarations_constants") fn constants()u64 {
+    if defs.ENABLED && !defs.DISABLED{return defs.NEXT+SHADOW;}return 0;
+}

@@ -1,0 +1,32 @@
+// Fixed initial L2 performance corpus. No I/O, host calls or hidden work.
+module kernels;
+export("dong_sum") fn sum(n:u64)u64 {
+    var total:u64=0;var i:u64=0;
+    while i<n {total+=i;i+=1;}
+    return total;
+}
+export("dong_lcg") fn lcg(n:u64,seed:u64)u64 {
+    var value=seed;var i:u64=0;
+    while i<n {value=value*6364136223846793005+1442695040888963407;i+=1;}
+    return value;
+}
+export("dong_mix") fn mix(n:u64,seed:u64)u64 {
+    var value=seed;var i:u64=0;
+    while i<n {
+        if ((value^i)&1)==0 {value=(value+i)^0x9e37_79b9_7f4a_7c15;}
+        else {value=(value*3)^i;}
+        i+=1;
+    }
+    return value;
+}
+// Ordinary pointer accesses retain their order, including overlapping copies.
+// These functions now use the ordered-memory SSA backend; the gate stays 1.20.
+export("dong_array_sum") unsafe fn array_sum(source:*const u64,n:u64)u64 {unsafe {
+    var total:u64=0;var i:u64=0;
+    while i<n {total+=*(source+i);i+=1;}
+    return total;
+}}
+export("dong_array_copy") unsafe fn array_copy(destination:*u64,source:*const u64,n:u64)u64 {unsafe {
+    var i:u64=0;while i<n {*(destination+i)=*(source+i);i+=1;}
+    return n;
+}}

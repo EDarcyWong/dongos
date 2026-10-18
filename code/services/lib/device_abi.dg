@@ -1,0 +1,55 @@
+// Data-only catalog and IRQ capability ABI shared with the kernel.
+module lib.device_abi;
+pub const VERSION:u64=1;
+pub const ENUMERATE:u64=0x90;
+pub const BIND:u64=0x91;
+pub const IRQ_BIND:u64=0x92;
+pub const IRQ_WAIT:u64=0x93;
+pub const IRQ_ACK:u64=0x94;
+pub const REVOKE:u64=0x95;
+pub const PCI_IRQ_BIND:u64=0x96;
+pub const MSI:u64=4;
+pub const MSI_SOURCE:u64=0x100;
+pub const PCI:u64=1;
+pub const I8042:u64=2;
+pub const BLOCK:u64=1;
+pub const TABLET:u64=2;
+pub const PS2:u64=3;
+pub const XHCI:u64=4;
+pub const SUPPORTED:u64=1;
+pub const BOUND:u64=2;
+pub const REVOKED:u64=4;
+pub const MASKED:u64=1;
+pub const PENDING:u64=2;
+pub const NONBLOCK:u64=0;
+pub const WAIT:u64=1;
+pub error Invalid=0x0512_0001;
+pub error Denied=0x0512_0002;
+pub error Busy=0x0512_0003;
+pub error Stale=0x0512_0004;
+pub error Capacity=0x0512_0005;
+pub error WouldBlock=0x0512_0006;
+pub error Timeout=0x0512_0007;
+pub error Removed=0x0512_0008;
+pub error Readback=0x0512_0009;
+pub error Unsupported=0x0512_000a;
+pub struct Device {
+    pub version:u64,pub token:u64,pub next_cursor:u64,pub kind:u64,
+    pub ecam:u64,pub segment:u64,pub bus:u64,pub device:u64,pub function:u64,
+    pub vendor:u64,pub device_id:u64,pub class_code:u64,pub header:u64,
+    pub flags:u64,pub generation:u64,pub reserved:u64,
+}
+pub const EMPTY_DEVICE:Device=Device {version:1,token:0,next_cursor:0,kind:0,
+    ecam:0,segment:0,bus:0,device:0,function:0,vendor:0,device_id:0,class_code:0,
+    header:0,flags:0,generation:0,reserved:0};
+pub struct Binding {
+    pub version:u64,pub device_token:u64,pub role:u64,pub configuration_id:u64,
+    pub generation:u64,pub irq_mask:u64,pub flags:u64,pub reserved:u64,
+}
+pub const EMPTY_BINDING:Binding=Binding {version:1,device_token:0,role:0,configuration_id:0,
+    generation:0,irq_mask:0,flags:0,reserved:0};
+pub struct Irq {
+    pub version:u64,pub token:u64,pub irq:u64,pub gsi:u64,pub vector:u64,
+    pub generation:u64,pub sequence:u64,pub flags:u64,
+}
+pub const EMPTY_IRQ:Irq=Irq {version:1,token:0,irq:0,gsi:0,vector:0,generation:0,sequence:0,flags:0};

@@ -1,0 +1,19 @@
+module apps.echo;
+import lib.sys as sys;
+pub var CANARY:u64=0;
+var REQUEST:sys.Message=sys.EMPTY_MESSAGE;
+var RESPONSE:sys.Message=sys.EMPTY_MESSAGE;
+const BAD:u64=0x0512_0001;
+export("service_main") fn main()u64 {unsafe {
+    let boot=sys.boot();if boot==null||(*boot).version!=1||CANARY!=0 {return BAD;}
+    let argument=(*boot).reserved0;CANARY=argument;
+    let ready=sys.ready_boot(boot);if ready!=0 {return ready;}
+    if argument==999 {
+        if (*boot).block==0 {return BAD;}REQUEST.words[0]=999;
+        let status=sys.call((*boot).block,&REQUEST,&RESPONSE);
+        if status!=0x0511_0008 {return BAD;}
+        let logged=sys.log("DONGOS_APP_PEER_GONE\r\n");if logged!=0 {return logged;}
+        return 0;
+    }
+    return argument;
+}}

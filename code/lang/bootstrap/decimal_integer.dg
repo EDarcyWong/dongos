@@ -1,0 +1,41 @@
+// Fixed-width integer → canonical decimal ASCII.
+// Descriptors, width/raw rules, and need length are checked before any output
+// byte or *written update. INVALID precedes CAPACITY; failures leave out and
+// *written untouched. i64 minimum uses unsigned wrapping negation.
+module bootstrap.decimal_integer;
+pub const OK:u64=0;pub const INVALID:u64=1;pub const CAPACITY:u64=2;
+const MAX:u64=0xffff_ffff_ffff_ffff;
+fn span(p:u64,n:u64)bool{return n==0||(p!=0&&n<=MAX-p);}
+fn overlap(a:u64,n:u64,b:u64,m:u64)bool{return n!=0&&m!=0&&a<b+m&&b<a+n;}
+fn width_ok(width:usize)bool{return width==8||width==16||width==32||width==64;}
+fn digits(value:u64)usize{var n:usize=1;var v=value;while v>=10{v/=10;n+=1;}return n;}
+pub unsafe fn encode(raw:u64,width:usize,signed:bool,out:[]u8,written:*usize)u64{unsafe{
+ let wp=written as u64;let op=out.ptr as u64;
+ if written==null||(wp&7)!=0||!span(wp,8){return INVALID;}
+ if !span(op,out.len){return INVALID;}
+ if overlap(wp,8,op,out.len){return INVALID;}
+ if !width_ok(width){return INVALID;}
+ if width!=64{
+  let limit=(1 as u64)<<width;
+  if raw>=limit{return INVALID;}
+ }
+ var negative=false;var magnitude=raw;
+ if signed{
+  let sign=(1 as u64)<<(width-1);
+  if (raw&sign)!=0{
+   negative=true;
+   if width==64{magnitude=wrapping_sub(0,raw);}
+   else{magnitude=((1 as u64)<<width)-raw;}
+  }
+ }
+ if magnitude==0{negative=false;}
+ let nd=digits(magnitude);var total=nd;if negative{total+=1;}
+ if total>out.len{return CAPACITY;}
+ var buf:[20]u8=[0;20];
+ var v=magnitude;var i=nd;
+ while i!=0{i-=1;buf[i]=(48+(v%10))as u8;v/=10;}
+ var at:usize=0;
+ if negative{out[0]=45;at=1;}
+ var j:usize=0;while j<nd{out[at+j]=buf[j];j+=1;}
+ *written=total;return OK;
+}}

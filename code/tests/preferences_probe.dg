@@ -1,0 +1,17 @@
+module preferences_probe;
+import desktop.preferences as prefs;
+import desktop.theme as theme;
+export("prefs_sizes") fn sizes(out:*u64)void {
+    unsafe { out[0]=sizeof(theme.Theme) as u64;out[1]=sizeof(prefs.Record) as u64; }return;
+}
+export("prefs_default") fn defaults(out:*theme.Theme)void { unsafe { *out=theme.DEFAULT; }return; }
+export("prefs_encode") fn encode(value:*const theme.Theme,sequence:u64,out:*u8,length:usize)u64 {
+    unsafe { match prefs.encode(value,sequence,slice_from_raw_parts(out,length)) { ok=>{return 0;},err(code)=>{return code;}, } }
+}
+export("prefs_decode") fn decode(bytes:*const u8,length:usize,out:*prefs.Record)u64 {
+    unsafe { match prefs.decode(slice_from_raw_parts(bytes,length),out) { ok=>{return 0;},err(code)=>{return code;}, } }
+}
+export("prefs_select") fn select(a:*const u8,alen:usize,b:*const u8,blen:usize,out:*prefs.Record,slot:*u64)u64 {
+    unsafe { match prefs.select(slice_from_raw_parts(a,alen),slice_from_raw_parts(b,blen),out) { ok(v)=>{*slot=v;return 0;},err(code)=>{return code;}, } }
+}
+export("prefs_next") fn next(value:u64,out:*u64)u64 { unsafe { match prefs.next_sequence(value) { ok(v)=>{*out=v;return 0;},err(code)=>{return code;}, } } }

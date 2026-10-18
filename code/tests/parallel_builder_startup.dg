@@ -1,0 +1,5 @@
+module boot.memory_startup;
+import mm.paging as paging;
+var SPACE:paging.Space=paging.EMPTY_SPACE;var TABLES:[128]paging.Table=[paging.Table{entries:[0;512]};128];var META:[128]u8=[0;128];
+pub fn space_pointer()*paging.Space{unsafe{return &SPACE;}}
+export("pb_space_init") fn init()u64{unsafe{match paging.init(&SPACE,TABLES[..],0x100000,META[..],48,true){ok=>{return 0;},err(e)=>{return e;},}}}

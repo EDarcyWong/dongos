@@ -1,0 +1,58 @@
+// HID boot protocol only. Caller must have completed SET_PROTOCOL(0).
+module usb.hid_boot;
+import input.events as ev;
+pub error Invalid=0x0815_0001;
+pub struct Keyboard {pub keys:ev.Keys,pub usages:[6]u8,pub modifiers:u64}
+pub const EMPTY_KEYBOARD:Keyboard=Keyboard {keys:ev.EMPTY_KEYS,usages:[0;6],modifiers:0};
+pub struct Mouse {pub buttons:u64}
+pub const EMPTY_MOUSE:Mouse=Mouse {buttons:0};
+const LETTERS:[26]u16=[30,48,46,32,18,33,34,35,23,36,37,38,50,49,24,25,16,19,31,20,22,47,17,45,21,44];
+const SYMBOLS:[18]u16=[28,1,14,15,57,12,13,26,27,43,43,39,40,41,51,52,53,58];
+const NAV:[20]u16=[99,70,119,110,102,104,111,107,109,106,105,108,103,69,98,55,74,78,96,79];
+const MODIFIERS:[8]u16=[29,42,56,125,97,54,100,126];
+pub fn evdev(usage:u64)u64 {
+    if usage>=4&&usage<=29 {return LETTERS[(usage-4) as usize] as u64;}
+    if usage>=30&&usage<=39 {return usage-28;}
+    if usage>=40&&usage<=57 {return SYMBOLS[(usage-40) as usize] as u64;}
+    if usage>=58&&usage<=67 {return usage+1;}if usage==68 {return 87;}if usage==69 {return 88;}
+    if usage>=70&&usage<=89 {return NAV[(usage-70) as usize] as u64;}
+    if usage>=90&&usage<=98 {let keypad:[9]u16=[80,81,75,76,77,71,72,73,82];return keypad[(usage-90) as usize] as u64;}
+    if usage==99 {return 83;}if usage==100 {return 86;}if usage==101 {return 127;}
+    if usage>=224&&usage<=231 {return MODIFIERS[(usage-224) as usize] as u64;}return 0;
+}
+unsafe fn emit(s:*Keyboard,q:*ev.Queue,code:u64,value:i64)!void {unsafe {
+    if code==0 {return;}var event=ev.EMPTY_EVENT;let made=try ev.key(&(*s).keys,code,value,&event);if made {ev.append(q,event.kind,event.code,event.a,event.b);}
+}return;}
+pub unsafe fn reset_keyboard(s:*Keyboard,q:*ev.Queue,reason:u64)!void {unsafe {try ev.validate(q);if s==null {return error.Invalid;}*s=EMPTY_KEYBOARD;ev.loss(q,reason);}return;}
+pub unsafe fn keyboard(s:*Keyboard,q:*ev.Queue,report:[]const u8)!void {unsafe {
+    try ev.validate(q);if s==null||(*s).modifiers>255 {return error.Invalid;}
+    if report.ptr==null||report.len!=8 {try reset_keyboard(s,q,ev.BAD_SEQUENCE);return error.Invalid;}
+    var next:[6]u8=[0;6];var i:usize=0;
+    while i<6 {
+        let usage=report[i+2];if (usage>=1&&usage<=3)||(usage>=224&&usage<=231) {try reset_keyboard(s,q,ev.BAD_SEQUENCE);return;}
+        var previous:usize=0;while previous<i {if usage!=0&&next[previous]==usage {try reset_keyboard(s,q,ev.BAD_SEQUENCE);return;}previous+=1;}
+        next[i]=usage;i+=1;
+    }
+    // At most six releases, eight modifier transitions, six new presses.
+    if (*q).count>44 {try reset_keyboard(s,q,ev.QUEUE_FULL);return;}
+    i=0;while i<6 {let old=(*s).usages[i];var found=false;var j:usize=0;while j<6 {if next[j]==old {found=true;}j+=1;}if old!=0&&!found {try emit(s,q,evdev(old as u64),0);}i+=1;}
+    let modifiers=report[0] as u64;i=0;while i<8 {let bit=(1 as u64)<<i;if ((*s).modifiers&bit)!=0&&(modifiers&bit)==0 {try emit(s,q,MODIFIERS[i] as u64,0);}i+=1;}
+    i=0;while i<8 {let bit=(1 as u64)<<i;if ((*s).modifiers&bit)==0&&(modifiers&bit)!=0 {try emit(s,q,MODIFIERS[i] as u64,1);}i+=1;}
+    i=0;while i<6 {let usage=next[i];var found=false;var j:usize=0;while j<6 {if (*s).usages[j]==usage {found=true;}j+=1;}if usage!=0&&!found {try emit(s,q,evdev(usage as u64),1);}i+=1;}
+    (*s).usages=next;(*s).modifiers=modifiers;
+}return;}
+pub unsafe fn repeat(s:*Keyboard,q:*ev.Queue,usage:u64)!void {unsafe {
+    try ev.validate(q);if s==null||usage==0||usage>=224 {return error.Invalid;}
+    if (*q).count==64 {try reset_keyboard(s,q,ev.QUEUE_FULL);return;}
+    var i:usize=0;while i<6 {if (*s).usages[i] as u64==usage {try emit(s,q,evdev(usage),2);return;}i+=1;}
+}return;}
+pub unsafe fn reset_mouse(s:*Mouse,q:*ev.Queue,reason:u64)!void {unsafe {try ev.validate(q);if s==null {return error.Invalid;}*s=EMPTY_MOUSE;ev.loss(q,reason);}return;}
+pub unsafe fn mouse(s:*Mouse,q:*ev.Queue,report:[]const u8)!void {unsafe {
+    try ev.validate(q);if s==null||(*s).buttons>7 {return error.Invalid;}
+    if report.ptr==null||report.len<3||report.len>8 {try reset_mouse(s,q,ev.BAD_SEQUENCE);return error.Invalid;}
+    if (*q).count>60 {try reset_mouse(s,q,ev.QUEUE_FULL);return;}
+    let buttons=(report[0]&7) as u64;let x=report[1] as i8 as i64;let y=report[2] as i8 as i64;
+    if x!=0||y!=0 {ev.append(q,ev.RELATIVE,0,x,y);}
+    var i:u64=0;while i<3 {let bit=(1 as u64)<<i;if (buttons&bit)!=((*s).buttons&bit) {var value:i64=0;if (buttons&bit)!=0 {value=1;}ev.append(q,ev.KEY,272+i,value,0);}i+=1;}
+    (*s).buttons=buttons;
+}return;}

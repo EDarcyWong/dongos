@@ -1,0 +1,17 @@
+module device_manager_probe;
+import user.device_manager as dm;
+import lib.device_abi as abi;
+import drivers.device_manager as main;
+export("dm_init") fn init(t:*dm.Table)u64 {unsafe {match dm.initialize(t) {ok=>{return 0;},err(e)=>{return e;},}}}
+export("dm_register") fn register(t:*dm.Table,h:*const abi.Device,o:*abi.Device)u64 {unsafe {match dm.register(t,h,o) {ok=>{return 0;},err(e)=>{return e;},}}}
+export("dm_enum") fn enumerate(t:*const dm.Table,c:u64,o:*abi.Device)u64 {unsafe {match dm.enumerate(t,c,o) {ok=>{return 0;},err(e)=>{return e;},}}}
+export("dm_bind") fn bind(t:*dm.Table,k:u64,h:*const abi.Device,r:u64,o:*abi.Binding)u64 {unsafe {match dm.bind(t,k,h,r,o) {ok=>{return 0;},err(e)=>{return e;},}}}
+export("dm_binding") fn binding(t:*const dm.Table,r:u64,o:*abi.Binding)u64 {unsafe {match dm.binding(t,r,o) {ok=>{return 0;},err(e)=>{return e;},}}}
+export("dm_revoke") fn revoke(t:*dm.Table,k:u64,g:u64)u64 {unsafe {match dm.revoke(t,k,g) {ok=>{return 0;},err(e)=>{return e;},}}}
+export("dm_rank") fn rank(d:*const abi.Device,r:u64)u64 {unsafe {return dm.rank(d,r);}}
+export("dm_irq_bind") fn irq_bind(t:*dm.Table,o:u64,g:u64,s:u64,gsi:u64,out:*abi.Irq)u64 {unsafe {match dm.irq_bind(t,o,g,s,gsi,out) {ok=>{return 0;},err(e)=>{return e;},}}}
+export("dm_signal") fn signal(t:*dm.Table,v:u64,out:*abi.Irq,owner:*u64)u64 {unsafe {match dm.irq_signal(t,v,out) {ok(value)=>{*owner=value;return 0;},err(e)=>{return e;},}}}
+export("dm_poll") fn poll(t:*const dm.Table,k:u64,o:u64,a:u64,out:*abi.Irq)u64 {unsafe {match dm.irq_poll(t,k,o,a,out) {ok=>{return 0;},err(e)=>{return e;},}}}
+export("dm_ack") fn ack(t:*dm.Table,k:u64,o:u64,s:u64)u64 {unsafe {match dm.irq_ack(t,k,o,s) {ok=>{return 0;},err(e)=>{return e;},}}}
+export("dm_ack_valid") fn ack_valid(t:*const dm.Table,k:u64,o:u64,s:u64)u64 {unsafe {match dm.irq_validate_ack(t,k,o,s) {ok=>{return 0;},err(e)=>{return e;},}}}
+export("dm_irq_revoke") fn irq_revoke(t:*dm.Table,o:u64)u64 {unsafe {match dm.irq_revoke_owner(t,o) {ok=>{return 0;},err(e)=>{return e;},}}}

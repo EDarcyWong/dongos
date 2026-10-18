@@ -1,0 +1,225 @@
+// Isolated pure prototype. No MMIO, physical pointer casts, DMA writes or free.
+module drivers.ahci_core;
+pub error Invalid=0x0901_0001;
+pub error Range=0x0901_0002;
+pub error Unsupported=0x0901_0003;
+pub error BadIdentify=0x0901_0004;
+pub error Checksum=0x0901_0005;
+pub error Busy=0x0901_0006;
+pub error CleanupRequired=0x0901_0007;
+pub error Timeout=0x0901_0008;
+pub error BadCompletion=0x0901_0009;
+pub error DeviceError=0x0901_000a;
+pub error InvalidState=0x0901_000b;
+pub const IDENTIFY:u64=0xec;
+pub const READ:u64=0x25;
+pub const WRITE:u64=0x35;
+pub const FLUSH:u64=0xea;
+pub const LEASE_BYTES:u64=131072;
+pub const MAX_SECTORS:u64=128;
+pub const STRICT:u64=0;
+pub const IDENTIFY_DRQ0:u64=1;
+// Device-specific completed-snapshot compatibility, not SATA wire conformance.
+// Official IDs: vmware/open-vm-tools lib/include/vm_device_version.h.
+// The caller must use the same trusted PCI function that owns the AHCI BAR.
+pub fn completion_policy(vendor:u64,device:u64,class:u64,subclass:u64,interface:u64,header:u64)u64 {
+    if vendor==0x15ad && device==0x07e0 && class==1 && subclass==6 && interface==1
+        && (header==0 || header==0x80) {return IDENTIFY_DRQ0;}
+    return STRICT;
+}
+const MAX:u64=0xffff_ffff_ffff_ffff;
+pub struct Lease {pub token:u64,pub physical:u64,pub length:u64}
+pub struct Caps {pub physical_bits:u64,pub s64a:u64}
+pub struct Info {pub sectors:u64,pub sector_bytes:u64,pub flush_ext:u64,pub write_cache:u64,pub valid:u64}
+pub const EMPTY_INFO:Info=Info {sectors:0,sector_bytes:0,flush_ext:0,write_cache:0,valid:0};
+pub struct Request {pub opcode:u64,pub lba:u64,pub sectors:u64}
+// Layout in one caller-owned 128KiB lease: CLB[1024]@0, RFIS[256]@0x400,
+// CTBA[144]@0x800, data[<=65536]@0x1000. Fixed slot0, one contiguous PRD.
+pub struct Command {
+    pub clb:u64,pub fb:u64,pub ctba:u64,pub data:u64,
+    pub bytes:u64,pub opcode:u64,pub lba:u64,pub sectors:u64,
+    pub header:[32]u8,pub table:[144]u8,
+}
+pub const EMPTY_COMMAND:Command=Command {clb:0,fb:0,ctba:0,data:0,bytes:0,opcode:0,lba:0,sectors:0,header:[0;32],table:[0;144]};
+fn word(raw:[]const u8,index:usize)u64 {unsafe {return read_unaligned((raw.ptr+index*2) as *const u16) as u64;}}
+fn put32(raw:[]u8,at:usize,value:u64)void {
+    var i:usize=0;while i<4 {raw[at+i]=((value>>(i*8))&255) as u8;i+=1;}return;
+}
+
+// Strict subset: SATA ATA, DMA/LBA48 supported+enabled, valid word106 and
+// 512-byte logical sectors. 512e physical sectors are allowed; 4Kn is not.
+// Optional word255 integrity byte A5 requires the full byte checksum.
+pub unsafe fn identify(raw:[]const u8,out:*Info)!void {
+    unsafe {
+        if raw.ptr==null || raw.len!=512 || out==null {return error.Invalid;}
+        if (word(raw,0)&0x8004)!=0 || (word(raw,49)&0x300)!=0x300 {return error.Unsupported;}
+        let supported=word(raw,83);let enabled=word(raw,86);
+        if (supported&0xc000)!=0x4000 || (word(raw,87)&0xc000)!=0x4000
+            || (supported&0x400)==0 || (enabled&0x400)==0 {return error.Unsupported;}
+        let logical=word(raw,106);
+        if (logical&0xc000)!=0x4000 {return error.Unsupported;}
+        if (logical&0x1000)!=0 {return error.Unsupported;}
+        var capacity:u64=0;var i:usize=0;while i<4 {capacity|=word(raw,100+i)<<(i*16);i+=1;}
+        if capacity==0 || capacity>0xffff_ffff_ffff {return error.BadIdentify;}
+        if raw[510]==0xa5 {
+            var sum:u64=0;i=0;while i<512 {sum=(sum+raw[i] as u64)&255;i+=1;}
+            if sum!=0 {return error.Checksum;}
+        }else {if raw[510]!=0 && raw[510]!=255 {return error.BadIdentify;}}
+        var candidate=Info {sectors:capacity,sector_bytes:512,flush_ext:0,write_cache:0,valid:1};
+        if (supported&0x2000)!=0 && (enabled&0x2000)!=0 {candidate.flush_ext=1;}
+        if (word(raw,85)&0x20)!=0 {candidate.write_cache=1;}
+        *out=candidate;
+    }return;
+}
+
+// Output stays byte-for-byte unchanged on all errors. The unsafe output must
+// be aligned writable storage disjoint from every stable input structure.
+// Lease provenance/IOVA authorization comes from the future kernel grant.
+pub unsafe fn build(lease:*const Lease,caps:*const Caps,info:*const Info,request:*const Request,out:*Command)!void {
+    unsafe {
+        if lease==null || caps==null || info==null || request==null || out==null {return error.Invalid;}
+        let l=*lease;let c=*caps;let r=*request;
+        if c.physical_bits<32 || c.physical_bits>52 || c.s64a>1 {return error.Invalid;}
+        var limit:u64=1<<c.physical_bits;if c.s64a==0 {limit=0x1_0000_0000;}
+        if l.token==0 || l.length!=LEASE_BYTES || l.physical==0 || (l.physical&4095)!=0
+            || l.physical>=limit || LEASE_BYTES>limit-l.physical {return error.Range;}
+        var bytes:u64=0;
+        if r.opcode==IDENTIFY {if r.lba!=0 || r.sectors!=0 {return error.Invalid;}bytes=512;}
+        else {
+            let d=*info;
+            if d.valid!=1 || d.sector_bytes!=512 || d.sectors==0 || d.sectors>0xffff_ffff_ffff
+                || d.flush_ext>1 || d.write_cache>1 {return error.Invalid;}
+            if r.opcode==FLUSH {
+                if r.lba!=0 || r.sectors!=0 {return error.Invalid;}
+                if d.flush_ext==0 {return error.Unsupported;}
+            }else {
+                if r.opcode!=READ && r.opcode!=WRITE {return error.Unsupported;}
+                if r.sectors==0 || r.sectors>MAX_SECTORS || r.lba>=d.sectors || r.sectors>d.sectors-r.lba {return error.Range;}
+                bytes=r.sectors*512;
+                // The writable block contract requires a durable flush path.
+                if r.opcode==WRITE && d.flush_ext==0 {return error.Unsupported;}
+            }
+        }
+        var candidate=EMPTY_COMMAND;
+        candidate.clb=l.physical;candidate.fb=l.physical+0x400;candidate.ctba=l.physical+0x800;candidate.data=l.physical+0x1000;
+        candidate.bytes=bytes;candidate.opcode=r.opcode;candidate.lba=r.lba;candidate.sectors=r.sectors;
+        var flags:u64=5;if r.opcode==WRITE {flags|=0x40;}if bytes!=0 {flags|=0x1_0000;}
+        put32(candidate.header[..],0,flags);
+        put32(candidate.header[..],8,candidate.ctba&0xffff_ffff);put32(candidate.header[..],12,candidate.ctba>>32);
+        candidate.table[0]=0x27;candidate.table[1]=0x80;candidate.table[2]=r.opcode as u8;
+        if r.opcode==READ || r.opcode==WRITE {
+            candidate.table[4]=(r.lba&255) as u8;candidate.table[5]=((r.lba>>8)&255) as u8;
+            candidate.table[6]=((r.lba>>16)&255) as u8;candidate.table[7]=0x40;
+            candidate.table[8]=((r.lba>>24)&255) as u8;candidate.table[9]=((r.lba>>32)&255) as u8;
+            candidate.table[10]=((r.lba>>40)&255) as u8;
+            candidate.table[12]=(r.sectors&255) as u8;candidate.table[13]=((r.sectors>>8)&255) as u8;
+        }
+        if bytes!=0 {
+            put32(candidate.table[..],128,candidate.data&0xffff_ffff);put32(candidate.table[..],132,candidate.data>>32);
+            put32(candidate.table[..],140,bytes-1);
+        }
+        *out=candidate;
+    }return;
+}
+
+pub struct State {
+    pub generation:u64,pub pending:u64,pub faulted:u64,pub held:u64,pub opcode:u64,
+    pub expected:u64,pub start_ms:u64,pub timeout_ms:u64,pub last_ms:u64,pub completed:u64,
+}
+pub const EMPTY_STATE:State=State {generation:0,pending:0,faulted:0,held:0,opcode:0,expected:0,start_ms:0,timeout_ms:0,last_ms:0,completed:0};
+pub struct Sample {pub generation:u64,pub ci:u64,pub sact:u64,pub interrupts:u64,pub tfd:u64,pub serr:u64,pub prdbc:u64,pub now_ms:u64,pub fis:[256]u8}
+fn shape(opcode:u64,bytes:u64)bool {
+    if opcode==IDENTIFY {return bytes==512;}
+    if opcode==FLUSH {return bytes==0;}
+    return (opcode==READ || opcode==WRITE) && bytes!=0 && bytes<=65536 && bytes%512==0;
+}
+pub unsafe fn arm(state:*State,opcode:u64,bytes:u64,now_ms:u64,timeout_ms:u64)!void {
+    unsafe {
+        if state==null || !shape(opcode,bytes) || timeout_ms==0 || timeout_ms>600000 || timeout_ms>MAX-now_ms {return error.Invalid;}
+        if (*state).faulted!=0 {return error.CleanupRequired;}if (*state).pending!=0 {return error.Busy;}
+        if (*state).held>1 || (*state).generation==MAX || (*state).completed==MAX || now_ms<(*state).last_ms {return error.InvalidState;}
+        var next=*state;next.generation+=1;next.pending=1;next.held=1;next.opcode=opcode;next.expected=bytes;
+        next.start_ms=now_ms;next.last_ms=now_ms;next.timeout_ms=timeout_ms;*state=next;
+    }return;
+}
+unsafe fn poison(state:*State)void {unsafe {(*state).faulted=1;(*state).pending=1;(*state).held=1;}return;}
+
+// Snapshot must follow acquire/device read barriers after volatile register/
+// descriptor reads. clear RFIS/PxIS/PxSERR before issue; sample is not authority
+// to read MMIO. Error/timeout deliberately poisons state and retains the lease.
+// No recovery/free API exists. A PRD interrupt alone is never completion.
+pub unsafe fn poll(state:*State,sample:*const Sample)!bool {
+    unsafe {return poll_with_policy(state,sample,STRICT);}
+}
+// AHCI 1.3.1 sections 4.2.1/5.3.9 copy the original PIO Setup FIS to PSFIS;
+// PIO:Update applies E_Status to PxTFD, not PSFIS. SATA PIO data-in requires
+// initial BSY=0/DRQ=1. Observed VMware AHCI instead saves Status=40/E_Status=0.
+// Only an explicitly selected IDENTIFY_DRQ0 policy tolerates this historical
+// DRQ bit; current TFD and all completion/error/byte-count rules stay strict.
+pub unsafe fn poll_with_policy(state:*State,sample:*const Sample,policy:u64)!bool {
+    unsafe {
+        if state==null || sample==null || policy>IDENTIFY_DRQ0 {return error.Invalid;}
+        if (*state).faulted!=0 {return error.CleanupRequired;}
+        if (*state).pending!=1 || (*state).held!=1 || (*state).generation==0 || !shape((*state).opcode,(*state).expected) {return error.InvalidState;}
+        let s=*sample;
+        if s.generation!=(*state).generation || s.ci>1 || s.sact!=0 || s.interrupts>0xffff_ffff
+            || s.tfd>0xffff || s.serr>0xffff_ffff || s.prdbc>0xffff_ffff || s.now_ms<(*state).last_ms {
+            poison(state);return error.BadCompletion;
+        }
+        if (s.interrupts&0x7d00_0010)!=0 || (s.tfd&0x21)!=0 || s.serr!=0 {poison(state);return error.DeviceError;}
+        if s.now_ms-(*state).start_ms>=(*state).timeout_ms {poison(state);return error.Timeout;}
+        if s.ci==1 {(*state).last_ms=s.now_ms;return false;}
+        if (s.tfd&0x88)!=0 || s.prdbc!=(*state).expected {poison(state);return error.BadCompletion;}
+        if (s.interrupts&1)!=0 {
+            if s.fis[0x40]!=0x34 || (s.fis[0x41]&0x4f)!=0x40 || (s.fis[0x42]&0xa9)!=0 {poison(state);return error.BadCompletion;}
+        }else {
+            // IDENTIFY DEVICE is PIO data-in: PIO:ClearCI may complete it
+            // without a D2H Register FIS. E_Status is PSFIS byte15, not byte2.
+            var initial=s.fis[0x22]&0xa9;
+            if policy==IDENTIFY_DRQ0 && (*state).opcode==IDENTIFY {initial|=8;}
+            if (*state).opcode!=IDENTIFY || (s.interrupts&2)==0 || s.fis[0x20]!=0x5f
+                || (s.fis[0x21]&0x6f)!=0x60 || initial!=8 || (s.fis[0x2f]&0xa9)!=0
+                || s.fis[0x30]!=0 || s.fis[0x31]!=2 {poison(state);return error.BadCompletion;}
+        }
+        if (*state).completed==MAX {poison(state);return error.InvalidState;}
+        (*state).pending=0;(*state).last_ms=s.now_ms;(*state).completed+=1;return true;
+    }
+}
+
+// Pure ordered BIOS-ownership/stop policy. A target is only an action proposal:
+// 0 none, 1 BOHC (OOS), 2 PxCMD; masks are not raw register RMW values.
+// elapsed_ms is a real monotonic per-phase budget, never an iteration count.
+pub struct EngineInput {pub phase:u64,pub elapsed_ms:u64,pub boh:u64,pub bohc:u64,pub cmd:u64,pub ci:u64,pub sact:u64}
+pub struct Action {pub target:u64,pub clear_mask:u64,pub set_mask:u64,pub wait_mask:u64,pub next_phase:u64}
+pub unsafe fn engine(input:*const EngineInput,out:*Action)!void {
+    unsafe {
+        if input==null || out==null {return error.Invalid;}let i=*input;
+        if i.phase>5 || i.boh>1 || i.bohc>0xffff_ffff || i.cmd>0xffff_ffff || i.ci>0xffff_ffff || i.sact>0xffff_ffff {return error.Invalid;}
+        var a=Action {target:0,clear_mask:0,set_mask:0,wait_mask:0,next_phase:i.phase+1};
+        if i.phase==0 && i.boh==1 {
+            if ((i.bohc&2)==0 || (i.bohc&0x11)!=0) && i.elapsed_ms>=2000 {return error.Timeout;}
+            if (i.bohc&2)==0 {a.target=1;a.set_mask=2;a.next_phase=0;}
+            else {if (i.bohc&0x11)!=0 {
+                if i.elapsed_ms>=2000 {return error.Timeout;}a.wait_mask=0x11;a.next_phase=0;
+            }}
+        }
+        if i.phase==1 && (i.cmd&1)!=0 {a.target=2;a.clear_mask=1;}
+        if i.phase==2 {
+            if (i.cmd&1)!=0 {return error.InvalidState;}
+            if (i.cmd&0x8000)!=0 {if i.elapsed_ms>=500 {return error.Timeout;}a.wait_mask=0x8000;a.next_phase=2;}
+        }
+        if i.phase==3 {
+            if (i.cmd&0x8001)!=0 {return error.InvalidState;}
+            if (i.cmd&0x10)!=0 {a.target=2;a.clear_mask=0x10;}
+        }
+        if i.phase==4 || i.phase==5 {
+            if (i.cmd&0x8011)!=0 {return error.InvalidState;}
+            if (i.cmd&0x4000)!=0 {
+                if i.phase==5 {return error.InvalidState;}
+                if i.elapsed_ms>=500 {return error.Timeout;}a.wait_mask=0x4000;a.next_phase=4;
+            }
+            if i.phase==5 && (i.ci!=0 || i.sact!=0) {return error.InvalidState;}
+        }
+        *out=a;
+    }return;
+}

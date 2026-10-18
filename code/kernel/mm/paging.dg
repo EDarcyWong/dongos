@@ -1,0 +1,490 @@
+// Four-level, 4 KiB paging. This module never loads CR3 or invalidates
+// a TLB. The caller supplies a valid aligned pool and disjoint metadata/Space/
+// output storage, owns them exclusively, and keeps their addresses/lifetimes.
+// Tables form this module's private, uniquely-parented tree, not an imported
+// hierarchy or a DAG. Outside writes may simulate hardware A/D updates only.
+// W^X applies per leaf, not across distinct physical aliases.
+// The original map/protect/unmap API is offline only. The *_live API performs
+// atomic entry publication but requires exclusive CPU ownership and a caller
+// supplied TLB barrier. Never mix offline mutations with a live address space.
+module mm.paging;
+
+import mm.errors as errors;
+import mm.paging_errors as paging_errors;
+
+pub const PAGE_SIZE: usize = 4096;
+pub const WRITE: u64 = 1;
+pub const USER: u64 = 2;
+pub const EXECUTE: u64 = 4;
+pub const UNCACHED: u64 = 8;
+
+const PRESENT: u64 = 1;
+const ENTRY_WRITE: u64 = 2;
+const ENTRY_USER: u64 = 4;
+// 4 KiB PTE: PAT[7]=0, PCD[4]=1, PWT[3]=1 select IA32_PAT entry 3.
+// Intel SDM Vol. 3A "Page Attribute Table (PAT)"; AMD APM Vol. 2 "PAT".
+// The activating caller verifies PAT support, entry 0=WB(6), entry 3=UC(0).
+// This offline builder never reads/writes IA32_PAT or enables caching modes.
+const ENTRY_UNCACHED: u64 = 0x18;
+const ACCESSED: u64 = 0x20;
+const DIRTY: u64 = 0x40;
+const NX: u64 = 0x8000_0000_0000_0000;
+const PARENT_BITS: u64 = 7;
+
+pub align(4096) struct Table { pub entries: [512]u64 }
+
+pub struct Space {
+    initialized: bool,
+    pool: *Table,
+    pool_count: usize,
+    pool_physical: u64,
+    metadata: *u8,
+    address_mask: u64,
+    nx_supported: bool,
+    used_total: usize,
+}
+
+pub const EMPTY_SPACE: Space = Space {
+    initialized: false, pool: null, pool_count: 0, pool_physical: 0,
+    metadata: null, address_mask: 0, nx_supported: false, used_total: 0,
+};
+
+pub struct Mapping { pub physical: u64, pub flags: u64 }
+
+// A detached table remains unavailable to allocation (metadata=2) and counted
+// as used until the caller has completed a full paging-structure/TLB flush.
+// Receipts are linear caller-owned objects: never copy a pending receipt, edit
+// its private fields, or reclaim it before every old translation is invalid.
+pub struct Retired {
+    pending: bool, owner: *Space, root: u64, indices: [3]usize, count: usize,
+}
+pub const EMPTY_RETIRED: Retired = Retired {
+    pending: false, owner: null, root: 0, indices: [0; 3], count: 0,
+};
+pub error InvalidRetirement = 0x0203_0005;
+
+struct Path {
+    tables: [4]usize,
+    slots: [4]usize,
+    depth: usize,
+    present: bool,
+    leaf: u64,
+}
+
+const EMPTY_PATH: Path = Path {
+    tables: [0; 4], slots: [0; 4], depth: 0, present: false, leaf: 0,
+};
+
+fn initialized(space: *const Space) bool {
+    unsafe { return (*space).initialized; }
+}
+
+fn canonical(virtual: u64) bool {
+    let upper: u64 = virtual >> 48;
+    if (virtual & 0x0000_8000_0000_0000) == 0 { return upper == 0; }
+    return upper == 0xffff;
+}
+
+fn table_at(space: *const Space, index: usize) *Table {
+    unsafe { return (*space).pool + index; }
+}
+
+fn zero_table(table: *Table) void {
+    var index: usize = 0;
+    while index < 512 {
+        unsafe { (*table).entries[index] = 0; }
+        index += 1;
+    }
+}
+
+fn empty_table(table: *const Table) bool {
+    var index: usize = 0;
+    while index < 512 {
+        unsafe { if (*table).entries[index] != 0 { return false; } }
+        index += 1;
+    }
+    return true;
+}
+
+fn validate_address(virtual: u64, aligned: bool) !void {
+    if !canonical(virtual) { return error.errors.InvalidArgument; }
+    if aligned && (virtual & 4095) != 0 { return error.errors.InvalidArgument; }
+    return;
+}
+
+fn validate_flags(space: *const Space, virtual: u64, flags: u64) !void {
+    if (flags & ~15) != 0 { return error.errors.InvalidArgument; }
+    if (flags & WRITE) != 0 && (flags & EXECUTE) != 0 { return error.errors.InvalidArgument; }
+    if (virtual >> 63) != 0 && (flags & USER) != 0 { return error.errors.InvalidArgument; }
+    unsafe {
+        if !(*space).nx_supported && (flags & EXECUTE) == 0 {
+            return error.paging_errors.NxUnavailable;
+        }
+    }
+    return;
+}
+
+fn permission_bits(flags: u64) u64 {
+    var result: u64 = PRESENT;
+    if (flags & WRITE) != 0 { result |= ENTRY_WRITE; }
+    if (flags & USER) != 0 { result |= ENTRY_USER; }
+    if (flags & UNCACHED) != 0 { result |= ENTRY_UNCACHED; }
+    if (flags & EXECUTE) == 0 { result |= NX; }
+    return result;
+}
+
+fn logical_flags(entry: u64) u64 {
+    var result: u64 = 0;
+    if (entry & ENTRY_WRITE) != 0 { result |= WRITE; }
+    if (entry & ENTRY_USER) != 0 { result |= USER; }
+    if (entry & ENTRY_UNCACHED) == ENTRY_UNCACHED { result |= UNCACHED; }
+    if (entry & NX) == 0 { result |= EXECUTE; }
+    return result;
+}
+
+// Read-only walk. Local Path may change on error; caller-owned Space, pool,
+// metadata and Mapping never change. A zero nonpresent entry terminates at a
+// hole. Every encountered present link is checked before pointer conversion.
+fn walk(space: *const Space, virtual: u64, path: *Path) !void {
+    unsafe {
+        if *((*space).metadata) != 1 { return error.paging_errors.MalformedEntry; }
+        var level: usize = 0;
+        while level < 4 {
+            (*path).slots[level] = ((virtual >> (39 - level * 9)) & 511) as usize;
+            level += 1;
+        }
+        var current: usize = 0;
+        level = 0;
+        while level < 4 {
+            (*path).tables[level] = current;
+            let table = table_at(space, current);
+            let entry: u64 = (*table).entries[(*path).slots[level]];
+            (*path).depth = level;
+            if (entry & PRESENT) == 0 {
+                if entry != 0 { return error.paging_errors.MalformedEntry; }
+                (*path).present = false;
+                (*path).leaf = 0;
+                return;
+            }
+            if level == 3 {
+                let allowed: u64 = (*space).address_mask | PRESENT | ENTRY_WRITE | ENTRY_USER | ENTRY_UNCACHED | ACCESSED | DIRTY | NX;
+                if (entry & ~allowed) != 0 { return error.paging_errors.MalformedEntry; }
+                let cache_bits: u64 = entry & ENTRY_UNCACHED;
+                if cache_bits != 0 && cache_bits != ENTRY_UNCACHED { return error.paging_errors.MalformedEntry; }
+                if (entry & NX) != 0 && !(*space).nx_supported { return error.paging_errors.MalformedEntry; }
+                if (entry & ENTRY_WRITE) != 0 && (entry & NX) == 0 { return error.paging_errors.MalformedEntry; }
+                if (virtual >> 63) != 0 && (entry & ENTRY_USER) != 0 { return error.paging_errors.MalformedEntry; }
+                (*path).present = true;
+                (*path).leaf = entry;
+                return;
+            }
+            let allowed: u64 = (*space).address_mask | PARENT_BITS | ACCESSED;
+            if (entry & ~allowed) != 0 || (entry & PARENT_BITS) != PARENT_BITS {
+                return error.paging_errors.MalformedEntry;
+            }
+            let physical: u64 = entry & (*space).address_mask;
+            if physical < (*space).pool_physical { return error.paging_errors.MalformedEntry; }
+            let child: usize = ((physical - (*space).pool_physical) / 4096) as usize;
+            if child >= (*space).pool_count { return error.paging_errors.MalformedEntry; }
+            if *((*space).metadata + child) != 1 { return error.paging_errors.MalformedEntry; }
+            var ancestor: usize = 0;
+            while ancestor <= level {
+                if child == (*path).tables[ancestor] { return error.paging_errors.MalformedEntry; }
+                ancestor += 1;
+            }
+            current = child;
+            level += 1;
+        }
+    }
+    return;
+}
+
+pub unsafe fn init(space: *Space, pool: []Table, pool_physical: u64,
+                   metadata: []u8, physical_bits: usize, nx_supported: bool) !void {
+    if initialized(space) { return error.errors.AlreadyInitialized; }
+    if pool.len == 0 || physical_bits < 32 || physical_bits > 52 { return error.errors.InvalidArgument; }
+    unsafe {
+        let host: usize = pool.ptr as usize;
+        if host == 0 || (host & 4095) != 0 || (pool_physical & 4095) != 0 {
+            return error.errors.InvalidArgument;
+        }
+    }
+    let physical_limit: u64 = 1 << physical_bits;
+    if pool.len > physical_limit / 4096 { return error.errors.InvalidArgument; }
+    let bytes: u64 = (pool.len as u64) * 4096;
+    if pool_physical > physical_limit - bytes { return error.errors.InvalidArgument; }
+    if metadata.len < pool.len { return error.errors.MetadataTooSmall; }
+    // All validation precedes even the first write to root or metadata.
+    zero_table(pool.ptr);
+    var index: usize = 0;
+    while index < pool.len {
+        metadata[index] = 0;
+        index += 1;
+    }
+    metadata[0] = 1;
+    unsafe {
+        (*space).pool = pool.ptr;
+        (*space).pool_count = pool.len;
+        (*space).pool_physical = pool_physical;
+        (*space).metadata = metadata.ptr;
+        (*space).address_mask = (physical_limit - 1) & ~4095;
+        (*space).nx_supported = nx_supported;
+        (*space).used_total = 1;
+        (*space).initialized = true;
+    }
+    return;
+}
+
+pub unsafe fn root_physical(space: *const Space) !u64 {
+    if !initialized(space) { return error.errors.NotInitialized; }
+    unsafe { return (*space).pool_physical; }
+}
+
+pub unsafe fn used_tables(space: *const Space) !usize {
+    if !initialized(space) { return error.errors.NotInitialized; }
+    unsafe { return (*space).used_total; }
+}
+
+pub unsafe fn physical_address_mask(space: *const Space) !u64 {
+    if !initialized(space) { return error.errors.NotInitialized; }
+    unsafe { return (*space).address_mask; }
+}
+
+unsafe fn map_impl(space: *Space, virtual: u64, physical: u64, flags: u64, live: bool) !void {
+    if !initialized(space) { return error.errors.NotInitialized; }
+    try validate_address(virtual, true);
+    unsafe {
+        if (physical & ~(*space).address_mask) != 0 { return error.errors.InvalidArgument; }
+    }
+    try validate_flags(space, virtual, flags);
+    var path: Path = EMPTY_PATH;
+    try walk(space, virtual, &path);
+    if path.present { return error.paging_errors.AlreadyMapped; }
+    let needed: usize = 3 - path.depth;
+    var selected: [3]usize = [0; 3];
+    var found: usize = 0;
+    var index: usize = 0;
+    unsafe {
+        while index < (*space).pool_count && found < needed {
+            if *((*space).metadata + index) == 0 {
+                selected[found] = index;
+                found += 1;
+            }
+            index += 1;
+        }
+    }
+    if found != needed { return error.errors.OutOfMemory; }
+    // Commit cannot produce a regular failure. Preserve all free-table bytes
+    // until enough slots have been found; then link the lowest free indices.
+    var level: usize = path.depth;
+    index = 0;
+    unsafe {
+        while level < 3 {
+            let child: usize = selected[index];
+            zero_table(table_at(space, child));
+            *((*space).metadata + child) = 1;
+            (*space).used_total += 1;
+            let parent = table_at(space, path.tables[level]);
+            let entry: u64 = ((*space).pool_physical + (child as u64) * 4096) | PARENT_BITS;
+            if live { atomic_store(&(*parent).entries[path.slots[level]], entry); }
+            else { (*parent).entries[path.slots[level]] = entry; }
+            path.tables[level + 1] = child;
+            level += 1;
+            index += 1;
+        }
+        let leaf = table_at(space, path.tables[3]);
+        let entry: u64 = physical | permission_bits(flags);
+        if live { atomic_store(&(*leaf).entries[path.slots[3]], entry); }
+        else { (*leaf).entries[path.slots[3]] = entry; }
+    }
+    return;
+}
+
+pub unsafe fn map(space: *Space, virtual: u64, physical: u64, flags: u64) !void {
+    unsafe { return map_impl(space,virtual,physical,flags,false); }
+}
+
+// Validates everything before publication. The caller must invalidate virtual
+// after success, including a newly present mapping, before using that address.
+pub unsafe fn map_live(space: *Space, virtual: u64, physical: u64, flags: u64) !void {
+    unsafe { return map_impl(space,virtual,physical,flags,true); }
+}
+
+pub unsafe fn unmap(space: *Space, virtual: u64) !void {
+    if !initialized(space) { return error.errors.NotInitialized; }
+    try validate_address(virtual, true);
+    var path: Path = EMPTY_PATH;
+    try walk(space, virtual, &path);
+    if !path.present { return error.paging_errors.NotMapped; }
+    unsafe {
+        let leaf = table_at(space, path.tables[3]);
+        (*leaf).entries[path.slots[3]] = 0;
+        var level: usize = 3;
+        while level > 0 {
+            let child: usize = path.tables[level];
+            if !empty_table(table_at(space, child)) { break; }
+            let parent = table_at(space, path.tables[level - 1]);
+            (*parent).entries[path.slots[level - 1]] = 0;
+            *((*space).metadata + child) = 0;
+            (*space).used_total -= 1;
+            level -= 1;
+        }
+    }
+    return;
+}
+
+pub unsafe fn protect(space: *Space, virtual: u64, flags: u64) !void {
+    if !initialized(space) { return error.errors.NotInitialized; }
+    try validate_address(virtual, true);
+    try validate_flags(space, virtual, flags);
+    var path: Path = EMPTY_PATH;
+    try walk(space, virtual, &path);
+    if !path.present { return error.paging_errors.NotMapped; }
+    unsafe {
+        let leaf = table_at(space, path.tables[3]);
+        (*leaf).entries[path.slots[3]] = (path.leaf & ((*space).address_mask | ACCESSED | DIRTY)) | permission_bits(flags);
+    }
+    return;
+}
+
+unsafe fn change_live(space: *Space, virtual: u64, physical: u64, flags: u64,
+                      replace: bool) !void {
+    if !initialized(space) { return error.errors.NotInitialized; }
+    try validate_address(virtual,true);
+    unsafe {
+        if replace && (physical & ~(*space).address_mask) != 0 {
+            return error.errors.InvalidArgument;
+        }
+    }
+    try validate_flags(space,virtual,flags);
+    var path: Path = EMPTY_PATH;
+    try walk(space,virtual,&path);
+    if !path.present { return error.paging_errors.NotMapped; }
+    unsafe {
+        let table = table_at(space,path.tables[3]);
+        let entry = &(*table).entries[path.slots[3]];
+        var observed: u64 = path.leaf;
+        loop {
+            // Hardware is the only concurrent writer and may only set A/D.
+            // CAS retries preserve the latest A/D for permission-only changes.
+            var desired: u64 = (observed & ((*space).address_mask | ACCESSED | DIRTY)) | permission_bits(flags);
+            if replace { desired = physical | permission_bits(flags); }
+            let previous: u64 = atomic_compare_exchange(entry,observed,desired);
+            if previous == observed { break; }
+            if (previous & ~(ACCESSED | DIRTY)) != (path.leaf & ~(ACCESSED | DIRTY))
+                || ((previous & (ACCESSED | DIRTY)) & (observed & (ACCESSED | DIRTY))) != (observed & (ACCESSED | DIRTY)) {
+                return error.paging_errors.MalformedEntry;
+            }
+            observed = previous;
+        }
+    }
+    return;
+}
+
+pub unsafe fn protect_live(space: *Space, virtual: u64, flags: u64) !void {
+    unsafe { return change_live(space,virtual,0,flags,false); }
+}
+
+// Replacing the PA deliberately starts a fresh A/D history, even for the same
+// PA. The old physical frame remains owned until caller invalidation completes.
+pub unsafe fn replace_live(space: *Space, virtual: u64, physical: u64, flags: u64) !void {
+    unsafe { return change_live(space,virtual,physical,flags,true); }
+}
+
+fn empty_except(table: *const Table, slot: usize) bool {
+    var index: usize = 0;
+    while index < 512 {
+        unsafe { if index != slot && (*table).entries[index] != 0 { return false; } }
+        index += 1;
+    }
+    return true;
+}
+
+pub unsafe fn unmap_live(space: *Space, virtual: u64, retired: *Retired) !void {
+    if !initialized(space) { return error.errors.NotInitialized; }
+    unsafe { if (*retired).pending { return error.InvalidRetirement; } }
+    try validate_address(virtual,true);
+    var path: Path = EMPTY_PATH;
+    try walk(space,virtual,&path);
+    if !path.present { return error.paging_errors.NotMapped; }
+    // Calculate the entire retirement before writing any caller-owned state.
+    var receipt: Retired = EMPTY_RETIRED;
+    var level: usize = 3;
+    unsafe {
+        while level > 0 {
+            if !empty_except(table_at(space,path.tables[level]),path.slots[level]) { break; }
+            receipt.indices[receipt.count] = path.tables[level];
+            receipt.count += 1;
+            level -= 1;
+        }
+        let leaf = table_at(space,path.tables[3]);
+        atomic_store(&(*leaf).entries[path.slots[3]],0);
+        var index: usize = 0;
+        level = 3;
+        while index < receipt.count {
+            let parent = table_at(space,path.tables[level - 1]);
+            atomic_store(&(*parent).entries[path.slots[level - 1]],0);
+            *((*space).metadata + receipt.indices[index]) = 2;
+            index += 1;
+            level -= 1;
+        }
+        receipt.pending = true;
+        receipt.owner = space;
+        receipt.root = (*space).pool_physical;
+        *retired = receipt;
+    }
+    return;
+}
+
+pub unsafe fn retired_tables(retired: *const Retired) usize {
+    unsafe { return (*retired).count; }
+}
+
+// Caller precondition: completed a full local paging-structure/TLB invalidation
+// on every CPU that could have used this root, and no pending hardware walks.
+// This module cannot observe or prove that architectural barrier itself.
+pub unsafe fn reclaim(space: *Space, retired: *Retired) !void {
+    if !initialized(space) { return error.errors.NotInitialized; }
+    unsafe {
+        let receipt = *retired;
+        if !receipt.pending || receipt.owner != space || receipt.root != (*space).pool_physical
+            || receipt.count > 3 || (*space).used_total < receipt.count + 1 {
+            return error.InvalidRetirement;
+        }
+        var index: usize = 0;
+        while index < receipt.count {
+            let child: usize = receipt.indices[index];
+            if child == 0 || child >= (*space).pool_count || *((*space).metadata + child) != 2
+                || !empty_table(table_at(space,child)) {
+                return error.InvalidRetirement;
+            }
+            var earlier: usize = 0;
+            while earlier < index {
+                if receipt.indices[earlier] == child { return error.InvalidRetirement; }
+                earlier += 1;
+            }
+            index += 1;
+        }
+        index = 0;
+        while index < receipt.count {
+            *((*space).metadata + receipt.indices[index]) = 0;
+            index += 1;
+        }
+        (*space).used_total -= receipt.count;
+        *retired = EMPTY_RETIRED;
+    }
+    return;
+}
+
+pub unsafe fn query(space: *const Space, virtual: u64, out: *Mapping) !void {
+    if !initialized(space) { return error.errors.NotInitialized; }
+    try validate_address(virtual, false);
+    var path: Path = EMPTY_PATH;
+    try walk(space, virtual, &path);
+    if !path.present { return error.paging_errors.NotMapped; }
+    unsafe {
+        (*out).physical = (path.leaf & (*space).address_mask) + (virtual & 4095);
+        (*out).flags = logical_flags(path.leaf);
+    }
+    return;
+}

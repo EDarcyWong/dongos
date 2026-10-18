@@ -1,0 +1,43 @@
+// Integer-only libc/libasm process API. All pointers refer to caller-owned
+// objects; failed syscalls leave outputs unpublished. Tokens are capabilities.
+module lib.process;
+import lib.sys as sys;
+import lib.process_abi as abi;
+pub unsafe fn configuration(manager:u64,index:u64,out:*abi.Config)u64 {unsafe {
+    return sys.svc_call(abi.CONFIG,manager,index,out as u64,0,0,0);
+}}
+pub unsafe fn configuration_state(manager:u64,index:u64,out:*abi.Config,state:*abi.Snapshot)u64 {unsafe {
+    return sys.svc_call(abi.CONFIG,manager,index,out as u64,state as u64,0,0);
+}}
+pub unsafe fn spawn(manager:u64,index:u64,generation:u64,argument:u64,out:*abi.Snapshot)u64 {unsafe {
+    return sys.svc_call(abi.SPAWN,manager,index,generation,argument,out as u64,0);
+}}
+// after_sequence is a consumed event cursor. A blocking wait may yield until
+// deadline_ticks; zero deadline waits only for an event. NONBLOCK never yields.
+pub unsafe fn wait(manager:u64,after_sequence:u64,out:*abi.Event,flags:u64,deadline_ticks:u64)u64 {unsafe {
+    return sys.svc_call(abi.WAIT,manager,after_sequence,out as u64,flags,deadline_ticks,0);
+}}
+pub fn kill(manager:u64,process:u64,status:u64)u64 {unsafe {
+    return sys.svc_call(abi.KILL,manager,process,status,0,0,0);
+}}
+pub fn ready(endpoint:u64,generation:u64)u64 {unsafe {
+    return sys.svc_call(abi.MARK_READY,endpoint,generation,0,0,0,0);
+}}
+// The kernel snapshots and validates caller-owned ELF bytes before loading;
+// this interface never lets an image choose a privileged device-service role.
+pub unsafe fn execute(manager:u64,image:[]const u8,argument:u64,out:*abi.Snapshot)u64 {unsafe {
+    return sys.svc_call(abi.EXEC,manager,image.ptr as u64,image.len as u64,argument,out as u64,0);
+}}
+pub fn ticks()u64 {unsafe {return sys.svc_call(0x73,0,0,0,0,0,0);}}
+pub fn incarnation(endpoint:u64)u64 {unsafe {return sys.svc_call(abi.INCARNATION,endpoint,0,0,0,0,0);}}
+pub unsafe fn runtime(manager:u64,out:*abi.Runtime)u64 {unsafe {
+    return sys.svc_call(abi.RUNTIME,manager,out as u64,0,0,0,0);
+}}
+// The interactive shell may request bounded recovery of FS/compositor only.
+// Drivers retain DMA and are deliberately excluded from this operation.
+pub fn restart(manager:u64,configuration:u64,generation:u64)u64 {unsafe {
+    return sys.svc_call(abi.RESTART_SERVICE,manager,configuration,generation,0,0,0);
+}}
+// The common entry bridge reports the result of service_main through the
+// existing 0xff/0xfe exit ABI. A kernel which implements generic lifecycle
+// records either result against the current generation before waking waiters.

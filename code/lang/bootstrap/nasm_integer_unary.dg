@@ -1,0 +1,97 @@
+// Emit NASM 64-bit unary neg/not or zero-compare-to-bool into one register.
+// Length is planned before any user-out write. INVALID precedes CAPACITY.
+module bootstrap.nasm_integer_unary;
+pub const OK:u64=0;pub const INVALID:u64=1;pub const CAPACITY:u64=2;
+const MAX:u64=0xffff_ffff_ffff_ffff;
+fn span(p:u64,n:u64)bool{return n==0||(p!=0&&n<=MAX-p);}
+fn overlap(a:u64,n:u64,b:u64,m:u64)bool{return n!=0&&m!=0&&a<b+m&&b<a+n;}
+fn reg64_len(r:u64)usize{
+ if r<=7{return 3;}
+ if r<=9{return 2;}
+ return 3;
+}
+fn reg8_len(r:u64)usize{
+ if r<=3{return 2;}
+ if r<=9{return 3;}
+ return 4;
+}
+fn write_reg64(out:[]u8,at:usize,r:u64)usize{
+ if r==0{out[at]=114;out[at+1]=97;out[at+2]=120;return at+3;}
+ if r==1{out[at]=114;out[at+1]=99;out[at+2]=120;return at+3;}
+ if r==2{out[at]=114;out[at+1]=100;out[at+2]=120;return at+3;}
+ if r==3{out[at]=114;out[at+1]=98;out[at+2]=120;return at+3;}
+ if r==4{out[at]=114;out[at+1]=115;out[at+2]=112;return at+3;}
+ if r==5{out[at]=114;out[at+1]=98;out[at+2]=112;return at+3;}
+ if r==6{out[at]=114;out[at+1]=115;out[at+2]=105;return at+3;}
+ if r==7{out[at]=114;out[at+1]=100;out[at+2]=105;return at+3;}
+ if r==8{out[at]=114;out[at+1]=56;return at+2;}
+ if r==9{out[at]=114;out[at+1]=57;return at+2;}
+ if r==10{out[at]=114;out[at+1]=49;out[at+2]=48;return at+3;}
+ if r==11{out[at]=114;out[at+1]=49;out[at+2]=49;return at+3;}
+ if r==12{out[at]=114;out[at+1]=49;out[at+2]=50;return at+3;}
+ if r==13{out[at]=114;out[at+1]=49;out[at+2]=51;return at+3;}
+ if r==14{out[at]=114;out[at+1]=49;out[at+2]=52;return at+3;}
+ out[at]=114;out[at+1]=49;out[at+2]=53;return at+3;
+}
+fn write_reg8(out:[]u8,at:usize,r:u64)usize{
+ if r==0{out[at]=97;out[at+1]=108;return at+2;}
+ if r==1{out[at]=99;out[at+1]=108;return at+2;}
+ if r==2{out[at]=100;out[at+1]=108;return at+2;}
+ if r==3{out[at]=98;out[at+1]=108;return at+2;}
+ if r==4{out[at]=115;out[at+1]=112;out[at+2]=108;return at+3;}
+ if r==5{out[at]=98;out[at+1]=112;out[at+2]=108;return at+3;}
+ if r==6{out[at]=115;out[at+1]=105;out[at+2]=108;return at+3;}
+ if r==7{out[at]=100;out[at+1]=105;out[at+2]=108;return at+3;}
+ if r==8{out[at]=114;out[at+1]=56;out[at+2]=98;return at+3;}
+ if r==9{out[at]=114;out[at+1]=57;out[at+2]=98;return at+3;}
+ if r==10{out[at]=114;out[at+1]=49;out[at+2]=48;out[at+3]=98;return at+4;}
+ if r==11{out[at]=114;out[at+1]=49;out[at+2]=49;out[at+3]=98;return at+4;}
+ if r==12{out[at]=114;out[at+1]=49;out[at+2]=50;out[at+3]=98;return at+4;}
+ if r==13{out[at]=114;out[at+1]=49;out[at+2]=51;out[at+3]=98;return at+4;}
+ if r==14{out[at]=114;out[at+1]=49;out[at+2]=52;out[at+3]=98;return at+4;}
+ out[at]=114;out[at+1]=49;out[at+2]=53;out[at+3]=98;return at+4;
+}
+fn total_of(op:u64,r:u64)usize{
+ let r64=reg64_len(r);
+ if op==0||op==1{
+  // "neg "/"not " + reg + LF
+  return 4+r64+1;
+ }
+ let r8=reg8_len(r);
+ // test reg, reg\n + sete reg8\n + movzx reg, reg8\n
+ // 5+r64+2+r64+1 + 5+r8+1 + 6+r64+2+r8+1
+ return 5+r64+2+r64+1+5+r8+1+6+r64+2+r8+1;
+}
+pub unsafe fn emit(operation:u64,register:u64,out:[]u8,written:*usize)u64{unsafe{
+ let wp=written as u64;let optr=out.ptr as u64;
+ if written==null||(wp&7)!=0||!span(wp,8){return INVALID;}
+ if !span(optr,out.len){return INVALID;}
+ if overlap(wp,8,optr,out.len){return INVALID;}
+ if operation>2||register>15{return INVALID;}
+ let total=total_of(operation,register);
+ if total>out.len{return CAPACITY;}
+ if operation==0||operation==1{
+  // "neg " or "not "
+  out[0]=110;
+  if operation==0{out[1]=101;out[2]=103;}else{out[1]=111;out[2]=116;}
+  out[3]=32;
+  var at=write_reg64(out,4,register);
+  out[at]=10;
+  *written=total;return OK;
+ }
+ // test <r>, <r>\nsete <r8>\nmovzx <r>, <r8>\n
+ out[0]=116;out[1]=101;out[2]=115;out[3]=116;out[4]=32;
+ var at=write_reg64(out,5,register);
+ out[at]=44;out[at+1]=32;at+=2;
+ at=write_reg64(out,at,register);
+ out[at]=10;at+=1;
+ out[at]=115;out[at+1]=101;out[at+2]=116;out[at+3]=101;out[at+4]=32;at+=5;
+ at=write_reg8(out,at,register);
+ out[at]=10;at+=1;
+ out[at]=109;out[at+1]=111;out[at+2]=118;out[at+3]=122;out[at+4]=120;out[at+5]=32;at+=6;
+ at=write_reg64(out,at,register);
+ out[at]=44;out[at+1]=32;at+=2;
+ at=write_reg8(out,at,register);
+ out[at]=10;
+ *written=total;return OK;
+}}

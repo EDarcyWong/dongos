@@ -1,0 +1,56 @@
+// Emit a restricted NASM BSS declaration using CR4 decimal_integer for numbers.
+// All descriptors, label/alignment rules, and need length are settled before any
+// user-out write. CR4 encodes into stack scratch first so failures never leave a
+// half-written label line. INVALID precedes CAPACITY.
+module bootstrap.nasm_bss;
+import bootstrap.decimal_integer as dec;
+pub const OK:u64=0;pub const INVALID:u64=1;pub const CAPACITY:u64=2;
+const MAX:u64=0xffff_ffff_ffff_ffff;
+const PREFIX:usize=7;
+const MIN_LABEL:usize=8;
+const MAX_LABEL:usize=128;
+const FIXED:usize=16; // "alignb " + LF + ": resb " + LF
+fn span(p:u64,n:u64)bool{return n==0||(p!=0&&n<=MAX-p);}
+fn overlap(a:u64,n:u64,b:u64,m:u64)bool{return n!=0&&m!=0&&a<b+m&&b<a+n;}
+fn label_ok(label:[]const u8)bool{
+ if label.len<MIN_LABEL||label.len>MAX_LABEL{return false;}
+ if label[0]!=95||label[1]!=95||label[2]!=100||label[3]!=111||label[4]!=110||label[5]!=103||label[6]!=95{return false;}
+ var i:usize=PREFIX;
+ while i<label.len{
+  let c=label[i];
+  if !((c>=65&&c<=90)||(c>=97&&c<=122)||(c>=48&&c<=57)||c==95){return false;}
+  i+=1;
+ }
+ return true;
+}
+fn align_ok(a:usize)bool{return a!=0&&a<=4096&&(a&(a-1))==0;}
+fn copy(out:[]u8,at:usize,text:[]const u8)usize{
+ var i:usize=0;while i<text.len{out[at+i]=text[i];i+=1;}return at+text.len;
+}
+pub unsafe fn emit(label:[]const u8,byte_count:usize,alignment:usize,out:[]u8,written:*usize)u64{unsafe{
+ let wp=written as u64;let lp=label.ptr as u64;let op=out.ptr as u64;
+ if written==null||(wp&7)!=0||!span(wp,8){return INVALID;}
+ if !span(lp,label.len)||!span(op,out.len){return INVALID;}
+ if overlap(op,out.len,lp,label.len)||overlap(wp,8,lp,label.len)||overlap(wp,8,op,out.len){return INVALID;}
+ if !label_ok(label)||!align_ok(alignment){return INVALID;}
+ var ab:[20]u8=[0;20];var cb:[20]u8=[0;20];var aw:usize=0;var cw:usize=0;
+ let asl=slice_from_raw_parts(&ab[0],20);let csl=slice_from_raw_parts(&cb[0],20);
+ let sa=dec.encode(alignment as u64,64,false,asl,&aw);
+ if sa!=OK{return sa;}
+ let sc=dec.encode(byte_count as u64,64,false,csl,&cw);
+ if sc!=OK{return sc;}
+ if label.len>MAX-FIXED{return INVALID;}let base=FIXED+label.len;
+ if aw>MAX-base{return INVALID;}let mid=base+aw;
+ if cw>MAX-mid{return INVALID;}let total=mid+cw;
+ if total>out.len{return CAPACITY;}
+ // "alignb "
+ out[0]=97;out[1]=108;out[2]=105;out[3]=103;out[4]=110;out[5]=98;out[6]=32;
+ var at=copy(out,7,slice_from_raw_parts(&ab[0],aw));
+ out[at]=10;at+=1;
+ at=copy(out,at,label);
+ // ": resb "
+ out[at]=58;out[at+1]=32;out[at+2]=114;out[at+3]=101;out[at+4]=115;out[at+5]=98;out[at+6]=32;at+=7;
+ at=copy(out,at,slice_from_raw_parts(&cb[0],cw));
+ out[at]=10;
+ *written=total;return OK;
+}}

@@ -1,0 +1,93 @@
+// Server-owned, caller-bound file grants. The kernel supplies an unrepeatable
+// service epoch and authenticated caller identity; user request words cannot.
+module fs.handles;
+pub const STAT:u64=1;
+pub const READ:u64=2;
+pub const WRITE:u64=4;
+pub const LIST:u64=8;
+pub const CREATE:u64=16;
+pub const TRUNCATE:u64=32;
+pub const REMOVE:u64=64;
+pub const DUP:u64=128;
+pub const OPEN:u64=256;
+pub const MKDIR:u64=512;
+pub const ALL:u64=1023;
+pub const FILE:u64=1;
+pub const DIRECTORY:u64=2;
+pub const ROOT:u64=3;
+pub const MAX_EPOCH:u64=0xffff_ffff;
+pub const MAX_GENERATION:u64=0xff_ffff;
+pub error InvalidArgument=0x050c_0001;
+pub error InvalidHandle=0x050c_0002;
+pub error Denied=0x050c_0003;
+pub error NoSpace=0x050c_0004;
+pub error Exhausted=0x050c_0005;
+pub error NotInitialized=0x050c_0006;
+pub struct Entry {
+    pub generation:u64,pub live:u64,pub owner:u64,pub rights:u64,pub kind:u64,
+    pub length:usize,pub sector:u64,pub offset:u64,pub alias:[11]u8,pub path:[1024]u8,
+}
+pub struct Table {pub ready:u64,pub epoch:u64,pub used:u64,pub entries:[32]Entry}
+pub const EMPTY_ENTRY:Entry=Entry{generation:1,live:0,owner:0,rights:0,kind:0,
+    length:0,sector:0,offset:0,alias:[0;11],path:[0;1024]};
+pub const EMPTY_TABLE:Table=Table{ready:0,epoch:0,used:0,entries:[EMPTY_ENTRY;32]};
+pub unsafe fn init(table:*Table,epoch:u64)!void {unsafe {
+    if (*table).ready!=0||epoch==0||epoch>MAX_EPOCH {return error.InvalidArgument;}
+    *table=EMPTY_TABLE;(*table).epoch=epoch;(*table).ready=1;
+}return;}
+pub unsafe fn lookup(table:*const Table,owner:u64,token:u64,required:u64)!usize {unsafe {
+    if (*table).ready!=1 {return error.NotInitialized;}
+    let slot=token&255;let generation=(token>>8)&MAX_GENERATION;
+    if owner==0||slot==0||slot>32||generation==0||token>>32!=(*table).epoch {return error.InvalidHandle;}
+    let item=&(*table).entries[(slot-1) as usize];
+    if (*item).live!=1||(*item).generation!=generation {return error.InvalidHandle;}
+    if (*item).owner!=owner||(required&~(*item).rights)!=0 {return error.Denied;}
+    return (slot-1) as usize;
+}}
+pub unsafe fn install(table:*Table,owner:u64,kind:u64,rights:u64,
+    path:[]const u8,sector:u64,offset:u64,alias:[]const u8)!u64 {unsafe {
+    if (*table).ready!=1 {return error.NotInitialized;}
+    if owner==0||kind<FILE||kind>ROOT||rights==0||(rights&~ALL)!=0
+        ||path.len==0||path.len>1024||path.ptr==null||(path.ptr as u64)>0xffff_ffff_ffff_ffff-path.len as u64
+        ||alias.len!=11||alias.ptr==null||(alias.ptr as u64)>0xffff_ffff_ffff_ffff-alias.len as u64
+        ||path[0]!=47||offset>=512||(offset&31)!=0 {return error.InvalidArgument;}
+    var slot:usize=0;while slot<32 {
+        let item=&(*table).entries[slot];
+        if (*item).live==0&&(*item).generation<MAX_GENERATION {
+            (*item).owner=owner;(*item).rights=rights;(*item).kind=kind;
+            (*item).length=path.len;(*item).sector=sector;(*item).offset=offset;
+            var i:usize=0;while i<path.len {(*item).path[i]=path[i];i+=1;}
+            i=0;while i<11 {(*item).alias[i]=alias[i];i+=1;}
+            // Publish only after all authority and identity metadata is present.
+            (*item).live=1;(*table).used+=1;
+            return ((*table).epoch<<32)|((*item).generation<<8)|(slot as u64+1);
+        }slot+=1;
+    }
+    return error.NoSpace;
+}}
+unsafe fn revoke(table:*Table,slot:usize)void {unsafe {
+    let item=&(*table).entries[slot];(*item).live=0;(*item).owner=0;(*item).rights=0;
+    // Reaching MAX permanently retires this slot. No token is ever reused.
+    (*item).generation+=1;(*table).used-=1;
+}return;}
+pub unsafe fn close(table:*Table,owner:u64,token:u64)!void {unsafe {
+    let slot=try lookup(table,owner,token,0);revoke(table,slot);
+}return;}
+pub unsafe fn duplicate(table:*Table,owner:u64,token:u64,rights:u64)!u64 {unsafe {
+    let slot=try lookup(table,owner,token,DUP);let item=&(*table).entries[slot];
+    if rights==0||(rights&~(*item).rights)!=0 {return error.Denied;}
+    return install(table,owner,(*item).kind,rights,(*item).path[0..(*item).length],
+        (*item).sector,(*item).offset,(*item).alias[0..11]);
+}}
+pub unsafe fn revoke_owner(table:*Table,owner:u64)void {unsafe {
+    if (*table).ready!=1 {return;}var i:usize=0;while i<32 {
+        if (*table).entries[i].live==1&&(*table).entries[i].owner==owner {revoke(table,i);}i+=1;
+    }
+}return;}
+// Namespace mutation invalidates all open objects, including directories. Root
+// grants remain valid because they name the mount, never a reusable disk slot.
+pub unsafe fn namespace_changed(table:*Table)void {unsafe {
+    if (*table).ready!=1 {return;}var i:usize=0;while i<32 {
+        if (*table).entries[i].live==1&&(*table).entries[i].kind!=ROOT {revoke(table,i);}i+=1;
+    }
+}return;}

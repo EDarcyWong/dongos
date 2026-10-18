@@ -1,0 +1,8 @@
+module user_address_probe;
+import user.entropy as entropy;
+export("address_layout") fn layout(a:u64,s:u64,source:u64,out:*entropy.Layout)u64 {
+    unsafe { match entropy.layout(a,s,source,out) { ok=>{return 0;},err(code)=>{return code;}, } }
+}
+export("address_generate") fn generate(out:*entropy.Layout)u64 {
+    unsafe { match entropy.generate(out) { ok=>{return 0;},err(code)=>{return code;}, } }
+}

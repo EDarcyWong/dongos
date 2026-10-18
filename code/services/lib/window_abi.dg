@@ -1,0 +1,72 @@
+// Candidate ABI only: not yet linked into the production compositor/kernel.
+module lib.window_abi;
+pub const VERSION:u64=1;
+pub const HELLO:u64=0x400;
+pub const CREATE:u64=0x401;
+pub const COMMIT:u64=0x402;
+pub const POLL:u64=0x403;
+pub const ACK_CONFIGURE:u64=0x404;
+pub const DESTROY:u64=0x405;
+pub const GET_FONT:u64=0x406;
+pub const APPLY_SETTINGS:u64=0x407;
+pub const KEY:u64=1;
+pub const POINTER:u64=2;
+pub const CONFIGURE:u64=3;
+pub const EXIT:u64=4;
+pub const FOCUS:u64=5;
+pub const THEME:u64=6;
+pub const DRAW:u64=1;
+pub const INPUT:u64=2;
+pub const RESIZE:u64=4;
+pub const CLOSE:u64=8;
+pub const ALL:u64=15;
+pub const MAX_LEASE_BYTES:u64=3145728;
+pub const MAX_TOTAL_BYTES:u64=8388608;
+pub struct Message {pub words:[8]u64}
+pub struct Layout {pub width:u64,pub height:u64,pub stride:u64,pub bytes:u64}
+pub struct Rectangle {pub x:u64,pub y:u64,pub width:u64,pub height:u64}
+pub struct Request {pub operation:u64,pub window:u64,pub lease:u64,pub serial:u64,pub sequence:u64,pub layout:Layout,pub damage:Rectangle}
+pub const EMPTY_LAYOUT:Layout=Layout{width:0,height:0,stride:0,bytes:0};
+pub const EMPTY_RECT:Rectangle=Rectangle{x:0,y:0,width:0,height:0};
+pub const EMPTY_REQUEST:Request=Request{operation:0,window:0,lease:0,serial:0,sequence:0,layout:EMPTY_LAYOUT,damage:EMPTY_RECT};
+pub error Invalid=0x0740_0001;
+pub error Stale=0x0740_0002;
+pub unsafe fn layout(width:u64,height:u64,stride:u64,out:*Layout)!void {unsafe {
+    if width==0||width>1920||height==0||height>1080||stride<width*4||stride>8192
+        ||(stride&3)!=0||stride>MAX_LEASE_BYTES/height {return error.Invalid;}
+    *out=Layout{width:width,height:height,stride:stride,bytes:stride*height};
+}return;}
+// All outputs are published only after the complete request validates. Leases
+// remain opaque IDs; the bridge must resolve them to kernel-owned shared RAM.
+pub unsafe fn decode(message:*const Message,epoch:u64,out:*Request)!void {unsafe {
+    let m=*message;let op=m.words[0];var r=EMPTY_REQUEST;r.operation=op;
+    if epoch==0||epoch>0xffff_ffff||op<HELLO||op>APPLY_SETTINGS||m.words[7]!=0 {return error.Invalid;}
+    if op==HELLO {
+        if m.words[1]!=VERSION||m.words[2]!=0||m.words[3]!=0||m.words[4]!=0||m.words[5]!=0||m.words[6]!=0 {return error.Invalid;}
+        *out=r;return;
+    }
+    if m.words[1]!=epoch {return error.Stale;}
+    r.window=m.words[2];r.lease=m.words[3];r.serial=m.words[4];
+    if op==CREATE {
+        if r.window!=0||r.lease!=0||r.serial!=0 {return error.Invalid;}
+        try layout(m.words[5]&0xffff_ffff,m.words[5]>>32,m.words[6],&r.layout);
+    }else {
+        if r.window==0 {return error.Invalid;}
+        if op==COMMIT {
+            if r.lease==0||r.serial==0||m.words[5]==0 {return error.Invalid;}
+            r.sequence=m.words[5];r.damage=Rectangle{x:m.words[6]&65535,y:(m.words[6]>>16)&65535,
+                width:(m.words[6]>>32)&65535,height:m.words[6]>>48};
+            if r.damage.width==0||r.damage.height==0 {return error.Invalid;}
+        }else if op==ACK_CONFIGURE {
+            if r.lease==0||r.serial==0||m.words[5]!=0||m.words[6]!=0 {return error.Invalid;}
+        }else if op==POLL {
+            if r.lease!=0||r.serial!=0||m.words[6]!=0 {return error.Invalid;}r.sequence=m.words[5];
+        }else if op==APPLY_SETTINGS {
+            if r.lease!=0||r.serial!=0||m.words[5]>1||(m.words[6]!=256&&m.words[6]!=320&&m.words[6]!=384&&m.words[6]!=448&&m.words[6]!=512){return error.Invalid;}
+            r.sequence=m.words[5];r.layout.width=m.words[6];
+        }else {
+            if r.lease!=0||r.serial!=0||m.words[5]!=0||m.words[6]!=0 {return error.Invalid;}
+        }
+    }
+    *out=r;
+}return;}

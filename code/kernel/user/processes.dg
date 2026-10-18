@@ -1,0 +1,124 @@
+// Kernel-owned process catalog and bounded event history. No user pointers or
+// hardware access: the dispatcher validates authority and commits resources.
+module user.processes;
+import lib.process_abi as abi;
+pub const CONFIGS:usize=18;
+pub const SLOTS:usize=16;
+pub const EVENTS:usize=64;
+pub const NONE:u64=0xffff_ffff_ffff_ffff;
+pub struct Catalog {
+    pub ready:u64,pub count:usize,pub sequence:u64,
+    pub configs:[32]abi.Config,pub states:[32]abi.Snapshot,
+    pub slot:[32]u64,pub incarnation:[16]u64,pub configuration:[16]u64,
+    pub events:[64]abi.Event,
+}
+unsafe fn configure(c:*Catalog,id:usize,name:[]const u8,deps:u64,flags:u64,retries:u64,hz:u64)void{unsafe{
+    (*c).configs[id]=abi.EMPTY_CONFIG;
+    let out=&(*c).configs[id];(*out).id=id as u64;(*out).image=id as u64+1;
+    (*out).dependencies=deps;(*out).flags=flags;(*out).restart_limit=retries;
+    (*out).timeout_ticks=hz*10;(*out).name_length=name.len as u64;
+    var i:usize=0;while i<name.len{(*out).name[i]=name[i];i+=1;}
+}return;}
+pub unsafe fn initialize(c:*Catalog,hz:u64)!void{unsafe{
+    if c==null||(*c).ready!=0||hz==0||hz>0xffff_ffff_ffff_ffff/10{return error.abi.Invalid;}
+    (*c).count=CONFIGS;(*c).sequence=0;
+    var i:usize=0;while i<32{
+        (*c).configs[i]=abi.EMPTY_CONFIG;(*c).states[i]=abi.EMPTY_SNAPSHOT;
+        (*c).states[i].configuration=i as u64;(*c).slot[i]=NONE;
+        if i<SLOTS{(*c).configuration[i]=NONE;(*c).incarnation[i]=0;}i+=1;
+    }
+    i=0;while i<EVENTS{(*c).events[i]=abi.EMPTY_EVENT;i+=1;}
+    let auto=abi.AUTOSTART|abi.ESSENTIAL;let retry=auto|abi.RESTART;
+    configure(c,0,"shell",1<<1,retry,3,hz);
+    configure(c,1,"fs",1<<2,retry,3,hz);
+    configure(c,2,"block",1<<6,auto,0,hz);
+    configure(c,3,"compositor",(1<<1)|(1<<4),retry,3,hz);
+    configure(c,4,"input",1<<6,auto,0,hz);
+    configure(c,5,"init",0,auto,0,hz);
+    configure(c,6,"devmgr",1<<5,retry,3,hz);
+    configure(c,7,"echo",1<<1,abi.ORDINARY,0,hz);
+    configure(c,8,"fault",1<<1,abi.ORDINARY,0,hz);
+    configure(c,9,"waiter",1<<1,abi.ORDINARY,0,hz);
+    configure(c,10,"ipc-peer",1<<1,abi.ORDINARY,0,hz);
+    configure(c,11,"fs-reader",1<<1,abi.ORDINARY,0,hz);
+    configure(c,12,"file-app",1<<1,abi.ORDINARY,0,hz);
+    configure(c,13,"xhci",1<<6,abi.ESSENTIAL,0,hz);
+    configure(c,14,"terminal",(1<<1)|(1<<3),abi.AUTOSTART|abi.ORDINARY,0,hz);
+    configure(c,15,"files",(1<<1)|(1<<3),abi.AUTOSTART|abi.ORDINARY,0,hz);
+    configure(c,16,"editor",(1<<1)|(1<<3),abi.AUTOSTART|abi.ORDINARY,0,hz);
+    configure(c,17,"settings",(1<<1)|(1<<3),abi.AUTOSTART|abi.ORDINARY,0,hz);
+    (*c).ready=1;
+}return;}
+pub unsafe fn allowed(c:*const Catalog,actor:usize,id:usize,write:bool)!void{unsafe{
+    if c==null||(*c).ready!=1||id>=(*c).count{return error.abi.Invalid;}
+    if actor==5{return;}
+    if actor==0{if !write||((*c).configs[id].flags&abi.ORDINARY)!=0{return;}}
+    if actor==6{if !write||id==2||id==4||id==13{return;}}
+    if actor==3{if !write||(id>=14&&id<=17){return;}}
+    // A role follows its current configuration and incarnation, never its
+    // physical slot number. A stopped or stale terminal cannot retain power.
+    if actor<SLOTS&&(*c).configuration[actor]==14&&(*c).slot[14]==actor as u64{
+        let terminal=(*c).states[14];let incarnation=(*c).incarnation[actor];
+        if (terminal.state==abi.STARTING||terminal.state==abi.READY)&&incarnation!=0
+            &&terminal.process==((incarnation<<8)|(actor as u64+1))
+            &&(!write||((*c).configs[id].flags&abi.ORDINARY)!=0){return;}
+    }
+    return error.abi.Invalid;
+}}
+pub unsafe fn dependencies(c:*const Catalog,id:usize)!void{unsafe{
+    if c==null||(*c).ready!=1||id>=(*c).count{return error.abi.Invalid;}
+    let bits=(*c).configs[id].dependencies;var i:usize=0;
+    while i<(*c).count{if (bits&(1<<i as u64))!=0&&(*c).states[i].state!=abi.READY{return error.abi.Dependency;}i+=1;}
+}return;}
+pub unsafe fn start(c:*Catalog,id:usize,slot:usize,argument:u64,out:*abi.Snapshot)!void{unsafe{
+    try dependencies(c,id);
+    if (*c).sequence==0xffff_ffff_ffff_ffff{return error.abi.Exhausted;}
+    if out==null||slot>=SLOTS||(*c).configuration[slot]!=NONE
+        ||(*c).states[id].process!=0||(*c).states[id].generation==0xffff_ffff_ffff_ffff
+        ||(*c).incarnation[slot]>=0x0fff_ffff{return error.abi.Stale;}
+    (*c).incarnation[slot]+=1;let incarnation=(*c).incarnation[slot];
+    let token=(incarnation<<8)|(slot as u64+1);
+    (*c).states[id]=abi.Snapshot{version:1,configuration:id as u64,process:token,
+        generation:(*c).states[id].generation+1,state:abi.STARTING,status:0,
+        sequence:(*c).sequence,argument:argument};
+    (*c).slot[id]=slot as u64;(*c).configuration[slot]=id as u64;*out=(*c).states[id];
+}return;}
+unsafe fn publish(c:*Catalog,id:usize,token:u64,state:u64,status:u64)!void{unsafe{
+    if (*c).sequence==0xffff_ffff_ffff_ffff{return error.abi.Exhausted;}
+    (*c).sequence+=1;let seq=(*c).sequence;
+    (*c).events[((seq-1)%EVENTS as u64) as usize]=abi.Event{version:1,sequence:seq,
+        configuration:id as u64,generation:(*c).states[id].generation,process:token,
+        state:state,status:status,flags:0};
+    (*c).states[id].sequence=seq;
+}return;}
+pub unsafe fn mark_ready(c:*Catalog,slot:usize,incarnation:u64)!void{unsafe{
+    if c==null||(*c).ready!=1||slot>=SLOTS||incarnation==0||(*c).incarnation[slot]!=incarnation{return error.abi.Stale;}
+    let id=(*c).configuration[slot];if id>=(*c).count as u64{return error.abi.Stale;}
+    let s=&(*c).states[id as usize];if (*s).state==abi.READY{return;}
+    if (*s).state!=abi.STARTING{return error.abi.Stale;}
+    try dependencies(c,id as usize);try publish(c,id as usize,(*s).process,abi.READY,0);(*s).state=abi.READY;
+}return;}
+pub unsafe fn terminate(c:*Catalog,slot:usize,state:u64,status:u64)!void{unsafe{
+    if c==null||(*c).ready!=1||slot>=SLOTS||state<abi.EXITED||state>abi.KILLED{return error.abi.Invalid;}
+    let id=(*c).configuration[slot];if id>=(*c).count as u64{return error.abi.Stale;}
+    let s=&(*c).states[id as usize];if (*s).state!=abi.STARTING&&(*s).state!=abi.READY{return error.abi.Stale;}
+    try publish(c,id as usize,(*s).process,state,status);
+    (*s).state=state;(*s).status=status;(*s).process=0;
+    (*c).slot[id as usize]=NONE;(*c).configuration[slot]=NONE;
+}return;}
+pub unsafe fn event(c:*const Catalog,actor:usize,after:u64,out:*abi.Event)!bool{unsafe{
+    if c==null||(*c).ready!=1||out==null||after>(*c).sequence{return error.abi.Invalid;}
+    if after==(*c).sequence{return false;}
+    if (*c).sequence-after>EVENTS as u64{return error.abi.Stale;}
+    var seq=after+1;while seq!=0&&seq<=(*c).sequence{
+        let item=(*c).events[((seq-1)%EVENTS as u64) as usize];
+        if item.sequence!=seq{return error.abi.Stale;}
+        let permitted=allowed(c,actor,item.configuration as usize,true);
+        match permitted{ok=>{*out=item;return true;},err(e)=>{},}
+        if seq==(*c).sequence{return false;}seq+=1;
+    }
+    return false;
+}}
+pub unsafe fn current(c:*const Catalog,slot:usize)u64{unsafe{
+    if c==null||(*c).ready!=1||slot>=SLOTS{return NONE;}return (*c).configuration[slot];
+}}

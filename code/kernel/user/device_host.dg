@@ -1,0 +1,198 @@
+// Trusted hardware half of the CPL3 device-manager protocol. Only snapshots
+// read here enter the authority ledger; user requests never supply MMIO PAs.
+module user.device_host;
+import user.device_manager as ledger;
+import user.pci_inventory as pci_inventory;
+import lib.pci_inventory_abi as pci_inventory_abi;
+import user.devices as devices;
+import boot.service_memory as resources;
+import irq.platform as platform;
+import lib.device_abi as abi;
+import drivers.pci_msi as msi;
+pub var TABLE:*ledger.Table=null;
+pub var VIEW:abi.Device=abi.EMPTY_DEVICE;
+pub var BINDING:abi.Binding=abi.EMPTY_BINDING;
+pub var IRQ:abi.Irq=abi.EMPTY_IRQ;
+var RAW:abi.Device=abi.EMPTY_DEVICE;
+var ENUMERATED:bool=false;
+var XHCI_OWNER:u64=0;
+var PCI_OWNERS:[2]u64=[0;2];
+var PCI_TOKENS:[2]u64=[0;2];
+pub var MSI:msi.State=msi.EMPTY;
+pub var PCI_FAILED:bool=false;
+var MSI_OPS:msi.Ops=msi.Ops{read:msi_read,write:msi_write};
+unsafe fn hardware(ecam:u64,out:*abi.Device)!bool{unsafe{
+    let identity=try devices.configuration_read(ecam);
+    if (identity&65535)==0||(identity&65535)==65535{return false;}
+    let offset=ecam-devices.region_base();var d=abi.EMPTY_DEVICE;d.kind=abi.PCI;
+    d.ecam=ecam;d.bus=offset>>20;d.device=(offset>>15)&31;d.function=(offset>>12)&7;
+    d.vendor=(identity&65535) as u64;d.device_id=(identity>>16) as u64;
+    d.class_code=((try devices.configuration_read(ecam+8))>>8) as u64;
+    d.header=(((try devices.configuration_read(ecam+12))>>16)&255) as u64;*out=d;return true;
+}}
+pub unsafe fn initialize()!void{unsafe{
+    if TABLE!=null{return error.abi.Invalid;}
+    var block=resources.Block{physical:0,virtual:0,pages:0};
+    try resources.allocate((sizeof(ledger.Table)+4095)/4096,1,&block);
+    TABLE=block.virtual as *ledger.Table;try ledger.initialize(TABLE);devices.require_manager();
+}return;}
+unsafe fn discover()!void{unsafe{
+    if ENUMERATED{return;}if TABLE==null{return error.abi.Invalid;}
+    var bus=devices.region_first();while bus<=devices.region_last(){
+        var slot:u64=0;while slot<32{
+            let address=devices.region_base()+(bus<<20)+(slot<<15);
+            if try hardware(address,&RAW){
+                let multi=(RAW.header&128)!=0;try ledger.register(TABLE,&RAW,&VIEW);
+                if multi{var f:u64=1;while f<8{
+                    if try hardware(address+(f<<12),&RAW){try ledger.register(TABLE,&RAW,&VIEW);}f+=1;
+                }}
+            }slot+=1;
+        }bus+=1;
+    }
+    RAW=abi.EMPTY_DEVICE;RAW.kind=abi.I8042;try ledger.register(TABLE,&RAW,&VIEW);ENUMERATED=true;
+}return;}
+pub unsafe fn enumerate(cursor:u64)!void{unsafe{
+    try discover();try ledger.enumerate(TABLE,cursor,&VIEW);
+    if VIEW.kind==abi.PCI&&(VIEW.flags&abi.REVOKED)==0{
+        let present=try hardware(VIEW.ecam,&RAW);
+        if !present||!ledger.same_identity(&VIEW,&RAW){VIEW.flags|=abi.REVOKED;}
+    }
+}return;}
+pub unsafe fn bind(token:u64,role:u64)!void{unsafe{
+    if TABLE==null{return error.abi.Invalid;}
+    let slot=token&255;if slot==0||slot>(*TABLE).count as u64{return error.abi.Stale;}
+    let d=(*TABLE).devices[(slot-1) as usize];RAW=abi.EMPTY_DEVICE;
+    if d.kind==abi.PCI{if !(try hardware(d.ecam,&RAW)){return error.abi.Removed;}}
+    else{RAW.kind=abi.I8042;}
+    try ledger.bind(TABLE,token,&RAW,role,&BINDING);
+    if role==abi.BLOCK||role==abi.TABLET||role==abi.XHCI{try devices.admit(role,RAW.ecam);}
+}return;}
+// Invoked by the trusted identity installer for configuration/physical slot13,
+// after the device manager bound role4 and before that service is scheduled.
+pub unsafe fn xhci_attach(slot:usize,owner:u64,incarnation:u64)!void{unsafe{
+    if slot!=devices.ADMITTED_XHCI||owner==0||incarnation==0||XHCI_OWNER!=0||TABLE==null{return error.abi.Denied;}
+    var binding=abi.EMPTY_BINDING;try ledger.binding(TABLE,abi.XHCI,&binding);
+    if binding.configuration_id!=13||(binding.flags&abi.REVOKED)!=0{return error.abi.Denied;}
+    let i=(binding.device_token&255)-1;let stored=(*TABLE).devices[i as usize];
+    if !(try hardware(stored.ecam,&RAW))||!ledger.same_identity(&stored,&RAW){return error.abi.Removed;}
+    try devices.xhci_attach(slot,owner,incarnation,binding.device_token,binding.generation,stored.ecam);XHCI_OWNER=owner;
+}return;}
+pub unsafe fn bind_irq(owner:u64,generation:u64,irq:u64)!void{unsafe{
+    var route=platform.EMPTY_ISA_ROUTE;try platform.route_isa(irq,true,&route);
+    try ledger.irq_bind(TABLE,owner,generation,irq,route.gsi,&IRQ);
+    try platform.mask_isa(irq,false);
+}return;}
+// BSP+BKL/IF0 preflight only. Both backends read const ledger/state and
+// write a private local snapshot. No ACK, MMIO, mask or global IRQ publication.
+pub unsafe fn irq_poll_readonly(token:u64,owner:u64,after:u64)bool{unsafe{
+ var snapshot=abi.EMPTY_IRQ;
+ if msi.tagged(token){match msi.poll(&MSI,token,owner,after,&snapshot){
+  ok=>{return true;},err(e)=>{return e==0x0512_0006;},}}
+ match ledger.irq_poll(TABLE,token,owner,after,&snapshot){
+  ok=>{return true;},err(e)=>{return e==0x0512_0006;},}
+}}
+pub unsafe fn poll_irq(token:u64,owner:u64,after:u64)!void{unsafe{
+    if msi.tagged(token){try msi.poll(&MSI,token,owner,after,&IRQ);return;}
+    try ledger.irq_poll(TABLE,token,owner,after,&IRQ);
+}return;}
+pub unsafe fn ack_irq(token:u64,owner:u64,sequence:u64)!void{unsafe{
+    if msi.tagged(token){try msi.acknowledge(&MSI,token,owner,sequence);return;}
+    try ledger.irq_validate_ack(TABLE,token,owner,sequence);
+    // The source is taken from the authenticated ledger, never a user GSI.
+    let slot=(token&255)-1;let irq=(*TABLE).interrupts[slot as usize].view.irq;
+    try platform.mask_isa(irq,false);try ledger.irq_ack(TABLE,token,owner,sequence);
+}return;}
+pub unsafe fn interrupt(vector:u64)!u64{unsafe{
+    if vector==msi.VECTOR{
+        let delivered=msi.signal(&MSI,&IRQ);
+        match delivered{ok(owner)=>{},err(code)=>{if code==0x0512_0005{
+            PCI_FAILED=true;match msi.retire(&MSI,&MSI_OPS,MSI.owner){ok=>{},err(ignored)=>{},}
+            match devices.quarantine(2){ok=>{},err(ignored)=>{},}
+        }},}
+        try platform.device_eoi();return delivered;
+    }
+    var source:u64=1;if vector==0x5c{source=12;}else if vector!=0x51{return error.abi.Invalid;}
+    let masked=platform.mask_isa(source,true);
+    match masked{ok=>{},err(e)=>{
+        match platform.device_eoi(){ok=>{},err(ignored)=>{},}return error.abi.Readback;
+    },}
+    let signaled=ledger.irq_signal(TABLE,vector,&IRQ);try platform.device_eoi();return signaled;
+}}
+pub unsafe fn revoke_owner(owner:u64)!void{unsafe{
+    if TABLE==null{return;}
+    // Retire the message route and verified BME before closing driver caps.
+    let stopped=msi.retire(&MSI,&MSI_OPS,owner);match stopped{ok=>{},err(e)=>{PCI_FAILED=true;return stopped;},}
+    var pci:usize=0;while pci<2{if PCI_OWNERS[pci]==owner&&owner!=0{
+        var slot:usize=2;if pci==1{slot=4;}
+        let isolated=devices.quarantine(slot);match isolated{ok=>{},err(e)=>{PCI_FAILED=true;return isolated;},}
+        let token=PCI_TOKENS[pci];let index=(token&255)-1;
+        if token!=0&&((*TABLE).devices[index as usize].flags&abi.REVOKED)==0{
+            try ledger.revoke(TABLE,token,token>>8);
+        }
+    }pci+=1;}
+    if XHCI_OWNER!=0&&owner==XHCI_OWNER{
+        try devices.quarantine(devices.ADMITTED_XHCI);
+        let binding=(*TABLE).bindings[3];if binding.device_token!=0&&(binding.flags&abi.REVOKED)==0{
+            try ledger.revoke(TABLE,binding.device_token,binding.generation);
+        }
+    }
+    var i:usize=0;while i<2{let irq=(*TABLE).interrupts[i];
+        if irq.live==1&&irq.owner==owner{try platform.mask_isa(irq.view.irq,true);}i+=1;
+    }
+    try ledger.irq_revoke_owner(TABLE,owner);
+}return;}
+pub unsafe fn revoke(token:u64,generation:u64)!u64{unsafe{
+    if TABLE==null{return error.abi.Invalid;}
+    var config:u64=0xffff_ffff_ffff_ffff;var i:usize=0;
+    while i<4{let binding=(*TABLE).bindings[i];if binding.device_token==token{
+        if binding.generation!=generation{return error.abi.Stale;}config=binding.configuration_id;
+        if binding.role==abi.BLOCK{try devices.quarantine(2);}
+        if binding.role==abi.TABLET{try devices.quarantine(4);}
+        if binding.role==abi.XHCI{try devices.quarantine(devices.ADMITTED_XHCI);}
+        if binding.role==abi.PS2{var n:usize=0;while n<2{
+            if (*TABLE).interrupts[n].live==1{try platform.mask_isa((*TABLE).interrupts[n].view.irq,true);}n+=1;
+        }}
+    }i+=1;}
+    try ledger.revoke(TABLE,token,generation);return config;
+}}
+// Read-only completed boot inventory: no rediscovery, hardware read or grant.
+pub unsafe fn read_pci_inventory(cursor:u64,out:*pci_inventory_abi.Entry)!void{unsafe{
+ try pci_inventory.read(TABLE,ENUMERATED,devices.region_base(),devices.region_first(),devices.region_last(),cursor,out);
+}return;}
+// Called by syscall 0x61 with the live Catalog owner before any partial BAR
+// publication. Preloaded identities cannot bind before devmgr establishes a
+// role; an attempted/pinned driver is never adopted by a later incarnation.
+pub unsafe fn attach_pci(slot:usize,owner:u64)!void{unsafe{
+    if TABLE==null||PCI_FAILED||owner>>32!=slot as u64+1||(owner&0xffff_ffff)==0
+        ||(owner&0xffff_ffff)>0x0fff_ffff||(slot!=2&&slot!=4){return error.abi.Denied;}
+    var role:u64=abi.BLOCK;var index:usize=0;if slot==4{role=abi.TABLET;index=1;}
+    var binding=abi.EMPTY_BINDING;try ledger.binding(TABLE,role,&binding);
+    let token=binding.device_token;let d=(*TABLE).devices[((token&255)-1) as usize];
+    if binding.configuration_id!=slot as u64||(binding.flags&abi.REVOKED)!=0
+        ||!(try hardware(d.ecam,&RAW))||!ledger.same_identity(&d,&RAW){return error.abi.Removed;}
+    if PCI_OWNERS[index]!=0&&PCI_OWNERS[index]!=owner{return error.abi.Denied;}
+    PCI_OWNERS[index]=owner;PCI_TOKENS[index]=token;
+}return;}
+unsafe fn msi_read(context:u64,at:u64,out:*u32)u64{unsafe{
+    if out==null||at>252||(at&3)!=0{return 0x0512_0001;}
+    match devices.configuration_read(context+at){ok(value)=>{*out=value;return 0;},err(e)=>{return e;},}
+}}
+unsafe fn msi_write(context:u64,at:u64,width:u64,value:u32)u64{unsafe{
+    if at>=256{return 0x0512_0001;}
+    if width==2{match devices.configuration_write16(context+at,value as u16){ok=>{return 0;},err(e)=>{return e;},}}
+    if width==4{match devices.configuration_write32(context+at,value){ok=>{return 0;},err(e)=>{return e;},}}
+}return 0x0512_0001;}
+pub fn is_pci_irq(object:u64)bool{return msi.tagged(object);}
+pub unsafe fn bind_pci_irq(owner:u64,incarnation:u64)!void{unsafe{
+    if PCI_FAILED||PCI_OWNERS[0]!=owner||(owner&0xffff_ffff)!=incarnation{return error.abi.Denied;}
+    let ecam=try devices.msi_device();var binding=abi.EMPTY_BINDING;try ledger.binding(TABLE,abi.BLOCK,&binding);
+    let d=(*TABLE).devices[((binding.device_token&255)-1) as usize];
+    if d.ecam!=ecam||!(try hardware(ecam,&RAW))||!ledger.same_identity(&d,&RAW){return error.abi.Removed;}
+    var report=platform.EMPTY_REPORT;try platform.describe(&report);
+    let configured=msi.bind(&MSI,&MSI_OPS,owner,incarnation,ecam,try devices.configuration_read(ecam) as u64,report.lapic_id,&IRQ);
+    match configured{ok=>{},err(e)=>{if MSI.stage==3{PCI_FAILED=true;match devices.quarantine(2){ok=>{},err(ignored)=>{},}}return configured;},}
+}return;}
+pub unsafe fn close_pci_irq(object:u64,owner:u64)!void{unsafe{
+    let closed=msi.close(&MSI,&MSI_OPS,object,owner);
+    match closed{ok=>{},err(e)=>{if MSI.stage==3{PCI_FAILED=true;match devices.quarantine(2){ok=>{},err(ignored)=>{},}}return closed;},}
+}return;}

@@ -1,0 +1,98 @@
+// Two independent fixed records. The caller owns I/O, flush, and slot rotation.
+// This bounded checksum detects accidental damage; it is not authentication.
+module desktop.preferences;
+import desktop.theme as theme;
+pub error InvalidInput=0x0724_0001;
+pub error InvalidRecord=0x0724_0002;
+pub error InvalidChecksum=0x0724_0003;
+pub error InvalidTheme=0x0724_0004;
+pub error NoValidRecord=0x0724_0005;
+pub error Conflict=0x0724_0006;
+pub error SequenceExhausted=0x0724_0007;
+pub const BYTES:usize=128;
+const MAGIC:u64=0x4645_5250_474e_4f44; // DONGPREF, little endian.
+const MAX:u64=0xffff_ffff_ffff_ffff;
+pub struct Record { pub sequence:u64,pub theme:theme.Theme }
+pub const EMPTY_RECORD:Record=Record { sequence:0,theme:theme.DEFAULT };
+
+unsafe fn buffer(bytes:[]const u8)!void {
+    unsafe { if bytes.ptr==null || bytes.len!=BYTES || (bytes.ptr as u64)>MAX-BYTES as u64 { return error.InvalidInput; } }
+    return;
+}
+unsafe fn valid(value:*const theme.Theme)!void {
+    unsafe {
+        // Return one stable preferences error for all theme-policy failures.
+        let result=theme.validate(value);
+        match result { ok=>{},err(code)=>{return error.InvalidTheme;}, }
+        let scale=(*value).scale_q8;
+        if ((*value).surface>>24)!=255 || ((*value).background>>24)!=255
+            || (scale!=256 && scale!=320 && scale!=384 && scale!=448 && scale!=512) { return error.InvalidTheme; }
+    }return;
+}
+unsafe fn checksum(bytes:[]const u8)u64 {
+    unsafe {
+        var fa:u64=1;var fb:u64=0;var ra:u64=1;var rb:u64=0;var i:usize=0;
+        while i<BYTES {
+            var v=bytes[i] as u64;let j=BYTES-1-i;var w=bytes[j] as u64;
+            if i>=104 && i<112 { v=0; }if j>=104 && j<112 { w=0; }
+            fa=(fa+v)%65521;fb=(fb+fa)%65521;
+            ra=(ra+w)%65521;rb=(rb+ra)%65521;i+=1;
+        }
+        return (rb<<48)|(ra<<32)|(fb<<16)|fa;
+    }
+}
+pub fn next_sequence(current:u64)!u64 {
+    if current==MAX { return error.SequenceExhausted; }return current+1;
+}
+pub unsafe fn encode(value:*const theme.Theme,sequence:u64,out:[]u8)!void {
+    unsafe {
+        try buffer(out);try valid(value);
+        if sequence==0 { return error.InvalidRecord; }
+        let a=out.ptr as u64;let b=value as u64;
+        if b>MAX-sizeof(theme.Theme) as u64 || (a<b+sizeof(theme.Theme) as u64 && b<a+BYTES as u64) { return error.InvalidInput; }
+        // Canonical bytes include explicit zeroed Theme padding and reserved bits.
+        var i:usize=0;while i<BYTES { out[i]=0;i+=1; }
+        let p=out.ptr;
+        write_unaligned(p as *u64,MAGIC);write_unaligned((p+8) as *u32,1);
+        write_unaligned((p+12) as *u32,BYTES as u32);write_unaligned((p+16) as *u64,sequence);
+        write_unaligned((p+32) as *u32,(*value).background);write_unaligned((p+36) as *u32,(*value).surface);
+        write_unaligned((p+40) as *u32,(*value).text);write_unaligned((p+44) as *u32,(*value).muted);
+        write_unaligned((p+48) as *u32,(*value).accent);write_unaligned((p+52) as *u32,(*value).border);
+        write_unaligned((p+56) as *u32,(*value).shadow);write_unaligned((p+60) as *u32,(*value).selection);
+        write_unaligned((p+64) as *u32,(*value).danger);write_unaligned((p+72) as *u64,(*value).radius);
+        write_unaligned((p+80) as *u64,(*value).shadow_size);write_unaligned((p+88) as *u64,(*value).scale_q8);
+        write_unaligned((p+96) as *u64,(*value).duration_ms);write_unaligned((p+104) as *u64,checksum(out));
+    }return;
+}
+pub unsafe fn decode(bytes:[]const u8,out:*Record)!void {
+    unsafe {
+        try buffer(bytes);if out==null { return error.InvalidInput; }let p=bytes.ptr;
+        if read_unaligned(p as *const u64)!=MAGIC || read_unaligned((p+8) as *const u32)!=1
+            || read_unaligned((p+12) as *const u32)!=BYTES as u32 || read_unaligned((p+24) as *const u64)!=0
+            || read_unaligned((p+68) as *const u32)!=0 { return error.InvalidRecord; }
+        var i:usize=112;while i<BYTES { if bytes[i]!=0 { return error.InvalidRecord; }i+=1; }
+        let sequence=read_unaligned((p+16) as *const u64);if sequence==0 { return error.InvalidRecord; }
+        if read_unaligned((p+104) as *const u64)!=checksum(bytes) { return error.InvalidChecksum; }
+        let value=theme.Theme { background:read_unaligned((p+32) as *const u32),surface:read_unaligned((p+36) as *const u32),
+            text:read_unaligned((p+40) as *const u32),muted:read_unaligned((p+44) as *const u32),
+            accent:read_unaligned((p+48) as *const u32),border:read_unaligned((p+52) as *const u32),
+            shadow:read_unaligned((p+56) as *const u32),selection:read_unaligned((p+60) as *const u32),danger:read_unaligned((p+64) as *const u32),
+            radius:read_unaligned((p+72) as *const u64),shadow_size:read_unaligned((p+80) as *const u64),
+            scale_q8:read_unaligned((p+88) as *const u64),duration_ms:read_unaligned((p+96) as *const u64) };
+        try valid(&value);*out=Record { sequence:sequence,theme:value };
+    }return;
+}
+pub unsafe fn select(first:[]const u8,second:[]const u8,out:*Record)!u64 {
+    unsafe {
+        if out==null { return error.InvalidInput; }
+        var a=EMPTY_RECORD;var b=EMPTY_RECORD;var av=false;var bv=false;
+        match decode(first,&a) { ok=>{av=true;},err(code)=>{}, }
+        match decode(second,&b) { ok=>{bv=true;},err(code)=>{}, }
+        if !av && !bv { return error.NoValidRecord; }
+        if av && bv && a.sequence==b.sequence {
+            var i:usize=0;while i<BYTES { if first[i]!=second[i] { return error.Conflict; }i+=1; }
+        }
+        if av && (!bv || a.sequence>=b.sequence) { *out=a;return 0; }
+        *out=b;return 1;
+    }
+}

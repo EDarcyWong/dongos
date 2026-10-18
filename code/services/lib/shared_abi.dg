@@ -1,0 +1,11 @@
+// Bounded object-owned shared RAM; no user physical/object identity.
+module lib.shared_abi;
+pub const CREATE:u64=0xb6;pub const MAP:u64=0xb7;pub const UNMAP:u64=0xb8;pub const INFO:u64=0xb9;
+pub const READ:u64=1;pub const WRITE:u64=2;pub const TRANSFER:u64=4;pub const MAP_RIGHT:u64=128;
+pub const MAX_BYTES:u64=65536;pub const MAPS:usize=4;
+pub struct Mapping{pub version:u64,pub token:u64,pub address:u64,pub bytes:u64,pub rights:u64,pub reserved:[3]u64}
+pub const EMPTY_MAPPING:Mapping=Mapping{version:1,token:0,address:0,bytes:0,rights:0,reserved:[0;3]};
+pub struct Info{pub version:u64,pub bytes:u64,pub rights:u64,pub mappings:u64,pub reserved:[4]u64}
+pub const EMPTY_INFO:Info=Info{version:1,bytes:0,rights:0,mappings:0,reserved:[0;4]};
+pub error Invalid=0x0410_0001;pub error Stale=0x0410_0002;pub error Exhausted=0x0410_0003;
+pub error Held=0x0410_0004;pub error NoSpace=0x0410_0005;pub error Denied=0x0410_0006;

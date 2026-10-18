@@ -1,0 +1,257 @@
+// Per-CPU runqueue metadata. A single scheduling-domain lock plus local IRQ
+// exclusion must cover every call and the caller's corresponding context
+// publication. No CPU registers, user pointers, heap or callbacks are touched.
+// This candidate does not execute an AP thread: GS/TSS/stack/xstate/CR3/PCID and
+// cross-CPU translation retirement remain the architecture adapter's duty.
+module sched.multicore;
+pub const CPUS:usize=16;
+pub const THREADS:usize=64;
+pub const PRIORITIES:usize=32;
+pub const NONE:u64=64;
+pub const NO_CPU:u64=16;
+pub const UNUSED:u64=0;
+pub const READY:u64=1;
+pub const RUNNING:u64=2;
+pub const BLOCKED:u64=3;
+const MAX:u64=0xffff_ffff_ffff_ffff;
+const MAX_GENERATION:u64=0x00ff_ffff_ffff_ffff;
+pub error Invalid=0x0606_0001;
+pub error State=0x0606_0002;
+pub error Busy=0x0606_0003;
+pub error Overflow=0x0606_0004;
+pub error Corrupt=0x0606_0005;
+pub error Stale=0x0606_0006;
+pub struct Thread {
+    pub state:u64,pub priority:u64,pub affinity:u64,pub cpu:u64,
+    pub next:u64,pub previous:u64,pub generation:u64,pub frame:u64,
+}
+pub struct Cpu {
+    pub current:u64,pub ready_count:u64,pub bitmap:u64,pub cursor:u64,pub dispatches:u64,
+    pub heads:[32]u64,pub tails:[32]u64,
+}
+pub struct Engine {
+    pub ready:u64,pub online:u64,pub sequence:u64,pub count:u64,
+    pub cpus:[16]Cpu,pub threads:[64]Thread,
+}
+pub struct Dispatch {pub token:u64,pub frame:u64,pub source_cpu:u64,pub target_cpu:u64,pub priority:u64}
+pub struct Move {pub token:u64,pub source_cpu:u64,pub target_cpu:u64,pub notify:u64}
+pub const EMPTY_THREAD:Thread=Thread {state:0,priority:0,affinity:0,cpu:NO_CPU,next:NONE,previous:NONE,generation:0,frame:0};
+pub const EMPTY_CPU:Cpu=Cpu {current:NONE,ready_count:0,bitmap:0,cursor:0,dispatches:0,heads:[NONE;32],tails:[NONE;32]};
+
+fn valid_mask(mask:u64,online:u64)bool{return mask!=0&&(mask&~online)==0;}
+unsafe fn online(e:*const Engine,cpu:usize)bool{unsafe{return cpu<CPUS&&((*e).online&(1<<cpu as u64))!=0;}}
+fn valid_frame(frame:u64)bool{return frame!=0&&(frame&7)==0;}
+unsafe fn token(e:*const Engine,id:usize)u64{unsafe{return ((*e).threads[id].generation<<8)|(id as u64+1);}}
+unsafe fn lookup(e:*const Engine,value:u64)!usize{unsafe{
+    let low=value&255;
+    if low==0||low>THREADS as u64{return error.Stale;}
+    let id=(low-1) as usize;
+    if (*e).threads[id].state==UNUSED||value>>8!=(*e).threads[id].generation{return error.Stale;}
+    return id;
+}}
+
+// Read-only complete structural audit precedes mutations. A corrupt intrusive
+// link, duplicate ownership, impossible affinity or overflow cannot cause a
+// partial dequeue. Work is bounded by 16*32 buckets plus 64 ready links.
+pub unsafe fn audit(e:*const Engine)!void{unsafe{
+    if e==null||(*e).ready!=1||(*e).online==0||((*e).online&~0xffff)!=0||(*e).count>64{return error.Invalid;}
+    var seen:u64=0;var active:u64=0;var cpu:usize=0;
+    while cpu<CPUS{
+        let q=&(*e).cpus[cpu];
+        if (*q).cursor>=CPUS as u64||(*q).current>NONE{return error.Corrupt;}
+        if !online(e,cpu)&&((*q).current!=NONE||(*q).ready_count!=0||(*q).bitmap!=0){return error.Corrupt;}
+        if (*q).current!=NONE{
+            let id=(*q).current as usize;let t=(*e).threads[id];let bit:u64=1<<id as u64;
+            if (seen&bit)!=0||t.state!=RUNNING||t.cpu!=cpu as u64{return error.Corrupt;}seen|=bit;
+        }
+        // Empty queues still check every head and tail, including offline CPUs.
+        // OR/XOR aggregation has no early success and does not trust bitmap alone.
+        if (*q).bitmap==0{
+            var different:u64=0;var empty_priority:usize=0;
+            while empty_priority<PRIORITIES{
+                different|=((*q).heads[empty_priority]^NONE)|((*q).tails[empty_priority]^NONE);
+                different|=((*q).heads[empty_priority+1]^NONE)|((*q).tails[empty_priority+1]^NONE);
+                different|=((*q).heads[empty_priority+2]^NONE)|((*q).tails[empty_priority+2]^NONE);
+                different|=((*q).heads[empty_priority+3]^NONE)|((*q).tails[empty_priority+3]^NONE);
+                empty_priority+=4;
+            }
+            if different!=0||(*q).ready_count!=0{return error.Corrupt;}
+            cpu+=1;continue;
+        }
+        var bitmap:u64=0;var count:u64=0;var priority:usize=0;
+        while priority<PRIORITIES{
+            let head=(*q).heads[priority];let tail=(*q).tails[priority];
+            if head>NONE||tail>NONE||((head==NONE)!=(tail==NONE)){return error.Corrupt;}
+            if head!=NONE{bitmap|=1<<priority as u64;}
+            var next=head;var previous=NONE;
+            while next!=NONE{
+                if next>=THREADS as u64{return error.Corrupt;}
+                let bit:u64=1<<next;
+                if (seen&bit)!=0{return error.Corrupt;}
+                let t=(*e).threads[next as usize];
+                if t.state!=READY||t.priority!=priority as u64||t.cpu!=cpu as u64||t.previous!=previous{return error.Corrupt;}
+                seen|=bit;count+=1;previous=next;next=t.next;
+            }
+            if previous!=tail{return error.Corrupt;}priority+=1;
+        }
+        if count!=(*q).ready_count||bitmap!=(*q).bitmap{return error.Corrupt;}cpu+=1;
+    }
+    var id:usize=0;
+    while id<THREADS{
+        let t=(*e).threads[id];let bit:u64=1<<id as u64;
+        if t.generation>MAX_GENERATION{return error.Corrupt;}
+        if t.state==UNUSED{
+            if (seen&bit)!=0||t.priority!=0||t.affinity!=0||t.cpu!=NO_CPU||t.next!=NONE||t.previous!=NONE||t.frame!=0{return error.Corrupt;}
+        }else{
+            if t.state>BLOCKED||t.priority>=32||t.generation==0||!valid_frame(t.frame)
+                ||!valid_mask(t.affinity,(*e).online)||t.cpu>=CPUS as u64
+                ||(t.affinity&(1<<t.cpu))==0{return error.Corrupt;}
+            if t.state==BLOCKED{
+                if (seen&bit)!=0||t.next!=NONE||t.previous!=NONE{return error.Corrupt;}
+            }else if (seen&bit)==0{return error.Corrupt;}
+            if t.state==RUNNING&&(t.next!=NONE||t.previous!=NONE){return error.Corrupt;}
+            active+=1;
+        }
+        id+=1;
+    }
+    if active!=(*e).count{return error.Corrupt;}
+}return;}
+
+pub unsafe fn initialize(e:*Engine,mask:u64)!void{unsafe{
+    if e==null||mask==0||(mask&~0xffff)!=0{return error.Invalid;}
+    if (*e).ready!=0{return error.State;}
+    (*e).online=mask;(*e).sequence=0;(*e).count=0;
+    var cpu:usize=0;while cpu<CPUS{(*e).cpus[cpu]=EMPTY_CPU;(*e).cpus[cpu].cursor=(cpu as u64+1)%CPUS as u64;cpu+=1;}
+    var id:usize=0;while id<THREADS{(*e).threads[id]=EMPTY_THREAD;id+=1;}
+    compiler_fence();(*e).ready=1;
+}return;}
+unsafe fn room(e:*const Engine)!void{unsafe{if (*e).sequence==MAX{return error.Overflow;}}return;}
+unsafe fn load(e:*const Engine,cpu:usize)u64{unsafe{
+    var count=(*e).cpus[cpu].ready_count;if (*e).cpus[cpu].current!=NONE{count+=1;}return count;
+}}
+unsafe fn least(e:*const Engine,mask:u64)usize{unsafe{
+    var selected:usize=CPUS;var best:u64=THREADS as u64+1;var cpu:usize=0;
+    while cpu<CPUS{if (mask&(1<<cpu as u64))!=0{let count=load(e,cpu);if count<best{selected=cpu;best=count;}}cpu+=1;}return selected;
+}}
+unsafe fn enqueue(e:*Engine,id:usize,cpu:usize)void{unsafe{
+    let t=&(*e).threads[id];let q=&(*e).cpus[cpu];let p=(*t).priority as usize;let tail=(*q).tails[p];
+    (*t).state=READY;(*t).cpu=cpu as u64;(*t).previous=tail;(*t).next=NONE;
+    if tail==NONE{(*q).heads[p]=id as u64;}else{(*e).threads[tail as usize].next=id as u64;}
+    (*q).tails[p]=id as u64;(*q).bitmap|=1<<p as u64;(*q).ready_count+=1;
+}return;}
+unsafe fn dequeue(e:*Engine,id:usize)void{unsafe{
+    let t=&(*e).threads[id];let q=&(*e).cpus[(*t).cpu as usize];let p=(*t).priority as usize;
+    if (*t).previous==NONE{(*q).heads[p]=(*t).next;}else{(*e).threads[(*t).previous as usize].next=(*t).next;}
+    if (*t).next==NONE{(*q).tails[p]=(*t).previous;}else{(*e).threads[(*t).next as usize].previous=(*t).previous;}
+    if (*q).heads[p]==NONE{(*q).bitmap&=~(1<<p as u64);}(*q).ready_count-=1;(*t).next=NONE;(*t).previous=NONE;
+}return;}
+
+pub unsafe fn admit(e:*Engine,id:usize,priority:u64,affinity:u64,frame:u64,out:*u64)!void{unsafe{
+    if out==null||id>=THREADS||priority>=32||!valid_frame(frame){return error.Invalid;}
+    try audit(e);if !valid_mask(affinity,(*e).online){return error.Invalid;}
+    if (*e).threads[id].state!=UNUSED{return error.State;}
+    if (*e).threads[id].generation==MAX_GENERATION{return error.Overflow;}try room(e);
+    let cpu=least(e,affinity);let generation=(*e).threads[id].generation+1;
+    (*e).threads[id]=Thread {state:READY,priority:priority,affinity:affinity,cpu:cpu as u64,next:NONE,previous:NONE,generation:generation,frame:frame};
+    enqueue(e,id,cpu);(*e).count+=1;(*e).sequence+=1;*out=token(e,id);
+}return;}
+
+// Local priority FIFO first. An idle CPU with no local work scans donor
+// priority buckets in order and inspects at most 64 distinct ready threads.
+// RUNNING ownership never transfers here. Output is unchanged on false/error.
+pub unsafe fn acquire(e:*Engine,cpu:usize,out:*Dispatch)!bool{unsafe{
+    if out==null{return error.Invalid;}try audit(e);if !online(e,cpu){return error.Invalid;}
+    if (*e).cpus[cpu].current!=NONE{return error.Busy;}
+    var selected=NONE;var source=cpu as u64;var priority:usize=0;
+    while priority<PRIORITIES&&selected==NONE{selected=(*e).cpus[cpu].heads[priority];priority+=1;}
+    if selected==NONE{
+        priority=0;while priority<PRIORITIES&&selected==NONE{
+            var distance:usize=0;while distance<CPUS&&selected==NONE{
+                let donor=((*e).cpus[cpu].cursor+distance as u64)%CPUS as u64;
+                if donor!=cpu as u64&&online(e,donor as usize){
+                    var next=(*e).cpus[donor as usize].heads[priority];
+                    while next!=NONE&&selected==NONE{
+                        if ((*e).threads[next as usize].affinity&(1<<cpu as u64))!=0{selected=next;source=donor;}
+                        else{next=(*e).threads[next as usize].next;}
+                    }
+                }distance+=1;
+            }priority+=1;
+        }
+    }
+    if selected==NONE{return false;}try room(e);
+    if (*e).cpus[cpu].dispatches==MAX{return error.Overflow;}
+    let id=selected as usize;dequeue(e,id);let t=&(*e).threads[id];(*t).state=RUNNING;(*t).cpu=cpu as u64;
+    (*e).cpus[cpu].current=selected;(*e).cpus[cpu].dispatches+=1;(*e).cpus[cpu].cursor=(source+1)%CPUS as u64;(*e).sequence+=1;
+    *out=Dispatch {token:token(e,id),frame:(*t).frame,source_cpu:source,target_cpu:cpu as u64,priority:(*t).priority};return true;
+}}
+
+// The architecture adapter has already saved the complete GPR/xstate context
+// and will not execute the old context after this call. Remote migration can
+// occur only after this handoff; never move an executing RUNNING thread.
+pub unsafe fn needs_quantum(e:*const Engine,cpu:usize)!bool{unsafe{
+ try audit(e);if !online(e,cpu){return error.Invalid;}
+ let current=(*e).cpus[cpu].current;if current==NONE{return false;}
+ let priority=(*e).threads[current as usize].priority;var id:usize=0;
+ while id<64{let t=&(*e).threads[id];if (*t).state==READY&&(*t).priority<=priority&&((*t).affinity&(1<<cpu as u64))!=0{return true;}id+=1;}
+ return false;
+}}
+pub unsafe fn release(e:*Engine,cpu:usize,value:u64,state:u64,frame:u64)!void{unsafe{
+    if (state!=READY&&state!=BLOCKED)||!valid_frame(frame){return error.Invalid;}
+    try audit(e);if !online(e,cpu){return error.Invalid;}let id=try lookup(e,value);let t=&(*e).threads[id];
+    if (*t).state!=RUNNING||(*t).cpu!=cpu as u64||(*e).cpus[cpu].current!=id as u64{return error.State;}try room(e);
+    (*e).cpus[cpu].current=NONE;(*t).frame=frame;(*t).state=state;
+    if state==READY{enqueue(e,id,cpu);}(*e).sequence+=1;
+}return;}
+
+pub unsafe fn wake(e:*Engine,value:u64)!void{unsafe{
+    try audit(e);let id=try lookup(e,value);let t=&(*e).threads[id];if (*t).state!=BLOCKED{return error.State;}
+    try room(e);let cpu=least(e,(*t).affinity);enqueue(e,id,cpu);(*e).sequence+=1;
+}return;}
+
+pub unsafe fn set_affinity(e:*Engine,value:u64,mask:u64)!void{unsafe{
+    try audit(e);if !valid_mask(mask,(*e).online){return error.Invalid;}
+    let id=try lookup(e,value);let t=&(*e).threads[id];
+    if (*t).affinity==mask{return;}
+    if (*t).state==RUNNING&&(mask&(1<<(*t).cpu))==0{return error.Busy;}try room(e);
+    if (mask&(1<<(*t).cpu))==0{
+        let cpu=least(e,mask);
+        if (*t).state==READY{dequeue(e,id);enqueue(e,id,cpu);}else{(*t).cpu=cpu as u64;}
+    }
+    (*t).affinity=mask;(*e).sequence+=1;
+}return;}
+
+pub unsafe fn set_priority(e:*Engine,value:u64,priority:u64)!void{unsafe{
+    if priority>=32{return error.Invalid;}try audit(e);let id=try lookup(e,value);let t=&(*e).threads[id];
+    if (*t).priority==priority{return;}try room(e);
+    let cpu=(*t).cpu as usize;let queued=(*t).state==READY;if queued{dequeue(e,id);}(*t).priority=priority;
+    if queued{enqueue(e,id,cpu);}(*e).sequence+=1;
+}return;}
+
+// Root first stops hardware execution and drops wait/capability references.
+// Generations survive removal; a stale token can never wake the next occupant.
+pub unsafe fn remove(e:*Engine,value:u64)!void{unsafe{
+    try audit(e);let id=try lookup(e,value);let t=&(*e).threads[id];if (*t).state==RUNNING{return error.Busy;}
+    try room(e);let generation=(*t).generation;if (*t).state==READY{dequeue(e,id);}
+    (*t)=EMPTY_THREAD;(*t).generation=generation;(*e).count-=1;(*e).sequence+=1;
+}return;}
+
+// Move at most one READY thread if the source load exceeds the destination
+// by at least two. Preserve the donor's higher-priority work by scanning tails
+// from priority31 down. notify requests an adapter IPI; this code sends none.
+pub unsafe fn rebalance(e:*Engine,source:usize,target:usize,out:*Move)!bool{unsafe{
+    if out==null||source==target{return error.Invalid;}try audit(e);
+    if !online(e,source)||!online(e,target){return error.Invalid;}
+    if load(e,source)<=load(e,target)+1{return false;}
+    var selected=NONE;var priority:usize=PRIORITIES;
+    while priority>0&&selected==NONE{
+        priority-=1;var previous=(*e).cpus[source].tails[priority];
+        while previous!=NONE&&selected==NONE{
+            if ((*e).threads[previous as usize].affinity&(1<<target as u64))!=0{selected=previous;}
+            else{previous=(*e).threads[previous as usize].previous;}
+        }
+    }
+    if selected==NONE{return false;}try room(e);let id=selected as usize;dequeue(e,id);enqueue(e,id,target);(*e).sequence+=1;
+    var notify:u64=0;let current=(*e).cpus[target].current;
+    if current==NONE||(*e).threads[id].priority<(*e).threads[current as usize].priority{notify=1;}
+    *out=Move {token:token(e,id),source_cpu:source as u64,target_cpu:target as u64,notify:notify};return true;
+}}

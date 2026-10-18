@@ -1,0 +1,103 @@
+module memory_probe;
+
+// Keep language examples independent from the kernel source roots.
+import boot_probe;
+import boot.abi as abi;
+import boot.memory_startup as startup;
+import boot.memory_resources as resources;
+import boot.runtime_view as runtime;
+import boot.preflight as preflight;
+import boot.activation as activation;
+import boot.live_memory as live;
+import mm.active_paging as active;
+import cpu.hardening as hardening;
+import boot.object_memory as objects;
+import boot.acpi_startup as acpi_startup;
+import firmware.acpi as acpi;
+import boot.power_startup as power;
+
+export("dong_acpi_prepare") fn acpi_prepare(info: abi.BootInfoPtr) u64 {
+    unsafe { match acpi_startup.prepare(info) { ok => { power.prepare_optional(info); return 0; }, err(code) => { return code; }, } }
+}
+export("dong_acpi_report") fn acpi_report(out: *acpi_startup.Report) u64 {
+    unsafe { match acpi_startup.report(out) { ok => { return 0; }, err(code) => { return code; }, } }
+}
+export("dong_acpi_inventory") fn acpi_inventory() *const acpi.Inventory {
+    return acpi_startup.inventory_pointer();
+}
+
+export("dong_object_memory_run") fn object_memory_run(out: *objects.Report) u64 {
+    unsafe { match objects.run(out) { ok => { return 0; }, err(code) => { return code; }, } }
+}
+
+export("dong_cpu_hardening_detect") fn hardening_detect(out: *hardening.Features) void {
+    unsafe { hardening.detect(out); }
+}
+export("dong_cpu_hardening_plan") fn hardening_plan(features: *const hardening.Features,
+    before: *const preflight.State, out: *hardening.Plan) u64 {
+    unsafe { match hardening.plan(features,before,out) { ok => { return 0; }, err(code) => { return code; }, } }
+}
+export("dong_cpu_hardening_verify") fn hardening_verify(features: *const hardening.Features,
+    before: *const preflight.State, after: *const preflight.State, plan: *const hardening.Plan,
+    report: *const hardening.Report) u64 {
+    unsafe { match hardening.verify(features,before,after,plan,report) { ok => { return 0; }, err(code) => { return code; }, } }
+}
+
+export("dong_memory_display") fn display(info: abi.BootInfoPtr, out: *runtime.Display) u64 {
+    unsafe { match runtime.display(info, out) { ok => { return 0; }, err(code) => { return code; }, } }
+}
+export("dong_memory_runtime") fn runtime_pointer() *const runtime.View { return startup.runtime_pointer(); }
+export("dong_memory_control_plan") fn control_plan(state: *const preflight.State, old_root: u64, out: *preflight.Plan) u64 {
+    unsafe { match preflight.plan(state,old_root,out) { ok => { return 0; }, err(code) => { return code; }, } }
+}
+export("dong_memory_controls_unchanged") fn controls_unchanged(a: *const preflight.State, b: *const preflight.State) u64 {
+    unsafe { match preflight.unchanged(a,b) { ok => { return 0; }, err(code) => { return code; }, } }
+}
+export("dong_memory_validate") fn validate_runtime() u64 {
+    unsafe { match startup.validate_runtime() { ok => { return 0; }, err(code) => { return code; }, } }
+}
+export("dong_memory_validate_active") fn validate_active(root: u64) u64 {
+    unsafe { match startup.validate_active(root) { ok => { return 0; }, err(code) => { return code; }, } }
+}
+export("dong_memory_activation_verify") fn activation_verify(report: *const activation.Report,
+    before: *const preflight.State, plan: *const preflight.Plan, view: *const runtime.View) u64 {
+    unsafe { match activation.verify(report,before,plan,view) { ok => { return 0; }, err(code) => { return code; }, } }
+}
+
+export("dong_memory_startup") fn memory_startup_probe(info: abi.BootInfoPtr,
+    info_physical: u64, layout: *const resources.Layout, report: *startup.Report, pat: u64) u64 {
+    unsafe {
+        match startup.prepare(info, info_physical, layout, report, pat) {
+            ok => { return 0; }, err(code) => { return code; },
+        }
+    }
+}
+
+export("dong_memory_manifest") fn memory_manifest() *const resources.Resource {
+    return startup.manifest_pointer();
+}
+
+export("dong_memory_live_init") fn live_init(state: *const preflight.State, a: u64, b: u64) u64 {
+    unsafe { match live.init(state,a,b) { ok => { return 0; }, err(code) => { return code; }, } }
+}
+export("dong_memory_live_map") fn live_map(state: *const preflight.State, virtual: u64, physical: u64, flags: u64) u64 {
+    unsafe { match live.map(state,virtual,physical,flags) { ok => { return 0; }, err(code) => { return code; }, } }
+}
+export("dong_memory_live_protect") fn live_protect(state: *const preflight.State, virtual: u64, flags: u64) u64 {
+    unsafe { match live.protect(state,virtual,flags) { ok => { return 0; }, err(code) => { return code; }, } }
+}
+export("dong_memory_live_replace") fn live_replace(state: *const preflight.State, virtual: u64, physical: u64, flags: u64) u64 {
+    unsafe { match live.replace(state,virtual,physical,flags) { ok => { return 0; }, err(code) => { return code; }, } }
+}
+export("dong_memory_live_unmap") fn live_unmap(state: *const preflight.State, virtual: u64) u64 {
+    unsafe { match live.unmap(state,virtual) { ok => { return 0; }, err(code) => { return code; }, } }
+}
+export("dong_memory_live_counts") fn live_counts(out: *active.Stats) u64 {
+    unsafe { match live.counts(out) { ok => { return 0; }, err(code) => { return code; }, } }
+}
+export("dong_memory_live_used") fn live_used(out: *u64) u64 {
+    unsafe { match live.used(out) { ok => { return 0; }, err(code) => { return code; }, } }
+}
+export("dong_memory_live_verify") fn live_verify(report: *const live.Report) u64 {
+    unsafe { match live.verify(report) { ok => { return 0; }, err(code) => { return code; }, } }
+}

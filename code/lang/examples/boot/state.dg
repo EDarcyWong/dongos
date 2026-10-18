@@ -1,0 +1,18 @@
+module boot.state;
+
+pub var COUNT: u64 = 0;
+pub var VALUES: [3]u64 = [10,20,30];
+pub const MIDDLE: *u64 = &VALUES[1];
+pub const VIEW: []u64 = VALUES[1..];
+pub const READ_ONLY: [3]u16 = [7,11,13];
+pub const TEXT: []const u8 = "董\0A";
+
+pub struct Config { pub tag: u8, pub limits: [2]u16 }
+pub const CONFIG: Config = Config { tag: 3, limits: [4,9] };
+
+pub align(4096) struct Page { pub entries: [4]u64 }
+pub var PAGE: Page = Page { entries: [0;4] };
+pub const PAGE_POINTER: *Page = &PAGE;
+
+pub struct Node { pub value: u64, pub next: *Node }
+pub var ROOT: Node = Node { value: 5, next: &ROOT };

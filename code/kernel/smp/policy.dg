@@ -1,0 +1,103 @@
+module smp.policy;
+import firmware.acpi as acpi;
+import smp.context as context;
+pub error InvalidArgument=0x0601_0001;
+pub error InvalidTopology=0x0601_0002;
+pub error Unsupported=0x0601_0003;
+pub error InvalidState=0x0601_0004;
+pub error Hardware=0x0601_0005;
+pub error Timeout=0x0601_0006;
+pub struct Cpu { pub logical_id:u64,pub apic_id:u64,pub uid:u64,pub flags:u64 }
+pub struct Topology { pub count:u64,pub bsp_id:u64,pub lapic_pa:u64,pub cpus:[16]Cpu }
+const EMPTY_CPU:Cpu=Cpu{logical_id:0,apic_id:0,uid:0,flags:0};
+pub const EMPTY_TOPOLOGY:Topology=Topology{count:0,bsp_id:0,lapic_pa:0,cpus:[EMPTY_CPU;16]};
+pub type Send=unsafe fn(context:u64,target:u64,command:u64)u64;
+pub type Delay=unsafe fn(context:u64,microseconds:u64)u64;
+pub struct Ops { pub context:u64,pub send:Send,pub delay:Delay }
+pub unsafe fn topology(inventory:*const acpi.Inventory,bsp:u64,out:*Topology)!void{unsafe{
+    let inv=*inventory;if inv.cpu_count==0||inv.cpu_count>16||bsp>255||inv.lapic_address==0||inv.lapic_address>=0x1_0000_0000||(inv.lapic_address&4095)!=0{return error.InvalidTopology;}
+    var result=EMPTY_TOPOLOGY;result.bsp_id=bsp;result.lapic_pa=inv.lapic_address;var bsp_index:u64=16;var i:u64=0;
+    while i<inv.cpu_count{let cpu=inv.cpus[i as usize];if cpu.kind!=0&&cpu.kind!=9{return error.InvalidTopology;}
+        var j:u64=0;while j<i{if inv.cpus[j as usize].apic_id==cpu.apic_id||inv.cpus[j as usize].uid==cpu.uid{return error.InvalidTopology;}j+=1;}
+        if (cpu.flags&1)!=0{if cpu.apic_id>255{return error.Unsupported;}if cpu.apic_id==bsp{bsp_index=i;}}
+        i+=1;
+    }
+    if bsp_index==16{return error.InvalidTopology;}let boot=inv.cpus[bsp_index as usize];result.cpus[0]=Cpu{logical_id:0,apic_id:bsp,uid:boot.uid,flags:boot.flags};result.count=1;
+    i=0;while i<inv.cpu_count{let cpu=inv.cpus[i as usize];if i!=bsp_index&&(cpu.flags&1)!=0{
+        let id=result.count;result.cpus[id as usize]=Cpu{logical_id:id,apic_id:cpu.apic_id,uid:cpu.uid,flags:cpu.flags};result.count+=1;
+    }i+=1;}*out=result;
+}return;}
+fn high(address:u64)bool{return address>=0xffff_8000_0000_0000;}
+fn stack(bottom:u64,top:u64)bool{return bottom>=0xffff_8000_0000_1000&&(bottom&4095)==0&&bottom<=0xffff_ffff_ffff_afff&&top==bottom+16384;}
+fn overlap(a:u64,bytes:u64,b:u64,length:u64)bool{return a<b+length&&b<a+bytes;}
+pub unsafe fn prepare(input:*const context.Context,out:*context.Context)!void{unsafe{
+    let c=*input;
+    if !high(c.self)||(c.self&63)!=0||c.logical_id==0||c.logical_id>=16||c.apic_id>255||c.state!=0||c.epoch==0
+        ||c.cr3==0||c.cr3>=0x1_0000_0000||(c.cr3&4095)!=0||!high(c.main)
+        ||(c.cr0&0x8001_0033)!=0x8001_0033||(c.cr0&~0x8005_0033)!=0
+        ||(c.cr4&0x620)!=0x620||(c.cr4&~0x0034_0e68)!=0||(c.efer&0xd00)!=0xd00||(c.efer&~0xd01)!=0
+        ||(c.pat&255)!=6||((c.pat>>24)&255)!=0||((c.cr4&0x40000)!=0&&c.xcr0!=3&&c.xcr0!=7)
+        ||((c.cr4&0x40000)==0&&c.xcr0!=0){return error.InvalidArgument;}
+    var pat_index:usize=0;while pat_index<8{
+        let entry=(c.pat>>(pat_index as u64*8))&255;
+        if entry!=0&&entry!=1&&entry!=4&&entry!=5&&entry!=6&&entry!=7{return error.InvalidArgument;}
+        pat_index+=1;
+    }
+    if !stack(c.stack_bottom,c.stack_top)||!stack(c.df_bottom,c.df_top)||!stack(c.nmi_bottom,c.nmi_top)||!stack(c.exception_bottom,c.exception_top)
+        ||!high(c.gdt)||(c.gdt&4095)!=0||c.gdt>0xffff_ffff_ffff_efff||c.tss<c.gdt+64||c.tss>c.gdt+4096-104||(c.tss&7)!=0
+        ||!high(c.idt)||(c.idt&4095)!=0||c.lapic_pa==0||c.lapic_pa>=0x1_0000_0000||(c.lapic_pa&4095)!=0
+        ||!high(c.lapic_va)||(c.lapic_va&4095)!=0||c.lapic_va>0xffff_ffff_ffff_efff{return error.InvalidArgument;}
+    let bases:[7]u64=[c.stack_bottom-4096,c.df_bottom-4096,c.nmi_bottom-4096,c.exception_bottom-4096,c.gdt,c.idt,c.self];
+    let sizes:[7]u64=[24576,24576,24576,24576,4096,4096,256];
+    var i:usize=0;while i<7{if bases[i]>0xffff_ffff_ffff_ffff-sizes[i]{return error.InvalidArgument;}
+        if overlap(bases[i],sizes[i],c.lapic_va,4096){return error.InvalidArgument;}
+        var j:usize=0;while j<i{if overlap(bases[i],sizes[i],bases[j],sizes[j]){return error.InvalidArgument;}j+=1;}i+=1;
+    }
+    if c.online_epoch!=0||c.ping_request!=0||c.ping_ack!=0||c.stop_request!=0||c.stop_ack!=0||c.irq_count!=0||c.last_error!=0{return error.InvalidArgument;}
+    *out=c;(*out).state=context.PREPARED;
+}return;}
+pub fn trampoline_page(physical:u64)bool{return physical>=4096&&physical<0xa0000&&(physical&4095)==0;}
+pub unsafe fn arm(cpu:*context.Context,epoch:u64)!void{unsafe{
+    if epoch==0||epoch!=(*cpu).epoch{return error.InvalidArgument;}
+    if atomic_compare_exchange(&(*cpu).state,context.PREPARED,context.STARTING)!=context.PREPARED{return error.InvalidState;}
+}return;}
+pub unsafe fn acknowledge_online(cpu:*context.Context,epoch:u64)!void{unsafe{
+    if epoch==0||epoch!=(*cpu).epoch||atomic_load(&(*cpu).state)!=context.STARTING{return error.InvalidState;}
+    atomic_store(&(*cpu).online_epoch,epoch);
+    if atomic_compare_exchange(&(*cpu).state,context.STARTING,context.ONLINE)!=context.STARTING{return error.InvalidState;}
+}return;}
+pub unsafe fn timeout(cpu:*context.Context)!void{unsafe{
+    let state=atomic_load(&(*cpu).state);if state!=context.STARTING&&state!=context.STOPPING{return error.InvalidState;}
+    if atomic_compare_exchange(&(*cpu).state,state,context.QUARANTINED)!=state{return error.InvalidState;}
+}return;}
+pub unsafe fn ping(cpu:*context.Context,sequence:u64)!void{unsafe{
+    if atomic_load(&(*cpu).state)!=context.ONLINE||sequence==0||sequence<=atomic_load(&(*cpu).ping_ack)
+        ||atomic_load(&(*cpu).ping_request)!=atomic_load(&(*cpu).ping_ack){return error.InvalidState;}
+    atomic_store(&(*cpu).ping_request,sequence);
+}return;}
+pub unsafe fn acknowledge_ping(cpu:*context.Context,sequence:u64)!void{unsafe{
+    if atomic_load(&(*cpu).state)!=context.ONLINE||sequence==0||sequence!=atomic_load(&(*cpu).ping_request){return error.InvalidState;}
+    atomic_store(&(*cpu).ping_ack,sequence);
+}return;}
+pub unsafe fn stop(cpu:*context.Context,sequence:u64)!void{unsafe{
+    if sequence==0||sequence<=atomic_load(&(*cpu).stop_ack)||atomic_load(&(*cpu).ping_request)!=atomic_load(&(*cpu).ping_ack){return error.InvalidState;}
+    if atomic_compare_exchange(&(*cpu).state,context.ONLINE,context.STOPPING)!=context.ONLINE{return error.InvalidState;}
+    atomic_store(&(*cpu).stop_request,sequence);
+}return;}
+pub unsafe fn acknowledge_stop(cpu:*context.Context,sequence:u64)!void{unsafe{
+    if atomic_load(&(*cpu).state)!=context.STOPPING||sequence==0||sequence!=atomic_load(&(*cpu).stop_request){return error.InvalidState;}
+    atomic_store(&(*cpu).stop_ack,sequence);
+    if atomic_compare_exchange(&(*cpu).state,context.STOPPING,context.STOPPED)!=context.STOPPING{return error.InvalidState;}
+}return;}
+// Delay callback must use a calibrated monotonic source, IF0. The caller waits
+// for Context.ONLINE with a separate bounded deadline after this sequence.
+pub unsafe fn startup(ops:*const Ops,target:u64,physical:u64)!void{unsafe{
+    if target>255||!trampoline_page(physical){return error.InvalidArgument;}let o=*ops;
+    if o.send(o.context,target,0xc500)!=0{return error.Hardware;}
+    if o.delay(o.context,10000)!=0{return error.Timeout;}
+    if o.send(o.context,target,0x8500)!=0{return error.Hardware;}
+    if o.send(o.context,target,0x600|(physical>>12))!=0{return error.Hardware;}
+    if o.delay(o.context,200)!=0{return error.Timeout;}
+    if o.send(o.context,target,0x600|(physical>>12))!=0{return error.Hardware;}
+    if o.delay(o.context,200)!=0{return error.Timeout;}
+}return;}

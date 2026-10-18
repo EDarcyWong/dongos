@@ -1,0 +1,14 @@
+module lib.cap_notify;
+import lib.sys as sys;
+import lib.cap_notify_abi as abi;
+pub unsafe fn create(rights:u64,out:*u64)u64{unsafe{return sys.svc_call(abi.CREATE,out as u64,rights,0,0,0,0);}}
+pub fn signal(token:u64,bits:u64)u64{unsafe{return sys.svc_call(abi.SIGNAL,token,bits,0,0,0,0);}}
+pub unsafe fn take(token:u64,mask:u64,out:*u64)u64{unsafe{return sys.svc_call(abi.TAKE,token,mask,out as u64,0,0,0);}}
+pub unsafe fn call(endpoint:u64,request:*const sys.Message,response:*sys.Message,offer:*const abi.Offer)u64{
+    unsafe{return sys.svc_call(abi.CALL_CAP,endpoint,request as u64,response as u64,offer as u64,0,0);}}
+pub unsafe fn claim(endpoint:u64,ticket:u64,out:*abi.Received)u64{
+    unsafe{return sys.svc_call(abi.CLAIM,endpoint,ticket,out as u64,0,0,0);}}
+pub unsafe fn export_endpoint(endpoint:u64,rights:u64,out:*u64)u64{
+    unsafe{return sys.svc_call(abi.EXPORT_ENDPOINT,endpoint,out as u64,rights,0,0,0);}}
+pub fn close(token:u64)u64{unsafe{return sys.svc_call(0x10,token,0,0,0,0,0);}}
+pub fn duplicate(token:u64,rights:u64)u64{unsafe{return sys.svc_call(0x11,token,rights,0,0,0,0);}}

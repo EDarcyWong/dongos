@@ -1,0 +1,160 @@
+// Graphical app state and synchronous filesystem RPC. The compositor is the
+// sole owner of these buffers; disk bytes always pass through the FS service.
+module desktop.apps;
+import lib.sys as sys;
+import fs.protocol as protocol;
+import desktop.theme as theme;
+import desktop.preferences as preferences;
+pub var LOG:[4096]u8=[0;4096];
+pub var LOG_SIZE:usize=0;
+pub var COMMAND:[256]u8=[0;256];
+pub var COMMAND_SIZE:usize=0;
+pub var FILES:[2048]u8=[0;2048];
+pub var FILES_SIZE:usize=0;
+pub var SAVED:bool=false;
+pub var LIGHT:bool=false;
+var ENDPOINT:u64=0;
+var REQUEST:sys.Message=sys.EMPTY_MESSAGE;
+var RESPONSE:sys.Message=sys.EMPTY_MESSAGE;
+const CHANNEL:u64=0x5200_0000;
+pub error Invalid=0x0733_0001;
+fn equal(a:[]const u8,b:[]const u8)bool {
+    if a.len!=b.len { return false; }var i:usize=0;while i<a.len { if a[i]!=b[i] { return false; }i+=1; }return true;
+}
+pub unsafe fn append(text:[]const u8)void {
+    unsafe { if text.len>LOG.len { return; }if LOG_SIZE+text.len>LOG.len { LOG_SIZE=0; }
+        var i:usize=0;while i<text.len { LOG[LOG_SIZE]=text[i];LOG_SIZE+=1;i+=1; }
+    }return;
+}
+unsafe fn fs(op:u64,name:[]const u8,offset:u64,count:u64)!void {
+    unsafe {
+        if name.len>16 || count>65520 { return error.Invalid; }
+        var i:usize=0;while i<name.len { *((CHANNEL as *u8)+i)=name[i];i+=1; }
+        REQUEST=sys.EMPTY_MESSAGE;REQUEST.words[0]=op;REQUEST.words[1]=offset;REQUEST.words[2]=count;
+        REQUEST.words[3]=name.len as u64;REQUEST.words[4]=16;
+        let status=sys.call(ENDPOINT,&REQUEST,&RESPONSE);
+        if status!=0 { return error.Invalid; }
+        if op==protocol.CREATE && RESPONSE.words[0]==0x0504_0007 { return; }
+        if RESPONSE.words[0]!=0 { return error.Invalid; }
+    }return;
+}
+pub unsafe fn refresh()!void {
+    unsafe {
+        FILES_SIZE=0;var index:u64=0;
+        while index<64 {
+            try fs(protocol.LIST,"",index,0);if RESPONSE.words[1]==0 { break; }
+            let p=CHANNEL as *const u8;var base:usize=8;while base>0 && *(p+base-1)==32 { base-=1; }
+            var ext:usize=3;while ext>0 && *(p+8+ext-1)==32 { ext-=1; }
+            if FILES_SIZE+base+ext+3>FILES.len { break; }
+            var i:usize=0;while i<base { FILES[FILES_SIZE]=*(p+i);FILES_SIZE+=1;i+=1; }
+            if ext!=0 { FILES[FILES_SIZE]=46;FILES_SIZE+=1;i=0;while i<ext { FILES[FILES_SIZE]=*(p+8+i);FILES_SIZE+=1;i+=1; } }
+            FILES[FILES_SIZE]=10;FILES_SIZE+=1;index+=1;
+        }
+    }return;
+}
+pub unsafe fn initialize(endpoint:u64)!void {
+    unsafe { ENDPOINT=endpoint;try fs(protocol.READY,"",0,0);try refresh();append("DongOS shell\nhelp / ls / cat / write / sync\n"); }return;
+}
+pub unsafe fn save(text:[]const u8)!void {
+    unsafe {
+        match fs(protocol.CREATE,"NOTE.TXT",0,0) { ok=>{},err(code)=>{if code!=0x0504_0007 { return error.Invalid; }}, }
+        try fs(protocol.TRUNCATE,"NOTE.TXT",0,0);
+        var i:usize=0;while i<text.len { *((CHANNEL+16) as *u8+i)=text[i];i+=1; }
+        try fs(protocol.WRITE,"NOTE.TXT",0,text.len as u64);
+        if RESPONSE.words[1]!=text.len as u64 { return error.Invalid; }
+        try fs(protocol.FLUSH,"",0,0);SAVED=true;try refresh();
+        let log=sys.log("DONGOS_EDITOR_SAVED\r\n");
+    }return;
+}
+pub unsafe fn open(out:[]u8)!usize {
+    unsafe { try fs(protocol.READ,"NOTE.TXT",0,out.len as u64);let n=RESPONSE.words[1] as usize;
+        if n>out.len { return error.Invalid; }var i:usize=0;while i<n { out[i]=*((CHANNEL+16) as *const u8+i);i+=1; }return n;
+    }
+}
+unsafe fn execute()!void {
+    unsafe {
+        append("> ");append(COMMAND[..COMMAND_SIZE]);append("\n");
+        var split:usize=0;while split<COMMAND_SIZE && COMMAND[split]!=32 { split+=1; }
+        let verb=COMMAND[..split];var first=split;while first<COMMAND_SIZE && COMMAND[first]==32 { first+=1; }
+        var last=first;while last<COMMAND_SIZE && COMMAND[last]!=32 { last+=1; }
+        let name=COMMAND[first..last];var body=last;while body<COMMAND_SIZE && COMMAND[body]==32 { body+=1; }
+        if equal(verb,"help") { append("ls, cat NAME, write NAME TEXT, rm NAME, sync\n");return; }
+        if equal(verb,"ls") { try refresh();append(FILES[..FILES_SIZE]);if FILES_SIZE==0 { append("(empty)\n"); }return; }
+        if equal(verb,"sync") { try fs(protocol.FLUSH,"",0,0);append("SYNC OK\n");return; }
+        if equal(verb,"cat") { try fs(protocol.READ,name,0,2048);if RESPONSE.words[1]>2048 { return error.Invalid; }
+            append(slice_from_raw_parts((CHANNEL+16) as *const u8,RESPONSE.words[1] as usize));append("\n");return; }
+        if equal(verb,"rm") { try fs(protocol.REMOVE,name,0,0);try fs(protocol.FLUSH,"",0,0);try refresh();return; }
+        if equal(verb,"write") {
+            match fs(protocol.CREATE,name,0,0) { ok=>{},err(code)=>{if code!=0x0504_0007 { return error.Invalid; }}, }
+            try fs(protocol.TRUNCATE,name,0,0);var i=body;
+            while i<COMMAND_SIZE { *((CHANNEL+16) as *u8+i-body)=COMMAND[i];i+=1; }
+            try fs(protocol.WRITE,name,0,(COMMAND_SIZE-body) as u64);try fs(protocol.FLUSH,"",0,0);try refresh();append("WRITE OK\n");return;
+        }
+        if verb.len!=0 { append("Unknown command\n"); }
+    }return;
+}
+pub unsafe fn key(c:u8)void {
+    unsafe {
+        if c==8 { if COMMAND_SIZE!=0 { COMMAND_SIZE-=1; } }
+        else { if c==10 {
+            match execute() { ok=>{},err(code)=>{append("Filesystem operation failed\n");}, }
+            COMMAND_SIZE=0;
+        } else { if c>=32 && c<127 && COMMAND_SIZE+1<COMMAND.len { COMMAND[COMMAND_SIZE]=c;COMMAND_SIZE+=1; } } }
+    }return;
+}
+pub unsafe fn tail(lines:usize)[]const u8 {
+    unsafe { var at=LOG_SIZE;var found:usize=0;while at>0 { at-=1;if LOG[at]==10 { found+=1;if found>lines { return LOG[at+1..LOG_SIZE]; } } }return LOG[..LOG_SIZE]; }
+}
+
+// Two durable slots: only publish the new sequence after FLUSH and exact readback.
+pub var PREF_SEQUENCE:u64=0;
+pub var PREF_SLOT:u64=1;
+pub var PREF_STATUS:u64=1; // 0 loaded/saved, 1 defaults/unsaved, 2 I/O/conflict.
+pub var PREF_SAVES:u64=0;
+var PREF_DATA:[2][129]u8=[[0;129];2];
+var PREF_SAVED:[128]u8=[0;128];
+fn preference_name(slot:usize)[]const u8 { if slot==0 { return "DESK0.CFG"; }return "DESK1.CFG"; }
+unsafe fn preference_read(slot:usize)!usize {
+    unsafe {
+        RESPONSE=sys.EMPTY_MESSAGE;
+        match fs(protocol.READ,preference_name(slot),0,129) {
+            ok=>{},err(code)=>{if RESPONSE.words[0]==0x0504_0006 { return 0; }return error.Invalid;},
+        }
+        let n=RESPONSE.words[1] as usize;if n>129 { return error.Invalid; }
+        var i:usize=0;while i<n { PREF_DATA[slot][i]=*((CHANNEL+16) as *const u8+i);i+=1; }return n;
+    }
+}
+pub unsafe fn load_preferences(out:*theme.Theme)!bool {
+    unsafe {
+        let a=preference_read(0);let b=preference_read(1);var na:usize=0;var nb:usize=0;
+        match a { ok(n)=>{na=n;},err(code)=>{PREF_STATUS=2;return error.Invalid;}, }
+        match b { ok(n)=>{nb=n;},err(code)=>{PREF_STATUS=2;return error.Invalid;}, }
+        var record=preferences.EMPTY_RECORD;
+        match preferences.select(PREF_DATA[0][..na],PREF_DATA[1][..nb],&record) {
+            ok(slot)=>{PREF_SEQUENCE=record.sequence;PREF_SLOT=slot;PREF_STATUS=0;*out=record.theme;return true;},
+            err(code)=>{
+                if code==0x0724_0005 { PREF_SEQUENCE=0;PREF_SLOT=1;PREF_STATUS=1;return false; }
+                PREF_STATUS=2;return error.Invalid;
+            },
+        }
+    }
+}
+pub unsafe fn save_preferences(value:*const theme.Theme)!void {
+    unsafe {
+        var ignored=theme.DEFAULT;let present=try load_preferences(&ignored);
+        let sequence=try preferences.next_sequence(PREF_SEQUENCE);let target=(1-PREF_SLOT) as usize;
+        try preferences.encode(value,sequence,PREF_SAVED[..]);
+        try fs(protocol.CREATE,preference_name(target),0,0);try fs(protocol.TRUNCATE,preference_name(target),0,0);
+        var i:usize=0;while i<128 { *((CHANNEL+16) as *u8+i)=PREF_SAVED[i];i+=1; }
+        try fs(protocol.WRITE,preference_name(target),0,128);if RESPONSE.words[1]!=128 { return error.Invalid; }
+        try fs(protocol.FLUSH,"",0,0);
+        if (try preference_read(target))!=128 { return error.Invalid; }
+        i=0;while i<128 { if PREF_DATA[target][i]!=PREF_SAVED[i] { return error.Invalid; }i+=1; }
+        var check=preferences.EMPTY_RECORD;try preferences.decode(PREF_DATA[target][..128],&check);
+        if check.sequence!=sequence { return error.Invalid; }
+        PREF_SEQUENCE=sequence;PREF_SLOT=target as u64;PREF_STATUS=0;PREF_SAVES+=1;
+        // Directory repaint is best effort after the durable commit.
+        match refresh() { ok=>{},err(code)=>{}, }
+        let logged=sys.log("DONGOS_P7_SETTINGS_SAVED\r\n");
+    }return;
+}

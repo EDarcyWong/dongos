@@ -1,0 +1,13 @@
+module service_resources_probe;
+import boot.service_resources as resources;
+export("sr_handoff_size") fn handoff_size() usize { return sizeof(resources.Handoff); }
+export("sr_plan_size") fn plan_size() usize { return sizeof(resources.Plan); }
+export("sr_readable") fn readable(raw:*const u8,bytes:usize,stride:usize,physical:u64)u64 {
+    unsafe { if resources.readable_handoff(slice_from_raw_parts(raw,bytes),stride,physical) { return 1; } return 0; }
+}
+export("sr_validate") fn validate(handoff:*const resources.Handoff,physical:u64,raw:*const u8,bytes:usize,stride:usize,
+                                  forbidden:*const resources.Span,count:usize,out:*resources.Plan)u64 {
+    unsafe { match resources.validate(handoff,physical,slice_from_raw_parts(raw,bytes),stride,slice_from_raw_parts(forbidden,count),out) {
+        ok=>{return 0;},err(code)=>{return code;},
+    } }
+}

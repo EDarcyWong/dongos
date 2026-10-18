@@ -1,0 +1,11 @@
+module clock_calibration_probe;
+import irq.clock_calibration as clock;
+export("clock_sizes") fn sizes(out:*u64)void {
+    unsafe { out[0]=sizeof(clock.Reference) as u64;out[1]=sizeof(clock.Sample) as u64;out[2]=sizeof(clock.Estimate) as u64;out[3]=sizeof(clock.Result) as u64; }return;
+}
+export("clock_estimate") fn estimate(reference:*const clock.Reference,sample:*const clock.Sample,out:*clock.Estimate)u64 {
+    unsafe { match clock.estimate(reference,sample,out) { ok=>{return 0;},err(code)=>{return code;}, } }
+}
+export("clock_select") fn select(reference:*const clock.Reference,samples:*const clock.Sample,count:usize,out:*clock.Result)u64 {
+    unsafe { match clock.select(reference,slice_from_raw_parts(samples,count),out) { ok=>{return 0;},err(code)=>{return code;}, } }
+}

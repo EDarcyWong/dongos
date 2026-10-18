@@ -1,0 +1,44 @@
+// Appended to a private native copy only. Production stage/load/abort execute.
+var TEST_STAGE_TABLES:[32]paging.Table=[EMPTY_TABLE;32];
+var TEST_KEEP_TABLES:[32]paging.Table=[EMPTY_TABLE;32];
+export("stage_setup") fn test_setup(alias:u64)void{unsafe{
+    ALIASES=alias;KERNEL_PHYSICAL=0x10_0000;FRAME_COUNT=0;REUSE_FROM=0;EXTENDED=&FRAMES[0];EXTENDED_LIMIT=FRAME_LIMIT;
+    EXTENDED_RECYCLED=&RECYCLED[0];EXTENDED_JOURNAL=&JOURNAL[0];STAGE_ID=LIMIT;STAGE_COUNT=0;
+    STAGE_ROOT=0;STAGE_BOUND=false;STAGE_TABLES=false;STAGE_FAILED=false;
+    var id:usize=0;while id<LIMIT{PROCESSES[id]=EMPTY_PROCESS;SPACES[id]=paging.EMPTY_SPACE;
+        PINNED[id]=false;GENERATIONS[id]=0;DYNAMIC_TABLES[id]=null;DYNAMIC_PHYSICAL[id]=0;
+        var t:usize=0;while t<32{META[id][t]=0;t+=1;}id+=1;
+    }
+    id=0;while id<FRAME_LIMIT{FRAMES[id]=EMPTY_RAM;RECYCLED[id]=0;JOURNAL[id]=0;id+=1;}
+    DYNAMIC_TABLES[8]=&TEST_STAGE_TABLES[0];DYNAMIC_PHYSICAL[8]=0x30_0000;
+    DYNAMIC_TABLES[9]=&TEST_KEEP_TABLES[0];DYNAMIC_PHYSICAL[9]=0x32_0000;
+}return;}
+export("stage_load") fn test_load(image:*const u8,length:usize,random:bool)u64{unsafe{
+    if random{match stage_random(8,slice_from_raw_parts(image,length)){ok=>{return 0;},err(e)=>{return e;},}}
+    match stage(8,slice_from_raw_parts(image,length),0x1000_0000,STACK_TOP){ok=>{return 0;},err(e)=>{return e;},}
+}}
+export("stage_commit_test") fn test_commit()u64{unsafe{match stage_commit(8){ok=>{return 0;},err(e)=>{return e;},}}}
+export("stage_abort_test") fn test_abort()u64{unsafe{match stage_abort(8){ok=>{return 0;},err(e)=>{return e;},}}}
+export("stage_destroy_test") fn test_destroy(id:usize)u64{unsafe{match destroy(id){ok=>{return 0;},err(e)=>{return e;},}}}
+export("stage_extra") fn test_extra(collision:bool)u64{unsafe{
+    if collision{match page(8,0x1001_0000,paging.WRITE){ok(index)=>{return 0;},err(e)=>{return e;},}}
+    match page(8,0x4300_0000,paging.WRITE){ok(index)=>{return index as u64;},err(e)=>{return e;},}
+}}
+export("stage_own_orphan") fn test_orphan()u64{unsafe{
+    match own_frame(0x60_0000){ok(index)=>{return index as u64;},err(e)=>{return e;},}
+}}
+export("stage_share_test") fn test_share()u64{unsafe{
+    match paging.init(&SPACES[9],TEST_KEEP_TABLES[..],0x32_0000,META[9][..],48,true){ok=>{},err(e)=>{return e;},}
+    PROCESSES[9].ready=1;PROCESSES[9].root=0x32_0000;
+    match share_at(8,9,0x4300_0000,0x4400_0000,true){ok=>{return 0;},err(e)=>{return e;},}
+}}
+export("stage_pin_test") fn test_pin(index:usize)void{unsafe{*recycled(index)=2;}return;}
+export("stage_get") fn test_get(which:u64,index:usize)u64{unsafe{
+    if which==0{return FRAME_COUNT as u64;}if which==1{return *recycled(index) as u64;}
+    if which==2{return PROCESSES[index].ready;}if which==3{return (*table_at(index,0)).entries[0];}
+    if which==4{return STAGE_COUNT as u64;}if which==5{return STAGE_ID as u64;}
+    if which==6{return STAGE_FAILED as u64;}if which==7{return (*record(index)).writable;}
+    if which==8{return (*record(index)).physical;}if which==9{return GENERATIONS[index];}
+    if which==10{return (*record(index)).virtual;}if which==12{return PROCESSES[index].frame.rip;}
+    if which==13{return PROCESSES[index].frame.rsp;}return PROCESSES[index].root;
+}}

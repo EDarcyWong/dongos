@@ -1,0 +1,7 @@
+module smp_probe;
+import services_probe;
+import smp.runtime;
+
+import sched.parallel_live;
+
+import sched.user_boot;

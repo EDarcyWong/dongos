@@ -1,0 +1,9 @@
+module boot.service_memory;
+import boot.memory_startup as startup;import mm.paging as paging;
+pub struct Block{pub physical:u64,pub virtual:u64,pub pages:usize}
+pub error Failed=0x0609_0001;
+unsafe extern "sysv64" fn pb_allocate(pages:usize,out:*Block)u64;
+pub unsafe fn allocate(pages:usize,alignment:usize,out:*Block)!void{unsafe{
+ if alignment!=1||pb_allocate(pages,out)!=0{return error.Failed;}
+ var i:usize=0;while i<pages{try paging.map_live(startup.space_pointer(),(*out).virtual+i as u64*4096,(*out).physical+i as u64*4096,paging.WRITE);i+=1;}
+}return;}

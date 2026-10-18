@@ -1,0 +1,37 @@
+// Shortest standard ULEB128/SLEB128 encoders into a caller buffer. The byte
+// count is computed first; nothing is written unless the whole encoding fits.
+module bootstrap.leb128;
+pub const OK:u64=0;pub const INVALID:u64=1;pub const CAPACITY:u64=2;
+const MAX:u64=0xffff_ffff_ffff_ffff;
+fn span(p:u64,n:u64)bool{return n==0||(p!=0&&n<=MAX-p);}
+fn overlap(a:u64,n:u64,b:u64,m:u64)bool{return n!=0&&m!=0&&a<b+m&&b<a+n;}
+unsafe fn valid(out:[]u8,written:*usize)bool{unsafe{
+ if written==null{return false;}
+ let op=out.ptr as u64;let wp=written as u64;
+ // Spans first: overlap() may only add endpoints already known not to wrap.
+ if !span(op,out.len)||!span(wp,8)||(wp&7)!=0||overlap(op,out.len,wp,8){return false;}
+ return true;
+}}
+// 7-bit groups up to and including the highest set bit; zero still takes one byte.
+fn ulen(value:u64)usize{var n:usize=1;var v:u64=value>>7;while v!=0{n+=1;v=v>>7;}return n;}
+// Stop once the remaining arithmetic shift is pure sign (0 or -1) and bit 6 of
+// the last emitted group already carries that sign.
+fn slen(value:i64)usize{
+ var n:usize=1;var low:u64=(value as u64)&0x7f;var v:i64=value>>7;
+ while !((v==0&&(low&0x40)==0)||(v==-1&&(low&0x40)!=0)){low=(v as u64)&0x7f;v=v>>7;n+=1;}
+ return n;
+}
+pub unsafe fn unsigned(value:u64,out:[]u8,written:*usize)u64{unsafe{
+ if !valid(out,written){return INVALID;}
+ let n=ulen(value);if out.len<n{return CAPACITY;}
+ var v:u64=value;var i:usize=0;
+ while i<n{let b=v&0x7f;v=v>>7;if i+1<n{out[i]=(b|0x80)as u8;}else{out[i]=b as u8;}i+=1;}
+ *written=n;return OK;
+}}
+pub unsafe fn signed(value:i64,out:[]u8,written:*usize)u64{unsafe{
+ if !valid(out,written){return INVALID;}
+ let n=slen(value);if out.len<n{return CAPACITY;}
+ var s:i64=value;var i:usize=0;
+ while i<n{let c=(s as u64)&0x7f;s=s>>7;if i+1<n{out[i]=(c|0x80)as u8;}else{out[i]=c as u8;}i+=1;}
+ *written=n;return OK;
+}}

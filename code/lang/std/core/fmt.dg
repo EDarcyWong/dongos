@@ -1,0 +1,102 @@
+// core.fmt — buffer/callback formatting without allocation or a global output.
+// Every formatter returns the number of bytes written (never NUL-terminated) as
+// !usize, or error.errors.BufferTooSmall when the output buffer is too small.
+// Capacity is checked before any byte is written, so a failure leaves the
+// output buffer unchanged.
+
+module core.fmt;
+
+import core.errors as errors;
+import core.mem as mem;
+
+// Number of decimal digits of value (1 for zero).
+fn decimal_digit_count(value: u64) usize {
+    var digits: usize = 1;
+    var remaining: u64 = value;
+    while remaining >= 10 {
+        remaining = remaining / 10;
+        digits += 1;
+    }
+    return digits;
+}
+
+// Writes the decimal digits of value (no sign) into output[0..], least
+// significant last, and returns the digit count. Requires enough capacity.
+fn write_decimal_digits(value: u64, output: []u8) usize {
+    let digits: usize = decimal_digit_count(value);
+    var remaining: u64 = value;
+    var index: usize = digits;
+    while index > 0 {
+        index = index - 1;
+        output[index] = ((remaining % 10) as u8) + 48;
+        remaining = remaining / 10;
+    }
+    return digits;
+}
+
+// Unsigned decimal, no padding or sign. Zero renders as "0".
+pub fn decimal(value: u64, output: []u8) !usize {
+    let digits: usize = decimal_digit_count(value);
+    if digits > output.len { return error.errors.BufferTooSmall; }
+    return write_decimal_digits(value, output);
+}
+
+// Signed decimal with a leading '-' for negatives. Handles i64::MIN without
+// overflow by negating through unsigned wrapping arithmetic.
+pub fn signed_decimal(value: i64, output: []u8) !usize {
+    var negative: bool = value < 0;
+    var magnitude: u64 = 0;
+    if negative {
+        magnitude = wrapping_sub(0, value as u64);
+    } else {
+        magnitude = value as u64;
+    }
+    let digits: usize = decimal_digit_count(magnitude);
+    var total: usize = digits;
+    if negative { total += 1; }
+    if total > output.len { return error.errors.BufferTooSmall; }
+    if negative {
+        output[0] = 45;
+        let written = write_decimal_digits(magnitude, output[1..]);
+        return written + 1;
+    }
+    return write_decimal_digits(magnitude, output);
+}
+
+// Lowercase hexadecimal, no "0x" prefix and no padding. Zero renders as "0".
+pub fn hexadecimal(value: u64, output: []u8) !usize {
+    var digits: usize = 1;
+    var remaining: u64 = value;
+    while remaining >= 16 {
+        remaining = remaining / 16;
+        digits += 1;
+    }
+    if digits > output.len { return error.errors.BufferTooSmall; }
+    remaining = value;
+    var index: usize = digits;
+    while index > 0 {
+        index = index - 1;
+        var nibble: u8 = (remaining % 16) as u8;
+        if nibble < 10 {
+            output[index] = nibble + 48;
+        } else {
+            output[index] = nibble - 10 + 97;
+        }
+        remaining = remaining / 16;
+    }
+    return digits;
+}
+
+// Copies bytes into output, preserving UTF-8 and embedded NUL bytes. The
+// source and destination may overlap; the copy uses move semantics.
+pub fn write(bytes: []const u8, output: []u8) !usize {
+    if bytes.len > output.len { return error.errors.BufferTooSmall; }
+    unsafe { mem.move(output.ptr, bytes.ptr, bytes.len); }
+    return bytes.len;
+}
+
+// Calls the provided SysV callback with bytes and forwards its error result.
+// There is no global output device, allocation or variadic formatting.
+pub unsafe fn emit(bytes: []const u8, sink: fn([]const u8)!void) !void {
+    unsafe { return sink(bytes); }
+}

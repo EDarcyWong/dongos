@@ -1,0 +1,38 @@
+// Conservative closed interval [min position, max position] per linearly
+// numbered value. Not CFG liveness: no phi, loops or cross-function allocation.
+// Every event, value_count's byte size and the capacity are checked before
+// any output is written; out[0..value_count) is then reset and folded.
+module bootstrap.linear_intervals;
+pub const OK:u64=0;pub const INVALID:u64=1;pub const CAPACITY:u64=2;
+pub const NONE:usize=0xffff_ffff_ffff_ffff;
+pub struct Event{pub value:usize,pub position:usize}
+pub struct Interval{pub first:usize,pub last:usize}
+const MAX:u64=0xffff_ffff_ffff_ffff;
+fn span(p:u64,n:u64)bool{return n==0||(p!=0&&n<=MAX-p);}
+fn overlap(a:u64,n:u64,b:u64,m:u64)bool{return n!=0&&m!=0&&a<b+m&&b<a+n;}
+unsafe fn valid(events:[]const Event,out:[]Interval,used:*usize)bool{unsafe{
+ if used==null||events.len>MAX/sizeof(Event)||out.len>MAX/sizeof(Interval){return false;}
+ let ep=events.ptr as u64;let op=out.ptr as u64;let up=used as u64;
+ let en=events.len*sizeof(Event);let on=out.len*sizeof(Interval);
+ if !span(ep,en)||!span(op,on)||!span(up,8){return false;}
+ if (en!=0&&(ep&7)!=0)||(on!=0&&(op&7)!=0)||(up&7)!=0{return false;}
+ if overlap(op,on,ep,en)||overlap(up,8,ep,en)||overlap(op,on,up,8){return false;}
+ return true;
+}}
+pub unsafe fn build(events:[]const Event,value_count:usize,out:[]Interval,used:*usize)u64{unsafe{
+ if !valid(events,out,used){return INVALID;}
+ var i:usize=0;
+ while i<events.len{let e=events[i];if e.value>=value_count||e.position==NONE{return INVALID;}i+=1;}
+ if value_count>MAX/sizeof(Interval){return INVALID;}
+ if out.len<value_count{return CAPACITY;}
+ i=0;while i<value_count{out[i]=Interval{first:NONE,last:0};i+=1;}
+ // position<NONE, so the first event of a value always lowers first.
+ i=0;
+ while i<events.len{
+  let e=events[i];let cur=out[e.value];var first=cur.first;var last=cur.last;
+  if e.position<first{first=e.position;}
+  if e.position>last{last=e.position;}
+  out[e.value]=Interval{first:first,last:last};i+=1;
+ }
+ *used=value_count;return OK;
+}}

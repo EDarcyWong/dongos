@@ -1,0 +1,49 @@
+module desktop_probe;
+import desktop.windows as win;
+import gfx.geometry as geo;
+import input.events as ev;
+export("desktop_size") fn state_size() usize { return sizeof(win.State); }
+export("desktop_slot_size") fn slot_size() usize { return sizeof(win.Slot); }
+export("desktop_init") fn init(s: *win.State, w: usize, h: usize) u64 {
+    unsafe { match win.init(s,w,h) { ok => { return 0; }, err(code) => { return code; }, } }
+}
+export("desktop_validate") fn validate(s: *const win.State) u64 {
+    unsafe { match win.validate(s) { ok => { return 0; }, err(code) => { return code; }, } }
+}
+export("desktop_create") fn create(s: *win.State, owner: u64, buffer: u64, r: *const geo.Rect,
+                                     minw: i64, minh: i64, flags: u64, out: *u64) u64 {
+    unsafe { match win.create(s,owner,buffer,r,minw,minh,flags,out) { ok => { return 0; }, err(code) => { return code; }, } }
+}
+export("desktop_raise") fn raise(s: *win.State, owner: u64, h: u64) u64 {
+    unsafe { match win.raise(s,owner,h) { ok => { return 0; }, err(code) => { return code; }, } }
+}
+export("desktop_visible") fn visible(s: *win.State, owner: u64, h: u64, show: bool) u64 {
+    unsafe { match win.visible(s,owner,h,show) { ok => { return 0; }, err(code) => { return code; }, } }
+}
+export("desktop_capture") fn capture(s: *win.State, owner: u64, h: u64, enabled: bool) u64 {
+    unsafe { match win.capture(s,owner,h,enabled) { ok => { return 0; }, err(code) => { return code; }, } }
+}
+export("desktop_close") fn close(s: *win.State, owner: u64, h: u64) u64 {
+    unsafe { match win.close(s,owner,h) { ok => { return 0; }, err(code) => { return code; }, } }
+}
+export("desktop_disconnect") fn disconnect(s: *win.State, owner: u64, out: *usize) u64 {
+    unsafe { match win.disconnect(s,owner) { ok(n) => { *out = n; return 0; }, err(code) => { return code; }, } }
+}
+export("desktop_released") fn released(s: *win.State, h: u64, buffer: u64) u64 {
+    unsafe { match win.released(s,h,buffer) { ok => { return 0; }, err(code) => { return code; }, } }
+}
+export("desktop_reap") fn reap(s: *win.State, h: u64) u64 {
+    unsafe { match win.reap(s,h) { ok => { return 0; }, err(code) => { return code; }, } }
+}
+export("desktop_request") fn request(s: *win.State, owner: u64, h: u64, w: i64, height: i64, serial: *u64) u64 {
+    unsafe { match win.request_resize(s,owner,h,w,height,serial) { ok => { return 0; }, err(code) => { return code; }, } }
+}
+export("desktop_ack") fn acknowledge(s: *win.State, owner: u64, h: u64, serial: u64, buffer: u64) u64 {
+    unsafe { match win.acknowledge(s,owner,h,serial,buffer) { ok => { return 0; }, err(code) => { return code; }, } }
+}
+export("desktop_input") fn input(s: *win.State, e: *const ev.Event, target: *u64) u64 {
+    unsafe { match win.input(s,e,target) { ok => { return 0; }, err(code) => { return code; }, } }
+}
+export("desktop_damage") fn damage(s: *win.State, d: *geo.Damage) u64 {
+    unsafe { match win.take_damage(s,d) { ok => { return 0; }, err(code) => { return code; }, } }
+}

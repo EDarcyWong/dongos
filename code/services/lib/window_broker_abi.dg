@@ -1,0 +1,27 @@
+// Data-only contract: kernel may import this without user syscall references.
+module lib.window_broker_abi;
+pub const VERSION:u64=1;
+pub const ALLOCATE:u64=0xa0;
+pub const REVOKE:u64=0xa1;
+pub const FONT:u64=0xa2;
+pub const PEER:u64=0xa3;
+pub const NONE:u64=0;
+pub const TERMINAL:u64=1;
+pub const FILES:u64=2;
+pub const EDITOR:u64=3;
+pub const SETTINGS:u64=4;
+pub const MAX_WINDOW_BYTES:u64=3145728;
+pub const MAX_TOTAL_BYTES:u64=8388608;
+pub struct Lease {
+    pub version:u64,pub lease:u64,pub owner:u64,pub epoch:u64,
+    pub client_address:u64,pub server_address:u64,pub bytes:u64,
+    pub width:u64,pub height:u64,pub stride:u64,
+}
+pub const EMPTY_LEASE:Lease=Lease{version:0,lease:0,owner:0,epoch:0,client_address:0,server_address:0,bytes:0,width:0,height:0,stride:0};
+pub struct Font {
+    pub version:u64,pub owner:u64,pub epoch:u64,pub client_address:u64,
+    pub server_address:u64,pub bytes:u64,pub pixels:u64,pub scale:u64,pub glyphs:u64,
+}
+pub const EMPTY_FONT:Font=Font{version:0,owner:0,epoch:0,client_address:0,server_address:0,bytes:0,pixels:0,scale:0,glyphs:0};
+pub struct Peer {pub version:u64,pub owner:u64,pub epoch:u64,pub role:u64}
+pub const EMPTY_PEER:Peer=Peer{version:0,owner:0,epoch:0,role:0};

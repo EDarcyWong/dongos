@@ -1,0 +1,54 @@
+// Cleanup order for leaving lexical scopes: from from_scope up the parent
+// chain to (excluding) target_scope, or through the root when target is
+// ROOT_PARENT (function exit); each scope's cleanups in reverse registration
+// order. Every scope and parent chain is validated before out is written.
+module bootstrap.cleanup_plan;
+pub const OK:u64=0;pub const INVALID:u64=1;pub const CAPACITY:u64=2;
+pub const ROOT_PARENT:usize=0xffff_ffff_ffff_ffff;
+pub struct Scope{pub parent:usize,pub first:usize,pub count:usize}
+const MAX:u64=0xffff_ffff_ffff_ffff;
+fn span(p:u64,n:u64)bool{return n==0||(p!=0&&n<=MAX-p);}
+fn overlap(a:u64,n:u64,b:u64,m:u64)bool{return n!=0&&m!=0&&a<b+m&&b<a+n;}
+unsafe fn valid(scopes:[]const Scope,ids:[]const usize,out:[]usize,used:*usize)bool{unsafe{
+ if used==null||scopes.len>MAX/sizeof(Scope)||ids.len>MAX/8||out.len>MAX/8{return false;}
+ let sp=scopes.ptr as u64;let ip=ids.ptr as u64;let op=out.ptr as u64;let up=used as u64;
+ let sn=scopes.len*sizeof(Scope);let inn=ids.len*8;let on=out.len*8;
+ if !span(sp,sn)||!span(ip,inn)||!span(op,on)||!span(up,8){return false;}
+ if (sn!=0&&(sp&7)!=0)||(inn!=0&&(ip&7)!=0)||(on!=0&&(op&7)!=0)||(up&7)!=0{return false;}
+ if overlap(op,on,sp,sn)||overlap(op,on,ip,inn)||overlap(up,8,sp,sn)||overlap(up,8,ip,inn)||overlap(op,on,up,8){return false;}
+ return true;
+}}
+// Shape: only scope 0 is the root, every parent is a valid scope, every
+// cleanup range is in bounds, and every chain reaches 0 within n steps (so no
+// cycle anywhere, reachable or not). O(n^2) steps in the worst case.
+fn tree(scopes:[]const Scope,ids:[]const usize)bool{
+ let n=scopes.len;var i:usize=0;
+ while i<n{
+  let s=scopes[i];
+  if s.first>ids.len||s.count>ids.len-s.first{return false;}
+  if i==0{if s.parent!=ROOT_PARENT{return false;}}else if s.parent>=n{return false;}
+  i+=1;
+ }
+ i=1;
+ while i<n{var at=i;var steps:usize=0;while at!=0{if steps==n{return false;}at=scopes[at].parent;steps+=1;}i+=1;}
+ return true;
+}
+pub unsafe fn plan(scopes:[]const Scope,cleanup_ids:[]const usize,from_scope:usize,target_scope:usize,
+ out:[]usize,used:*usize)u64{unsafe{
+ if !valid(scopes,cleanup_ids,out,used)||scopes.len==0||from_scope>=scopes.len{return INVALID;}
+ if !tree(scopes,cleanup_ids){return INVALID;}
+ // target must be from itself, an ancestor, or ROOT_PARENT; total length is checked as it is summed.
+ var need:usize=0;var at=from_scope;
+ while at!=target_scope{
+  if at==ROOT_PARENT{return INVALID;}
+  let c=scopes[at].count;if need>MAX-c{return INVALID;}need+=c;at=scopes[at].parent;
+ }
+ if out.len<need{return CAPACITY;}
+ var k:usize=0;at=from_scope;
+ while at!=target_scope{
+  let s=scopes[at];var j=s.count;
+  while j!=0{j-=1;out[k]=cleanup_ids[s.first+j];k+=1;}
+  at=s.parent;
+ }
+ *used=need;return OK;
+}}

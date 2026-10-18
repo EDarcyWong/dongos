@@ -1,0 +1,66 @@
+// Emit one NASM 64-bit immediate shift: shl/shr/sar dest, count.
+// Count decimal digits come from CR4 into stack scratch first.
+// INVALID precedes CAPACITY; count outside 0..63 is not masked.
+module bootstrap.nasm_integer_shift;
+import bootstrap.decimal_integer as dec;
+pub const OK:u64=0;pub const INVALID:u64=1;pub const CAPACITY:u64=2;
+const MAX:u64=0xffff_ffff_ffff_ffff;
+fn span(p:u64,n:u64)bool{return n==0||(p!=0&&n<=MAX-p);}
+fn overlap(a:u64,n:u64,b:u64,m:u64)bool{return n!=0&&m!=0&&a<b+m&&b<a+n;}
+fn reg64_len(r:u64)usize{
+ if r<=7{return 3;}
+ if r<=9{return 2;}
+ return 3;
+}
+fn write_reg64(out:[]u8,at:usize,r:u64)usize{
+ if r==0{out[at]=114;out[at+1]=97;out[at+2]=120;return at+3;}
+ if r==1{out[at]=114;out[at+1]=99;out[at+2]=120;return at+3;}
+ if r==2{out[at]=114;out[at+1]=100;out[at+2]=120;return at+3;}
+ if r==3{out[at]=114;out[at+1]=98;out[at+2]=120;return at+3;}
+ if r==4{out[at]=114;out[at+1]=115;out[at+2]=112;return at+3;}
+ if r==5{out[at]=114;out[at+1]=98;out[at+2]=112;return at+3;}
+ if r==6{out[at]=114;out[at+1]=115;out[at+2]=105;return at+3;}
+ if r==7{out[at]=114;out[at+1]=100;out[at+2]=105;return at+3;}
+ if r==8{out[at]=114;out[at+1]=56;return at+2;}
+ if r==9{out[at]=114;out[at+1]=57;return at+2;}
+ if r==10{out[at]=114;out[at+1]=49;out[at+2]=48;return at+3;}
+ if r==11{out[at]=114;out[at+1]=49;out[at+2]=49;return at+3;}
+ if r==12{out[at]=114;out[at+1]=49;out[at+2]=50;return at+3;}
+ if r==13{out[at]=114;out[at+1]=49;out[at+2]=51;return at+3;}
+ if r==14{out[at]=114;out[at+1]=49;out[at+2]=52;return at+3;}
+ out[at]=114;out[at+1]=49;out[at+2]=53;return at+3;
+}
+fn copy(out:[]u8,at:usize,text:[]const u8)usize{
+ var i:usize=0;while i<text.len{out[at+i]=text[i];i+=1;}return at+text.len;
+}
+fn write_mnem(out:[]u8,op:u64)usize{
+ // shl / shr / sar + space
+ if op==0{out[0]=115;out[1]=104;out[2]=108;out[3]=32;return 4;}
+ if op==1{out[0]=115;out[1]=104;out[2]=114;out[3]=32;return 4;}
+ out[0]=115;out[1]=97;out[2]=114;out[3]=32;return 4;
+}
+pub unsafe fn emit(operation:u64,destination:u64,count:u64,out:[]u8,written:*usize)u64{unsafe{
+ let wp=written as u64;let optr=out.ptr as u64;
+ if written==null||(wp&7)!=0||!span(wp,8){return INVALID;}
+ if !span(optr,out.len){return INVALID;}
+ if overlap(wp,8,optr,out.len){return INVALID;}
+ if operation>2||destination>15{return INVALID;}
+ if count>63{return INVALID;}
+ var db:[20]u8=[0;20];var dw:usize=0;
+ let dsl=slice_from_raw_parts(&db[0],20);
+ let sd=dec.encode(count,64,false,dsl,&dw);
+ if sd!=OK{return sd;}
+ let dl=reg64_len(destination);
+ // "xxx " + dest + ", " + digits + LF
+ if 4>MAX-dl{return INVALID;}let a1=4+dl;
+ if 2>MAX-a1{return INVALID;}let a2=a1+2;
+ if dw>MAX-a2{return INVALID;}let a3=a2+dw;
+ if 1>MAX-a3{return INVALID;}let total=a3+1;
+ if total>out.len{return CAPACITY;}
+ var at=write_mnem(out,operation);
+ at=write_reg64(out,at,destination);
+ out[at]=44;out[at+1]=32;at+=2;
+ at=copy(out,at,slice_from_raw_parts(&db[0],dw));
+ out[at]=10;
+ *written=total;return OK;
+}}

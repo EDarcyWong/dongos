@@ -1,0 +1,13 @@
+module process_catalog_probe;
+import user.processes as p;
+import lib.process_abi as abi;
+export("catalog_initialize") fn initialize(c:*p.Catalog,hz:u64)u64 {unsafe {match p.initialize(c,hz){ok=>{return 0;},err(code)=>{return code;},}}}
+export("catalog_allowed") fn allowed(c:*const p.Catalog,actor:usize,id:usize,write:bool)u64 {unsafe {match p.allowed(c,actor,id,write){ok=>{return 0;},err(code)=>{return code;},}}}
+export("catalog_dependencies") fn dependencies(c:*const p.Catalog,id:usize)u64 {unsafe {match p.dependencies(c,id){ok=>{return 0;},err(code)=>{return code;},}}}
+export("catalog_start") fn start(c:*p.Catalog,id:usize,slot:usize,arg:u64,out:*abi.Snapshot)u64 {unsafe {match p.start(c,id,slot,arg,out){ok=>{return 0;},err(code)=>{return code;},}}}
+export("catalog_ready") fn ready(c:*p.Catalog,slot:usize,generation:u64)u64 {unsafe {match p.mark_ready(c,slot,generation){ok=>{return 0;},err(code)=>{return code;},}}}
+export("catalog_terminate") fn terminate(c:*p.Catalog,slot:usize,state:u64,status:u64)u64 {unsafe {match p.terminate(c,slot,state,status){ok=>{return 0;},err(code)=>{return code;},}}}
+export("catalog_event") fn event(c:*const p.Catalog,actor:usize,after:u64,out:*abi.Event,found:*u64)u64 {unsafe {
+    match p.event(c,actor,after,out){ok(value)=>{*found=value as u64;return 0;},err(code)=>{return code;},}
+}}
+export("catalog_current") fn current(c:*const p.Catalog,slot:usize)u64 {unsafe {return p.current(c,slot);}}

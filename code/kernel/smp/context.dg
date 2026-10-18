@@ -1,0 +1,22 @@
+// Stable per-CPU AP bootstrap/mailbox ABI. Storage and tables are caller owned.
+module smp.context;
+pub const PREPARED:u64=2;
+pub const STARTING:u64=3;
+pub const ONLINE:u64=4;
+pub const STOPPING:u64=5;
+pub const STOPPED:u64=6;
+pub const QUARANTINED:u64=8;
+pub struct Context {
+    pub self:u64,pub logical_id:u64,pub apic_id:u64,pub state:u64,pub epoch:u64,
+    pub cr3:u64,pub cr0:u64,pub cr4:u64,pub efer:u64,pub pat:u64,pub xcr0:u64,
+    pub stack_bottom:u64,pub stack_top:u64,pub gdt:u64,pub tss:u64,pub idt:u64,
+    pub df_bottom:u64,pub df_top:u64,pub nmi_bottom:u64,pub nmi_top:u64,
+    pub exception_bottom:u64,pub exception_top:u64,pub lapic_pa:u64,pub lapic_va:u64,pub main:u64,
+    pub online_epoch:u64,pub ping_request:u64,pub ping_ack:u64,pub stop_request:u64,pub stop_ack:u64,pub irq_count:u64,pub last_error:u64,
+}
+pub const EMPTY:Context=Context{
+    self:0,logical_id:0,apic_id:0,state:0,epoch:0,cr3:0,cr0:0,cr4:0,efer:0,pat:0,xcr0:0,
+    stack_bottom:0,stack_top:0,gdt:0,tss:0,idt:0,df_bottom:0,df_top:0,nmi_bottom:0,nmi_top:0,
+    exception_bottom:0,exception_top:0,lapic_pa:0,lapic_va:0,main:0,online_epoch:0,
+    ping_request:0,ping_ack:0,stop_request:0,stop_ack:0,irq_count:0,last_error:0,
+};

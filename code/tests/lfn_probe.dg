@@ -1,0 +1,14 @@
+module lfn_probe;
+import fs.lfn as lfn;
+export("lfn_sizes") fn sizes(out:*u64)void {unsafe {
+    out[0]=sizeof(lfn.Group) as u64;out[1]=sizeof(lfn.Name) as u64;
+}return;}
+export("lfn_checksum") fn checksum(input:*const u8,length:usize,out:*u64)u64 {unsafe {
+    match lfn.checksum(slice_from_raw_parts(input,length)) {ok(n)=>{*out=n as u64;return 0;},err(code)=>{return code;},}
+}}
+export("lfn_encode") fn encode(input:*const u8,length:usize,entry:*const u8,entry_length:usize,out:*lfn.Group)u64 {unsafe {
+    match lfn.encode(slice_from_raw_parts(input,length),slice_from_raw_parts(entry,entry_length),out) {ok=>{return 0;},err(code)=>{return code;},}
+}}
+export("lfn_decode") fn decode(input:*const u8,length:usize,out:*lfn.Name)u64 {unsafe {
+    match lfn.decode(slice_from_raw_parts(input,length),out) {ok=>{return 0;},err(code)=>{return code;},}
+}}

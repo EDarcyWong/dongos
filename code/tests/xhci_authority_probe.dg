@@ -1,0 +1,4 @@
+module xhci_authority_probe;
+import drivers.xhci_authority as a;
+export("xa_shape") fn shape(h:*const a.Header,b:*a.Bounds)u64 {unsafe {match a.shape(h,b) {ok=>{return 0;},err(e)=>{return e;},}}}
+export("xa_permit") fn permit(h:*const a.Header,r:*const a.Registers,i:*const a.Interrupter,n:usize,e:*const a.Extension,en:usize,d:*const u8,dn:usize,out:*u64)u64 {unsafe {match a.permit(h,r,slice_from_raw_parts(i,n),slice_from_raw_parts(e,en),slice_from_raw_parts(d,dn)) {ok(v)=>{*out=v as u64;return 0;},err(code)=>{return code;},}}}

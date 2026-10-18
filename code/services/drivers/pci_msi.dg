@@ -1,0 +1,126 @@
+// Serialized kernel-only PCI MSI programming. No PA/vector comes from USER.
+module drivers.pci_msi;
+import lib.device_abi as abi;
+pub const VECTOR:u64=0x60;
+pub const TAG:u64=0x4d53_0000_0000_0000;
+pub const MAX_SERIAL:u64=0x0000_00ff_ffff_ffff;
+pub type Read=unsafe fn(context:u64,offset:u64,out:*u32)u64;
+pub type Write=unsafe fn(context:u64,offset:u64,width:u64,value:u32)u64;
+pub struct Ops{pub read:Read,pub write:Write}
+pub struct State{
+ pub stage:u64,pub serial:u64,pub owner:u64,pub incarnation:u64,pub ecam:u64,pub identity:u64,
+ pub offset:u64,pub control:u64,pub address:u64,pub data:u64,pub sequence:u64,pub pending:u64,
+ pub delivered:u64,pub retired:u64,
+}
+pub const EMPTY:State=State{stage:0,serial:0,owner:0,incarnation:0,ecam:0,identity:0,
+ offset:0,control:0,address:0,data:0,sequence:0,pending:0,delivered:0,retired:0};
+pub fn tagged(token:u64)bool{return (token&0xffff_0000_0000_0000)==TAG;}
+pub unsafe fn token(s:*const State)u64{unsafe{return TAG|((*s).serial<<8)|1;}}
+unsafe fn read(o:*const Ops,c:u64,at:u64)!u32{unsafe{
+ if o==null||at>252||(at&3)!=0{return error.abi.Invalid;}
+ var value:u32=0;if (*o).read(c,at,&value)!=0{return error.abi.Readback;}return value;
+}}
+unsafe fn write(o:*const Ops,c:u64,at:u64,width:u64,value:u32)!void{unsafe{
+ if at>256-width||(width!=2&&width!=4)||(at&(width-1))!=0||(*o).write(c,at,width,value)!=0{return error.abi.Readback;}
+}return;}
+unsafe fn word(o:*const Ops,c:u64,at:u64,value:u32)!void{unsafe{
+ try write(o,c,at,2,value);let raw=try read(o,c,at&~3);
+ if ((raw>>((at&2)*8))&65535)!=(value&65535){return error.abi.Readback;}
+}return;}
+unsafe fn dword(o:*const Ops,c:u64,at:u64,value:u32)!void{unsafe{
+ try write(o,c,at,4,value);if (try read(o,c,at))!=value{return error.abi.Readback;}
+}return;}
+pub struct Plan{pub offset:u64,pub control:u64,pub data_offset:u64,pub mask_offset:u64}
+pub const EMPTY_PLAN:Plan=Plan{offset:0,control:0,data_offset:0,mask_offset:0};
+pub unsafe fn inspect(o:*const Ops,ecam:u64,identity:u64,out:*Plan)!void{unsafe{
+ if out==null||ecam==0||(ecam&4095)!=0||identity==0||identity>0xffff_ffff
+  ||((try read(o,ecam,0)) as u64)!=identity||((try read(o,ecam,8))>>8)!=0x010601
+  ||(((try read(o,ecam,12))>>16)&127)!=0{return error.abi.Denied;}
+ if ((try read(o,ecam,4))&0x10_0000)==0{return error.abi.Unsupported;}
+ var at:u64=((try read(o,ecam,0x34))&255) as u64;var occupied:u64=0;var found=EMPTY_PLAN;var msix=false;
+ while at!=0{
+  if at<0x40||at>0xfc||(at&3)!=0||(occupied&(1<<(at/4)))!=0{return error.abi.Invalid;}
+  let header=try read(o,ecam,at as u64);let kind=header&255;let control=header>>16;var bytes:u64=4;
+  if kind==5{
+   if found.offset!=0||(control&~0x1ff)!=0||((control>>1)&7)>5{return error.abi.Invalid;}
+   if (control&1)!=0{return error.abi.Busy;}
+   let wide=(control&128)!=0;let masked=(control&256)!=0;
+   var data:u64=8;if wide{data=12;}bytes=data+4;if masked{bytes=data+12;}
+   found=Plan{offset:at as u64,control:control as u64,data_offset:data,mask_offset:0};
+   if masked{found.mask_offset=data+4;}
+  }else if kind==0x11{
+   if msix{return error.abi.Invalid;}msix=true;bytes=12;
+   if (control&0x8000)!=0{return error.abi.Busy;}
+  }
+  if bytes>256-at as u64{return error.abi.Invalid;}
+  var span:u64=0;while span<bytes{let bit:u64=1<<((at as u64+span)/4);
+   if (occupied&bit)!=0{return error.abi.Invalid;}occupied|=bit;span+=4;
+  }
+  at=((header>>8)&255) as u64;
+ }
+ if found.offset==0{return error.abi.Unsupported;}*out=found;
+}return;}
+unsafe fn disable(s:*State,o:*const Ops,dma:bool)!void{unsafe{
+ if ((try read(o,(*s).ecam,0)) as u64)!=(*s).identity{return error.abi.Removed;}
+ let header=try read(o,(*s).ecam,(*s).offset);
+ if (header&255)!=5||(((header>>16) as u64)&~0x71)!=((*s).control&~0x71){return error.abi.Readback;}
+ let control=(header>>16)&~1;try word(o,(*s).ecam,(*s).offset+2,control as u32);
+ if dma{let command=(try read(o,(*s).ecam,4))&65535;try word(o,(*s).ecam,4,((command|0x400)&~4) as u32);}
+}return;}
+pub unsafe fn bind(s:*State,o:*const Ops,owner:u64,incarnation:u64,ecam:u64,identity:u64,apic:u64,out:*abi.Irq)!void{unsafe{
+ if s==null||out==null||owner>>32!=3||(owner&0xffff_ffff)!=incarnation||incarnation==0||incarnation>0x0fff_ffff
+  ||apic>255||((*s).stage!=0&&(*s).stage!=2)||(*s).retired!=0||(*s).serial>=MAX_SERIAL{return error.abi.Denied;}
+ var plan=EMPTY_PLAN;try inspect(o,ecam,identity,&plan);
+ let serial=(*s).serial+1;var next=EMPTY;next.serial=serial;next.owner=owner;next.incarnation=incarnation;
+ next.ecam=ecam;next.identity=identity;next.offset=plan.offset;next.control=plan.control;
+ next.address=0xfee0_0000|(apic<<12);next.data=VECTOR;
+ // Any programming failure leaves a held state; it cannot be retried as a
+ // fresh route. Only a complete disabled/readback state may be published.
+ next.stage=3;*s=next;
+ let committed=program(s,o,&plan);match committed{ok=>{},err(e)=>{
+  match disable(s,o,true){ok=>{},err(ignored)=>{},}return committed;
+ },}
+ (*s).stage=1;*out=abi.Irq{version:1,token:token(s),irq:0x100,gsi:0xffff_ffff_ffff_ffff,
+  vector:VECTOR,generation:incarnation,sequence:0,flags:4};
+}return;}
+unsafe fn program(s:*State,o:*const Ops,p:*const Plan)!void{unsafe{
+ let c=(*s).ecam;let at=(*p).offset;
+ // Disable INTx first; all writes avoid adjacent PCI Status W1C bits. MSI
+ // remains disabled until address/data/MME=0 are read back completely.
+ let command=(try read(o,c,4))&65535;try word(o,c,4,(command|0x400) as u32);
+ let control=(*p).control&~0x71;try word(o,c,at+2,control as u32);
+ if (*p).mask_offset!=0{let mask=try read(o,c,at+(*p).mask_offset);try dword(o,c,at+(*p).mask_offset,mask|1);}
+ try dword(o,c,at+4,(*s).address as u32);
+ if ((*p).control&128)!=0{try dword(o,c,at+8,0);}
+ try word(o,c,at+(*p).data_offset,VECTOR as u32);
+ try word(o,c,at+2,(control|1) as u32);
+ if (*p).mask_offset!=0{let mask=try read(o,c,at+(*p).mask_offset);try dword(o,c,at+(*p).mask_offset,mask&~1);}
+}return;}
+unsafe fn require(s:*const State,object:u64,owner:u64)!void{unsafe{
+ if s==null||(*s).stage!=1||(*s).retired!=0||object!=token(s)||owner!=(*s).owner{return error.abi.Stale;}
+}return;}
+pub unsafe fn signal(s:*State,out:*abi.Irq)!u64{unsafe{
+ if s==null||out==null||(*s).stage!=1||(*s).retired!=0{return error.abi.Stale;}
+ if (*s).sequence==0xffff_ffff_ffff_ffff{return error.abi.Capacity;}
+ (*s).sequence+=1;(*s).pending=1;(*s).delivered+=1;
+ *out=abi.Irq{version:1,token:token(s),irq:0x100,gsi:0xffff_ffff_ffff_ffff,vector:VECTOR,
+  generation:(*s).incarnation,sequence:(*s).sequence,flags:6};return (*s).owner;
+}}
+pub unsafe fn poll(s:*const State,object:u64,owner:u64,after:u64,out:*abi.Irq)!void{unsafe{
+ try require(s,object,owner);if out==null||after>(*s).sequence{return error.abi.Stale;}
+ if (*s).pending==0||after==(*s).sequence{return error.abi.WouldBlock;}
+ *out=abi.Irq{version:1,token:object,irq:0x100,gsi:0xffff_ffff_ffff_ffff,vector:VECTOR,
+  generation:(*s).incarnation,sequence:(*s).sequence,flags:6};
+}return;}
+pub unsafe fn acknowledge(s:*State,object:u64,owner:u64,sequence:u64)!void{unsafe{
+ try require(s,object,owner);
+ if sequence==0||sequence!=(*s).sequence||(*s).pending!=1{return error.abi.Stale;}(*s).pending=0;
+}return;}
+pub unsafe fn close(s:*State,o:*const Ops,object:u64,owner:u64)!void{unsafe{
+ try require(s,object,owner);(*s).stage=3;
+ try disable(s,o,false);(*s).stage=2;(*s).pending=0;
+}return;}
+pub unsafe fn retire(s:*State,o:*const Ops,owner:u64)!void{unsafe{
+ if s==null||(*s).owner!=owner||(*s).stage==0{return;}
+ (*s).retired=1;(*s).stage=3;try disable(s,o,true);(*s).pending=0;
+}return;}

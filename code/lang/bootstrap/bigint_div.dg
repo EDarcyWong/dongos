@@ -1,0 +1,111 @@
+// Arbitrary-precision signed division and remainder over bootstrap.bigint
+// values. DIV truncates toward zero; REM satisfies a=q*b+r, |r|<|b|, and a
+// nonzero remainder takes the dividend's sign. A zero divisor returns DIVZERO
+// before any division instruction. Storage rules match bootstrap.bigint:
+// INVALID changes nothing; WORKSPACE/CAPACITY may change work only.
+module bootstrap.bigint_div;
+import bootstrap.bigint as big;
+pub const DIV:u64=1;
+pub const REM:u64=2;
+pub const DIVZERO:u64=5;
+const MAX:u64=0xffff_ffff_ffff_ffff;
+const BASE:u64=0x1_0000_0000;
+fn span(p:u64,n:u64)bool{return n==0||(p!=0&&n<=MAX-p);}
+fn overlap(a:u64,n:u64,b:u64,m:u64)bool{return n!=0&&m!=0&&a<b+m&&b<a+n;}
+unsafe fn valid(a:[]const u32,b:[]const u32,out:[]u32,work:[]u32,result:*big.Result)bool{unsafe{
+ if result==null||a.len>MAX/4||b.len>MAX/4||out.len>MAX/4||work.len>MAX/4{return false;}
+ let ap=a.ptr as u64;let bp=b.ptr as u64;let op=out.ptr as u64;let wp=work.ptr as u64;let rp=result as u64;
+ let an=a.len*4;let bn=b.len*4;let on=out.len*4;let wn=work.len*4;let rn=sizeof(big.Result);
+ if !span(ap,an)||!span(bp,bn)||!span(op,on)||!span(wp,wn)||!span(rp,rn){return false;}
+ if (an!=0&&(ap&3)!=0)||(bn!=0&&(bp&3)!=0)||(on!=0&&(op&3)!=0)||(wn!=0&&(wp&3)!=0)||(rp&7)!=0{return false;}
+ if overlap(ap,an,op,on)||overlap(bp,bn,op,on)||overlap(ap,an,wp,wn)||overlap(bp,bn,wp,wn)
+  ||overlap(ap,an,rp,rn)||overlap(bp,bn,rp,rn)
+  ||overlap(op,on,wp,wn)||overlap(op,on,rp,rn)||overlap(wp,wn,rp,rn){return false;}
+ return true;
+}}
+fn canonical(negative:bool,a:[]const u32)bool{
+ if a.len==0{return !negative;}return a[a.len-1]!=0;
+}
+fn magnitude(a:[]const u32,b:[]const u32)i64{
+ if a.len<b.len{return -1;}if a.len>b.len{return 1;}var i=a.len;
+ while i!=0{i-=1;if a[i]<b[i]{return -1;}if a[i]>b[i]{return 1;}}return 0;
+}
+fn trimmed(a:[]const u32,n:usize)usize{var used=n;while used!=0&&a[used-1]==0{used-=1;}return used;}
+unsafe fn publish(negative:bool,used:usize,out:[]u32,work:[]u32,result:*big.Result)u64{unsafe{
+ if used>out.len{return big.CAPACITY;}var i:usize=0;while i<used{out[i]=work[i];i+=1;}
+ *result=big.Result{negative:negative&&used!=0,used:used};return big.OK;
+}}
+// Exact scratch limbs for canonical inputs with b!=0; see bigint_div.md.
+fn required(operation:u64,m:usize,n:usize,relation:i64)usize{
+ if m==0{return 0;}
+ if relation<0{if operation==REM{return m;}return 0;}
+ if relation==0{if operation==DIV{return 1;}return 0;}
+ if n==1{return m;}return 2*m+2;
+}
+// |a|>|b|, b.len==1: quotient in work[0..m), returns the remainder limb.
+fn short_divide(a:[]const u32,d:u64,work:[]u32)u64{
+ var r:u64=0;var i=a.len;
+ while i!=0{i-=1;let value=(r<<32)|(a[i]as u64);work[i]=(value/d)as u32;r=value%d;}
+ return r;
+}
+// Knuth TAOCP 4.3.1 Algorithm D, |a|>|b|, n=b.len>=2, m=a.len.
+// work[0..m+1) normalized dividend/remainder, work[m+1..m+1+n) normalized
+// divisor, work[m+1+n..2m+2) quotient. Returns the quotient offset.
+fn long_divide(a:[]const u32,b:[]const u32,work:[]u32)usize{
+ let m=a.len;let n=b.len;let v=m+1;let q=m+1+n;
+ var s:usize=0;var top=b[n-1];while (top&0x8000_0000)==0{top<<=1;s+=1;}
+ var carry:u64=0;var i:usize=0;
+ while i<n{let t=((b[i]as u64)<<s)|carry;work[v+i]=t as u32;carry=t>>32;i+=1;}
+ carry=0;i=0;
+ while i<m{let t=((a[i]as u64)<<s)|carry;work[i]=t as u32;carry=t>>32;i+=1;}
+ work[m]=carry as u32;
+ let d1=work[v+n-1]as u64;let d2=work[v+n-2]as u64;var j=m-n+1;
+ while j!=0{j-=1;
+  let top2=((work[j+n]as u64)<<32)|(work[j+n-1]as u64);
+  var qhat=top2/d1;var rhat=top2%d1;
+  while qhat>=BASE||qhat*d2>((rhat<<32)|(work[j+n-2]as u64)){
+   qhat-=1;rhat+=d1;if rhat>=BASE{break;}
+  }
+  var borrow:u64=0;i=0;
+  while i<n{let p=qhat*(work[v+i]as u64)+borrow;let low=p&0xffff_ffff;let x=work[j+i]as u64;
+   work[j+i]=wrapping_sub(x,low)as u32;borrow=p>>32;if x<low{borrow+=1;}i+=1;
+  }
+  let x=work[j+n]as u64;work[j+n]=wrapping_sub(x,borrow)as u32;
+  if x<borrow{
+   qhat-=1;var c:u64=0;i=0;
+   while i<n{let t=(work[j+i]as u64)+(work[v+i]as u64)+c;work[j+i]=t as u32;c=t>>32;i+=1;}
+   work[j+n]=wrapping_add(work[j+n]as u64,c)as u32;
+  }
+  work[q+j]=qhat as u32;
+ }
+ i=0;while i<n{let t=(((work[i+1]as u64)<<32)|(work[i]as u64))>>s;work[i]=t as u32;i+=1;}
+ return q;
+}
+pub unsafe fn calculate(operation:u64,negative_a:bool,a:[]const u32,
+ negative_b:bool,b:[]const u32,out:[]u32,work:[]u32,result:*big.Result)u64{unsafe{
+ if operation<DIV||operation>REM||!valid(a,b,out,work,result){return big.INVALID;}
+ if !canonical(negative_a,a)||!canonical(negative_b,b){return big.INVALID;}
+ if b.len==0{return DIVZERO;}
+ let relation=magnitude(a,b);
+ if work.len<required(operation,a.len,b.len,relation){return big.WORKSPACE;}
+ if a.len==0{return publish(false,0,out,work,result);}
+ if relation<0{
+  if operation==DIV{return publish(false,0,out,work,result);}
+  var i:usize=0;while i<a.len{work[i]=a[i];i+=1;}return publish(negative_a,a.len,out,work,result);
+ }
+ if relation==0{
+  if operation==REM{return publish(false,0,out,work,result);}
+  work[0]=1;return publish(negative_a!=negative_b,1,out,work,result);
+ }
+ let m=a.len;
+ if b.len==1{
+  let r=short_divide(a,b[0]as u64,work);
+  if operation==DIV{return publish(negative_a!=negative_b,trimmed(work,m),out,work,result);}
+  if r==0{return publish(false,0,out,work,result);}
+  work[0]=r as u32;return publish(negative_a,1,out,work,result);
+ }
+ let q=long_divide(a,b,work);
+ if operation==REM{return publish(negative_a,trimmed(work,b.len),out,work,result);}
+ let count=m-b.len+1;var i:usize=0;while i<count{work[i]=work[q+i];i+=1;}
+ return publish(negative_a!=negative_b,trimmed(work,count),out,work,result);
+}}

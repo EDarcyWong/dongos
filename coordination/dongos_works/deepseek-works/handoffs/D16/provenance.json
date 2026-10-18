@@ -1,0 +1,33 @@
+{
+  "from_task": "claude:C21",
+  "to_task": "deepseek:D16",
+  "candidate": "f19b013f9168407b9117bcfecb02d508",
+  "fingerprint": {
+    "claude-works/src/bootstrap/data_pool_layout.dg": "d39905e8e794e1e883476147622cb8c8be5a3b50500ee0a0fd972fcfafa11085",
+    "claude-works/src/bootstrap/data_pool_layout.md": "316bcc6c6abdd20c30113b8ca775620f057674a3d92dde19ab4208e988091efc",
+    "claude-works/tests/test_data_pool_layout.py": "6377406f01451a6858fbdbbd0f8f4aea0a57ccdccfe34b5298196af123c386b9"
+  },
+  "copies": [
+    {
+      "source": "claude-works/src/bootstrap/data_pool_layout.dg",
+      "source_sha256": "d39905e8e794e1e883476147622cb8c8be5a3b50500ee0a0fd972fcfafa11085",
+      "target": "deepseek-works/src/bootstrap/data_pool_layout.dg",
+      "target_sha256": "d39905e8e794e1e883476147622cb8c8be5a3b50500ee0a0fd972fcfafa11085"
+    },
+    {
+      "source": "claude-works/src/bootstrap/data_pool_layout.md",
+      "source_sha256": "316bcc6c6abdd20c30113b8ca775620f057674a3d92dde19ab4208e988091efc",
+      "target": "deepseek-works/src/bootstrap/data_pool_layout.md",
+      "target_sha256": "316bcc6c6abdd20c30113b8ca775620f057674a3d92dde19ab4208e988091efc"
+    },
+    {
+      "source": "claude-works/tests/test_data_pool_layout.py",
+      "source_sha256": "6377406f01451a6858fbdbbd0f8f4aea0a57ccdccfe34b5298196af123c386b9",
+      "target": "deepseek-works/tests/test_data_pool_layout.py",
+      "target_sha256": "a2a9f63e9226a68deea28885708d72bfabe949594eac5ab9ddb15030507cd97c"
+    }
+  ],
+  "prior_verification": null,
+  "repairs": "原C21执行中因Claude额度429中断，已有源码、说明和语法完整的测试，缺正式交付，尚未验收。三个文件是未完成的接续起点，不把它们当正确实物；依照下方完整契约核对实现、运行定向测试和真实坏源码控制、修复实质问题后写D16交付。原C21未运行正式复验，不能虚构已通过。无需从零重写，不改其它任务/编译器/活动内核。",
+  "transfer_is_not_delivery": true
+}

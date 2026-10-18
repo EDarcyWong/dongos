@@ -1,0 +1,245 @@
+// Copy firmware topology before retiring P1's broad physical aliases. The
+// optional immediately-following Reader window is consumed before retirement;
+// no firmware pointer, raw map borrow or callback survives that early phase.
+module boot.acpi_startup;
+
+import boot.abi as abi;
+import firmware.acpi as acpi;
+
+pub error InvalidBootInfo = 0x0302_0001;
+pub error InvalidMap = 0x0302_0002;
+pub error NotReady = 0x0302_0003;
+pub error Busy = 0x0302_0004;
+pub error AlreadyPrepared = 0x0302_0005;
+
+// Gas_info stores space | width<<8 | offset<<16 | access_size<<24. Its
+// corresponding address is separate, retaining all five original GAS values.
+pub struct Report {
+    pub rsdp: u64, pub xsdt: u64, pub madt: u64, pub fadt: u64, pub hpet: u64, pub mcfg: u64,
+    pub table_count: u64, pub cpu_count: u64, pub ioapic_count: u64,
+    pub iso_count: u64, pub nmi_count: u64, pub mcfg_count: u64,
+    pub lapic_address: u64, pub madt_flags: u64, pub fadt_flags: u64, pub boot_arch: u64,
+    pub pm_timer_block: u64, pub pm_timer_length: u64, pub pm_timer_32bit: u64,
+    pub hpet_gas_info: u64, pub hpet_address: u64,
+    pub pm_timer_gas_info: u64, pub pm_timer_address: u64, pub steps: u64,
+}
+
+const LIMIT: u64 = 0x1_0000_0000;
+const HHDM: u64 = 0xffff_8000_0000_0000;
+const MAX_U64: u64 = 0xffff_ffff_ffff_ffff;
+const RUNTIME: u64 = 0x8000_0000_0000_0000;
+var INVENTORY: acpi.Inventory = acpi.EMPTY_INVENTORY;
+// A second BSS object bounds the cumulative early-call stack. BUSY prevents
+// callbacks from observing this transaction scratch before publication.
+var CANDIDATE: acpi.Inventory = acpi.EMPTY_INVENTORY;
+var READY: bool = false;
+var BUSY: bool = false;
+// One synchronous optional follow-up borrow, opened only by the real prepare
+// path and consumed before entering the callback. prepare_with/native fixtures
+// never obtain a live HHDM Reader and never import hardware power execution.
+var READER_OPEN: bool = false;
+var PREPARED_INFO: u64 = 0;
+var PREPARED_MAP: u64 = 0;
+var PREPARED_BYTES: usize = 0;
+var PREPARED_STRIDE: usize = 0;
+pub type PreparedReader = unsafe fn(reader: acpi.Reader, context: u64, inventory: *const acpi.Inventory) void;
+
+struct ReaderContext { raw: []const u8, stride: usize }
+
+fn u32_at(raw: *const u8, offset: usize) u32 {
+    unsafe { return read_unaligned((raw + offset) as *const u32); }
+}
+fn u64_at(raw: *const u8, offset: usize) u64 {
+    unsafe { return read_unaligned((raw + offset) as *const u64); }
+}
+fn low_range(pa: u64, bytes: usize) bool {
+    return pa != 0 && pa < LIMIT && bytes != 0 && (bytes as u64) <= LIMIT - pa;
+}
+
+// Descriptor order and opaque extension bytes have no semantic meaning.
+// Reject malformed descriptors and overlap anywhere in the original map.
+unsafe fn valid_map(raw: []const u8, stride: usize) bool {
+    unsafe {
+        if raw.ptr == null || raw.len == 0 || raw.len > 65536 || stride < 40
+            || (stride & 7) != 0 || raw.len % stride != 0
+            || (raw.ptr as u64) > MAX_U64 - (raw.len as u64) { return false; }
+        var a: usize = 0;
+        while a < raw.len {
+            let start = u64_at(raw.ptr,a + 8);
+            let pages = u64_at(raw.ptr,a + 24);
+            if (start & 4095) != 0 || pages == 0 || pages > (MAX_U64 - start) / 4096 { return false; }
+            let end = start + pages * 4096;
+            var b: usize = 0;
+            while b < a {
+                let other = u64_at(raw.ptr,b + 8);
+                let other_pages = u64_at(raw.ptr,b + 24);
+                if start < other + other_pages * 4096 && other < end { return false; }
+                b += stride;
+            }
+            a += stride;
+        }
+    }
+    return true;
+}
+
+unsafe fn covered(raw: []const u8, stride: usize, pa: u64, bytes: usize) bool {
+    unsafe {
+        if !low_range(pa,bytes) { return false; }
+        let end = pa + bytes as u64;
+        var cursor = pa;
+        while cursor < end {
+            var next = cursor;
+            var offset: usize = 0;
+            while offset < raw.len {
+                let start = u64_at(raw.ptr,offset + 8);
+                let stop = start + u64_at(raw.ptr,offset + 24) * 4096;
+                if start <= cursor && cursor < stop {
+                    let kind = u32_at(raw.ptr,offset);
+                    if (kind != 9 && kind != 10) || (u64_at(raw.ptr,offset + 32) & RUNTIME) != 0 { return false; }
+                    next = stop;
+                }
+                offset += stride;
+            }
+            if next == cursor { return false; }
+            if next >= end { return true; }
+            cursor = next;
+        }
+    }
+    return false;
+}
+
+// raw must be readable for raw.len bytes. No input byte is ever modified and
+// this function never dereferences the queried physical address. Adjacent ACPI
+// Reclaim/NVS descriptors may jointly cover the requested complete byte span.
+pub unsafe fn readable(raw: []const u8, stride: usize, pa: u64, bytes: usize) bool {
+    unsafe {
+        if !valid_map(raw,stride) { return false; }
+        return covered(raw,stride,pa,bytes);
+    }
+}
+
+// Only prepare owns this stack context, after validating its entire raw map.
+// The stable old P1 HHDM covers every accepted address below 4 GiB.
+unsafe fn uefi_reader(context: u64, pa: u64, bytes: usize) *const u8 {
+    unsafe {
+        let source = context as *const ReaderContext;
+        if !covered((*source).raw,(*source).stride,pa,bytes) { return null; }
+        return (HHDM + pa) as *const u8;
+    }
+}
+
+// Host/native users may supply an equivalent complete-range Reader. Its
+// backing and callback context must remain stable only for this call, and
+// cannot overlap parser/output storage. The same publish path serves prepare.
+// Successful preparation is one-shot; errors preserve the published inventory.
+pub unsafe fn prepare_with(reader: acpi.Reader, context: u64, rsdp: u64) !void {
+    unsafe {
+        if BUSY { return error.Busy; }
+        if READY { return error.AlreadyPrepared; }
+        BUSY = true;
+        CANDIDATE = acpi.EMPTY_INVENTORY;
+        let result = acpi.discover(reader,context,rsdp,&CANDIDATE);
+        match result {
+            ok => {},
+            err(code) => { BUSY = false; return result; },
+        }
+        INVENTORY = CANDIDATE;
+        compiler_fence();
+        READY = true;
+        BUSY = false;
+    }
+    return;
+}
+
+// Called after memory_startup accepted the original BootInfo/raw map, while
+// P1's low physical HHDM still exists. Unsafe caller supplies readable BootInfo
+// and immutable LoaderData map backing; this routine never writes CPU controls.
+pub unsafe fn prepare(info: *const abi.BootInfo) !void {
+    unsafe {
+        if BUSY { return error.Busy; }
+        if READY { return error.AlreadyPrepared; }
+        if info == null || ((info as u64) & 7) != 0 || (info as u64) > MAX_U64 - 160 { return error.InvalidBootInfo; }
+        if (*info).magic != 0x544f_4f42_474e_4f44 || (*info).version != 1 || (*info).size != 160
+            || ((*info).flags & 1) == 0 || (*info).descriptor_version != 1
+            || !low_range((*info).memory_map as u64,(*info).memory_map_size)
+            || (*info).memory_map_size > 65536 || !low_range((*info).rsdp as u64,36) { return error.InvalidBootInfo; }
+        let raw = slice_from_raw_parts((HHDM + (*info).memory_map as u64) as *const u8,(*info).memory_map_size);
+        if !valid_map(raw,(*info).descriptor_size) { return error.InvalidMap; }
+        var context = ReaderContext { raw: raw, stride: (*info).descriptor_size };
+        try prepare_with(uefi_reader,(&context) as u64,(*info).rsdp as u64);
+        PREPARED_INFO = info as u64;
+        PREPARED_MAP = (*info).memory_map as u64;
+        PREPARED_BYTES = (*info).memory_map_size;
+        PREPARED_STRIDE = (*info).descriptor_size;
+        READER_OPEN = true;
+    }
+    return;
+}
+
+// Unsafe early-boot lifetime: call synchronously immediately after prepare and
+// before retiring the old HHDM. The callback may not retain Reader/context or
+// borrowed firmware bytes; it may publish owned scalar copies only. The exact
+// BootInfo/map identity is revalidated, and the window is consumed on any call.
+// BUSY keeps callback reentry/reporting from seeing transaction internals.
+pub unsafe fn with_prepared_reader(info: *const abi.BootInfo, callback: PreparedReader) !void {
+    unsafe {
+        if BUSY { return error.Busy; }
+        if !READY || !READER_OPEN { return error.NotReady; }
+        READER_OPEN = false;
+        let saved_info = PREPARED_INFO;
+        let saved_map = PREPARED_MAP;
+        let saved_bytes = PREPARED_BYTES;
+        let saved_stride = PREPARED_STRIDE;
+        PREPARED_INFO = 0; PREPARED_MAP = 0; PREPARED_BYTES = 0; PREPARED_STRIDE = 0;
+        if info == null || info as u64 != saved_info || ((info as u64) & 7) != 0
+            || (*info).magic != 0x544f_4f42_474e_4f44 || (*info).version != 1 || (*info).size != 160
+            || ((*info).flags & 1) == 0 || (*info).descriptor_version != 1
+            || (*info).memory_map as u64 != saved_map || (*info).memory_map_size != saved_bytes
+            || (*info).descriptor_size != saved_stride || (*info).rsdp as u64 != INVENTORY.rsdp
+            || !low_range(saved_map,saved_bytes) || saved_bytes > 65536 { return error.InvalidBootInfo; }
+        let raw = slice_from_raw_parts((HHDM + saved_map) as *const u8,saved_bytes);
+        if !valid_map(raw,saved_stride) { return error.InvalidMap; }
+        var context = ReaderContext { raw: raw, stride: saved_stride };
+        BUSY = true;
+        callback(uefi_reader,(&context) as u64,&INVENTORY);
+        BUSY = false;
+    }
+    return;
+}
+
+// After prepare this points only to persistent kernel BSS values; no firmware
+// table address is dereferenced when the private CR3 is active.
+pub fn inventory_pointer() *const acpi.Inventory {
+    unsafe {
+        if !READY || BUSY { return null; }
+        return &INVENTORY;
+    }
+}
+
+fn gas_info(value: *const acpi.Gas) u64 {
+    unsafe {
+        return (*value).address_space | ((*value).bit_width << 8) | ((*value).bit_offset << 16) | ((*value).access_size << 24);
+    }
+}
+
+// Unsafe output is aligned, writable live storage disjoint from the inventory.
+// NotReady/Busy errors leave every output byte unchanged.
+pub unsafe fn report(out: *Report) !void {
+    unsafe {
+        if BUSY { return error.Busy; }
+        if !READY { return error.NotReady; }
+        *out = Report {
+            rsdp: INVENTORY.rsdp, xsdt: INVENTORY.xsdt, madt: INVENTORY.madt, fadt: INVENTORY.fadt,
+            hpet: INVENTORY.hpet, mcfg: INVENTORY.mcfg, table_count: INVENTORY.table_count,
+            cpu_count: INVENTORY.cpu_count, ioapic_count: INVENTORY.ioapic_count,
+            iso_count: INVENTORY.iso_count, nmi_count: INVENTORY.nmi_count, mcfg_count: INVENTORY.mcfg_count,
+            lapic_address: INVENTORY.lapic_address, madt_flags: INVENTORY.madt_flags,
+            fadt_flags: INVENTORY.fadt_flags, boot_arch: INVENTORY.boot_arch,
+            pm_timer_block: INVENTORY.pm_timer_block, pm_timer_length: INVENTORY.pm_timer_length,
+            pm_timer_32bit: INVENTORY.pm_timer_32bit, hpet_gas_info: gas_info(&INVENTORY.hpet_gas),
+            hpet_address: INVENTORY.hpet_gas.address, pm_timer_gas_info: gas_info(&INVENTORY.pm_timer_gas),
+            pm_timer_address: INVENTORY.pm_timer_gas.address, steps: 7,
+        };
+    }
+    return;
+}

@@ -1,0 +1,103 @@
+// Synchronous, per-process file client. The kernel chooses the server's channel
+// from the accepted caller; channel here must be that caller's Boot channel.
+module lib.files;
+import lib.sys as sys;
+import fs.protocol as p;
+import fs.handles as h;
+pub const STAT:u64=h.STAT;
+pub const READ:u64=h.READ;
+pub const WRITE:u64=h.WRITE;
+pub const LIST:u64=h.LIST;
+pub const CREATE:u64=h.CREATE;
+pub const TRUNCATE:u64=h.TRUNCATE;
+pub const REMOVE:u64=h.REMOVE;
+pub const DUP:u64=h.DUP;
+pub const OPEN:u64=h.OPEN;
+pub const MKDIR:u64=h.MKDIR;
+pub const ALL:u64=h.ALL;
+pub const BAD:u64=0x0508_0003;
+pub struct Session {pub endpoint:u64,pub channel:u64,pub root:u64,pub root_rights:u64,pub request:sys.Message,pub response:sys.Message}
+pub const EMPTY:Session=Session{endpoint:0,channel:0,root:0,root_rights:0,request:sys.EMPTY_MESSAGE,response:sys.EMPTY_MESSAGE};
+// Calls are serialized by the owning process. Path/body inputs must remain
+// valid until copied; response bytes remain valid until that process's next call.
+pub unsafe fn execute(s:*Session,op:u64,token:u64,offset:u64,count:u64,rights:u64,
+    path:[]const u8,body:[]const u8)u64 {unsafe {
+    if (*s).endpoint==0||(*s).channel==0||((*s).channel&4095)!=0
+        ||(*s).channel>0xffff_ffff_ffff_ffff-p.CHANNEL_BYTES
+        ||path.len>4096||body.len>61440||count>61440 {return BAD;}
+    (*s).response=sys.EMPTY_MESSAGE;(*s).request=sys.EMPTY_MESSAGE;
+    var i:usize=0;while i<path.len {*(((*s).channel as *u8)+i)=path[i];i+=1;}
+    i=0;while i<body.len {*((((*s).channel+4096) as *u8)+i)=body[i];i+=1;}
+    (*s).request.words[0]=op;(*s).request.words[1]=token;(*s).request.words[2]=offset;
+    (*s).request.words[3]=count;(*s).request.words[4]=rights;(*s).request.words[5]=path.len as u64;
+    (*s).request.words[6]=p.HANDLE_VERSION;
+    // 04020003 is the kernel's explicit not-accepted IPC result. Retrying
+    // this transport refusal cannot repeat any server-side mutation or FLUSH.
+    var retries:u64=0;var status:u64=0;loop {
+        (*s).response=sys.EMPTY_MESSAGE;status=sys.call((*s).endpoint,&(*s).request,&(*s).response);
+        if status!=0x0402_0003 {break;}if retries==256 {return status;}
+        let yielded=sys.yield_now();if yielded!=0 {return yielded;}retries+=1;
+    }
+    if status!=0 {return status;}if (*s).response.words[0]!=0 {return (*s).response.words[0];}
+    if (*s).response.words[5]!=p.HANDLE_VERSION {return BAD;}
+    return 0;
+}}
+unsafe fn token_result(s:*Session,rights:u64,out:*u64)u64 {unsafe {
+    let token=(*s).response.words[1];
+    if token>>32==0||(token&255)==0||(token&255)>32||((token>>8)&0xff_ffff)==0||(*s).response.words[2]!=rights {return BAD;}
+    *out=token;return 0;
+}}
+pub unsafe fn root(s:*Session,rights:u64,out:*u64)u64 {unsafe {
+    let status=execute(s,p.H_ROOT,0,0,0,rights,"","");if status!=0 {return status;}return token_result(s,rights,out);
+}}
+pub unsafe fn init(s:*Session,endpoint:u64,channel:u64,rights:u64)u64 {unsafe {
+    *s=EMPTY;(*s).endpoint=endpoint;(*s).channel=channel;(*s).root_rights=rights;return root(s,rights,&(*s).root);
+}}
+// Only a rejected parent-root authorization can be retried. These InvalidHandle
+// replies precede filesystem I/O. Data operations and peer-loss failures are
+// never retried: a failed write may already have changed the disk.
+unsafe fn parent_execute(s:*Session,op:u64,parent:u64,rights:u64,path:[]const u8)u64 {unsafe {
+    let status=execute(s,op,parent,0,0,rights,path,"");
+    if status!=0x050c_0002||parent!=(*s).root||(*s).root_rights==0 {return status;}
+    var replacement:u64=0;let renewed=root(s,(*s).root_rights,&replacement);
+    if renewed!=0 {return renewed;}(*s).root=replacement;
+    return execute(s,op,replacement,0,0,rights,path,"");
+}}
+pub unsafe fn open(s:*Session,parent:u64,path:[]const u8,rights:u64,out:*u64)u64 {unsafe {
+    let status=parent_execute(s,p.H_OPEN,parent,rights,path);if status!=0 {return status;}return token_result(s,rights,out);
+}}
+pub unsafe fn duplicate(s:*Session,token:u64,rights:u64,out:*u64)u64 {unsafe {
+    let status=execute(s,p.H_DUP,token,0,0,rights,"","");if status!=0 {return status;}return token_result(s,rights,out);
+}}
+pub unsafe fn close(s:*Session,token:u64)u64 {unsafe {return execute(s,p.H_CLOSE,token,0,0,0,"","");}}
+pub unsafe fn stat(s:*Session,token:u64)u64 {unsafe {return execute(s,p.H_STAT,token,0,0,0,"","");}}
+pub unsafe fn list(s:*Session,token:u64,index:u64,generation:u64)u64 {unsafe {return execute(s,p.H_LIST,token,index,0,generation,"","");}}
+pub unsafe fn read(s:*Session,token:u64,offset:u64,count:u64)u64 {unsafe {return execute(s,p.H_READ,token,offset,count,0,"","");}}
+pub unsafe fn write(s:*Session,token:u64,offset:u64,body:[]const u8)u64 {unsafe {return execute(s,p.H_WRITE,token,offset,body.len as u64,0,"",body);}}
+pub unsafe fn append(s:*Session,token:u64,body:[]const u8)u64 {unsafe {return execute(s,p.H_APPEND,token,0,body.len as u64,0,"",body);}}
+pub unsafe fn truncate(s:*Session,token:u64,size:u64)u64 {unsafe {return execute(s,p.H_TRUNCATE,token,size,0,0,"","");}}
+pub unsafe fn remove(s:*Session,token:u64)u64 {unsafe {return execute(s,p.H_REMOVE,token,0,0,0,"","");}}
+pub unsafe fn create(s:*Session,parent:u64,path:[]const u8)u64 {unsafe {return parent_execute(s,p.H_CREATE,parent,0,path);}}
+pub unsafe fn mkdir(s:*Session,parent:u64,path:[]const u8)u64 {unsafe {return parent_execute(s,p.H_MKDIR,parent,0,path);}}
+// Flush this owner-bound writable file grant once; never retry I/O failures.
+pub unsafe fn sync(s:*Session,token:u64)u64 {unsafe {return execute(s,p.H_SYNC,token,0,0,0,"","");}}
+
+// Fixed kernel-approved namespace; no caller path or rights are requested.
+pub struct Scope {pub token:u64,pub rights:u64,pub kind:u64}
+pub const EMPTY_SCOPE:Scope=Scope{token:0,rights:0,kind:0};
+pub unsafe fn scope(s:*Session,selector:u64,out:*Scope)u64 {unsafe {
+    if selector==0||selector>3||out==null {return BAD;}
+    let status=execute(s,p.H_SCOPE,0,selector,0,0,"","");if status!=0 {return status;}
+    let rights=(*s).response.words[2];let kind=(*s).response.words[3];
+    if (*s).response.words[4]!=0||(*s).response.words[7]!=0 {return BAD;}
+    if selector==1 {if kind!=h.DIRECTORY||(rights!=447&&rights!=h.ALL) {return BAD;}}
+    else {if kind!=h.FILE||rights!=39 {return BAD;}}
+    var token:u64=0;let checked=token_result(s,rights,&token);if checked!=0 {return checked;}
+    *out=Scope{token:token,rights:rights,kind:kind};return 0;
+}}
+
+// Fixed Documents namespace durability. Reacquire scope before calling after
+// mutation; never retry the flush or any data operation after I/O failure.
+pub unsafe fn scope_sync(s:*Session,token:u64)u64 {unsafe {
+    return execute(s,p.H_SCOPE_SYNC,token,0,0,0,"","");
+}}

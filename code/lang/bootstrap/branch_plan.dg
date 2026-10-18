@@ -1,0 +1,40 @@
+// Deterministic conditional-branch and fallthrough-edge plan.
+// Validates out pointer/layout and enum/target rules before writing.
+// Unused Plan fields are zeroed; INVALID leaves the full 40-byte object untouched.
+module bootstrap.branch_plan;
+pub const OK:u64=0;pub const INVALID:u64=1;
+pub const EQ:u64=0;pub const NE:u64=1;
+pub const ULT:u64=2;pub const ULE:u64=3;pub const UGT:u64=4;pub const UGE:u64=5;
+pub const SLT:u64=6;pub const SLE:u64=7;pub const SGT:u64=8;pub const SGE:u64=9;
+pub struct Plan{
+ pub has_cond:u64,pub condition:u64,pub cond_target:u64,
+ pub has_jump:u64,pub jump_target:u64
+}
+const MAX:u64=0xffff_ffff_ffff_ffff;
+const NO_FALL:u64=0xffff_ffff_ffff_ffff;
+fn span(p:u64,n:u64)bool{return n==0||(p!=0&&n<=MAX-p);}
+fn cond_ok(c:u64)bool{return c<=9;}
+fn invert(c:u64)u64{
+ if c==EQ{return NE;}if c==NE{return EQ;}
+ if c==ULT{return UGE;}if c==ULE{return UGT;}if c==UGT{return ULE;}if c==UGE{return ULT;}
+ if c==SLT{return SGE;}if c==SLE{return SGT;}if c==SGT{return SLE;}
+ return SLT;
+}
+pub unsafe fn plan(condition:u64,yes:u64,no:u64,fallthrough:u64,out:*Plan)u64{unsafe{
+ let op=out as u64;let on=sizeof(Plan);
+ if out==null||(op&7)!=0||!span(op,on){return INVALID;}
+ if !cond_ok(condition){return INVALID;}
+ if yes==MAX||no==MAX{return INVALID;}
+ var has_cond:u64=0;var cond:u64=0;var ct:u64=0;var has_jump:u64=0;var jt:u64=0;
+ if yes==no{
+  if fallthrough==MAX||yes!=fallthrough{has_jump=1;jt=yes;}
+ }else if no==fallthrough{
+  has_cond=1;cond=condition;ct=yes;
+ }else if yes==fallthrough{
+  has_cond=1;cond=invert(condition);ct=no;
+ }else{
+  has_cond=1;cond=condition;ct=yes;has_jump=1;jt=no;
+ }
+ *out=Plan{has_cond:has_cond,condition:cond,cond_target:ct,has_jump:has_jump,jump_target:jt};
+ return OK;
+}}

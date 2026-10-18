@@ -1,0 +1,11 @@
+module fat32_probe;
+import fs.fat32 as f;
+export("fp_reset") fn reset(v:*f.Volume)void{unsafe{*v=f.EMPTY_VOLUME;}}
+export("fp_mount") fn mount(v:*f.Volume,d:*const f.Device,w:*f.Scratch)u64{unsafe{match f.mount(v,d,w){ok=>{return 0;},err(e)=>{return e;},}}}
+export("fp_list") fn list(v:*f.Volume,w:*f.Scratch,index:u64,out:*f.DirEntry,present:*u64)u64{unsafe{match f.list(v,w,index,out){ok(b)=>{if b{*present=1;}else{*present=0;}return 0;},err(e)=>{return e;},}}}
+export("fp_read") fn read(v:*f.Volume,w:*f.Scratch,name:*const u8,n:usize,offset:u64,out:*u8,length:usize,got:*u64)u64{unsafe{match f.read(v,w,slice_from_raw_parts(name,n),offset,slice_from_raw_parts(out,length)){ok(count)=>{*got=count as u64;return 0;},err(e)=>{return e;},}}}
+export("fp_write") fn write(v:*f.Volume,w:*f.Scratch,name:*const u8,n:usize,offset:u64,data:*const u8,length:usize,got:*u64)u64{unsafe{match f.write(v,w,slice_from_raw_parts(name,n),offset,slice_from_raw_parts(data,length)){ok(count)=>{*got=count as u64;return 0;},err(e)=>{return e;},}}}
+export("fp_create") fn create(v:*f.Volume,w:*f.Scratch,name:*const u8,n:usize)u64{unsafe{match f.create(v,w,slice_from_raw_parts(name,n)){ok=>{return 0;},err(e)=>{return e;},}}}
+export("fp_truncate") fn truncate(v:*f.Volume,w:*f.Scratch,name:*const u8,n:usize,size:u64)u64{unsafe{match f.truncate(v,w,slice_from_raw_parts(name,n),size){ok=>{return 0;},err(e)=>{return e;},}}}
+export("fp_remove") fn remove(v:*f.Volume,w:*f.Scratch,name:*const u8,n:usize)u64{unsafe{match f.remove(v,w,slice_from_raw_parts(name,n)){ok=>{return 0;},err(e)=>{return e;},}}}
+export("fp_flush") fn flush(v:*f.Volume,w:*f.Scratch)u64{unsafe{match f.flush(v,w){ok=>{return 0;},err(e)=>{return e;},}}}

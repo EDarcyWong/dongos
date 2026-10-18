@@ -1,0 +1,7 @@
+// Errors specific to the offline, private four-level page-table builder.
+module mm.paging_errors;
+
+pub error AlreadyMapped = 0x0203_0001;
+pub error NotMapped = 0x0203_0002;
+pub error MalformedEntry = 0x0203_0003;
+pub error NxUnavailable = 0x0203_0004;

@@ -1,0 +1,125 @@
+// Explicit boot extension ownership. Capture runs under the old low4G boot
+// root; apply runs only after the P2/P3 BSP proofs have finished. Neither API
+// calls firmware. Allocation is currently monotonic and never recycles DMA.
+module boot.service_memory;
+import boot.abi as abi;
+import boot.service_resources as resources;
+import boot.memory_startup as startup;
+import boot.device_memory as devices;
+import mm.paging as paging;
+import exec.bundle as bundle;
+
+pub const BUNDLE_BASE: u64 = 0xffff_d800_0000_0000;
+pub const ARENA_BASE: u64 = 0xffff_d400_0000_0000;
+pub error InvalidState = 0x0507_0001;
+pub error OutOfMemory = 0x0507_0002;
+pub struct Block { pub physical: u64, pub virtual: u64, pub pages: usize }
+var PLAN: resources.Plan = resources.EMPTY_PLAN;
+var INVENTORY: bundle.Inventory = bundle.EMPTY_INVENTORY;
+var HANDOFF: [12]u64 = [0;12];
+var CAPTURED: bool = false;
+var APPLIED: bool = false;
+var NEXT_PAGE: usize = 0;
+
+pub unsafe fn capture(info: abi.BootInfoPtr, info_physical: u64, handoff_physical: u64) !void {
+    unsafe {
+        if CAPTURED || info == null || (*info).size != 160 || (*info).version != 1
+            || (*info).memory_map_size == 0 || (*info).memory_map_size > 65536
+            || ((*info).memory_map as u64) == 0 || ((*info).memory_map as u64) >= 0x1_0000_0000
+            || (*info).memory_map_size as u64 > 0x1_0000_0000 - ((*info).memory_map as u64) { return error.InvalidState; }
+        let raw = slice_from_raw_parts((*info).memory_map,(*info).memory_map_size);
+        if !resources.readable_handoff(raw,(*info).descriptor_size,handoff_physical) { return error.InvalidState; }
+        // Numeric ownership/range validation precedes the first physical read.
+        let input = handoff_physical as *const u64;
+        var i: usize = 0;
+        while i < 12 { HANDOFF[i] = *(input + i); i += 1; }
+        let forbidden: [7]resources.Span = [
+            resources.Span { physical: info_physical, length: 160 },
+            resources.Span { physical: (*info).memory_map as u64, length: (*info).memory_map_size as u64 },
+            resources.Span { physical: (*info).kernel_physical as u64, length: 0x20_0000 },
+            resources.Span { physical: (*info).stack_physical as u64, length: (*info).stack_size as u64 },
+            resources.Span { physical: abi.bootstrap_root(info), length: 8 * 4096 },
+            resources.Span { physical: (*info).framebuffer_base as u64, length: (*info).framebuffer_size as u64 },
+            resources.Span { physical: (*info).rsdp as u64, length: 4096 }];
+        try resources.validate((&HANDOFF[0]) as *const resources.Handoff,handoff_physical,raw,
+            (*info).descriptor_size,forbidden[..],&PLAN);
+        CAPTURED = true;
+    }
+    return;
+}
+
+pub unsafe fn apply() !void {
+    unsafe {
+        if !CAPTURED || APPLIED || startup.space_pointer() == null { return error.InvalidState; }
+        var offset: u64 = 0;
+        while offset < PLAN.bundle.length {
+            try paging.map_live(startup.space_pointer(),BUNDLE_BASE + offset,PLAN.bundle.physical + offset,0);
+            devices.runtime_invalidate(BUNDLE_BASE + offset);
+            offset += 4096;
+        }
+        // No code or resource may be consumed until every manifest and payload
+        // hash is checked. The firmware helper only validates its envelope.
+        try bundle.validate(slice_from_raw_parts(BUNDLE_BASE as *const u8,PLAN.bundle.length as usize),&INVENTORY);
+        APPLIED = true;
+    }
+    return;
+}
+
+// Reserve physical RAM without a second virtual alias. The output has no
+// dereferenceable virtual address; its caller must establish its own mapping.
+pub unsafe fn reserve(pages: usize, alignment_pages: usize, out: *Block) !void {
+    unsafe {
+        if !APPLIED || out == null || pages == 0 || alignment_pages == 0 || alignment_pages > 1024
+            || (alignment_pages & (alignment_pages - 1)) != 0 { return error.InvalidState; }
+        // Align the bus address, rather than only the offset into the arena.
+        let base = PLAN.arena.physical / 4096;
+        let first = ((base + NEXT_PAGE as u64 + alignment_pages as u64 - 1) & ~(alignment_pages as u64 - 1)) - base;
+        if first >= PLAN.arena.length / 4096 || pages as u64 > PLAN.arena.length / 4096 - first { return error.OutOfMemory; }
+        let physical = PLAN.arena.physical + first * 4096;
+        // Reserve first: a partial map failure remains held, never reusable.
+        NEXT_PAGE = first as usize + pages;
+        *out = Block { physical: physical, virtual: 0, pages: pages };
+    }
+    return;
+}
+
+pub unsafe fn allocate(pages: usize, alignment_pages: usize, out: *Block) !void {
+    unsafe {
+        if out==null { return error.InvalidState; }
+        var held=Block { physical:0,virtual:0,pages:0 };
+        try reserve(pages,alignment_pages,&held);
+        let physical=held.physical;
+        let virtual=ARENA_BASE+physical-PLAN.arena.physical;
+        var index: usize = 0;
+        while index < pages {
+            let va = virtual + index as u64 * 4096;
+            try paging.map_live(startup.space_pointer(),va,physical + index as u64 * 4096,paging.WRITE);
+            devices.runtime_invalidate(va);
+            var word: usize = 0;
+            while word < 512 { *((va as *u64) + word) = 0; word += 1; }
+            index += 1;
+        }
+        *out = Block { physical: physical, virtual: virtual, pages: pages };
+    }
+    return;
+}
+
+pub unsafe fn find(name: []const u8, out: *bundle.Contents) !void {
+    unsafe {
+        if !APPLIED || out == null || name.len == 0 || name.len > 31 { return error.InvalidState; }
+        var i: usize = 0;
+        while i < INVENTORY.count as usize {
+            var j: usize = 0;
+            while j < name.len && INVENTORY.entries[i].name[j] == name[j] { j += 1; }
+            if j == name.len && INVENTORY.entries[i].name[j] == 0 {
+                return bundle.contents(slice_from_raw_parts(BUNDLE_BASE as *const u8,PLAN.bundle.length as usize),&INVENTORY,i,out);
+            }
+            i += 1;
+        }
+    }
+    return error.InvalidState;
+}
+
+pub fn plan_pointer() *const resources.Plan { unsafe { return &PLAN; } }
+pub fn inventory_pointer() *const bundle.Inventory { unsafe { return &INVENTORY; } }
+pub fn is_applied() bool { unsafe { return APPLIED; } }

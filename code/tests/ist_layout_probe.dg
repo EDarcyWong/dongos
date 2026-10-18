@@ -1,0 +1,15 @@
+module ist_layout_probe;
+
+import boot.ist_layout as ist;
+import boot.memory_resources as resources;
+
+export("ist_valid") fn valid(layout: *const resources.Layout) usize {
+    if ist.valid(layout) { return 1; }
+    return 0;
+}
+export("ist_is_guard") fn is_guard(address: u64, layout: *const resources.Layout) usize {
+    if ist.is_guard(address, layout) { return 1; }
+    return 0;
+}
+export("ist_layout_size") fn layout_size() usize { return sizeof(resources.Layout); }
+export("ist_layout_align") fn layout_align() usize { return alignof(resources.Layout); }

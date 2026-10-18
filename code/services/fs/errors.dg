@@ -1,0 +1,12 @@
+module fs.errors;
+pub error InvalidArgument = 0x0504_0001;
+pub error InvalidBpb = 0x0504_0002;
+pub error Unsupported = 0x0504_0003;
+pub error Io = 0x0504_0004;
+pub error Corrupt = 0x0504_0005;
+pub error NotFound = 0x0504_0006;
+pub error Exists = 0x0504_0007;
+pub error NoSpace = 0x0504_0008;
+pub error ReadOnly = 0x0504_0009;
+pub error NeedsCheck = 0x0504_000a;
+pub error Busy = 0x0504_000b;

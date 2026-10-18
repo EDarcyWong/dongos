@@ -1,0 +1,45 @@
+module alg.l1;
+
+error NotReady=1;
+enum Event{Idle,Tick(u8),Stop}
+struct Counter{value:u64}
+var TRACE:u64=0;
+
+unsafe fn (self:*Counter) add(amount:u64)u64 {
+    unsafe {(*self).value+=amount;return (*self).value;}
+}
+fn record(value:u64)void {TRACE=TRACE*10+value;}
+fn available(fail:bool)!i16 {if fail{return error.NotReady;}return -7;}
+fn finish(fail:bool)!u64 {
+    defer record(9);
+    let value=try available(fail);
+    record(1);
+    return (0-value) as u64;
+}
+
+pub fn probe()u64 {
+    if sizeof(Event)!=16 {return 0;}
+    TRACE=0;
+    let failed=finish(true);
+    match failed {err(code)=>{if code!=1 {return 0;}},ok(value)=>{return 0;},}
+    if TRACE!=9 {return 0;}
+    TRACE=0;
+    let completed=finish(false);
+    var result:u64=0;
+    match completed {ok(value)=>{result=value;},err(code)=>{return 0;},}
+    if TRACE!=19 {return 0;}
+    var counter=Counter{value:10};
+    let pointer=&counter;
+    unsafe {result+=pointer.add(5);}
+    const COUNT:usize=3;
+    var sum:u64=0;
+    for index in 0..COUNT {sum+=index;}
+    var values:[COUNT]u64=[2,4,6];
+    for value in values {sum+=value;}
+    loop {sum+=8;break;}
+    let missing:?u64=null;
+    let fallback=missing orelse 4;
+    let event=Event.Tick(7);
+    match event {Event.Tick(value)=>{result+=value as u64;},_=>{return 0;},}
+    return result+sum+fallback+TRACE;
+}

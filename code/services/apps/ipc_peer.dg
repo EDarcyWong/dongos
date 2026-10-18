@@ -1,0 +1,18 @@
+module apps.ipc_peer;
+import lib.sys as sys;
+pub var CANARY:u64=0;
+unsafe extern "sysv64" fn svc_user_ud2()void;
+var REQUEST:sys.Message=sys.EMPTY_MESSAGE;
+var TICKET:u64=0;
+const BAD:u64=0x0512_0001;
+export("service_main") fn main()u64 {unsafe {
+    let boot=sys.boot();if boot==null||(*boot).version!=1||CANARY!=0 {return BAD;}
+    CANARY=(*boot).reserved0;
+    let ready=sys.ready_boot(boot);if ready!=0 {return ready;}
+    var status=sys.svc_receive((*boot).endpoint,&REQUEST,&TICKET);
+    loop {
+        if status!=0 {return status;}
+        if REQUEST.words[0]==999 {svc_user_ud2();return BAD;}
+        status=sys.svc_reply_wait((*boot).endpoint,TICKET,&REQUEST,&REQUEST,&TICKET);
+    }
+}}

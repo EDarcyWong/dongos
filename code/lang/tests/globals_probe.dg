@@ -1,0 +1,57 @@
+module globals_probe;
+import globals_defs as d;
+
+export("globals_u8") fn read_u8() u8 { return d.number_u8; }
+export("globals_i8") fn read_i8() i8 { return d.number_i8; }
+export("globals_u16") fn read_u16() u16 { return d.number_u16; }
+export("globals_i16") fn read_i16() i16 { return d.number_i16; }
+export("globals_u32") fn read_u32() u32 { return d.number_u32; }
+export("globals_i32") fn read_i32() i32 { return d.number_i32; }
+export("globals_u64") fn read_u64() u64 { return d.number_u64; }
+export("globals_i64") fn read_i64() i64 { return d.number_i64; }
+export("globals_bool") fn read_bool() bool { return d.enabled; }
+export("globals_hidden") fn read_private() u64 { return d.read_hidden(); }
+
+export("globals_write_scalars") fn write_scalars() void {
+    d.number_u8 = 17; d.number_i8 = -17;
+    d.number_u16 = 2000; d.number_i16 = -2000;
+    d.number_u32 = 3000000000; d.number_i32 = -2000000000;
+    d.number_u64 = 0xfedcba9876543210; d.number_i64 = -1234567890123456;
+    d.enabled = false;
+}
+
+export("globals_packet") fn packet() *d.Natural { return &d.packet; }
+export("globals_packed") fn packed_record() *d.Packed { return &d.packed_record; }
+export("globals_nested") fn nested() *d.Nested { return &d.nested; }
+export("globals_bytes") fn bytes() *u8 { return &d.bytes[0]; }
+export("globals_zeros") fn zeros() *u8 { return &d.zeros[0]; }
+export("globals_frozen") fn frozen() *const u8 { return &d.frozen[0]; }
+export("globals_frozen_packet") fn frozen_packet() *const d.Natural { return &d.frozen_packet; }
+export("globals_count_address") fn count_address() *u32 { return d.count_address; }
+export("globals_element_address") fn element_address() *u8 { return d.element_address; }
+export("globals_frozen_address") fn frozen_address() *const u8 { return d.frozen_address; }
+export("globals_nested_address") fn nested_address() *u8 { return d.nested_address; }
+export("globals_scalar_address") fn scalar_address() *const u16 { return d.scalar_address; }
+export("globals_indirect") fn indirect() *u8 { return d.indirect; }
+
+export("globals_copy_constant") fn copy_constant() u64 {
+    var copy = d.frozen_packet;
+    copy.count = 99; copy.values[0] = -7;
+    return copy.count as u64 + (d.frozen_packet.count as u64) * 100;
+}
+
+export("globals_greeting") fn greeting() []const u8 { return d.greeting; }
+export("globals_empty") fn empty() []const u8 { return d.empty; }
+export("globals_text") fn text() []const u8 { return d.text; }
+export("globals_mutable_view") fn mutable_view() []u8 { return d.mutable_view; }
+export("globals_constant_view") fn constant_view() []const u8 { return d.constant_view; }
+export("globals_empty_view") fn empty_view() []const u8 { return d.empty_view; }
+export("globals_mutate_view") fn mutate_view() void { d.mutable_view[0] = 90; }
+export("globals_rebind_text") fn rebind_text() void { d.text = "替换\0"; }
+
+export("globals_self_node") fn self_node() *d.Node { return &d.self_node; }
+export("globals_first") fn first() *d.Node { return &d.first; }
+export("globals_second") fn second() *d.Node { return &d.second; }
+export("globals_node_table") fn node_table() *const *d.Node { return &d.node_table[0]; }
+export("globals_page") fn page() *u8 { return &d.page.bytes[0]; }
+export("globals_page_mark") fn page_mark() void { d.page.bytes[4095] = 0x5a; }

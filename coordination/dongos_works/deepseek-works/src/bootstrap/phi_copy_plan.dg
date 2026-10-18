@@ -1,0 +1,61 @@
+// Parallel copy for one CFG edge: for every phi, in phi order, the move
+// {dst <- src of the input whose pred is the chosen predecessor}. Every phi's
+// inputs are validated (including predecessors not chosen) before out is
+// written. The result is unscheduled; bootstrap.parallel_moves.schedule breaks
+// its cycles with temporary id slot_count, which never occurs in the input.
+module bootstrap.phi_copy_plan;
+import bootstrap.parallel_moves as moves;
+pub const OK:u64=0;pub const INVALID:u64=1;pub const CAPACITY:u64=2;
+pub struct Phi{pub dst:usize,pub first:usize,pub count:usize}
+pub struct Input{pub pred:usize,pub src:usize}
+const MAX:u64=0xffff_ffff_ffff_ffff;
+fn span(p:u64,n:u64)bool{return n==0||(p!=0&&n<=MAX-p);}
+fn overlap(a:u64,n:u64,b:u64,m:u64)bool{return n!=0&&m!=0&&a<b+m&&b<a+n;}
+unsafe fn valid(phis:[]const Phi,inputs:[]const Input,out:[]moves.Move,used:*usize)bool{unsafe{
+ if used==null||phis.len>MAX/sizeof(Phi)||inputs.len>MAX/sizeof(Input)||out.len>MAX/sizeof(moves.Move){return false;}
+ let pp=phis.ptr as u64;let ip=inputs.ptr as u64;let op=out.ptr as u64;let up=used as u64;
+ let pn=phis.len*sizeof(Phi);let inn=inputs.len*sizeof(Input);let on=out.len*sizeof(moves.Move);
+ if !span(pp,pn)||!span(ip,inn)||!span(op,on)||!span(up,8){return false;}
+ if (pn!=0&&(pp&7)!=0)||(inn!=0&&(ip&7)!=0)||(on!=0&&(op&7)!=0)||(up&7)!=0{return false;}
+ // phis and inputs are read-only and may overlap each other; out and used may not touch either.
+ if overlap(op,on,pp,pn)||overlap(op,on,ip,inn)||overlap(up,8,pp,pn)||overlap(up,8,ip,inn)||overlap(op,on,up,8){return false;}
+ return true;
+}}
+// Every phi: dst in range and unique, input range in bounds, each input's pred
+// and src in range, no pred repeated within the phi, and the chosen
+// predecessor present exactly once. O(phis^2 + sum of count^2).
+fn check(phis:[]const Phi,inputs:[]const Input,predecessor:usize,block_count:usize,slot_count:usize)bool{
+ if block_count==0||predecessor>=block_count||slot_count==0||slot_count==MAX{return false;}
+ let n=phis.len;var i:usize=0;
+ while i<n{
+  let p=phis[i];
+  if p.dst>=slot_count{return false;}
+  if p.count!=0&&(p.first>inputs.len||p.count>inputs.len-p.first){return false;}
+  var hits:usize=0;var j:usize=0;
+  while j<p.count{
+   let a=inputs[p.first+j];
+   if a.pred>=block_count||a.src>=slot_count{return false;}
+   if a.pred==predecessor{hits+=1;}
+   var k=j+1;while k<p.count{if inputs[p.first+k].pred==a.pred{return false;}k+=1;}
+   j+=1;
+  }
+  if hits!=1{return false;}
+  var q=i+1;while q<n{if phis[q].dst==p.dst{return false;}q+=1;}
+  i+=1;
+ }
+ return true;
+}
+pub unsafe fn plan(phis:[]const Phi,inputs:[]const Input,predecessor:usize,block_count:usize,slot_count:usize,
+ out:[]moves.Move,used:*usize)u64{unsafe{
+ if !valid(phis,inputs,out,used)||!check(phis,inputs,predecessor,block_count,slot_count){return INVALID;}
+ let n=phis.len;
+ if out.len<n{return CAPACITY;}
+ // Nothing below can fail: check() guaranteed exactly one matching input per phi.
+ var i:usize=0;
+ while i<n{
+  let p=phis[i];var j:usize=0;
+  while inputs[p.first+j].pred!=predecessor{j+=1;}
+  out[i]=moves.Move{dst:p.dst,src:inputs[p.first+j].src};i+=1;
+ }
+ *used=n;return OK;
+}}

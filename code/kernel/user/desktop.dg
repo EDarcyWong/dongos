@@ -1,0 +1,170 @@
+// Desktop setup owns all display authority. Input and composition run in
+// distinct CPL3 processes; the kernel handles neither glyphs nor PS/2 packets.
+module user.desktop;
+import user.memory as memory;
+import boot.memory_startup as startup;
+import boot.service_memory as resources;
+import exec.bundle as bundle;
+import irq.platform as platform;
+import lib.desktop as api;
+import lib.window_broker_abi as broker;
+import gfx.atlas as atlas;
+pub error Invalid=0x0730_0001;
+pub const INPUT_QUEUE:u64=0x5400_0000;
+var FRAMES:u64=0;
+var FIRST:u64=0;
+var LAST:u64=0;
+var FONT_PHYSICAL:[5]u64=[0;5];
+var FONT_BYTES:[5]u64=[0;5];
+var FONT_POINTERS:[5]*const u8=[null;5];
+var CLIENT_FONT_GENERATION:[16]u64=[0;16];
+var CLIENT_FONT_INDEX:[16]usize=[0;16];
+pub var FONT_INDEX:usize=0;
+pub var FONT_SWITCHES:u64=0;
+var DESCRIPTOR_ALIAS:*api.Display=null;
+var PREPARED:bool=false;
+var COMPOSITOR_GENERATION:u64=0;
+var INPUT_GENERATION:u64=0;
+var BUFFER_BYTES:u64=0;
+var FRAMEBUFFER_PHYSICAL:u64=0;
+var FRAMEBUFFER_BYTES:u64=0;
+unsafe fn private_display(compositor:usize)!void {unsafe {
+    try memory.map_device(compositor,0x6000_0000,FRAMEBUFFER_PHYSICAL,FRAMEBUFFER_BYTES);
+    var i:u64=0;while i<(BUFFER_BYTES+4095)/4096 {
+        let back=try memory.anonymous(compositor,0x5800_0000+i*4096);
+        let background=try memory.anonymous(compositor,0x5500_0000+i*4096);i+=1;
+    }
+    i=0;while i<2048 {let window=try memory.anonymous(compositor,0x5600_0000+i*4096);i+=1;}
+}return;}
+fn index(scale:u64)!usize {
+    if scale==256 { return 0; }if scale==320 { return 1; }if scale==384 { return 2; }if scale==448 { return 3; }if scale==512 { return 4; }return error.Invalid;
+}
+unsafe fn validated_font(selected:usize)!u64 {unsafe {
+    if selected>=5||FONT_POINTERS[selected]==null||FONT_BYTES[selected]<48||FONT_BYTES[selected]>0x80_0000
+        ||FONT_PHYSICAL[selected]==0||(FONT_PHYSICAL[selected]&4095)!=0||FONT_PHYSICAL[selected]>=0x1_0000_0000
+        ||FONT_BYTES[selected]>0x1_0000_0000-FONT_PHYSICAL[selected] {return error.Invalid;}
+    var font=atlas.Atlas {bytes:slice_from_raw_parts(null as *const u8,0),count:0,pixel_size:0,records:0,bitmap:0,bitmap_size:0,ascent:0,descent:0};
+    try atlas.open(slice_from_raw_parts(FONT_POINTERS[selected],FONT_BYTES[selected] as usize),&font);
+    if font.pixel_size!=16+selected*4||font.count==0||font.count>65536 {return error.Invalid;}
+    return font.count as u64;
+}}
+unsafe fn current_font()!u64 {unsafe {
+    if !PREPARED||memory.RESOURCE_FAILED||FONT_INDEX>=5||DESCRIPTOR_ALIAS==null||memory.generation(3)!=COMPOSITOR_GENERATION
+        ||(*DESCRIPTOR_ALIAS).version!=3||(try index((*DESCRIPTOR_ALIAS).scale_q8))!=FONT_INDEX
+        ||(*DESCRIPTOR_ALIAS).font_pixels!=(*DESCRIPTOR_ALIAS).scale_q8/16||(*DESCRIPTOR_ALIAS).font_bytes!=FONT_BYTES[FONT_INDEX]
+        ||(*DESCRIPTOR_ALIAS).font!=0x7200_0000 {return error.Invalid;}
+    return (*DESCRIPTOR_ALIAS).scale_q8;
+}}
+
+pub unsafe fn prepare(compositor:usize,input:usize)!void {
+    unsafe {
+        if PREPARED||compositor!=3||input!=4||memory.generation(compositor)==0||memory.generation(input)==0 {return error.Invalid;}
+        let view=startup.runtime_pointer();let screen=(*view).display;
+        if screen.width<800 || screen.width>1920 || screen.height<600 || screen.height>1080
+            || screen.stride<screen.width || screen.stride>2048 || screen.pixel_format>1 { return error.Invalid; }
+        let pixels=screen.stride*screen.height;let bytes=pixels*4;
+        let physical=screen.framebuffer_base-0xffff_8000_0000_0000;
+        let offset=physical&4095;let pages=(bytes+offset+4095)/4096;
+        BUFFER_BYTES=bytes;FRAMEBUFFER_PHYSICAL=physical&~4095;FRAMEBUFFER_BYTES=pages*4096;
+        try private_display(compositor);
+        var i:u64=0;
+        let queue=try memory.anonymous(input,INPUT_QUEUE);
+        try memory.share(input,compositor,INPUT_QUEUE,true);
+        var config=bundle.Contents { pointer:null,length:0 };try resources.find("desktop-config",&config);
+        if config.length!=8 { return error.Invalid; }let scale=read_unaligned(config.pointer as *const u64);
+        FONT_INDEX=try index(scale);i=0;
+        while i<5 {
+            var name:[]const u8="font16";var pixels:u64=16;
+            if i==1 { name="font20";pixels=20; }if i==2 { name="font24";pixels=24; }if i==3 { name="font28";pixels=28; }if i==4 { name="font32";pixels=32; }
+            var font=bundle.Contents { pointer:null,length:0 };try resources.find(name,&font);
+            if ((font.pointer as u64)&4095)!=0 || font.length<48 || font.length>0x80_0000
+                || read_unaligned(font.pointer as *const u64)!=0x3130_544e_4f46_4744
+                || read_unaligned((font.pointer+20) as *const u32) as u64!=pixels
+                || read_unaligned((font.pointer+28) as *const u32) as u64+read_unaligned((font.pointer+32) as *const u32) as u64!=font.length as u64 { return error.Invalid; }
+            FONT_PHYSICAL[i as usize]=(*resources.plan_pointer()).bundle.physical+(font.pointer as u64)-resources.BUNDLE_BASE;
+            FONT_BYTES[i as usize]=font.length as u64;FONT_POINTERS[i as usize]=font.pointer;
+            let glyphs=try validated_font(i as usize);i+=1;
+        }
+        try memory.resource_aperture(compositor,0x7200_0000,FONT_PHYSICAL[FONT_INDEX],FONT_BYTES[FONT_INDEX]);
+        let font_pixels=scale/16;
+        var clock=platform.EMPTY_REPORT;try platform.describe(&clock);
+        let descriptor=api.Display { version:3,width:screen.width,height:screen.height,stride:screen.stride,pixel_format:screen.pixel_format,
+            framebuffer:0x6000_0000+offset,bytes:bytes,back_buffer:0x5800_0000,font:0x7200_0000,font_bytes:FONT_BYTES[FONT_INDEX],
+            tsc_hz:clock.tsc_hz,input_queue:INPUT_QUEUE,background_cache:0x5500_0000,window_cache:0x5600_0000,scale_q8:scale,font_pixels:font_pixels };
+        let boot=try memory.anonymous(compositor,api.DESCRIPTOR);
+        try memory.copy_out(compositor,api.DESCRIPTOR,slice_from_raw_parts((&descriptor) as *const u8,sizeof(api.Display)));
+        try memory.readonly_data(compositor,api.DESCRIPTOR);
+        try memory.share(compositor,input,api.DESCRIPTOR,false);
+        DESCRIPTOR_ALIAS=(try memory.readonly_alias(compositor,api.DESCRIPTOR)) as *api.Display;
+        COMPOSITOR_GENERATION=memory.generation(compositor);INPUT_GENERATION=memory.generation(input);PREPARED=true;
+    }
+    return;
+}
+// BSP/IF=0 only, after the old compositor is retired and a new ELF/root is
+// loaded. Input remains live and retains the queue and readonly descriptor.
+// Failure leaves the new root ineligible to run; the lifecycle owner destroys
+// that incomplete candidate. Private cache pointers are never retained here.
+pub unsafe fn recreate(compositor:usize)!void {unsafe {
+    if !PREPARED||memory.RESOURCE_FAILED||compositor!=3||DESCRIPTOR_ALIAS==null||memory.generation(4)!=INPUT_GENERATION
+        ||memory.generation(3)<=COMPOSITOR_GENERATION {return error.Invalid;}
+    let processes=memory.processes();if (*(processes+3)).ready!=1||(*(processes+4)).ready!=1 {return error.Invalid;}
+    let persistent=try memory.owned_alias(4,api.DESCRIPTOR,false);
+    if persistent!=DESCRIPTOR_ALIAS as u64 {return error.Invalid;}
+    let d=*DESCRIPTOR_ALIAS;
+    if d.version!=3||d.bytes!=BUFFER_BYTES||d.width<800||d.width>1920||d.height<600||d.height>1080
+        ||d.stride<d.width||d.stride>2048||d.stride*d.height*4!=BUFFER_BYTES||d.pixel_format>1
+        ||d.framebuffer<0x6000_0000||d.framebuffer>=0x6000_1000||d.back_buffer!=0x5800_0000
+        ||d.background_cache!=0x5500_0000||d.window_cache!=0x5600_0000||d.font!=0x7200_0000
+        ||d.font_bytes!=FONT_BYTES[FONT_INDEX]||d.input_queue!=INPUT_QUEUE||d.tsc_hz==0
+        ||(try index(d.scale_q8))!=FONT_INDEX||d.font_pixels!=d.scale_q8/16 {return error.Invalid;}
+    try memory.check_range(4,INPUT_QUEUE,4096,true);
+    try private_display(3);
+    try memory.resource_aperture(3,0x7200_0000,FONT_PHYSICAL[FONT_INDEX],FONT_BYTES[FONT_INDEX]);
+    try memory.share_at(4,3,INPUT_QUEUE,INPUT_QUEUE,true);
+    try memory.share_at(4,3,api.DESCRIPTOR,api.DESCRIPTOR,false);
+    if (try memory.readonly_alias(3,api.DESCRIPTOR))!=persistent {return error.Invalid;}
+    COMPOSITOR_GENERATION=memory.generation(3);
+}return;}
+pub unsafe fn presented(now:u64)void {
+    unsafe { if FRAMES==0 { FIRST=now; } LAST=now;FRAMES+=1; }return;
+}
+
+pub unsafe fn select_font(scale:u64)!u64 {
+    unsafe {
+        let next=try index(scale);
+        if !PREPARED||DESCRIPTOR_ALIAS==null||memory.generation(3)!=COMPOSITOR_GENERATION { return error.Invalid; }
+        let alias=try memory.readonly_alias(3,api.DESCRIPTOR);
+        if alias!=DESCRIPTOR_ALIAS as u64 || (*DESCRIPTOR_ALIAS).version!=3 { return error.Invalid; }
+        if next!=FONT_INDEX {
+            let glyphs=try validated_font(next);
+            try memory.replace_resource_aperture(3,0x7200_0000,FONT_PHYSICAL[FONT_INDEX],FONT_BYTES[FONT_INDEX],FONT_PHYSICAL[next],FONT_BYTES[next]);
+            FONT_INDEX=next;FONT_SWITCHES+=1;
+            (*DESCRIPTOR_ALIAS).font_bytes=FONT_BYTES[next];(*DESCRIPTOR_ALIAS).scale_q8=scale;(*DESCRIPTOR_ALIAS).font_pixels=scale/16;
+            compiler_fence();
+        }
+        return FONT_BYTES[next];
+    }
+}
+
+// Called only inside the application's active loader transaction. The root
+// broker authenticates the GUI configuration before choosing this physical slot.
+pub unsafe fn map_client_font(id:usize)!void {unsafe {
+    if id<7||id>=16||id==13||!memory.staging(id)||memory.generation(id)==0 {return error.Invalid;}
+    let scale=try current_font();let glyphs=try validated_font(FONT_INDEX);
+    try memory.gui_resource_aperture(id,0,0,FONT_PHYSICAL[FONT_INDEX],FONT_BYTES[FONT_INDEX]);
+    CLIENT_FONT_GENERATION[id]=memory.generation(id);CLIENT_FONT_INDEX[id]=FONT_INDEX;
+}return;}
+// The kernel passes an authenticated accepted-ticket owner and compositor
+// epoch. Allocator generations authenticate roots separately; they are never
+// substituted for Catalog incarnation or the compositor's logical epoch.
+pub unsafe fn client_font(id:usize,owner:u64,epoch:u64,scale:u64,out:*broker.Font)!void {unsafe {
+    if out==null||id<7||id>=16||id==13||owner>>32!=id as u64+1||(owner&0xffff_ffff)==0
+        ||epoch==0||epoch>0xffff_ffff||memory.staging(id)||memory.generation(id)==0
+        ||CLIENT_FONT_GENERATION[id]!=memory.generation(id)||CLIENT_FONT_INDEX[id]>=5 {return error.Invalid;}
+    if scale!=(try current_font()) {return error.Invalid;}
+    let glyphs=try validated_font(FONT_INDEX);let old=CLIENT_FONT_INDEX[id];
+    try memory.gui_resource_aperture(id,FONT_PHYSICAL[old],FONT_BYTES[old],FONT_PHYSICAL[FONT_INDEX],FONT_BYTES[FONT_INDEX]);
+    CLIENT_FONT_INDEX[id]=FONT_INDEX;
+    *out=broker.Font {version:1,owner:owner,epoch:epoch,client_address:0x7200_0000,server_address:0x7200_0000,
+        bytes:FONT_BYTES[FONT_INDEX],pixels:scale/16,scale:scale,glyphs:glyphs};
+}return;}

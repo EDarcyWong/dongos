@@ -1,0 +1,7 @@
+// core.errors — standard-library error codes shared by all std modules.
+// Modules that need a failure status must import and reuse these codes instead
+// of declaring duplicate numbers, so codes stay unique across the final program.
+
+module core.errors;
+
+pub error BufferTooSmall = 0x0100_0001;

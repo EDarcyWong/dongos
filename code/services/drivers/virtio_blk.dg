@@ -1,0 +1,255 @@
+// Modern VirtIO 1.2 block queue, one bounded synchronous request at a time.
+// DMA is a lease with separate bus address and CPU VA, never a physical cast.
+module drivers.virtio_blk;
+import drivers.virtio_pci as vp;
+pub error InvalidInput = 0x0503_0001;
+pub error AlreadyInitialized = 0x0503_0002;
+pub error NotReady = 0x0503_0003;
+pub error Busy = 0x0503_0004;
+pub error Unsupported = 0x0503_0005;
+pub error IoFailure = 0x0503_0006;
+pub error Timeout = 0x0503_0007;
+pub error BadCompletion = 0x0503_0008;
+pub error DeviceError = 0x0503_0009;
+pub error ReadOnly = 0x0503_000a;
+pub error CleanupRequired = 0x0503_000b;
+pub error DeviceReset = 0x0503_000c;
+pub const SECTOR_BYTES: u64 = 512;
+pub const MAX_SECTORS: u64 = 128;
+pub const DMA_BYTES: usize = 69632;
+pub struct Lease { pub token: u64, pub physical: u64, pub pointer: *u8, pub length: usize }
+pub type Acquire = unsafe fn(context: u64, bytes: usize, alignment: usize, out: *Lease) u64;
+pub type Release = unsafe fn(context: u64, lease: *const Lease) u64;
+pub struct Ops { pub read: vp.Read, pub write: vp.Write, pub fence: vp.Fence, pub acquire: Acquire, pub release: Release }
+pub struct Info { pub capacity_sectors: u64, pub max_transfer_sectors: u64, pub readonly: u64, pub ready: u64,
+    pub faulted: u64, pub held: u64, pub completed: u64, pub avail_index: u64, pub used_index: u64 }
+pub struct State {
+    pub info: Info, pub busy: u64, pub published: u64, pub generation: u64, pub notify_offset: u64,
+    pub transport: vp.Transport, pub ops: *const Ops, pub context: u64, pub lease: Lease,
+}
+pub const EMPTY_LEASE: Lease = Lease { token: 0, physical: 0, pointer: null, length: 0 };
+pub const EMPTY_INFO: Info = Info { capacity_sectors: 0, max_transfer_sectors: 0, readonly: 0, ready: 0,
+    faulted: 0, held: 0, completed: 0, avail_index: 0, used_index: 0 };
+pub const EMPTY_STATE: State = State { info: EMPTY_INFO, busy: 0, published: 0, generation: 0, notify_offset: 0,
+    transport: vp.EMPTY_TRANSPORT, ops: null, context: 0, lease: EMPTY_LEASE };
+const MAX: u64 = 0xffff_ffff_ffff_ffff;
+const AVAIL: usize = 128;
+const USED: usize = 152;
+const HEADER: usize = 256;
+const STATUS: usize = 272;
+const DATA: usize = 4096;
+unsafe fn read(state: *State, offset: u64, width: u64) !u64 {
+    unsafe { return try vp.read((*(*state).ops).read,(*state).context,&(*state).transport.common,offset,width); }
+}
+unsafe fn write(state: *State, offset: u64, width: u64, value: u64) !void {
+    unsafe { try vp.write((*(*state).ops).write,(*state).context,&(*state).transport.common,offset,width,value); }
+    return;
+}
+unsafe fn barrier(state: *State, kind: u64) !void {
+    unsafe {
+        compiler_fence();
+        if (*(*state).ops).fence((*state).context,kind) != 0 { return error.IoFailure; }
+        compiler_fence();
+    }
+    return;
+}
+unsafe fn store16(raw: *u8, offset: usize, value: u64) void { unsafe { write_unaligned((raw + offset) as *u16,value as u16); } return; }
+unsafe fn store32(raw: *u8, offset: usize, value: u64) void { unsafe { write_unaligned((raw + offset) as *u32,value as u32); } return; }
+unsafe fn store64(raw: *u8, offset: usize, value: u64) void { unsafe { write_unaligned((raw + offset) as *u64,value); } return; }
+unsafe fn address(state: *State, offset: u64, value: u64) !void {
+    unsafe { try write(state,offset,4,value & 0xffff_ffff); try write(state,offset + 4,4,value >> 32); }
+    return;
+}
+unsafe fn reset(state: *State) !void {
+    unsafe {
+        try write(state,20,1,0); var i: usize = 0;
+        while i < 1024 { if (try read(state,20,1)) == 0 { try barrier(state,3); (*state).published = 0; return; } i += 1; }
+    }
+    return error.Timeout;
+}
+unsafe fn cleanup(state: *State) !void {
+    unsafe {
+        try reset(state);
+        if (*state).info.held != 0 {
+            if (*(*state).ops).release((*state).context,&(*state).lease) != 0 { return error.CleanupRequired; }
+        }
+        *state = EMPTY_STATE;
+    }
+    return;
+}
+unsafe fn capacity(state: *State, initial: bool) !void {
+    unsafe {
+        var attempts: usize = 0;
+        while attempts < 8 {
+            let before = try read(state,21,1);
+            let lo = try vp.read((*(*state).ops).read,(*state).context,&(*state).transport.device,0,4);
+            let hi = try vp.read((*(*state).ops).read,(*state).context,&(*state).transport.device,4,4);
+            let after = try read(state,21,1);
+            if before == after {
+                let sectors = lo | (hi << 32);
+                if sectors == 0 { return error.Unsupported; }
+                if !initial && (after != (*state).generation || sectors != (*state).info.capacity_sectors) { return error.DeviceReset; }
+                (*state).generation = after; (*state).info.capacity_sectors = sectors; return;
+            }
+            attempts += 1;
+        }
+    }
+    return error.DeviceReset;
+}
+unsafe fn initialize_inner(state: *State) !void {
+    unsafe {
+        try reset(state); try write(state,20,1,1); try write(state,20,1,3);
+        try write(state,0,4,1); let high = try read(state,4,4);
+        if (high & 1) == 0 || (high & 2) != 0 { return error.Unsupported; } // VERSION_1; no IOMMU/ACCESS_PLATFORM adapter yet.
+        try write(state,0,4,0); let low = try read(state,4,4);
+        if (low & 512) == 0 { return error.Unsupported; } // explicit durable FLUSH contract
+        let accepted = low & 544; (*state).info.readonly = (low >> 5) & 1;
+        try write(state,8,4,0); try write(state,12,4,accepted);
+        try write(state,8,4,1); try write(state,12,4,1);
+        try write(state,20,1,11);
+        if (try read(state,20,1)) != 11 { return error.Unsupported; }
+        try capacity(state,true); (*state).info.max_transfer_sectors = MAX_SECTORS;
+        if (try read(state,18,2)) == 0 { return error.Unsupported; }
+        try write(state,22,2,0); let size = try read(state,24,2);
+        if size < 8 || size > 32768 || (size & (size - 1)) != 0 || (try read(state,28,2)) != 0 { return error.Unsupported; }
+        try write(state,24,2,8); if (try read(state,24,2)) != 8 { return error.Unsupported; }
+        try write(state,16,2,65535); try write(state,26,2,65535); // polling; do not bind MSI-X vectors
+        let notify = (try read(state,30,2)) * (*state).transport.multiplier;
+        if notify > (*state).transport.notify.length || 2 > (*state).transport.notify.length - notify { return error.InvalidInput; }
+        (*state).notify_offset = notify;
+        var lease = EMPTY_LEASE;
+        if (*(*state).ops).acquire((*state).context,DMA_BYTES,4096,&lease) != 0 { return error.IoFailure; }
+        (*state).lease = lease; (*state).info.held = 1;
+        if lease.token == 0 || lease.pointer == null || ((lease.pointer as u64) & 4095) != 0 || (lease.physical & 4095) != 0
+            || lease.physical == 0 || lease.length < DMA_BYTES || lease.length > 0x20_000
+            || (lease.pointer as u64) > MAX - lease.length as u64 || lease.physical >= 0x10_0000_0000_0000
+            || lease.length as u64 > 0x10_0000_0000_0000 - lease.physical { return error.InvalidInput; }
+        var i: usize = 0; while i < lease.length { *(lease.pointer + i) = 0; i += 1; }
+        store16(lease.pointer,AVAIL,1); // suppress notifications; completion is polled
+        try address(state,32,lease.physical); try address(state,40,lease.physical + AVAIL as u64); try address(state,48,lease.physical + USED as u64);
+        try barrier(state,1); try write(state,28,2,1); if (try read(state,28,2)) != 1 { return error.IoFailure; }
+        try write(state,20,1,15); if (try read(state,20,1)) != 15 { return error.DeviceReset; }
+        (*state).info.ready = 1;
+    }
+    return;
+}
+pub unsafe fn initialize(state: *State, transport: *const vp.Transport, ops: *const Ops, context: u64) !void {
+    unsafe {
+        if state == null || transport == null || ops == null { return error.InvalidInput; }
+        if (*state).busy != 0 { return error.Busy; }
+        if (*state).info.held != 0 || (*state).info.ready != 0 || (*state).info.faulted != 0 { return error.AlreadyInitialized; }
+        if (*transport).common.length < 56 || (*transport).device.length < 8 || (*transport).notify.length < 2
+            || (*transport).common.handle == 0 || (*transport).device.handle == 0 || (*transport).notify.handle == 0 { return error.InvalidInput; }
+        (*state).transport = *transport; (*state).ops = ops; (*state).context = context; (*state).busy = 1;
+        let result = initialize_inner(state);
+        match result {
+            ok => { (*state).busy = 0; return; },
+            err(code) => {
+                (*state).info.ready = 0; (*state).info.faulted = 1;
+                match cleanup(state) { ok => {}, err(clean) => { (*state).busy = 0; return error.CleanupRequired; }, }
+            },
+        }
+        return result;
+    }
+}
+fn overlap(a: u64, size: u64, b: u64, bytes: u64) bool { return a < b + bytes && b < a + size; }
+unsafe fn submit(state: *State, kind: u64, lba: u64, count: usize, input: *const u8, output: *u8) !void {
+    unsafe {
+        try capacity(state,false);
+        let raw = (*state).lease.pointer; let physical = (*state).lease.physical; let bytes = count as u64 * 512;
+        if kind != 4 {
+            var i: usize = 0;
+            while i < bytes as usize {
+                if kind == 1 { *(raw + DATA + i) = *(input + i); } else { *(raw + DATA + i) = 0; }
+                i += 1;
+            }
+        }
+        store32(raw,HEADER,kind); store32(raw,HEADER + 4,0); store64(raw,HEADER + 8,lba); *(raw + STATUS) = 255;
+        store64(raw,0,physical + HEADER as u64); store32(raw,8,16); store16(raw,12,1);
+        if kind == 4 { store16(raw,14,2); }
+        else {
+            store16(raw,14,1); store64(raw,16,physical + DATA as u64); store32(raw,24,bytes);
+            var flags: u64 = 1; if kind == 0 { flags = 3; }
+            store16(raw,28,flags); store16(raw,30,2);
+        }
+        store64(raw,32,physical + STATUS as u64); store32(raw,40,1); store16(raw,44,2); store16(raw,46,0);
+        store16(raw,AVAIL + 4 + ((*state).info.avail_index as usize % 8) * 2,0);
+        try barrier(state,1);
+        (*state).published = 1; (*state).info.avail_index = ((*state).info.avail_index + 1) & 65535;
+        volatile_store((raw + AVAIL + 2) as *u16,(*state).info.avail_index as u16);
+        try barrier(state,3);
+        try vp.write((*(*state).ops).write,(*state).context,&(*state).transport.notify,(*state).notify_offset,2,0);
+        var loops: usize = 0;
+        while loops < 100000 {
+            let status = try read(state,20,1); if status != 15 { return error.DeviceReset; }
+            let used = volatile_load((raw + USED + 2) as *const u16) as u64;
+            if used != (*state).info.used_index {
+                if used != (((*state).info.used_index + 1) & 65535) { return error.BadCompletion; }
+                try barrier(state,2);
+                let slot = USED + 4 + ((*state).info.used_index as usize % 8) * 8;
+                let id = volatile_load((raw + slot) as *const u32) as u64;
+                let length = volatile_load((raw + slot + 4) as *const u32) as u64;
+                let result = volatile_load((raw + STATUS) as *const u8);
+                var expected: u64 = 1; if kind == 0 { expected += bytes; }
+                if id != 0 || length != expected || result > 2 { return error.BadCompletion; }
+                (*state).info.used_index = used; (*state).published = 0; (*state).info.completed += 1;
+                if result == 1 { return error.DeviceError; } if result == 2 { return error.Unsupported; }
+                if kind == 0 { var i: usize = 0; while i < bytes as usize { *(output + i) = *(raw + DATA + i); i += 1; } }
+                return;
+            }
+            loops += 1;
+        }
+    }
+    return error.Timeout;
+}
+unsafe fn operation(state: *State, kind: u64, lba: u64, count: usize, input: *const u8, output: *u8) !void {
+    unsafe {
+        if state == null { return error.InvalidInput; }
+        if (*state).busy != 0 { return error.Busy; }
+        if (*state).info.ready == 0 || (*state).info.faulted != 0 { return error.NotReady; }
+        if (*state).info.completed == MAX { return error.InvalidInput; }
+        if kind != 4 {
+            if count == 0 || count as u64 > MAX_SECTORS || lba >= (*state).info.capacity_sectors
+                || count as u64 > (*state).info.capacity_sectors - lba { return error.InvalidInput; }
+            if kind == 1 && (*state).info.readonly != 0 { return error.ReadOnly; }
+            let bytes = count as u64 * 512; var pointer = input as u64; if kind == 0 { pointer = output as u64; }
+            if pointer == 0 || pointer > MAX - bytes || overlap(pointer,bytes,(*state).lease.pointer as u64,(*state).lease.length as u64)
+                || overlap(pointer,bytes,state as u64,sizeof(State) as u64) || overlap(pointer,bytes,(*state).ops as u64,sizeof(Ops) as u64) { return error.InvalidInput; }
+        }
+        (*state).busy = 1;
+        let result = submit(state,kind,lba,count,input,output);
+        match result {
+            ok => { (*state).busy = 0; return; },
+            err(code) => {
+                if (*state).published != 0 || code == 0x0503_000c { (*state).info.faulted = 1; (*state).info.ready = 0; }
+                (*state).busy = 0;
+            },
+        }
+        return result;
+    }
+}
+pub unsafe fn read_sectors(state: *State, lba: u64, count: usize, output: *u8) !void { unsafe { try operation(state,0,lba,count,null,output); } return; }
+pub unsafe fn write_sectors(state: *State, lba: u64, count: usize, input: *const u8) !void { unsafe { try operation(state,1,lba,count,input,null); } return; }
+pub unsafe fn flush(state: *State) !void { unsafe { try operation(state,4,0,0,null,null); } return; }
+// FAT Device ABI: context is a borrowed CPU State address, never a DMA PA.
+pub unsafe fn read_callback(context: u64, lba: u64, count: usize, output: *u8) u64 {
+    unsafe { match read_sectors(context as *State,lba,count,output) { ok => { return 0; }, err(code) => { return code; }, } }
+}
+pub unsafe fn write_callback(context: u64, lba: u64, count: usize, input: *const u8) u64 {
+    unsafe { match write_sectors(context as *State,lba,count,input) { ok => { return 0; }, err(code) => { return code; }, } }
+}
+pub unsafe fn flush_callback(context: u64) u64 {
+    unsafe { match flush(context as *State) { ok => { return 0; }, err(code) => { return code; }, } }
+}
+pub unsafe fn describe(state: *const State, out: *Info) !void {
+    unsafe { if state == null || out == null { return error.InvalidInput; } if (*state).busy != 0 { return error.Busy; } *out = (*state).info; }
+    return;
+}
+pub unsafe fn close(state: *State) !void {
+    unsafe {
+        if state == null { return error.InvalidInput; } if (*state).busy != 0 { return error.Busy; }
+        if (*state).ops == null { return error.NotReady; }
+        (*state).busy = 1; (*state).info.ready = 0;
+        match cleanup(state) { ok => { return; }, err(code) => { (*state).info.faulted = 1; (*state).busy = 0; return error.CleanupRequired; }, }
+    }
+}

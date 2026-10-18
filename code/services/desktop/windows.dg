@@ -1,0 +1,392 @@
+// Single-owner desktop policy. Opaque leases are released only by the bridge
+// after real IPC/mapping/presentation lifetime work; no callbacks or allocation.
+module desktop.windows;
+import gfx.geometry as geo;
+import input.events as ev;
+
+pub error InvalidState = 0x0720_0001;
+pub error InvalidWindow = 0x0720_0002;
+pub error Denied = 0x0720_0003;
+pub error Capacity = 0x0720_0004;
+pub error Busy = 0x0720_0005;
+pub error Stale = 0x0720_0006;
+pub const FREE: u64 = 0; pub const LIVE: u64 = 1; pub const CLOSING: u64 = 2; pub const RETIRED: u64 = 3;
+pub const VISIBLE: u64 = 1; pub const RESIZABLE: u64 = 2;
+pub const CAPTURE: u64 = 1; pub const MOVE: u64 = 2; pub const RESIZE: u64 = 3;
+const MAX_GENERATION: u64 = 0x00ff_ffff_ffff_ffff;
+const MAX_SERIAL: u64 = 0xffff_ffff_ffff_ffff;
+pub struct Slot {
+    pub generation: u64, pub status: u64, pub owner: u64, pub buffer: u64, pub retired_buffer: u64,
+    pub rect: geo.Rect, pub requested: geo.Rect, pub serial: u64, pub acknowledged: u64,
+    pub min_width: i64, pub min_height: i64, pub flags: u64,
+}
+pub const EMPTY_SLOT: Slot = Slot { generation: 1, status: FREE, owner: 0, buffer: 0, retired_buffer: 0,
+    rect: geo.EMPTY, requested: geo.EMPTY, serial: 0, acknowledged: 0, min_width: 0, min_height: 0, flags: 0 };
+pub struct State {
+    pub slots: [16]Slot, pub order: [16]u64, pub count: usize, pub focus: u64, pub grab: u64, pub mode: u64,
+    pub pointer_x: i64, pub pointer_y: i64, pub buttons: u64, pub start_x: i64, pub start_y: i64,
+    pub start_rect: geo.Rect, pub screen: geo.Rect, pub damage: geo.Damage,
+}
+pub const EMPTY_STATE: State = State { slots: [EMPTY_SLOT; 16], order: [0; 16], count: 0, focus: 0, grab: 0, mode: 0,
+    pointer_x: 0, pointer_y: 0, buttons: 0, start_x: 0, start_y: 0, start_rect: geo.EMPTY,
+    screen: geo.EMPTY, damage: geo.EMPTY_DAMAGE };
+fn index(handle: u64) !usize {
+    let low = handle & 255;
+    if low == 0 || low > 16 || (handle >> 8) == 0 { return error.InvalidWindow; }
+    return (low - 1) as usize;
+}
+unsafe fn handle(state: *const State, i: usize) u64 {
+    unsafe { return ((*state).slots[i].generation << 8) | (i as u64 + 1); }
+}
+unsafe fn find(state: *const State, value: u64, closing: bool) !usize {
+    let i = try index(value);
+    unsafe {
+        if handle(state,i) != value || ((*state).slots[i].status != LIVE
+            && (!closing || (*state).slots[i].status != CLOSING)) { return error.Stale; }
+    }
+    return i;
+}
+unsafe fn owned(state: *const State, owner: u64, value: u64) !usize {
+    unsafe {
+        let i = try find(state,value,false);
+        if owner == 0 || (*state).slots[i].owner != owner { return error.Denied; }
+        return i;
+    }
+}
+unsafe fn same(a: *const geo.Rect, b: *const geo.Rect) bool {
+    unsafe { return (*a).left == (*b).left && (*a).top == (*b).top && (*a).right == (*b).right && (*a).bottom == (*b).bottom; }
+}
+unsafe fn valid_rect(state: *const State, rect: *const geo.Rect, minw: i64, minh: i64) bool {
+    unsafe {
+        return geo.contains(&(*state).screen,rect) && minw >= 32 && minh >= 24
+            && (*rect).right - (*rect).left >= minw && (*rect).bottom - (*rect).top >= minh;
+    }
+}
+pub unsafe fn validate(state: *const State) !void {
+    unsafe {
+        if state == null || (*state).count > 16 || (*state).mode > 3 || (*state).buttons > 31
+            || (*state).screen.left != 0 || (*state).screen.top != 0
+            || (*state).screen.right < 64 || (*state).screen.right > 8192
+            || (*state).screen.bottom < 64 || (*state).screen.bottom > 8192
+            || (*state).pointer_x < 0 || (*state).pointer_x >= (*state).screen.right
+            || (*state).pointer_y < 0 || (*state).pointer_y >= (*state).screen.bottom { return error.InvalidState; }
+        try geo.validate_damage(&(*state).damage);
+        if !same(&(*state).screen,&(*state).damage.bounds) { return error.InvalidState; }
+        var live: usize = 0; var seen: u64 = 0; var i: usize = 0;
+        while i < 16 {
+            let slot = &(*state).slots[i];
+            if (*slot).generation == 0 || (*slot).generation > MAX_GENERATION || (*slot).status > RETIRED { return error.InvalidState; }
+            if (*slot).status == LIVE || (*slot).status == CLOSING {
+                if (*slot).owner == 0 || (*slot).flags > 3 || (*slot).acknowledged > (*slot).serial
+                    || !valid_rect(state,&(*slot).rect,(*slot).min_width,(*slot).min_height)
+                    || !valid_rect(state,&(*slot).requested,(*slot).min_width,(*slot).min_height)
+                    || ((*slot).status == LIVE && (*slot).buffer == 0)
+                    || ((*slot).retired_buffer != 0 && (*slot).retired_buffer == (*slot).buffer) { return error.InvalidState; }
+                if (*slot).status == LIVE { live += 1; }
+            }
+            i += 1;
+        }
+        if live != (*state).count { return error.InvalidState; }
+        i = 0;
+        while i < (*state).count {
+            let at = try find(state,(*state).order[i],false); let bit: u64 = 1 << (at as u64);
+            if (seen & bit) != 0 { return error.InvalidState; } seen |= bit; i += 1;
+        }
+        if (*state).focus != 0 {
+            let at = try find(state,(*state).focus,false);
+            if ((*state).slots[at].flags & VISIBLE) == 0 { return error.InvalidState; }
+        }
+        if (*state).grab == 0 { if (*state).mode != 0 { return error.InvalidState; } }
+        else {
+            let at = try find(state,(*state).grab,false);
+            if (*state).mode == 0 || ((*state).slots[at].flags & VISIBLE) == 0 { return error.InvalidState; }
+            if (*state).mode >= MOVE && ((*state).start_x < 0 || (*state).start_x >= (*state).screen.right
+                || (*state).start_y < 0 || (*state).start_y >= (*state).screen.bottom
+                || !valid_rect(state,&(*state).start_rect,(*state).slots[at].min_width,(*state).slots[at].min_height)) { return error.InvalidState; }
+        }
+    }
+    return;
+}
+pub unsafe fn init(out: *State, width: usize, height: usize) !void {
+    if width < 64 || width > 8192 || height < 64 || height > 8192 { return error.InvalidState; }
+    unsafe {
+        *out = EMPTY_STATE;
+        (*out).screen = geo.Rect { left: 0, top: 0, right: width as i64, bottom: height as i64 };
+        try geo.init_damage(&(*out).screen,&(*out).damage);
+    }
+    return;
+}
+unsafe fn dirty(state: *State, rect: *const geo.Rect) !void {
+    unsafe { try geo.damage_add(&(*state).damage,rect); }
+    return;
+}
+unsafe fn new_focus(state: *State, target: u64) !void {
+    unsafe {
+        if target == (*state).focus { return; }
+        if (*state).focus != 0 { let i = try find(state,(*state).focus,true); try dirty(state,&(*state).slots[i].rect); }
+        (*state).focus = target;
+        if target != 0 { let i = try find(state,target,false); try dirty(state,&(*state).slots[i].rect); }
+    }
+    return;
+}
+unsafe fn fallback(state: *State) !void {
+    unsafe {
+        var n = (*state).count;
+        while n != 0 {
+            n -= 1; let i = try find(state,(*state).order[n],false);
+            if ((*state).slots[i].flags & VISIBLE) != 0 { try new_focus(state,(*state).order[n]); return; }
+        }
+        try new_focus(state,0);
+    }
+    return;
+}
+unsafe fn raise_internal(state: *State, target: u64) !void {
+    unsafe {
+        var n: usize = 0;
+        while n < (*state).count && (*state).order[n] != target { n += 1; }
+        while n + 1 < (*state).count { (*state).order[n] = (*state).order[n + 1]; n += 1; }
+        (*state).order[(*state).count - 1] = target;
+        let i = try find(state,target,false); try dirty(state,&(*state).slots[i].rect); try new_focus(state,target);
+    }
+    return;
+}
+unsafe fn unique_buffer(state: *const State, buffer: u64) bool {
+    if buffer == 0 { return false; }
+    unsafe {
+        var i: usize = 0;
+        while i < 16 {
+            if ((*state).slots[i].status == LIVE || (*state).slots[i].status == CLOSING)
+                && ((*state).slots[i].buffer == buffer || (*state).slots[i].retired_buffer == buffer) { return false; }
+            i += 1;
+        }
+    }
+    return true;
+}
+pub unsafe fn create(state: *State, owner: u64, buffer: u64, rect: *const geo.Rect,
+                        minw: i64, minh: i64, flags: u64, out: *u64) !void {
+    unsafe {
+        try validate(state);
+        if owner == 0 || flags > 3 || !valid_rect(state,rect,minw,minh) { return error.InvalidWindow; }
+        if !unique_buffer(state,buffer) { return error.Denied; }
+        var i: usize = 0;
+        while i < 16 && (*state).slots[i].status != FREE { i += 1; }
+        if i == 16 { return error.Capacity; }
+        let generation = (*state).slots[i].generation;
+        (*state).slots[i] = Slot { generation: generation, status: LIVE, owner: owner, buffer: buffer, retired_buffer: 0,
+            rect: *rect, requested: *rect, serial: 1, acknowledged: 1, min_width: minw, min_height: minh, flags: flags };
+        let value = handle(state,i); (*state).order[(*state).count] = value; (*state).count += 1;
+        if (flags & VISIBLE) != 0 { try dirty(state,rect); try new_focus(state,value); }
+        *out = value;
+    }
+    return;
+}
+pub unsafe fn raise(state: *State, owner: u64, value: u64) !void {
+    unsafe {
+        try validate(state); let i = try owned(state,owner,value);
+        if ((*state).slots[i].flags & VISIBLE) == 0 { return error.Denied; }
+        try raise_internal(state,value);
+    }
+    return;
+}
+unsafe fn cancel_grab(state: *State) void {
+    unsafe { (*state).grab = 0; (*state).mode = 0; (*state).start_x = 0; (*state).start_y = 0; (*state).start_rect = geo.EMPTY; }
+    return;
+}
+pub unsafe fn visible(state: *State, owner: u64, value: u64, show: bool) !void {
+    unsafe {
+        try validate(state); let i = try owned(state,owner,value);
+        try dirty(state,&(*state).slots[i].rect); try dirty(state,&(*state).slots[i].requested);
+        if show { (*state).slots[i].flags |= VISIBLE; try raise_internal(state,value); }
+        else {
+            (*state).slots[i].flags &= ~VISIBLE;
+            if (*state).grab == value { cancel_grab(state); }
+            if (*state).focus == value { try fallback(state); }
+        }
+    }
+    return;
+}
+pub unsafe fn capture(state: *State, owner: u64, value: u64, enable: bool) !void {
+    unsafe {
+        try validate(state); let i = try owned(state,owner,value);
+        if enable {
+            if ((*state).slots[i].flags & VISIBLE) == 0 || (*state).focus != value || (*state).buttons == 0 { return error.Denied; }
+            if (*state).grab != 0 && (*state).grab != value { return error.Busy; }
+            (*state).grab = value; (*state).mode = CAPTURE;
+        } else {
+            if (*state).grab != value { return error.Denied; }
+            cancel_grab(state);
+        }
+    }
+    return;
+}
+unsafe fn close_internal(state: *State, value: u64) !void {
+    unsafe {
+        let i = try find(state,value,false); try dirty(state,&(*state).slots[i].rect); try dirty(state,&(*state).slots[i].requested);
+        if (*state).grab == value { cancel_grab(state); }
+        // Clear focus while this slot is still live, before removing it.
+        if (*state).focus == value { try new_focus(state,0); }
+        var n: usize = 0; while n < (*state).count && (*state).order[n] != value { n += 1; }
+        while n + 1 < (*state).count { (*state).order[n] = (*state).order[n + 1]; n += 1; }
+        (*state).count -= 1; (*state).order[(*state).count] = 0;
+        (*state).slots[i].status = CLOSING; (*state).slots[i].flags &= ~VISIBLE;
+        if (*state).focus == 0 { try fallback(state); }
+    }
+    return;
+}
+pub unsafe fn close(state: *State, owner: u64, value: u64) !void {
+    unsafe { try validate(state); let i = try owned(state,owner,value); try close_internal(state,handle(state,i)); }
+    return;
+}
+pub unsafe fn disconnect(state: *State, owner: u64) !usize {
+    unsafe {
+        try validate(state); if owner == 0 { return error.Denied; }
+        var i: usize = 0; var count: usize = 0;
+        while i < 16 {
+            if (*state).slots[i].status == LIVE && (*state).slots[i].owner == owner {
+                try close_internal(state,handle(state,i)); count += 1;
+            }
+            i += 1;
+        }
+        return count;
+    }
+}
+// Trusted bridge only, after every mapping/reference/presentation user of this
+// exact opaque lease has retired. Active buffers cannot be released while live.
+pub unsafe fn released(state: *State, value: u64, buffer: u64) !void {
+    unsafe {
+        try validate(state); let i = try find(state,value,true);
+        if buffer == 0 { return error.InvalidWindow; }
+        if (*state).slots[i].retired_buffer == buffer { (*state).slots[i].retired_buffer = 0; return; }
+        if (*state).slots[i].status == CLOSING && (*state).slots[i].buffer == buffer { (*state).slots[i].buffer = 0; return; }
+    }
+    return error.Denied;
+}
+pub unsafe fn reap(state: *State, value: u64) !void {
+    unsafe {
+        try validate(state); let i = try find(state,value,true);
+        if (*state).slots[i].status != CLOSING || (*state).slots[i].buffer != 0 || (*state).slots[i].retired_buffer != 0 { return error.Busy; }
+        let generation = (*state).slots[i].generation; (*state).slots[i] = EMPTY_SLOT;
+        if generation == MAX_GENERATION { (*state).slots[i].generation = generation; (*state).slots[i].status = RETIRED; }
+        else { (*state).slots[i].generation = generation + 1; }
+    }
+    return;
+}
+pub unsafe fn request_resize(state: *State, owner: u64, value: u64, width: i64, height: i64, serial: *u64) !void {
+    unsafe {
+        try validate(state); let i = try owned(state,owner,value); let slot = &(*state).slots[i];
+        if ((*slot).flags & RESIZABLE) == 0 { return error.Denied; }
+        if width < (*slot).min_width || height < (*slot).min_height
+            || width > (*state).screen.right - (*slot).rect.left || height > (*state).screen.bottom - (*slot).rect.top { return error.InvalidWindow; }
+        if (*slot).serial == MAX_SERIAL { return error.Capacity; }
+        var next = (*slot).rect; next.right = next.left + width; next.bottom = next.top + height;
+        try dirty(state,&(*slot).requested); try dirty(state,&next);
+        (*slot).requested = next; (*slot).serial += 1; *serial = (*slot).serial;
+    }
+    return;
+}
+// The exact requested serial is acknowledged only with a separately validated
+// new backing. Old backing stays recorded until released() confirms retirement.
+pub unsafe fn acknowledge(state: *State, owner: u64, value: u64, serial: u64, buffer: u64) !void {
+    unsafe {
+        try validate(state); let i = try owned(state,owner,value); let slot = &(*state).slots[i];
+        if serial != (*slot).serial || serial == (*slot).acknowledged { return error.Stale; }
+        if (*slot).retired_buffer != 0 { return error.Busy; }
+        if !unique_buffer(state,buffer) { return error.Denied; }
+        try dirty(state,&(*slot).rect); try dirty(state,&(*slot).requested);
+        (*slot).retired_buffer = (*slot).buffer; (*slot).buffer = buffer;
+        (*slot).rect = (*slot).requested; (*slot).acknowledged = serial;
+        if (*state).grab == value && (*state).mode == MOVE {
+            (*state).start_rect = (*slot).rect; (*state).start_x = (*state).pointer_x; (*state).start_y = (*state).pointer_y;
+        }
+    }
+    return;
+}
+unsafe fn hit(state: *const State, x: i64, y: i64) u64 {
+    unsafe {
+        var n = (*state).count;
+        while n != 0 {
+            n -= 1; let value = (*state).order[n]; let i = ((value & 255) - 1) as usize; let slot = &(*state).slots[i];
+            if ((*slot).flags & VISIBLE) != 0 && x >= (*slot).rect.left && x < (*slot).rect.right
+                && y >= (*slot).rect.top && y < (*slot).rect.bottom { return value; }
+        }
+    }
+    return 0;
+}
+fn clamp(value: i64, low: i64, high: i64) i64 { if value < low { return low; } if value > high { return high; } return value; }
+unsafe fn move_drag(state: *State, i: usize, x: i64, y: i64) !void {
+    unsafe {
+        let slot = &(*state).slots[i]; let old = (*slot).rect; let start = (*state).start_rect;
+        let width = start.right - start.left; let height = start.bottom - start.top;
+        let left = clamp(start.left + x - (*state).start_x,0,(*state).screen.right - width);
+        let top = clamp(start.top + y - (*state).start_y,0,(*state).screen.bottom - height);
+        let next = geo.Rect { left: left, top: top, right: left + width, bottom: top + height };
+        if same(&old,&next) { return; }
+        try dirty(state,&(*slot).requested); try dirty(state,&old); try dirty(state,&next);
+        (*slot).rect = next; (*slot).requested = next; (*slot).serial += 1; (*slot).acknowledged = (*slot).serial;
+    }
+    return;
+}
+unsafe fn resize_drag(state: *State, i: usize, x: i64, y: i64) !void {
+    unsafe {
+        let slot = &(*state).slots[i]; let start = (*state).start_rect;
+        let width = clamp(start.right - start.left + x - (*state).start_x,(*slot).min_width,(*state).screen.right - start.left);
+        let height = clamp(start.bottom - start.top + y - (*state).start_y,(*slot).min_height,(*state).screen.bottom - start.top);
+        let next = geo.Rect { left: start.left, top: start.top, right: start.left + width, bottom: start.top + height };
+        if same(&(*slot).requested,&next) { return; }
+        try dirty(state,&(*slot).requested); try dirty(state,&next); (*slot).requested = next; (*slot).serial += 1;
+    }
+    return;
+}
+// Routes an event and returns its target handle (0 is desktop). Metadata-only
+// move/resize remains in this module; input forwarding and redraw use the result.
+pub unsafe fn input_metrics(state: *State, event: *const ev.Event, target: *u64,title_height:i64,border:i64) !void {
+    unsafe {
+        try validate(state);
+        if event == null || title_height<24 || title_height>128 || border<1 || border>32 { return error.InvalidWindow; }
+        if (*event).kind == ev.LOST { (*state).buttons = 0; cancel_grab(state); *target = 0; return; }
+        if (*event).kind == ev.RELATIVE || (*event).kind == ev.ABSOLUTE {
+            var x = (*event).a; var y = (*event).b;
+            if (*event).kind == ev.RELATIVE {
+                // Clamp deltas before addition; hostile i64 values cannot wrap.
+                x = (*state).pointer_x + clamp(x,-8192,8192); y = (*state).pointer_y + clamp(y,-8192,8192);
+            }
+            x = clamp(x,0,(*state).screen.right - 1); y = clamp(y,0,(*state).screen.bottom - 1);
+            if (*state).grab != 0 && (*state).mode >= MOVE {
+                let i = try find(state,(*state).grab,false);
+                if (*state).slots[i].serial == MAX_SERIAL { return error.Capacity; }
+                if (*state).mode == MOVE { try move_drag(state,i,x,y); } else { try resize_drag(state,i,x,y); }
+            }
+            (*state).pointer_x = x; (*state).pointer_y = y;
+        } else { if (*event).kind == ev.KEY {
+            if (*event).a < 0 || (*event).a > 2 || (*event).code == 0 || (*event).code >= 768 { return error.InvalidWindow; }
+            if (*event).code < 272 || (*event).code > 276 { *target = (*state).focus; return; }
+            let bit: u64 = 1 << ((*event).code - 272);
+            if (*event).a == 2 { *target = (*state).grab; return; }
+            if (*event).a == 1 { (*state).buttons |= bit; }
+            else { (*state).buttons &= ~bit; }
+            if (*event).code == 272 {
+                if (*event).a == 0 { let previous = (*state).grab; cancel_grab(state); *target = previous; return; }
+                let value = hit(state,(*state).pointer_x,(*state).pointer_y);
+                if value != 0 {
+                    let i = try find(state,value,false); try raise_internal(state,value);
+                    (*state).grab = value; (*state).mode = CAPTURE;
+                    (*state).start_x = (*state).pointer_x; (*state).start_y = (*state).pointer_y; (*state).start_rect = (*state).slots[i].rect;
+                    if ((*state).slots[i].flags & RESIZABLE) != 0 && (*state).pointer_x >= (*state).slots[i].rect.right - border
+                        && (*state).pointer_y >= (*state).slots[i].rect.bottom - border { (*state).mode = RESIZE; }
+                    else { if (*state).pointer_y < (*state).slots[i].rect.top + title_height { (*state).mode = MOVE; } }
+                } else { try new_focus(state,0); }
+            }
+        } else { if (*event).kind != ev.SCROLL { return error.InvalidWindow; } } }
+        if (*state).grab != 0 { *target = (*state).grab; }
+        else { *target = hit(state,(*state).pointer_x,(*state).pointer_y); }
+    }
+    return;
+}
+pub unsafe fn take_damage(state: *State, out: *geo.Damage) !void {
+    unsafe { try validate(state); *out = (*state).damage; try geo.init_damage(&(*state).screen,&(*state).damage); }
+    return;
+}
+
+pub unsafe fn input(state:*State,event:*const ev.Event,target:*u64)!void {
+    unsafe { try input_metrics(state,event,target,24,8); }return;
+}

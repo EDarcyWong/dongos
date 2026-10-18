@@ -1,0 +1,11 @@
+
+// Native-only entry points; command(), filesystem client and process API stay
+// byte-identical to production. The host supplies syscall results and UART.
+export("shc_setup") fn shc_setup(boot:*const sys.Boot)u64{unsafe{
+    BOOT=boot;CWD=path.EMPTY;CWD.length=1;CWD.bytes[0]=47;CWD.directory_hint=1;
+    return files.init(&FILES,(*BOOT).filesystem,CHANNEL,files.ALL);
+}}
+export("shc_command") fn shc_command(p:*const u8,n:usize)u64{unsafe{
+    match parser.parse(slice_from_raw_parts(p,n),&PARSED,&PARSE_WORK){ok=>{},err(e)=>{return e;},}
+    if command(){return 0;}return 1;
+}}

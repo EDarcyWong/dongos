@@ -1,0 +1,82 @@
+module alignment_probe;
+
+align(32) struct A32 {value:u64}
+align(64) struct A64 {value:u64}
+align(256) struct A256 {value:u64}
+align(1024) struct A1024 {value:u64}
+align(64) struct Inner {tag:u8,data:[2]u64}
+struct Outer {tag:u8,blocks:[2]Inner}
+
+extern "sysv64" fn alignment_check(p:*const u8,alignment:usize,expected:u64)u64;
+extern "sysv64" fn alignment_nested(p:*const u8)u64;
+extern "sysv64" fn alignment_temp_frame(alignment:usize)u64;
+extern "sysv64" fn alignment_asm_sysv(a:u64,b:u64,c:u64,d:u64,e:u64,f:u64,g:u64,h:u64)u64;
+extern "win64" fn alignment_asm_win(a:u64,b:u64,c:u64,d:u64,e:u64,f:u64,g:u64,h:u64)u64;
+
+export("dg_align32") fn local32(n:u64)u64 {
+    var value=A32{value:n};
+    unsafe{return alignment_check(&value as *const u8,32,n)+value.value;}
+}
+export("dg_align64") fn local64(n:u64)u64 {
+    var value=A64{value:n};
+    unsafe{return alignment_check(&value as *const u8,64,n)+value.value;}
+}
+export("dg_align256") fn local256(n:u64)u64 {
+    var value=A256{value:n};
+    unsafe{return alignment_check(&value as *const u8,256,n)+value.value;}
+}
+export("dg_align1024") fn local1024()u64 {
+    var value=A1024{value:44};
+    unsafe{return alignment_check(&value as *const u8,1024,44)+value.value;}
+}
+
+export("dg_align_temp32") fn temporary32()u64 {unsafe{return A32{value:alignment_temp_frame(32)}.value;}}
+export("dg_align_temp64") fn temporary64()u64 {unsafe{return A64{value:alignment_temp_frame(64)}.value;}}
+export("dg_align_temp256") fn temporary256()u64 {unsafe{return A256{value:alignment_temp_frame(256)}.value;}}
+export("dg_align_temp1024") fn temporary1024()u64 {unsafe{return A1024{value:alignment_temp_frame(1024)}.value;}}
+
+export("dg_align_nested") fn nested()u64 {
+    var original=Outer{tag:5,blocks:[Inner{tag:7,data:[11,12]},Inner{tag:9,data:[21,22]}]};
+    var copy=original;copy.blocks[1].data[0]=99;
+    unsafe{return alignment_nested(&copy as *const u8)+original.blocks[1].data[0]*100+copy.blocks[1].data[0];}
+}
+
+export("dg_align_stack") fn stack(a:u64,b:u64,c:u64,d:u64,e:u64,f:u64,g:u64,h:u64)u64 {
+    var aligned=A64{value:17};
+    unsafe{return a+b*2+c*3+d*4+e*5+f*6+g*7+h*8+alignment_check(&aligned as *const u8,64,17)+aligned.value;}
+}
+export("dg_align_slice_stack") fn slice_stack(a:u64,b:u64,c:u64,d:u64,e:u64,s:[]u64,z:u64)u64 {
+    var aligned=A256{value:13};
+    unsafe{return a+b*2+c*3+d*4+e*5+s.len*100+s[1]+z*1000+alignment_check(&aligned as *const u8,256,13)+aligned.value;}
+}
+
+fn nested_slice(s:[]u64)[]u64 {
+    var aligned=A256{value:31};
+    unsafe{if alignment_check(&aligned as *const u8,256,31)!=100000{return s[..0];}}
+    return s[..2];
+}
+export("dg_align_return") fn slice_return(s:[]u64,early:bool)[]u64 {
+    var aligned=A64{value:29};
+    unsafe{if alignment_check(&aligned as *const u8,64,29)!=100000{return s[..0];}}
+    if early{return s[1..];}
+    return nested_slice(s);
+}
+
+export("dg_align_external") fn external_call()u64 {
+    var aligned=A256{value:9};
+    unsafe{return alignment_asm_sysv(1,2,3,4,5,6,7,8)+alignment_asm_win(1,2,3,4,5,6,7,8)
+        +alignment_check(&aligned as *const u8,256,9)+aligned.value;}
+}
+export("dg_align_calls") fn nested_calls()u64 {
+    var aligned=A64{value:17};
+    return stack(1,2,3,4,5,6,7,8)+external_call()+aligned.value;
+}
+
+export("dg_align_panic") fn panic_index(index:usize)u64 {
+    var aligned=A256{value:23};let data:[2]u64=[3,5];
+    unsafe{if alignment_check(&aligned as *const u8,256,23)!=100000{return 0;}}
+    return data[index]+aligned.value;
+}
+export("dg_align_overflow") fn panic_overflow(value:u64)u64 {
+    var aligned=A64{value:value};return aligned.value+1;
+}

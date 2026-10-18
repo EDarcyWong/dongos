@@ -1,0 +1,7 @@
+{
+  "lmstudioCode.lmStudioBaseUrl": "http://127.0.0.1:1234/v1",
+  "lmstudioCode.defaultModel": "qwen/qwen3.8-27b",
+  "lmstudioCode.autoEnsureContext": true,
+  "lmstudioCode.minContextLength": 32768,
+  "lmstudioCode.permissionMode": "bypass"
+}

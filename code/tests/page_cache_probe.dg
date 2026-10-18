@@ -1,0 +1,92 @@
+module page_cache_probe;
+
+import mm.page_cache as pc;
+import mm.phys_buddy as buddy;
+import mm.paging as paging;
+import mm.fixed_cache as fixed;
+import mm.active_paging as active;
+import boot.preflight as preflight;
+
+export("pc_owner_size") fn owner_size() usize { return sizeof(pc.Owner); }
+export("pc_owner_align") fn owner_align() usize { return alignof(pc.Owner); }
+export("pc_info_size") fn info_size() usize { return sizeof(pc.Info); }
+export("pc_info_align") fn info_align() usize { return alignof(pc.Info); }
+export("pc_buddy_size") fn buddy_size() usize { return sizeof(buddy.Allocator); }
+export("pc_buddy_align") fn buddy_align() usize { return alignof(buddy.Allocator); }
+export("pc_page_meta_size") fn page_meta_size() usize { return sizeof(buddy.PageMeta); }
+export("pc_page_meta_align") fn page_meta_align() usize { return alignof(buddy.PageMeta); }
+export("pc_slot_size") fn slot_size() usize { return sizeof(fixed.SlotMeta); }
+export("pc_slot_align") fn slot_align() usize { return alignof(fixed.SlotMeta); }
+export("pc_space_size") fn space_size() usize { return sizeof(paging.Space); }
+export("pc_space_align") fn space_align() usize { return alignof(paging.Space); }
+
+export("pc_owner_reset") fn owner_reset(owner: *pc.Owner) void { unsafe { *owner = pc.EMPTY_OWNER; } }
+export("pc_buddy_reset") fn buddy_reset(state: *buddy.Allocator) void { unsafe { *state = buddy.EMPTY_ALLOCATOR; } }
+export("pc_space_reset") fn space_reset(space: *paging.Space) void { unsafe { *space = paging.EMPTY_SPACE; } }
+
+export("pc_buddy_init") fn buddy_init(state: *buddy.Allocator, base: u64, pages: usize,
+                                      metadata: *buddy.PageMeta, count: usize) u64 {
+    unsafe { match buddy.init(state,base,pages,slice_from_raw_parts(metadata,count)) {
+        ok => { return 0; }, err(code) => { return code; },
+    } }
+}
+export("pc_buddy_add") fn buddy_add(state: *buddy.Allocator, first: usize, count: usize) u64 {
+    unsafe { match buddy.add_usable(state,first,count) {
+        ok => { return 0; }, err(code) => { return code; },
+    } }
+}
+export("pc_buddy_count") fn buddy_count(state: *const buddy.Allocator, output: *usize) u64 {
+    unsafe { match buddy.free_pages(state) {
+        ok(value) => { *output = value; return 0; }, err(code) => { return code; },
+    } }
+}
+export("pc_paging_init") fn paging_init(space: *paging.Space, pool: *paging.Table, count: usize,
+                                        physical: u64, metadata: *u8) u64 {
+    unsafe { match paging.init(space,slice_from_raw_parts(pool,count),physical,
+                               slice_from_raw_parts(metadata,count),52,true) {
+        ok => { return 0; }, err(code) => { return code; },
+    } }
+}
+export("pc_paging_used") fn paging_used(space: *const paging.Space, output: *usize) u64 {
+    unsafe { match paging.used_tables(space) {
+        ok(value) => { *output = value; return 0; }, err(code) => { return code; },
+    } }
+}
+export("pc_paging_query") fn paging_query(space: *const paging.Space, virtual: u64, output: *paging.Mapping) u64 {
+    unsafe { match paging.query(space,virtual,output) {
+        ok => { return 0; }, err(code) => { return code; },
+    } }
+}
+export("pc_paging_map") fn paging_map(space: *paging.Space, virtual: u64, physical: u64) u64 {
+    unsafe { match paging.map(space,virtual,physical,paging.WRITE) {
+        ok => { return 0; }, err(code) => { return code; },
+    } }
+}
+export("pc_create") fn create(owner: *pc.Owner, allocator: *buddy.Allocator, space: *paging.Space,
+                               state: *const preflight.State, virtual: u64, object_size: usize,
+                               alignment: usize, metadata: *fixed.SlotMeta, count: usize, flush: active.Flush) u64 {
+    unsafe { match pc.create(owner,allocator,space,state,virtual,object_size,alignment,
+                             slice_from_raw_parts(metadata,count),flush) {
+        ok => { return 0; }, err(code) => { return code; },
+    } }
+}
+export("pc_alloc") fn allocate(owner: *pc.Owner, output: *u64) u64 {
+    unsafe { match pc.alloc(owner) {
+        ok(value) => { *output = value as usize as u64; return 0; }, err(code) => { return code; },
+    } }
+}
+export("pc_free") fn release(owner: *pc.Owner, object: *u8) u64 {
+    unsafe { match pc.free(owner,object) {
+        ok => { return 0; }, err(code) => { return code; },
+    } }
+}
+export("pc_describe") fn describe(owner: *pc.Owner, output: *pc.Info) u64 {
+    unsafe { match pc.describe(owner,output) {
+        ok => { return 0; }, err(code) => { return code; },
+    } }
+}
+export("pc_destroy") fn destroy(owner: *pc.Owner, state: *const preflight.State) u64 {
+    unsafe { match pc.destroy(owner,state) {
+        ok => { return 0; }, err(code) => { return code; },
+    } }
+}

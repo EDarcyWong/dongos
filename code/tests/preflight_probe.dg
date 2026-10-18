@@ -1,0 +1,8 @@
+module preflight_probe;
+import boot.preflight as preflight;
+export("preflight_plan") fn plan(s: *const preflight.State, old_root: u64, out: *preflight.Plan) u64 {
+    unsafe { match preflight.plan(s, old_root, out) { ok => { return 0; }, err(code) => { return code; }, } }
+}
+export("preflight_unchanged") fn unchanged(a: *const preflight.State, b: *const preflight.State) u64 {
+    unsafe { match preflight.unchanged(a,b) { ok => { return 0; }, err(code) => { return code; }, } }
+}

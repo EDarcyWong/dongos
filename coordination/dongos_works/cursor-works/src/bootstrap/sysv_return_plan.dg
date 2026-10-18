@@ -1,0 +1,25 @@
+// Plan Dong x86-64 SysV INTEGER-class return metadata only: word count,
+// value width in bits, and the backend's unified high-bit extension.
+// No float/SSE, aggregates beyond a two-word pair, sret, Win64, or varargs.
+module bootstrap.sysv_return_plan;
+pub const OK:u64=0;pub const INVALID:u64=1;
+pub const NONE:u64=0;pub const ZERO:u64=1;pub const SIGN:u64=2;
+pub struct Plan{pub words:usize,pub width_bits:usize,pub extension:u64}
+const MAX:u64=0xffff_ffff_ffff_ffff;
+fn span(p:u64,n:u64)bool{return n==0||(p!=0&&n<=MAX-p);}
+pub unsafe fn plan(kind:u64,out:*Plan)u64{unsafe{
+ let op=out as u64;let on=sizeof(Plan);
+ if out==null||(op&7)!=0||!span(op,on){return INVALID;}
+ var words:usize=0;var width:usize=0;var ext:u64=NONE;
+ if kind==0{}
+ else if kind==1||kind==2{words=1;width=8;ext=ZERO;}
+ else if kind==3{words=1;width=8;ext=SIGN;}
+ else if kind==4{words=1;width=16;ext=ZERO;}
+ else if kind==5{words=1;width=16;ext=SIGN;}
+ else if kind==6{words=1;width=32;ext=ZERO;}
+ else if kind==7{words=1;width=32;ext=SIGN;}
+ else if kind==8||kind==9||kind==10{words=1;width=64;ext=NONE;}
+ else if kind==11{words=2;width=64;ext=NONE;}
+ else{return INVALID;}
+ *out=Plan{words:words,width_bits:width,extension:ext};return OK;
+}}

@@ -1,0 +1,5 @@
+module user_context_probe;
+import user.abi as abi;
+export("uc_dong_size") fn size() usize { return sizeof(abi.Frame); }
+export("uc_dong_align") fn frame_alignment() usize { return alignof(abi.Frame); }
+export("uc_dong_empty") fn empty(out: *abi.Frame) void { unsafe { *out = abi.EMPTY; } }

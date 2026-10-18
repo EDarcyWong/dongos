@@ -1,0 +1,35 @@
+module user_domain_probe;
+import sched.user_domain as p;
+import sched.multicore as q;
+var D:*p.Domain=null;
+export("ud_required") fn required()u64{return p.required_bytes();}
+export("ud_init") fn initialize(arena:u64,bytes:u64)u64{unsafe{match p.initialize(arena,bytes,7,0x100000,&D){ok=>{return 0;},err(e)=>{return e;},}}}
+export("ud_lock") fn acquire(cpu:usize,deadline:u64)u64{unsafe{match p.acquire(D,cpu,deadline){ok=>{return 0;},err(e)=>{return e;},}}}
+export("ud_unlock") fn unlock(cpu:usize)u64{unsafe{match p.unlock(D,cpu){ok=>{return 0;},err(e)=>{return e;},}}}
+export("ud_admit") fn admit(cpu:usize,slot:usize,inc:u64,root:u64,frame:u64,xstate:u64,out:*u64)u64{unsafe{match p.admit(D,cpu,slot,inc,root,frame,xstate,8,7,out){ok=>{return 0;},err(e)=>{return e;},}}}
+export("ud_select") fn select(cpu:usize,out:*u64)u64{unsafe{match p.select(D,cpu,out){ok(value)=>{return value as u64;},err(e)=>{return e;},}}}
+export("ud_begin") fn begin(cpu:usize)u64{unsafe{match p.begin_entry(D,cpu){ok=>{return 0;},err(e)=>{return e;},}}}
+export("ud_complete") fn complete(cpu:usize)u64{unsafe{match p.complete_entry(D,cpu){ok=>{return 0;},err(e)=>{return e;},}}}
+export("ud_drain") fn drain(cpu:usize)u64{unsafe{match p.drain(D,cpu){ok(value)=>{return value as u64;},err(e)=>{return e;},}}}
+export("ud_release") fn release(cpu:usize,state:u64)u64{unsafe{match p.release(D,cpu,state){ok=>{return 0;},err(e)=>{return e;},}}}
+export("ud_commit") fn commit(cpu:usize)u64{unsafe{match p.commit_user(D,cpu){ok(value)=>{return value as u64;},err(e)=>{return e;},}}}
+export("ud_cancel") fn cancel(cpu:usize)u64{unsafe{match p.cancel_return(D,cpu){ok=>{return 0;},err(e)=>{return e;},}}}
+export("ud_park") fn park(cpu:usize)u64{unsafe{match p.park(D,cpu){ok=>{return 0;},err(e)=>{return e;},}}}
+export("ud_poll") fn poll(cpu:usize)u64{unsafe{match p.poll(D,cpu){ok(value)=>{return value as u64;},err(e)=>{return e;},}}}
+export("ud_barrier_begin") fn barrier_begin(cpu:usize)u64{unsafe{match p.barrier_begin(D,cpu){ok(value)=>{return value;},err(e)=>{return e;},}}}
+export("ud_barrier_finish") fn barrier_finish(cpu:usize,sequence:u64)u64{unsafe{match p.barrier_finish(D,cpu,sequence){ok(value)=>{return value as u64;},err(e)=>{return e;},}}}
+export("ud_wait") fn wait(cpu:usize,sequence:u64,deadline:u64)u64{unsafe{match p.barrier_wait(D,cpu,sequence,deadline){ok=>{return 0;},err(e)=>{return e;},}}}
+export("ud_retire_begin") fn retire_begin(cpu:usize,slot:usize)u64{unsafe{match p.retire_begin(D,cpu,slot){ok(value)=>{return value;},err(e)=>{return e;},}}}
+export("ud_retire_finish") fn retire_finish(cpu:usize,slot:usize)u64{unsafe{match p.retire_finish(D,cpu,slot){ok=>{return 0;},err(e)=>{return e;},}}}
+export("ud_wake") fn wake(cpu:usize,slot:usize,inc:u64)u64{unsafe{match p.wake(D,cpu,slot,inc){ok=>{return 0;},err(e)=>{return e;},}}}
+export("ud_audit") fn audit()u64{unsafe{match q.audit((*D).engine){ok=>{return 0;},err(e)=>{return e;},}}}
+export("ud_get") fn get(which:u64,id:usize)u64{unsafe{
+ let c=(*D).cpus+id;let p=(*D).processes+id;
+ if which==0{return (*D).failed;}if which==1{return (*D).owner;}if which==2{return (*D).lock;}if which==3{return (*D).barrier;}
+ if which==4{return (*c).mode;}if which==5{return (*c).token;}if which==6{return (*c).incarnation;}if which==7{return (*c).slot;}
+ if which==8{return (*c).capture;}if which==9{return (*c).capture_xstate;}if which==10{return (*c).returned;}if which==11{return (*c).return_xstate;}
+ if which==12{return (*c).requested;}if which==13{return (*c).acknowledged;}if which==14{return (*c).captured;}
+ if which==15{return (*p).token;}if which==16{return (*p).incarnation;}if which==17{return (*p).retiring;}
+ if which==18{return (*(*D).engine).threads[id].state;}if which==19{return (*(*D).engine).count;}
+ if which==20{return (*D).completed;}return 0;
+}}

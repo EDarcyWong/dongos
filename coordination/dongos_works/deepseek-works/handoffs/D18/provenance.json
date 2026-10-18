@@ -1,0 +1,58 @@
+{
+  "from_task": "claude:C20",
+  "to_task": "deepseek:D18",
+  "candidate": "1b59ea7aa55f4eb8994b6901f0ea3ed4",
+  "fingerprint": {
+    "claude-works/src/bootstrap/phi_copy_plan.dg": "ad571b19cb27b25250316edd70ff8c834fcfe83ee5166cc25d7c716977e4575c",
+    "claude-works/src/bootstrap/phi_copy_plan.md": "e07afef6c4e1e02690d6cc4e284b6d1d162faedbd9721bbd69afa5de72e0aff1",
+    "claude-works/tests/test_phi_copy_plan.py": "0f24cd5495acba3d3d2cbd41731eb35b06b63d69035ec7a01b4c060d240adb7f",
+    "claude-works/deliveries/C20.md": "be5fa894256f7b0dd19d2fe0186b8cf897bbcd4c5e1a5daeef85099d713fdfe5"
+  },
+  "copies": [
+    {
+      "source": "claude-works/src/bootstrap/phi_copy_plan.dg",
+      "source_sha256": "ad571b19cb27b25250316edd70ff8c834fcfe83ee5166cc25d7c716977e4575c",
+      "target": "deepseek-works/src/bootstrap/phi_copy_plan.dg",
+      "target_sha256": "ad571b19cb27b25250316edd70ff8c834fcfe83ee5166cc25d7c716977e4575c"
+    },
+    {
+      "source": "claude-works/src/bootstrap/phi_copy_plan.md",
+      "source_sha256": "e07afef6c4e1e02690d6cc4e284b6d1d162faedbd9721bbd69afa5de72e0aff1",
+      "target": "deepseek-works/src/bootstrap/phi_copy_plan.md",
+      "target_sha256": "e07afef6c4e1e02690d6cc4e284b6d1d162faedbd9721bbd69afa5de72e0aff1"
+    },
+    {
+      "source": "claude-works/tests/test_phi_copy_plan.py",
+      "source_sha256": "0f24cd5495acba3d3d2cbd41731eb35b06b63d69035ec7a01b4c060d240adb7f",
+      "target": "deepseek-works/tests/test_phi_copy_plan.py",
+      "target_sha256": "c2a5a553b3ee10a590a6ea8c69a8900a0734223adcac3e5fbdf74ec9b3a79e90"
+    }
+  ],
+  "prior_verification": {
+    "passed": false,
+    "checks": [
+      {
+        "spec": "discover:claude-works/tests:test_phi_copy_plan.py",
+        "passed": false,
+        "tests": 3,
+        "skips": 0,
+        "returncode": 1,
+        "cancelled": false,
+        "timed_out": false,
+        "elapsed_seconds": 3.031
+      }
+    ],
+    "source_stable": true,
+    "fingerprint": {
+      "claude-works/src/bootstrap/phi_copy_plan.dg": "ad571b19cb27b25250316edd70ff8c834fcfe83ee5166cc25d7c716977e4575c",
+      "claude-works/src/bootstrap/phi_copy_plan.md": "e07afef6c4e1e02690d6cc4e284b6d1d162faedbd9721bbd69afa5de72e0aff1",
+      "claude-works/tests/test_phi_copy_plan.py": "0f24cd5495acba3d3d2cbd41731eb35b06b63d69035ec7a01b4c060d240adb7f",
+      "claude-works/deliveries/C20.md": "be5fa894256f7b0dd19d2fe0186b8cf897bbcd4c5e1a5daeef85099d713fdfe5"
+    },
+    "summary": "定向复验失败或受测源码发生变化",
+    "finished_at": "2026-10-18T10:42:39+00:00",
+    "job": "5cbbda58a7a6450eaa75f85c921299c2"
+  },
+  "repairs": "原C20正式3项：随机字典模型和边界选择两项通过，负控失败。bad-first-input尚未到Python的'phi-moves'断言，就在fixed()的adjacent objects正例退出96，正则不匹配。隔离负控的无关前置正例，例如显式preflight标志：正式实现仍运行全部20拒绝+2合法布局，坏源码负控跳过前置项且诚实记0，再执行原指定phi-moves/status/guard断言；不要以编译失败、崩溃、超时、放宽正则或假预检计数替代拒绝。保留原三项、四类坏董及真实C9符号调度组合，修完后全项零skip通过；生产算法无新缺陷不改，不增矩阵。",
+  "transfer_is_not_delivery": true
+}

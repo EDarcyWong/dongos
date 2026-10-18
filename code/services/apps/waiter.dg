@@ -1,0 +1,18 @@
+module apps.waiter;
+import lib.sys as sys;
+pub var CANARY:u64=0;
+pub var PROBE_VALUE:u64=0;
+const BAD:u64=0x0512_0001;
+const PROBE_ADDRESS:u64=0x4400_0000;
+export("service_main") fn main()u64 {unsafe {
+    let boot=sys.boot();if boot==null||(*boot).version!=1||CANARY!=0 {return BAD;}
+    CANARY=(*boot).reserved0;
+    PROBE_VALUE=volatile_load(PROBE_ADDRESS as *const u64);
+    if PROBE_VALUE!=CANARY {return BAD;}
+    let ready=sys.ready_boot(boot);if ready!=0 {return ready;}
+    loop {
+        PROBE_VALUE=volatile_load(PROBE_ADDRESS as *const u64);
+        if PROBE_VALUE!=CANARY {return BAD;}
+        let status=sys.yield_now();if status!=0 {return status;}
+    }
+}}

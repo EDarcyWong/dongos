@@ -1,0 +1,558 @@
+// BSP device capabilities. ECAM uses one exclusive supervisor UC window;
+// only the selected storage/input function receives BAR/DMA grants. No raw user PA
+// selects a RAM mapping. AP activation requires a new shared/TLB protocol.
+module user.devices;
+import boot.memory_startup as startup;
+import boot.service_memory as resources;
+import boot.acpi_startup as acpi;
+import boot.device_memory as devices;
+import mm.paging as paging;
+import ipc.handles as handles;
+import user.memory as memory;
+import drivers.virtio_pci as vp;
+import drivers.virtio_blk as blk;
+import drivers.ahci_authority as ahci;
+import drivers.nvme_authority as nvme;
+import drivers.xhci_authority as xhci;
+import cpu.capabilities as cpu;
+pub error Invalid = 0x050a_0001;
+pub error Denied = 0x050a_0002;
+pub error Busy = 0x050a_0003;
+pub const CONFIGURATION_OBJECT: u64 = 10;
+pub const DMA_OBJECT: u64 = 20;
+pub const CONSOLE_OBJECT: u64 = 30;
+const WINDOW: u64 = 0xffff_c000_0008_0000;
+const BAR_BASE: u64 = 0x6000_0000;
+const DMA_BASE: u64 = 0x6800_0000;
+var CURRENT_PAGE: u64 = 0;
+var SELECTED: u64 = 0;
+var SELECTED_KIND:u64=0; // 1 modern VirtIO, 2 AHCI, 3 NVMe; after all grants.
+var AHCI_DMA_ENABLED:bool=false;
+var NVME_DMA_ENABLED:bool=false;
+var NVME_HEADER:nvme.Header=nvme.Header {cap:0,version:0,physical_bits:0,bar_bytes:0,lease_physical:0,lease_bytes:0,pci_command:0,cc:0,csts:0,intms:0,aqa:0,asq:0,acq:0,msi_disabled:0,msix_disabled:0,lease_exclusive:0};
+var AHCI_PORTS:[32]ahci.Port=[ahci.EMPTY_PORT;32];
+var BARS: [6]vp.Bar = [vp.Bar { physical: 0, length: 0, handle: 0 };6];
+var VIRTUAL: [6]u64 = [0;6];
+var DMA_LEASE: blk.Lease = blk.EMPTY_LEASE;
+var INPUT_SELECTED:u64=0;
+var BLOCK_GRANT_ATTEMPTED:bool=false;
+var INPUT_GRANT_ATTEMPTED:bool=false;
+var BLOCK_QUARANTINED:bool=false;
+var INPUT_QUARANTINED:bool=false;
+var INPUT_BARS:[6]vp.Bar=[vp.Bar { physical:0,length:0,handle:0 };6];
+var INPUT_VIRTUAL:[6]u64=[0;6];
+var INPUT_LEASE:blk.Lease=blk.EMPTY_LEASE;
+var REGION_BASE: u64 = 0;
+var REGION_FIRST: u64 = 0;
+var REGION_LAST: u64 = 0;
+var PHYSICAL_LIMIT: u64 = 0;
+var PHYSICAL_BITS:u64=0;
+var MANAGED:bool=false;
+var ADMITTED_BLOCK:u64=0;
+var ADMITTED_INPUT:u64=0;
+pub const ADMITTED_XHCI:usize=13;
+var XHCI_ADMITTED:u64=0;
+var XHCI_SELECTED:u64=0;
+var XHCI_IDENTITY:u32=0;
+var XHCI_OWNER:u64=0;
+var XHCI_INCARNATION:u64=0;
+var XHCI_BINDING_TOKEN:u64=0;
+var XHCI_BINDING_GENERATION:u64=0;
+var XHCI_GRANT_ATTEMPTED:bool=false;
+var XHCI_DMA_ATTEMPTED:bool=false;
+var XHCI_ENABLE_ATTEMPTED:bool=false;
+var XHCI_QUARANTINED:bool=false;
+var XHCI_BARS:[6]vp.Bar=[vp.Bar {physical:0,length:0,handle:0};6];
+var XHCI_VIRTUAL:[6]u64=[0;6];
+var XHCI_LEASE:blk.Lease=blk.EMPTY_LEASE;
+// BSP-only syscall snapshots. These bounded arrays never consume kernel stack.
+// Kernel-only trusted pre-BME snapshots. These pages are monotonically
+// reserved and zeroed by service_memory.allocate, never given to a process or
+// recycled after a failed allocation, malformed snapshot or controller exit.
+// 10 pages of Interrupters, one page of Extensions, 32 pages of DMA bytes.
+var XHCI_INTERRUPTS:*xhci.Interrupter=null;
+var XHCI_EXTENSIONS:*xhci.Extension=null;
+var XHCI_DMA_SNAPSHOT:*u8=null;
+var XHCI_SNAPSHOT_BLOCK:resources.Block=resources.Block {physical:0,virtual:0,pages:0};
+var XHCI_SNAPSHOT_ATTEMPTED:bool=false;
+pub unsafe fn require_manager()void{unsafe{MANAGED=true;}return;}
+pub unsafe fn admit(role:u64,ecam:u64)!void{unsafe{
+    if !MANAGED||ecam==0||(ecam&4095)!=0{return error.Denied;}
+    if role==1{if ADMITTED_BLOCK!=0&&ADMITTED_BLOCK!=ecam{return error.Denied;}ADMITTED_BLOCK=ecam;return;}
+    if role==2{if ADMITTED_INPUT!=0&&ADMITTED_INPUT!=ecam{return error.Denied;}ADMITTED_INPUT=ecam;return;}
+    if role==4{if XHCI_ADMITTED!=0&&XHCI_ADMITTED!=ecam{return error.Denied;}XHCI_ADMITTED=ecam;return;}
+}return error.Denied;}
+// Kernel device_host alone supplies this identity from its live role-4 ledger.
+// It is installed once before the privileged service is scheduled, never from
+// syscall arguments. A pinned driver slot cannot adopt another incarnation.
+pub unsafe fn xhci_attach(id:usize,owner:u64,incarnation:u64,token:u64,generation:u64,ecam:u64)!void{unsafe{
+    if id!=ADMITTED_XHCI||!MANAGED||ecam==0||ecam!=XHCI_ADMITTED||owner==0||incarnation==0
+        ||token==0||generation==0||XHCI_OWNER!=0||XHCI_QUARANTINED{return error.Denied;}
+    let identity=try read32(ecam);
+    if (identity&65535)==0||(identity&65535)==65535||((try read32(ecam+8))>>8)!=0x0c0330
+        ||(((try read32(ecam+12))>>16)&127)!=0{return error.Denied;}
+    XHCI_OWNER=owner;XHCI_INCARNATION=incarnation;XHCI_BINDING_TOKEN=token;XHCI_BINDING_GENERATION=generation;XHCI_IDENTITY=identity;
+}return;}
+// Device removal/crash revokes bus mastering and message interrupts before
+// retiring user capabilities. The private DMA lease remains held forever.
+pub unsafe fn quarantine(id:usize)!void{unsafe{
+    var ecam:u64=0;if id==2{BLOCK_QUARANTINED=true;ecam=SELECTED;if MANAGED{ecam=ADMITTED_BLOCK;}}else if id==4{INPUT_QUARANTINED=true;ecam=INPUT_SELECTED;if MANAGED{ecam=ADMITTED_INPUT;}}else if id==ADMITTED_XHCI{
+        // Even partial grants must become permanently unusable. Admission is
+        // enough to locate hardware; SELECTED is deliberately published last.
+        XHCI_QUARANTINED=true;ecam=XHCI_ADMITTED;
+    }else{return error.Denied;}
+    if ecam==0{return;}
+    let before=(try read32(ecam+4)) as u16;try command(ecam,(before|0x400)&~4);
+    if ((try read32(ecam+4))&0x404)!=0x400{return error.Invalid;}
+    let masked=try interrupt_caps(ecam,true);if masked!=3{return error.Invalid;}
+}return;}
+unsafe fn raw64(raw: *const u8,offset: usize) u64 { unsafe { return read_unaligned((raw+offset) as *const u64); } }
+pub unsafe fn initialize() !void {
+    unsafe {
+        let inventory = acpi.inventory_pointer();
+        if REGION_BASE != 0 || inventory == null || (*inventory).mcfg_count != 1 { return error.Invalid; }
+        let region = (*inventory).mcfg_regions[0];
+        if region.segment != 0 || region.base == 0 || region.base >= 0x1_0000_0000
+            || region.start_bus > region.end_bus || region.end_bus > 255
+            || (region.end_bus + 1)*0x10_0000 > 0x1_0000_0000-region.base { return error.Invalid; }
+        REGION_BASE=region.base; REGION_FIRST=region.start_bus; REGION_LAST=region.end_bus;
+        var caps=cpu.EMPTY_CAPABILITIES; try cpu.detect(&caps);
+        var bits=caps.physical_bits; if bits>48 { bits=48; }
+        PHYSICAL_BITS=bits as u64;
+        PHYSICAL_LIMIT=1<<(bits as u64);
+    }
+    return;
+}
+pub fn region_base() u64 { unsafe { return REGION_BASE; } }
+pub fn region_first() u64 { unsafe { return REGION_FIRST; } }
+pub fn region_last() u64 { unsafe { return REGION_LAST; } }
+unsafe fn mmio_range(physical: u64,bytes: u64,ecam: bool) !void {
+    unsafe {
+        if PHYSICAL_LIMIT==0 || physical == 0 || physical >= PHYSICAL_LIMIT || bytes == 0 || bytes > PHYSICAL_LIMIT-physical
+            || (physical & 4095) != 0 || (bytes & 4095) != 0 { return error.Invalid; }
+        let view = startup.runtime_pointer();
+        if view == null { return error.Invalid; }
+        let raw = (*view).raw_map as *const u8; let stride=(*view).descriptor_size as usize;
+        var offset: usize = 0;
+        while offset < (*view).raw_size as usize {
+            let start=raw64(raw,offset+8); let pages=raw64(raw,offset+24); let stop=start+pages*4096;
+            if physical < stop && start < physical+bytes {
+                let kind=read_unaligned((raw+offset) as *const u32);
+                // EDK II reserves MCFG's ECAM aperture as ReservedMemoryType,
+                // rather than MemoryMappedIO. Only the trusted MCFG window
+                // may use that exception; user BAR grants cannot acquire it.
+                let cfg_first=REGION_BASE+REGION_FIRST*0x10_0000;
+                let cfg_end=REGION_BASE+(REGION_LAST+1)*0x10_0000;
+                let reserved_ecam=ecam && kind==0 && physical>=cfg_first && physical+bytes<=cfg_end;
+                // Firmware may describe the assigned high PCI aperture as
+                // reserved UC space. This exception is reached only through
+                // sizing the selected hardware BAR; callers cannot choose PA.
+                let reserved_pci=!ecam && kind==0 && start>=0x1_0000_0000 && stop<=PHYSICAL_LIMIT
+                    && (raw64(raw,offset+32)&6)==0;
+                if (kind != 11 && !reserved_ecam && !reserved_pci) || (raw64(raw,offset+32)&0x8000_0000_0000_0000)!=0 { return error.Denied; }
+            }
+            offset += stride;
+        }
+        // Explicit retained display may occupy an otherwise undescribed hole.
+        let fb=(*view).display.framebuffer_base-0xffff_8000_0000_0000;
+        if physical < fb+(*view).display.framebuffer_size && fb < physical+bytes { return error.Denied; }
+    }
+    return;
+}
+unsafe fn configuration_address(physical: u64,bytes: u64) !void {
+    unsafe {
+        let first=REGION_BASE+REGION_FIRST*0x10_0000;
+        let end=REGION_BASE+(REGION_LAST+1)*0x10_0000;
+        if REGION_BASE==0 || physical<first || physical>=end || bytes>end-physical { return error.Denied; }
+    }
+    return;
+}
+unsafe fn window(physical: u64) !u64 {
+    unsafe {
+        let page=physical&~4095;
+        if CURRENT_PAGE != page {
+            try mmio_range(page,4096,true);
+            if CURRENT_PAGE==0 { try paging.map_live(startup.space_pointer(),WINDOW,page,paging.WRITE|paging.UNCACHED); }
+            else { try paging.replace_live(startup.space_pointer(),WINDOW,page,paging.WRITE|paging.UNCACHED); }
+            devices.runtime_invalidate(WINDOW);
+            CURRENT_PAGE=page;
+        }
+        return WINDOW+(physical&4095);
+    }
+}
+unsafe fn read32(physical: u64) !u32 {
+    unsafe { try configuration_address(physical,4); if (physical&3)!=0 { return error.Invalid; }
+        let pointer=try window(physical); return volatile_load(pointer as *const u32); }
+}
+unsafe fn write32(physical: u64,value: u32) !void {
+    unsafe { try configuration_address(physical,4); let pointer=try window(physical); volatile_store(pointer as *u32,value); }
+    return;
+}
+unsafe fn command(ecam: u64,value: u16) !void {
+    unsafe { let pointer=try window(ecam+4); volatile_store(pointer as *u16,value); }
+    return;
+}
+pub unsafe fn configuration_read(physical: u64) !u32 { unsafe { return read32(physical); } }
+// Read-only preflight: no allocation, PTE mutation, invalidation or hardware IO.
+// A changed/first ECAM page always keeps the outer all-CPU service barriers.
+pub unsafe fn configuration_read_stable(physical:u64)bool{unsafe{
+ if CURRENT_PAGE==0||(physical&3)!=0||(physical&~4095)!=CURRENT_PAGE{return false;}
+ match configuration_address(physical,4){ok=>{},err(e)=>{return false;},}
+ let root=startup.space_pointer();if root==null{return false;}
+ var mapping=paging.Mapping{physical:0,flags:0};match paging.query(root,WINDOW,&mapping){ok=>{},err(e)=>{return false;},}
+ return mapping.physical==CURRENT_PAGE&&mapping.flags==(paging.WRITE|paging.UNCACHED);
+}}
+pub unsafe fn configuration_write32(physical:u64,value:u32)!void{unsafe{try write32(physical,value);}return;}
+pub unsafe fn msi_device()!u64{unsafe{if BLOCK_QUARANTINED||SELECTED==0||SELECTED_KIND!=2||!AHCI_DMA_ENABLED||DMA_LEASE.token==0{return error.Denied;}return SELECTED;}}
+pub unsafe fn configuration_write16(physical:u64,value:u16)!void {
+    unsafe {
+        try configuration_address(physical,2);if (physical&1)!=0 {return error.Invalid;}
+        let pointer=try window(physical);volatile_store(pointer as *u16,value);
+    }return;
+}
+// Bounded standard capability list. MSI/MSI-X control uses a 16-bit write,
+// preserving the adjacent capability header and avoiding PCI status W1C bits.
+// Return bit0/bit1 only when MSI/MSI-X respectively are absent or disabled.
+unsafe fn interrupt_caps(ecam:u64,disable:bool)!u64 {
+    unsafe {
+        if ((try read32(ecam+4))&0x0010_0000)==0 {return 3;}
+        var offset=((try read32(ecam+0x34))&255) as u64;
+        var seen:u64=0;var msi:bool=false;var msix:bool=false;var result:u64=3;
+        while offset!=0 {
+            if offset<0x40 || offset>0xfc || (offset&3)!=0 || (seen&(1<<(offset/4)))!=0 {return error.Invalid;}
+            seen|=1<<(offset/4);let header=try read32(ecam+offset);let kind=header&255;
+            var control=(header>>16) as u16;
+            if kind==5 {
+                if msi {return error.Invalid;}msi=true;
+                if disable {let planned=control&~1;try configuration_write16(ecam+offset+2,planned);
+                    if ((try read32(ecam+offset))>>16)!=(planned as u32) {return error.Invalid;}control=planned;}
+                if (control&1)!=0 {result&=~1;}
+            }
+            if kind==0x11 {
+                if msix {return error.Invalid;}msix=true;
+                if disable {let planned=(control|0x4000)&~0x8000;try configuration_write16(ecam+offset+2,planned);
+                    if ((try read32(ecam+offset))>>16)!=(planned as u32) {return error.Invalid;}control=planned;}
+                if (control&0x8000)!=0 {result&=~2;}
+            }
+            offset=((header>>8)&255) as u64;
+        }
+        return result;
+    }
+}
+pub unsafe fn grant(id: usize,table: *handles.Table,ecam: u64) !void {
+    unsafe {
+        if id==ADMITTED_XHCI {try xhci_grant(table,ecam);return;}
+        if (id!=2 && id!=4) || (ecam&4095)!=0 ||(id==2&&BLOCK_QUARANTINED)||(id==4&&INPUT_QUARANTINED){ return error.Denied; }
+        if MANAGED&&((id==2&&ecam!=ADMITTED_BLOCK)||(id==4&&ecam!=ADMITTED_INPUT)){return error.Denied;}
+        var selected=SELECTED;var bars=&BARS[0];var virtuals=&VIRTUAL[0];var other=&INPUT_BARS[0];var device:u32=0x1042_1af4;
+        if id==4 { selected=INPUT_SELECTED;bars=&INPUT_BARS[0];virtuals=&INPUT_VIRTUAL[0];other=&BARS[0];device=0x1052_1af4; }
+        if selected!=0 { return error.Denied; }
+        let identity=try read32(ecam);var sata:bool=false;var nvm:bool=false;
+        if id==2 && (identity&65535)!=65535 && (identity&65535)!=0
+            {let class=(try read32(ecam+8))>>8;if class==0x010601 {sata=true;}if class==0x010802 {nvm=true;}}
+        if (identity!=device && !sata && !nvm) || (((try read32(ecam+12))>>16)&127)!=0 { return error.Denied; }
+        // Grants are published monotonically; a partial failure cannot retry or
+        // acquire DMA. SELECTED is set only after the entire grant succeeds.
+        if id==2 { if BLOCK_GRANT_ATTEMPTED { return error.Denied; }BLOCK_GRANT_ATTEMPTED=true; }
+        else { if INPUT_GRANT_ATTEMPTED { return error.Denied; }INPUT_GRANT_ATTEMPTED=true; }
+        let old_command=(try read32(ecam+4)) as u16;
+        try command(ecam,old_command&~7);
+        if ((try read32(ecam+4))&65535)!=((old_command&~7) as u32) {return error.Invalid;}
+        if (try interrupt_caps(ecam,true))!=3 {return error.Invalid;}
+        var i: usize=0;
+        while i<6 {
+            if sata && i!=5 {i+=1;continue;}
+            if nvm && i!=0 {i+=1;continue;}
+            let address=ecam+16+i as u64*4;
+            let old=try read32(address);
+            if (old&1)!=0 { i+=1; continue; }
+            let kind=(old>>1)&3;
+            if kind!=0 && kind!=2 { i+=1; continue; }
+            var upper: u32=0;
+            if kind==2 { if i==5 { return error.Invalid; } upper=try read32(address+4); }
+            try write32(address,0xffff_ffff);
+            if kind==2 { try write32(address+4,0xffff_ffff); }
+            let low_mask=try read32(address);
+            var upper_mask: u32=0;
+            if kind==2 { upper_mask=try read32(address+4); try write32(address+4,upper); }
+            try write32(address,old);
+            var physical=(old&~15) as u64;
+            var mask=(low_mask&~15) as u64;
+            var bits: u64=0xffff_ffff;
+            if kind==2 { physical|=(upper as u64)<<32; mask|=(upper_mask as u64)<<32; bits=0xffff_ffff_ffff_ffff; }
+            if mask!=0 && physical!=0 {
+                let length=(~mask & bits)+1;
+                if length<4096 || length>0x100_0000 || (length&(length-1))!=0 || (physical&(length-1))!=0 { return error.Invalid; }
+                try mmio_range(physical,length,false);
+                var j: usize=0;
+                while j<i {
+                    if bars[j].length!=0 && physical<bars[j].physical+bars[j].length && bars[j].physical<physical+length { return error.Denied; }
+                    j+=1;
+                }
+                j=0;while j<6 { if other[j].length!=0 && physical<other[j].physical+other[j].length && other[j].physical<physical+length { return error.Denied; }j+=1; }
+                j=0;while j<6 {if XHCI_BARS[j].length!=0&&physical<XHCI_BARS[j].physical+XHCI_BARS[j].length&&XHCI_BARS[j].physical<physical+length{return error.Denied;}j+=1;}
+                let virtual=BAR_BASE+(i as u64)*0x100_0000;
+                try memory.map_device(id,virtual,physical,length);
+                let handle=try handles.install(table,handles.DEVICE,100+i as u64,handles.READ|handles.WRITE|handles.MAP);
+                bars[i]=vp.Bar { physical: physical,length: length,handle: handle }; virtuals[i]=virtual;
+            }
+            if kind==2 { i+=1; }
+            i+=1;
+        }
+        if sata || nvm {
+            if (sata && BARS[5].handle==0) || (nvm && BARS[0].handle==0) {return error.Invalid;}
+            // Stop controller-wide DMA until every implemented engine and the
+            // new private lease bases have been independently checked below.
+            try command(ecam,(old_command|0x402)&~5);
+            if ((try read32(ecam+4))&0x407)!=0x402 {return error.Invalid;}
+        }else {try command(ecam,old_command|0x406);}
+        if id==2 { SELECTED=ecam;SELECTED_KIND=1;if sata {SELECTED_KIND=2;}if nvm {SELECTED_KIND=3;} } else { INPUT_SELECTED=ecam; }
+    }
+    return;
+}
+pub fn granted_bars(id:usize) *const vp.Bar { unsafe {if id==ADMITTED_XHCI{return &XHCI_BARS[0];}if id==4 { return &INPUT_BARS[0]; }return &BARS[0]; } }
+pub unsafe fn mapped(id:usize,object: u64) !u64 {
+    unsafe { if (id==2&&BLOCK_QUARANTINED)||(id==4&&INPUT_QUARANTINED){return error.Denied;}var virtuals=&VIRTUAL[0];if id==ADMITTED_XHCI {if XHCI_QUARANTINED{return error.Denied;}virtuals=&XHCI_VIRTUAL[0];}else if id==4 { virtuals=&INPUT_VIRTUAL[0]; }else { if id!=2 { return error.Denied; } }if object<100 || object>=106 || virtuals[(object-100) as usize]==0 { return error.Denied; }
+        return virtuals[(object-100) as usize]; }
+}
+pub unsafe fn dma_acquire(id: usize,bytes: u64,alignment: u64) !void {
+    unsafe {
+        if (id==2&&BLOCK_QUARANTINED)||(id==4&&INPUT_QUARANTINED){return error.Denied;}
+        if id==ADMITTED_XHCI {
+            if XHCI_SELECTED==0||XHCI_OWNER==0||XHCI_INCARNATION==0||XHCI_QUARANTINED||XHCI_DMA_ATTEMPTED
+                ||bytes!=131072||alignment!=4096{return error.Denied;}
+            XHCI_DMA_ATTEMPTED=true;
+            let physical=try memory.contiguous(id,DMA_BASE,32);
+            // The allocator creates pinned, exclusive USER|WRITE (NX) pages.
+            // No share operation or caller-selected PA is exposed by this ABI.
+            XHCI_LEASE=blk.Lease {token:3,physical:physical,pointer:DMA_BASE as *u8,length:131072};return;
+        }
+        if id==4 {
+            if INPUT_SELECTED==0 || INPUT_LEASE.token!=0 || bytes!=16384 || alignment!=4096 { return error.Denied; }
+            let physical=try memory.contiguous(id,DMA_BASE,4);
+            INPUT_LEASE=blk.Lease { token:2,physical:physical,pointer:DMA_BASE as *u8,length:16384 };return;
+        }
+        var expected=blk.DMA_BYTES as u64;if SELECTED_KIND==2 || SELECTED_KIND==3 {expected=131072;}
+        if id!=2 || SELECTED==0 || DMA_LEASE.token!=0 || bytes!=expected || alignment!=4096 { return error.Denied; }
+        let physical=try memory.contiguous(id,DMA_BASE,17);
+        DMA_LEASE=blk.Lease { token: 1,physical: physical,pointer: DMA_BASE as *u8,length: 32*4096 };
+    }
+    return;
+}
+pub fn dma_lease(id:usize) *const blk.Lease { unsafe {if id==ADMITTED_XHCI{return &XHCI_LEASE;}if id==4 { return &INPUT_LEASE; }return &DMA_LEASE; } }
+// The same supervisor UC scratch window is serialized on the BSP. Only this
+// trusted, hardware-sized BAR is read; users cannot provide a physical address.
+unsafe fn device_word(index:usize,offset:u64)!u64 {
+    unsafe {
+        if index>=6 {return error.Denied;}let bar=BARS[index];
+        if bar.handle==0 || offset>bar.length || bar.length-offset<4 || (offset&3)!=0 {return error.Denied;}
+        let physical=bar.physical+offset;let page=physical&~4095;
+        if CURRENT_PAGE!=page {
+            try mmio_range(page,4096,false);
+            if CURRENT_PAGE==0 {try paging.map_live(startup.space_pointer(),WINDOW,page,paging.WRITE|paging.UNCACHED);}
+            else {try paging.replace_live(startup.space_pointer(),WINDOW,page,paging.WRITE|paging.UNCACHED);}
+            devices.runtime_invalidate(WINDOW);CURRENT_PAGE=page;
+        }
+        return volatile_load((WINDOW+(physical&4095)) as *const u32) as u64;
+    }
+}
+unsafe fn ahci_word(offset:u64)!u64 {unsafe {return device_word(5,offset);}}
+pub unsafe fn ahci_enable(id:usize,port:u64)!void {
+    unsafe {
+        if BLOCK_QUARANTINED{return error.Denied;}
+        if id!=2 || SELECTED==0 || SELECTED_KIND!=2 || AHCI_DMA_ENABLED || DMA_LEASE.token!=1 {return error.Denied;}
+        let cap=try ahci_word(0);let pi=try ahci_word(12);let version=try ahci_word(16);
+        let count=(cap&31)+1;
+        if port>=count || BARS[5].length<0x100+count*0x80 {return error.Denied;}
+        var cap2:u64=0;var bohc:u64=0;
+        if version>=0x10200 {cap2=try ahci_word(36);if (cap2&1)!=0 {bohc=try ahci_word(40);}}
+        var h=ahci.Header {cap:cap,ghc:try ahci_word(4),implemented:pi,selected:port,
+            bar_bytes:BARS[5].length,lease_physical:DMA_LEASE.physical,lease_bytes:DMA_LEASE.length as u64,
+            pci_command:((try read32(SELECTED+4))&65535) as u64,version:version,cap2:cap2,bohc:bohc};
+        var i:usize=0;
+        while i<count as usize {
+            AHCI_PORTS[i]=ahci.EMPTY_PORT;
+            if (pi&(1<<(i as u64)))!=0 {
+                let base=0x100+(i as u64)*0x80;
+                AHCI_PORTS[i].cmd=try ahci_word(base+24);AHCI_PORTS[i].ci=try ahci_word(base+56);
+                AHCI_PORTS[i].sact=try ahci_word(base+52);AHCI_PORTS[i].interrupts=try ahci_word(base+20);
+                AHCI_PORTS[i].clb=(try ahci_word(base))|((try ahci_word(base+4))<<32);
+                AHCI_PORTS[i].fb=(try ahci_word(base+8))|((try ahci_word(base+12))<<32);
+                AHCI_PORTS[i].ssts=try ahci_word(base+40);AHCI_PORTS[i].signature=try ahci_word(base+36);
+            }i+=1;
+        }
+        let planned=try ahci.permit(&h,slice_from_raw_parts(&AHCI_PORTS[0],count as usize));
+        AHCI_DMA_ENABLED=true; // irreversible attempt, including uncertain I/O
+        try command(SELECTED,planned);
+        if ((try read32(SELECTED+4))&65535)!=(planned as u32) {
+            // No caller may retry after an uncertain command write. Retain all
+            // RAM ownership, turn BME off, and propagate the readback failure.
+            AHCI_DMA_ENABLED=true;try command(SELECTED,planned&~4);return error.Invalid;
+        }
+        AHCI_DMA_ENABLED=true;
+    }return;
+}
+pub unsafe fn nvme_enable(id:usize)!void {
+    unsafe {
+        if BLOCK_QUARANTINED{return error.Denied;}
+        if id!=2 || SELECTED==0 || SELECTED_KIND!=3 || NVME_DMA_ENABLED || DMA_LEASE.token!=1 {return error.Denied;}
+        let interrupts=try interrupt_caps(SELECTED,false);
+        if interrupts!=3 {return error.Denied;}
+        NVME_HEADER=nvme.Header {cap:(try device_word(0,0))|((try device_word(0,4))<<32),
+            version:try device_word(0,8),physical_bits:PHYSICAL_BITS,bar_bytes:BARS[0].length,
+            lease_physical:DMA_LEASE.physical,lease_bytes:DMA_LEASE.length as u64,
+            pci_command:((try read32(SELECTED+4))&65535) as u64,cc:try device_word(0,0x14),
+            csts:try device_word(0,0x1c),intms:try device_word(0,0x0c),aqa:try device_word(0,0x24),
+            asq:(try device_word(0,0x28))|((try device_word(0,0x2c))<<32),
+            acq:(try device_word(0,0x30))|((try device_word(0,0x34))<<32),
+            msi_disabled:interrupts&1,msix_disabled:(interrupts>>1)&1,lease_exclusive:1};
+        let planned=try nvme.permit(&NVME_HEADER);
+        NVME_DMA_ENABLED=true; // irreversible even when command readback fails
+        try command(SELECTED,planned);
+        if ((try read32(SELECTED+4))&65535)!=(planned as u32) {
+            try command(SELECTED,planned&~4);return error.Invalid;
+        }
+    }return;
+}
+unsafe fn xhci_identity()!void {unsafe {
+    if XHCI_ADMITTED==0||XHCI_QUARANTINED||XHCI_OWNER==0||XHCI_INCARNATION==0||XHCI_BINDING_TOKEN==0
+        ||XHCI_BINDING_GENERATION==0||((try read32(XHCI_ADMITTED))!=XHCI_IDENTITY)
+        ||((try read32(XHCI_ADMITTED+8))>>8)!=0x0c0330||(((try read32(XHCI_ADMITTED+12))>>16)&127)!=0 {return error.Denied;}
+}return;}
+unsafe fn xhci_grant(table:*handles.Table,ecam:u64)!void {unsafe {
+    if ecam!=XHCI_ADMITTED||XHCI_GRANT_ATTEMPTED||XHCI_SELECTED!=0 {return error.Denied;}try xhci_identity();
+    XHCI_GRANT_ATTEMPTED=true;
+    let previous=(try read32(ecam+4)) as u16;
+    try command(ecam,(previous|0x400)&~7);
+    if ((try read32(ecam+4))&0x407)!=0x400||(try interrupt_caps(ecam,true))!=3 {return error.Invalid;}
+    // xHCI uses BAR0 only. Other BARs are never exposed to this role.
+    let old=try read32(ecam+16);let kind=(old>>1)&3;
+    if (old&1)!=0||(kind!=0&&kind!=2) {return error.Denied;}
+    var upper:u32=0;if kind==2 {upper=try read32(ecam+20);}
+    try write32(ecam+16,0xffff_ffff);if kind==2 {try write32(ecam+20,0xffff_ffff);}
+    let low_mask=try read32(ecam+16);var high_mask:u32=0;
+    if kind==2 {high_mask=try read32(ecam+20);try write32(ecam+20,upper);}try write32(ecam+16,old);
+    var physical=(old&~15) as u64;var mask=(low_mask&~15) as u64;var bits:u64=0xffff_ffff;
+    if kind==2 {physical|=(upper as u64)<<32;mask|=(high_mask as u64)<<32;bits=0xffff_ffff_ffff_ffff;}
+    let length=(~mask&bits)+1;
+    if physical==0||mask==0||length<4096||length>0x100_0000||(length&(length-1))!=0||(physical&(length-1))!=0 {return error.Invalid;}
+    try mmio_range(physical,length,false);
+    var i:usize=0;while i<6 {
+        if (BARS[i].length!=0&&physical<BARS[i].physical+BARS[i].length&&BARS[i].physical<physical+length)
+            ||(INPUT_BARS[i].length!=0&&physical<INPUT_BARS[i].physical+INPUT_BARS[i].length&&INPUT_BARS[i].physical<physical+length) {return error.Denied;}i+=1;
+    }
+    try memory.map_device(ADMITTED_XHCI,BAR_BASE,physical,length);
+    let handle=try handles.install(table,handles.DEVICE,100,handles.READ|handles.WRITE|handles.MAP);
+    XHCI_BARS[0]=vp.Bar {physical:physical,length:length,handle:handle};XHCI_VIRTUAL[0]=BAR_BASE;
+    try command(ecam,(previous|0x402)&~5);
+    if ((try read32(ecam+4))&0x407)!=0x402 {return error.Invalid;}
+    XHCI_SELECTED=ecam;
+}return;}
+unsafe fn xhci_word(offset:u64)!u64 {unsafe {
+    let bar=XHCI_BARS[0];
+    if bar.handle==0||(offset&3)!=0||offset>bar.length||4>bar.length-offset {return error.Denied;}
+    let physical=bar.physical+offset;let page=physical&~4095;
+    if CURRENT_PAGE!=page {
+        try mmio_range(page,4096,false);
+        if CURRENT_PAGE==0 {try paging.map_live(startup.space_pointer(),WINDOW,page,paging.WRITE|paging.UNCACHED);}
+        else {try paging.replace_live(startup.space_pointer(),WINDOW,page,paging.WRITE|paging.UNCACHED);}
+        devices.runtime_invalidate(WINDOW);CURRENT_PAGE=page;
+    }
+    return volatile_load((WINDOW+(physical&4095)) as *const u32) as u64;
+}}
+unsafe fn xhci_qword(offset:u64)!u64 {unsafe {
+    return (try xhci_word(offset))|((try xhci_word(offset+4))<<32);
+}}
+unsafe fn xhci_snapshot()!void {unsafe {
+    if XHCI_SNAPSHOT_ATTEMPTED {
+        if XHCI_INTERRUPTS==null||XHCI_EXTENSIONS==null||XHCI_DMA_SNAPSHOT==null
+            ||XHCI_SNAPSHOT_BLOCK.pages!=43 {return error.Denied;}return;
+    }
+    // Mark before any reserve/map side effect. A partially mapped allocation
+    // is held by the arena and must never be retried or published piecemeal.
+    XHCI_SNAPSHOT_ATTEMPTED=true;
+    if sizeof(xhci.Interrupter)!=40||sizeof(xhci.Extension)!=48 {return error.Invalid;}
+    var held=resources.Block {physical:0,virtual:0,pages:0};
+    try resources.allocate(43,1,&held);
+    let arena=(*resources.plan_pointer()).arena;
+    if held.pages!=43||held.physical==0||(held.physical&4095)!=0||(held.virtual&4095)!=0
+        ||held.physical<arena.physical||held.physical-arena.physical>arena.length
+        ||43*4096>arena.length-(held.physical-arena.physical)
+        ||held.virtual!=resources.ARENA_BASE+held.physical-arena.physical {return error.Denied;}
+    // The producer established WB/RW/NX supervisor mappings and cleared every
+    // byte. Publish the complete disjoint views only after all checks pass.
+    XHCI_SNAPSHOT_BLOCK=held;
+    XHCI_INTERRUPTS=held.virtual as *xhci.Interrupter;
+    XHCI_EXTENSIONS=(held.virtual+10*4096) as *xhci.Extension;
+    XHCI_DMA_SNAPSHOT=(held.virtual+11*4096) as *u8;
+}return;}
+unsafe fn xhci_extensions(first:u64)!usize {unsafe {
+    var offset=first;var count:usize=0;
+    while offset!=0 {
+        if count==64 {return error.Denied;}
+        let header=try xhci_word(offset);let kind=header&255;var bytes:u64=0;
+        if kind==1 {bytes=8;}else if kind==2 {bytes=16;}else {return error.Denied;}
+        if offset>XHCI_BARS[0].length||bytes>XHCI_BARS[0].length-offset {return error.Denied;}
+        var e=xhci.Extension {offset:offset,header:header,name:0,range:0,slot:0,legacy_control:0};
+        if kind==1 {e.legacy_control=try xhci_word(offset+4);}
+        else {e.name=try xhci_word(offset+4);e.range=try xhci_word(offset+8);e.slot=try xhci_word(offset+12);}
+        *(XHCI_EXTENSIONS+count)=e;count+=1;
+        let next=(header>>8)&255;if next==0 {offset=0;}else {
+            if next*4<bytes||offset>XHCI_BARS[0].length||next*4>XHCI_BARS[0].length-offset {return error.Denied;}
+            offset+=next*4;
+        }
+    }return count;
+}}
+// Caller identity is taken from the live kernel process catalog. The syscall
+// dispatcher verifies CONFIGURATION and zero unused arguments before this.
+// The BSP keeps this owner stopped throughout the snapshot and PCI commit.
+pub unsafe fn xhci_enable(id:usize,owner:u64,incarnation:u64)!void {unsafe {
+    if id!=ADMITTED_XHCI||owner!=XHCI_OWNER||incarnation!=XHCI_INCARNATION||XHCI_SELECTED==0
+        ||XHCI_ENABLE_ATTEMPTED||XHCI_LEASE.token!=3||XHCI_LEASE.length!=131072 {return error.Denied;}
+    try xhci_identity();let interrupts=try interrupt_caps(XHCI_SELECTED,false);if interrupts!=3 {return error.Denied;}
+    let identity=try read32(XHCI_SELECTED+8);let header=try read32(XHCI_SELECTED+12);
+    // Read only fixed capability offsets before validating the derived spans.
+    let cap0=try xhci_word(0);let op=cap0&255;
+    if op<32||(op&3)!=0||op>XHCI_BARS[0].length||12>XHCI_BARS[0].length-op {return error.Denied;}
+    var h=xhci.Header {owner:owner,incarnation:incarnation,binding_owner:XHCI_OWNER,binding_incarnation:XHCI_INCARNATION,
+        binding_token:XHCI_BINDING_TOKEN,binding_role:4,lease_owner:XHCI_OWNER,lease_incarnation:XHCI_INCARNATION,
+        lease_token:XHCI_LEASE.token,lease_exclusive:1,bar_exclusive:1,bar_uncached:1,lease_private_nx:1,attempted:0,
+        physical_bits:PHYSICAL_BITS,bar_physical:XHCI_BARS[0].physical,bar_bytes:XHCI_BARS[0].length,
+        lease_physical:XHCI_LEASE.physical,lease_bytes:XHCI_LEASE.length as u64,pci_command:((try read32(XHCI_SELECTED+4))&65535) as u64,
+        class_code:(identity>>8) as u64,header_type:((header>>16)&255) as u64,msi_disabled:interrupts&1,msix_disabled:(interrupts>>1)&1,
+        cap0:cap0,hcs1:try xhci_word(4),hcs2:try xhci_word(8),hcc1:try xhci_word(16),dboff:try xhci_word(20),rtsoff:try xhci_word(24),pagesize:try xhci_word(op+8)};
+    var b=xhci.Bounds {operational:0,runtime:0,doorbells:0,ports:0,interrupters:0,slots:0,extended_first:0,context_bytes:0};try xhci.shape(&h,&b);
+    try xhci_snapshot();
+    let r=xhci.Registers {usbcmd:try xhci_word(b.operational),usbsts:try xhci_word(b.operational+4),dnctrl:try xhci_word(b.operational+20),
+        dcbaap:try xhci_qword(b.operational+48),crcr:try xhci_qword(b.operational+24),config:try xhci_word(b.operational+56)};
+    var i:usize=0;while i<b.interrupters as usize {
+        let base=b.runtime+32+i as u64*32;
+        *(XHCI_INTERRUPTS+i)=xhci.Interrupter {iman:try xhci_word(base),imod:try xhci_word(base+4),erstsz:try xhci_word(base+8),
+            erstba:try xhci_qword(base+16),erdp:try xhci_qword(base+24)};i+=1;
+    }
+    let count=try xhci_extensions(b.extended_first);
+    // Validate every fixed lease page through the allocator's owned aliases,
+    // including physical identity. Contiguous() is the sole producer and pins
+    // USER|WRITE/NX pages; privileged setup never shares this driver lease.
+    i=0;while i<32 {
+        let alias=try memory.owned_alias(id,DMA_BASE+i as u64*4096,true);var found=false;var f:usize=0;
+        while f<memory.frame_count() {let frame=*(memory.frames()+f);
+            if frame.physical==XHCI_LEASE.physical+i as u64*4096&&frame.virtual==alias&&frame.writable==1 {found=true;break;}f+=1;
+        }if !found {return error.Denied;}i+=1;
+    }
+    try memory.copy_in(id,DMA_BASE,slice_from_raw_parts(XHCI_DMA_SNAPSHOT,131072));
+    let planned=try xhci.permit(&h,&r,slice_from_raw_parts(XHCI_INTERRUPTS,b.interrupters as usize),
+        slice_from_raw_parts(XHCI_EXTENSIONS,count),slice_from_raw_parts(XHCI_DMA_SNAPSHOT,131072));
+    XHCI_ENABLE_ATTEMPTED=true;compiler_fence();
+    // Even a failed write/readback retires this gate permanently. The outer
+    // driver failure path quarantines BME/MSI/INTx and retains all RAM.
+    match command(XHCI_SELECTED,planned) {ok=>{},err(code)=>{
+        match quarantine(id) {ok=>{},err(ignored)=>{},}return error.Invalid;
+    },}
+    var actual:u32=0;match read32(XHCI_SELECTED+4) {ok(value)=>{actual=value;},err(code)=>{
+        match quarantine(id) {ok=>{},err(ignored)=>{},}return error.Invalid;
+    },}
+    if (actual&65535)!=(planned as u32) {
+        match quarantine(id) {ok=>{},err(ignored)=>{},}return error.Invalid;
+    }
+}return;}

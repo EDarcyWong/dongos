@@ -1,0 +1,47 @@
+module alg.intrinsics;
+
+const WRAPPED: u8 = wrapping_add(255, 2);
+var COUNTER32: u32 = 0;
+var COUNTER64: u64 = 0;
+packed struct Unaligned { before: u8, value: i32, after: u8 }
+
+// Ordinary RAM only. Atomic objects are accessed through atomics throughout.
+// The boot kernel calls this after disabling interrupts and leaving firmware.
+pub fn probe() u64 {
+    if WRAPPED != 1 { return 0; }
+    let underflow: u16 = wrapping_sub(0, 1);
+    let signed_product: i8 = wrapping_mul(64, 2);
+    if underflow != 65535 { return 0; }
+    if signed_product != -128 { return 0; }
+    var packed_value = Unaligned { before: 17, value: -23, after: 29 };
+    var visible: i16 = -5;
+    unsafe {
+        write_unaligned(&packed_value.value, -7);
+        let unaligned = read_unaligned(&packed_value.value);
+        if unaligned != -7 { return 0; }
+        if packed_value.before != 17 { return 0; }
+        if packed_value.after != 29 { return 0; }
+        volatile_store(&visible, -11);
+        compiler_fence();
+        let observed = volatile_load(&visible);
+        if observed != -11 { return 0; }
+
+        if atomic_load(&COUNTER32) != 0 { return 0; }
+        if atomic_load(&COUNTER64) != 0 { return 0; }
+        atomic_store(&COUNTER32, 0xffff_fffe);
+        if atomic_fetch_add(&COUNTER32, 3) != 0xffff_fffe { return 0; }
+        if atomic_compare_exchange(&COUNTER32, 2, 99) != 1 { return 0; }
+        if atomic_compare_exchange(&COUNTER32, 1, 300) != 1 { return 0; }
+        atomic_store(&COUNTER64, 0xffff_ffff_ffff_ffff);
+        if atomic_fetch_add(&COUNTER64, 2) != 0xffff_ffff_ffff_ffff { return 0; }
+        if atomic_compare_exchange(&COUNTER64, 0, 99) != 1 { return 0; }
+        if atomic_compare_exchange(&COUNTER64, 1, 400) != 1 { return 0; }
+
+        asm { pause }
+        asm { lfence }
+        asm { sfence }
+        asm { mfence }
+        return (atomic_load(&COUNTER32) as u64) + atomic_load(&COUNTER64)
+            + ((0 - unaligned) as u64) + ((0 - observed) as u64) + (WRAPPED as u64);
+    }
+}

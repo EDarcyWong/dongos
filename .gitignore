@@ -5,3 +5,11 @@ __pycache__/
 build/
 esp/
 *.log
+.tools/
+node_modules/
+# Windows caches created by local tools; not project sources.
+code/%SystemDrive%/
+coordination/.local/
+coordination/index.*.tmp
+coordination/*_works/.local/
+coordination/*_works/index.*.tmp

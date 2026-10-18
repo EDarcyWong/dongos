@@ -1,0 +1,67 @@
+// SHA-256 over a bounded stable readable byte borrow; no allocation or SIMD.
+module exec.sha256;
+pub error InvalidInput = 0x0404_0010;
+pub struct Digest { pub bytes: [32]u8 }
+pub const EMPTY_DIGEST: Digest = Digest { bytes: [0;32] };
+const MASK: u64 = 0xffff_ffff;
+const K: [64]u64 = [
+    0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,
+    0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,
+    0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,
+    0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,
+    0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,
+    0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,
+    0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,
+    0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2
+];
+fn rotate(value: u64, bits: u64) u64 { return ((value >> bits) | (value << (32 - bits))) & MASK; }
+unsafe fn compress(state: *[8]u64, block: *const u8) void {
+    unsafe {
+        var words: [64]u64 = [0;64]; var i: usize = 0;
+        while i < 16 {
+            words[i] = ((*(block + i * 4) as u64) << 24) | ((*(block + i * 4 + 1) as u64) << 16)
+                | ((*(block + i * 4 + 2) as u64) << 8) | (*(block + i * 4 + 3) as u64); i += 1;
+        }
+        while i < 64 {
+            let a = words[i - 15]; let b = words[i - 2];
+            let s0 = rotate(a,7) ^ rotate(a,18) ^ (a >> 3);
+            let s1 = rotate(b,17) ^ rotate(b,19) ^ (b >> 10);
+            words[i] = (words[i - 16] + s0 + words[i - 7] + s1) & MASK; i += 1;
+        }
+        var a = (*state)[0]; var b = (*state)[1]; var c = (*state)[2]; var d = (*state)[3];
+        var e = (*state)[4]; var f = (*state)[5]; var g = (*state)[6]; var h = (*state)[7];
+        i = 0;
+        while i < 64 {
+            let s1 = rotate(e,6) ^ rotate(e,11) ^ rotate(e,25);
+            let choice = (e & f) ^ ((~e) & g);
+            let t1 = (h + s1 + choice + K[i] + words[i]) & MASK;
+            let s0 = rotate(a,2) ^ rotate(a,13) ^ rotate(a,22);
+            let majority = (a & b) ^ (a & c) ^ (b & c); let t2 = (s0 + majority) & MASK;
+            h = g; g = f; f = e; e = (d + t1) & MASK; d = c; c = b; b = a; a = (t1 + t2) & MASK; i += 1;
+        }
+        (*state)[0] = ((*state)[0] + a) & MASK; (*state)[1] = ((*state)[1] + b) & MASK;
+        (*state)[2] = ((*state)[2] + c) & MASK; (*state)[3] = ((*state)[3] + d) & MASK;
+        (*state)[4] = ((*state)[4] + e) & MASK; (*state)[5] = ((*state)[5] + f) & MASK;
+        (*state)[6] = ((*state)[6] + g) & MASK; (*state)[7] = ((*state)[7] + h) & MASK;
+    }
+    return;
+}
+pub unsafe fn hash(raw: []const u8, out: *Digest) !void {
+    unsafe {
+        if out == null || (raw.ptr == null && raw.len != 0) || raw.len > 0x400_0000
+            || (raw.ptr as u64) > 0xffff_ffff_ffff_ffff - raw.len as u64 { return error.InvalidInput; }
+        var state: [8]u64 = [0x6a09e667,0xbb67ae85,0x3c6ef372,0xa54ff53a,0x510e527f,0x9b05688c,0x1f83d9ab,0x5be0cd19];
+        var cursor: usize = 0;
+        while raw.len - cursor >= 64 { compress(&state,raw.ptr + cursor); cursor += 64; }
+        var tail: [128]u8 = [0;128]; let remaining = raw.len - cursor; var i: usize = 0;
+        while i < remaining { tail[i] = *(raw.ptr + cursor + i); i += 1; }
+        tail[remaining] = 128; var bytes: usize = 64; if remaining >= 56 { bytes = 128; }
+        let bits = (raw.len as u64) * 8; i = 0;
+        while i < 8 { tail[bytes - 1 - i] = ((bits >> ((i as u64) * 8)) & 255) as u8; i += 1; }
+        compress(&state,&tail[0]); if bytes == 128 { compress(&state,&tail[64]); }
+        var digest = EMPTY_DIGEST; i = 0;
+        while i < 32 { digest.bytes[i] = ((state[i / 4] >> ((3 - (i % 4)) as u64 * 8)) & 255) as u8; i += 1; }
+        *out = digest;
+    }
+    return;
+}

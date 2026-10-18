@@ -1,0 +1,124 @@
+module desktop.theme;
+pub error InvalidTheme = 0x0721_0001;
+pub error InvalidAnimation = 0x0721_0002;
+pub struct Theme {
+    pub background: u32, pub surface: u32, pub text: u32, pub muted: u32,
+    pub accent: u32, pub border: u32, pub shadow: u32, pub selection: u32, pub danger: u32,
+    pub radius: u64, pub shadow_size: u64, pub scale_q8: u64, pub duration_ms: u64,
+}
+pub const DEFAULT: Theme = Theme { background: 0xff15_1924, surface: 0xff24_2b3b, text: 0xffed_f1fa,
+    muted: 0xffa3_acc2, accent: 0xff4b_80e8, border: 0xff3c_4860, shadow: 0x6000_0000,
+    selection: 0xff35_558c, danger: 0xffe5_6067, radius: 7, shadow_size: 8, scale_q8: 256, duration_ms: 140 };
+pub struct Animation { pub from: i64, pub to: i64, pub start_ms: u64, pub duration_ms: u64 }
+pub const STILL: Animation = Animation { from: 0, to: 0, start_ms: 0, duration_ms: 0 };
+pub fn valid_color(color: u32) bool {
+    let a = color >> 24;
+    return (color & 255) <= a && ((color >> 8) & 255) <= a && ((color >> 16) & 255) <= a;
+}
+pub unsafe fn validate(t: *const Theme) !void {
+    unsafe {
+        if t == null || !valid_color((*t).background) || !valid_color((*t).surface) || !valid_color((*t).text)
+            || !valid_color((*t).muted) || !valid_color((*t).accent) || !valid_color((*t).border)
+            || !valid_color((*t).shadow) || !valid_color((*t).selection) || !valid_color((*t).danger)
+            || ((*t).background >> 24) != 255 || (*t).radius > 32 || (*t).shadow_size > 32
+            || (*t).scale_q8 < 256 || (*t).scale_q8 > 1024 || (*t).duration_ms > 1000 { return error.InvalidTheme; }
+    }
+    return;
+}
+pub unsafe fn scaled(t: *const Theme, logical: i64) !i64 {
+    unsafe { try validate(t); if logical < 0 || logical > 32768 { return error.InvalidTheme; } return (logical * (*t).scale_q8 as i64 + 128) / 256; }
+}
+pub unsafe fn sample(animation: *const Animation, now_ms: u64) !i64 {
+    unsafe {
+        if animation == null || (*animation).from < -32768 || (*animation).from > 32768
+            || (*animation).to < -32768 || (*animation).to > 32768 || (*animation).duration_ms > 60000 { return error.InvalidAnimation; }
+        if now_ms < (*animation).start_ms { return (*animation).from; }
+        let elapsed = now_ms - (*animation).start_ms;
+        if (*animation).duration_ms == 0 || elapsed >= (*animation).duration_ms { return (*animation).to; }
+        let q = (elapsed * 65536 / (*animation).duration_ms) as i64;
+        let ease = (q * q / 65536) * (196608 - 2 * q) / 65536;
+        return (*animation).from + ((*animation).to - (*animation).from) * ease / 65536;
+    }
+}
+pub fn mix(a: u32, b: u32, amount: u64) u32 {
+    var q = amount; if q > 256 { q = 256; }
+    var result: u64 = 0; var shift: u64 = 0;
+    while shift < 32 {
+        let x = ((a as u64) >> shift) & 255; let y = ((b as u64) >> shift) & 255;
+        result |= ((x * (256 - q) + y * q + 128) / 256) << shift; shift += 8;
+    }
+    return result as u32;
+}
+unsafe fn equal(bytes: []const u8, start: usize, end: usize, word: []const u8) bool {
+    if end - start != word.len { return false; }
+    unsafe { var i: usize = 0; while i < word.len { if bytes[start + i] != word[i] { return false; } i += 1; } }
+    return true;
+}
+fn digit(byte: u8) !u64 {
+    if byte >= 48 && byte <= 57 { return (byte - 48) as u64; }
+    if byte >= 65 && byte <= 70 { return (byte - 55) as u64; }
+    if byte >= 97 && byte <= 102 { return (byte - 87) as u64; }
+    return error.InvalidTheme;
+}
+unsafe fn number(bytes: []const u8, start: usize, end: usize, color: bool) !u64 {
+    if start == end { return error.InvalidTheme; }
+    unsafe {
+        var n: u64 = 0; var i = start;
+        if color {
+            if bytes[i] != 35 || (end - start != 7 && end - start != 9) { return error.InvalidTheme; }
+            i += 1; while i < end { n = n * 16 + (try digit(bytes[i])); i += 1; }
+            if end - start == 7 { n |= 0xff00_0000; }
+            if !valid_color(n as u32) { return error.InvalidTheme; }
+        } else {
+            while i < end {
+                if bytes[i] < 48 || bytes[i] > 57 || n > 1000000 { return error.InvalidTheme; }
+                n = n * 10 + (bytes[i] - 48) as u64; i += 1;
+            }
+        }
+        return n;
+    }
+}
+// ASCII key=value, LF/CRLF; blank lines allowed, no implicit whitespace or
+// comments. Partial files inherit DEFAULT. Unknown/duplicate keys fail atomically.
+pub unsafe fn parse(bytes: []const u8, out: *Theme) !void {
+    if bytes.len > 4096 || (bytes.len != 0 && bytes.ptr == null) { return error.InvalidTheme; }
+    unsafe {
+        var value = DEFAULT; var seen: u64 = 0; var start: usize = 0;
+        while start < bytes.len {
+            var stop = start; while stop < bytes.len && bytes[stop] != 10 { stop += 1; }
+            var end = stop; if end > start && bytes[end - 1] == 13 { end -= 1; }
+            if end != start {
+                var at = start; while at < end && bytes[at] != 61 { at += 1; }
+                if at == start || at == end { return error.InvalidTheme; }
+                var key: u64 = 99;
+                if equal(bytes,start,at,"background") { key = 0; }
+                if equal(bytes,start,at,"surface") { key = 1; }
+                if equal(bytes,start,at,"text") { key = 2; }
+                if equal(bytes,start,at,"muted") { key = 3; }
+                if equal(bytes,start,at,"accent") { key = 4; }
+                if equal(bytes,start,at,"border") { key = 5; }
+                if equal(bytes,start,at,"shadow") { key = 6; }
+                if equal(bytes,start,at,"selection") { key = 7; }
+                if equal(bytes,start,at,"danger") { key = 8; }
+                if equal(bytes,start,at,"radius") { key = 9; }
+                if equal(bytes,start,at,"shadow_size") { key = 10; }
+                if equal(bytes,start,at,"scale_q8") { key = 11; }
+                if equal(bytes,start,at,"duration_ms") { key = 12; }
+                if key == 99 { return error.InvalidTheme; }
+                let bit: u64 = 1 << key;
+                if (seen & bit) != 0 { return error.InvalidTheme; } seen |= bit;
+                let n = try number(bytes,at + 1,end,key < 9);
+                if key == 0 { value.background = n as u32; } if key == 1 { value.surface = n as u32; }
+                if key == 2 { value.text = n as u32; } if key == 3 { value.muted = n as u32; }
+                if key == 4 { value.accent = n as u32; } if key == 5 { value.border = n as u32; }
+                if key == 6 { value.shadow = n as u32; } if key == 7 { value.selection = n as u32; }
+                if key == 8 { value.danger = n as u32; } if key == 9 { value.radius = n; }
+                if key == 10 { value.shadow_size = n; } if key == 11 { value.scale_q8 = n; }
+                if key == 12 { value.duration_ms = n; }
+            }
+            start = stop; if start < bytes.len { start += 1; }
+        }
+        try validate(&value); *out = value;
+    }
+    return;
+}

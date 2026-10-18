@@ -1,0 +1,25 @@
+module layout_probe;
+import desktop.layout as layout;
+import desktop.windows as windows;
+import gfx.geometry as geo;
+export("layout_sizes") fn sizes(out:*u64)void {
+    unsafe { out[0]=sizeof(windows.State) as u64;out[1]=sizeof(windows.Slot) as u64;out[2]=sizeof(geo.Damage) as u64; }return;
+}
+unsafe fn initialize(out:*windows.State,width:usize,height:usize)!void {
+    unsafe {
+        try windows.init(out,width,height);var i:usize=0;
+        while i<4 {
+            let r=geo.Rect { left:0,top:0,right:32,bottom:24 };var handle:u64=0;
+            try windows.create(out,101+i as u64,1001+i as u64,&r,32,24,3,&handle);i+=1;
+        }
+    }return;
+}
+export("layout_init") fn init(out:*windows.State,width:usize,height:usize)u64 {
+    unsafe { match initialize(out,width,height) { ok=>{return 0;},err(code)=>{return code;}, } }
+}
+export("layout_rescale") fn rescale(state:*windows.State,old_q8:u64,new_q8:u64)u64 {
+    unsafe { match layout.rescale(state,old_q8,new_q8) { ok=>{return 0;},err(code)=>{return code;}, } }
+}
+export("layout_valid") fn valid(state:*const windows.State)u64 {
+    unsafe { var copy=*state;var damage=geo.EMPTY_DAMAGE;match windows.take_damage(&copy,&damage) { ok=>{return 0;},err(code)=>{return code;}, } }
+}

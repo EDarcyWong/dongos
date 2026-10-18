@@ -1,0 +1,19 @@
+module xhci_core_probe;
+import usb.xhci_trb as t;
+import usb.xhci_ring as r;
+import usb.xhci_context as context;
+export("xh_context") fn encode_context(region:*const t.Region,p:u64,bytes:u64,slot:*const context.Slot,endpoint:*const context.Endpoint,address:u64,out:*u8,n:usize)u64 {unsafe {match context.encode(region,p,bytes,slot,endpoint,address!=0,slice_from_raw_parts(out,n)) {ok=>{return 0;},err(e)=>{return e;},}}}
+export("xh_endpoint_id") fn endpoint_id(address:u64,out:*u64)u64 {unsafe {match context.endpoint_id(address) {ok(v)=>{*out=v;return 0;},err(e)=>{return e;},}}}
+export("xh_interval") fn interval(speed:u64,input:u64,out:*u64)u64 {unsafe {match context.interval(speed,input) {ok(v)=>{*out=v;return 0;},err(e)=>{return e;},}}}
+export("xh_command") fn command(reg:*const t.Region,c:*const t.Command,o:*t.Trb)u64 {unsafe {match t.command(reg,c,o) {ok=>{return 0;},err(e)=>{return e;},}}}
+export("xh_normal") fn normal(reg:*const t.Region,p:u64,n:u64,input:u64,o:*t.Trb)u64 {unsafe {match t.normal(reg,p,n,input!=0,o) {ok=>{return 0;},err(e)=>{return e;},}}}
+export("xh_control") fn control(reg:*const t.Region,c:*const t.Control,o:*t.ControlPlan)u64 {unsafe {match t.control(reg,c,o) {ok=>{return 0;},err(e)=>{return e;},}}}
+export("xh_event") fn event(raw:*const t.Trb,o:*t.Event)u64 {unsafe {match t.event(raw,o) {ok=>{return 0;},err(e)=>{return e;},}}}
+export("xh_producer_init") fn producer_init(p:*r.Producer,s:*const r.Setup)u64 {unsafe {match r.producer_initialize(p,s) {ok=>{return 0;},err(e)=>{return e;},}}}
+export("xh_plan") fn plan(p:*const r.Producer,trbs:*const t.Trb,n:usize,out:*r.Plan)u64 {unsafe {match r.plan(p,slice_from_raw_parts(trbs,n),out) {ok=>{return 0;},err(e)=>{return e;},}}}
+export("xh_publish") fn publish(p:*r.Producer,plan:*const r.Plan,ops:*const r.Ops,c:u64)u64 {unsafe {match r.publish(p,plan,ops,c) {ok=>{return 0;},err(e)=>{return e;},}}}
+export("xh_complete") fn complete(p:*r.Producer,epoch:u64,g:u64,e:*const t.Event,o:*r.Completion)u64 {unsafe {match r.complete(p,epoch,g,e,o) {ok=>{return 0;},err(e)=>{return e;},}}}
+export("xh_consumer_init") fn consumer_init(p:*r.Consumer,s:*const r.Setup)u64 {unsafe {match r.consumer_initialize(p,s) {ok=>{return 0;},err(e)=>{return e;},}}}
+export("xh_poll") fn poll(p:*r.Consumer,ops:*const r.Ops,c:u64,e:*t.Event,present:*u64)u64 {unsafe {match r.poll(p,ops,c,e) {ok(v)=>{*present=v as u64;return 0;},err(code)=>{return code;},}}}
+export("xh_erdp") fn erdp(p:*const r.Consumer,b:u64,o:*u64)u64 {unsafe {match r.erdp(p,b!=0) {ok(v)=>{*o=v;return 0;},err(code)=>{return code;},}}}
+export("xh_erst") fn erst(s:*const r.Setup,out:*u8,n:usize)u64 {unsafe {match r.erst(s,slice_from_raw_parts(out,n)) {ok=>{return 0;},err(code)=>{return code;},}}}

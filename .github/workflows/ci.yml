@@ -1,0 +1,56 @@
+name: Build and boot
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: p0-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-boot:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: code
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Install build and emulator tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends \
+            nasm lld qemu-system-x86 ovmf make python3 mtools gdb gcc
+
+      - name: Check toolchain
+        run: python3 tools/build.py doctor
+
+      - name: Build and boot in QEMU TCG
+        run: make test
+
+      - name: Save serial boot log
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: serial-boot-logs
+          path: code/build/test/**/serial.log
+          if-no-files-found: warn
+          retention-days: 14
+
+      - name: Save build output on failure
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: failure-output
+          path: code/build/
+          if-no-files-found: warn
+          retention-days: 14

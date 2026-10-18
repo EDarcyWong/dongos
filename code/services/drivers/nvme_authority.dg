@@ -1,0 +1,43 @@
+// Only kernel-owned, independently read register and lease snapshots enter this
+// policy. It never reads MMIO, changes PCI state, starts DMA or releases memory.
+module drivers.nvme_authority;
+import drivers.nvme_core as core;
+pub error Denied=0x0522_0001;
+pub struct Header {
+    pub cap:u64,pub version:u64,pub physical_bits:u64,pub bar_bytes:u64,
+    pub lease_physical:u64,pub lease_bytes:u64,pub pci_command:u64,pub cc:u64,
+    pub csts:u64,pub intms:u64,pub aqa:u64,pub asq:u64,pub acq:u64,
+    pub msi_disabled:u64,pub msix_disabled:u64,pub lease_exclusive:u64,
+}
+unsafe fn regions(base:u64,bytes:u64)!void {unsafe {
+    // Reserve complete pages, including the largest legal offset+128-sector
+    // transfer. The fixed I/O queue builders use precisely these core offsets.
+    let starts:[7]u64=[core.ASQ,core.ACQ,core.IOSQ,core.IOCQ,core.PRP_LIST,core.IDENTIFY_DATA,core.IO_DATA];
+    let lengths:[7]u64=[4096,4096,4096,4096,4096,4096,69632];
+    if core.DMA_BYTES!=131072 || core.ASQ!=0 || core.ACQ!=0x1000 || core.IOSQ!=0x2000
+        || core.IOCQ!=0x3000 || core.PRP_LIST!=0x4000 || core.IDENTIFY_DATA!=0x5000 || core.IO_DATA!=0x6000 {return error.Denied;}
+    var i:usize=0;
+    while i<7 {
+        if starts[i]>bytes || lengths[i]>bytes-starts[i] || base+starts[i]<base
+            || base+starts[i]+lengths[i]<base+starts[i] {return error.Denied;}
+        var j:usize=0;while j<i {
+            if starts[i]<starts[j]+lengths[j] && starts[j]<starts[i]+lengths[i] {return error.Denied;}j+=1;
+        }i+=1;
+    }
+}return;}
+pub unsafe fn permit(header:*const Header)!u16 {unsafe {
+    if header==null {return error.Denied;}let h=*header;
+    if h.pci_command>65535 || (h.pci_command&0x407)!=0x402
+        || h.msi_disabled!=1 || h.msix_disabled!=1 || h.lease_exclusive!=1
+        || h.cc!=0x0046_0000 || h.csts!=0 || h.intms!=0xffff_ffff || h.aqa!=0x0001_0001
+        || h.lease_physical==0 || (h.lease_physical&4095)!=0 || h.lease_physical>=0x1_0000_0000
+        || h.lease_bytes!=131072 || h.lease_bytes>0x1_0000_0000-h.lease_physical
+        || h.asq!=h.lease_physical || h.acq!=h.lease_physical+0x1000 {return error.Denied;}
+    let caps=core.Caps {cap:h.cap,version:h.version,physical_bits:h.physical_bits};
+    var bound=core.Limits {ready_timeout_ms:0,doorbell_stride:0,max_queue_entries:0};
+    match core.limits(&caps,2,&bound) {ok=>{},err(code)=>{return error.Denied;},}
+    let last:u64=0x1000+3*bound.doorbell_stride;
+    if last>h.bar_bytes || 4>h.bar_bytes-last {return error.Denied;}
+    try regions(h.lease_physical,h.lease_bytes);
+    return (h.pci_command|4) as u16;
+}}

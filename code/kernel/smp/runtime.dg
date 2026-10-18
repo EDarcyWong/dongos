@@ -1,0 +1,245 @@
+// Real AP bring-up and shared-kernel TLB domain. All page-table construction
+// precedes SIPI. APs remain online with IRQs enabled after the bounded proof;
+// every later BSP invalidation waits for their hardware acknowledgement.
+module smp.runtime;
+import smp.context as context;
+import smp.policy as policy;
+import smp.tlb as tlb;
+import boot.service_memory as resources;
+import boot.memory_startup as startup;
+import boot.acpi_startup as acpi;
+import boot.device_memory as devices;
+import boot.preflight as preflight;
+import boot.object_memory as object_memory;
+import irq.platform as platform;
+import mm.paging as paging;
+import arch.x86_64 as arch;
+import runtime_probe as bridge;
+pub const ITERATIONS:u64=2_097_152;
+pub const PROBE:u64=0xffff_c800_1234_5000;
+const LOW_ALIAS:u64=0xffff_c000_0020_0000;
+const MARKER_A:u64=0x1122_3344_5566_7788;
+const MARKER_B:u64=0x8877_6655_4433_2211;
+pub error InvalidState=0x0604_0001;
+pub error NoLowPage=0x0604_0002;
+pub error Hardware=0x0604_0003;
+pub error Timeout=0x0604_0004;
+pub error StressFailed=0x0604_0005;
+pub struct Stress { pub ready:u64,pub iterations:u64,pub checksum:u64,pub gpr_checks:u64,
+    pub xstate_checks:u64,pub errors:u64,pub start_tsc:u64,pub end_tsc:u64 }
+pub struct Report {
+    pub version:u64,pub cpu_count:u64,pub online:u64,pub ping_acks:u64,pub iterations:u64,
+    pub gpr_checks:u64,pub xstate_checks:u64,pub stress_errors:u64,pub overlap_start:u64,pub overlap_end:u64,
+    pub tlb_broadcasts:u64,pub tlb_sent:u64,pub tlb_acks:u64,pub tlb_invalidations:u64,pub tlb_full:u64,pub tlb_probes:u64,
+    pub reclaimed:u64,pub tables_before:u64,pub tables_after:u64,pub low_pages:u64,
+    pub context_pointer:u64,pub stress_pointer:u64,pub domain_pointer:u64,pub mailbox_pointer:u64,
+    pub marker_a:u64,pub marker_b:u64,pub steps:u64,pub error_code:u64,
+}
+var INFO:Report=Report { version:1,cpu_count:0,online:0,ping_acks:0,iterations:0,gpr_checks:0,xstate_checks:0,
+    stress_errors:0,overlap_start:0,overlap_end:0,tlb_broadcasts:0,tlb_sent:0,tlb_acks:0,tlb_invalidations:0,
+    tlb_full:0,tlb_probes:0,reclaimed:0,tables_before:0,tables_after:0,low_pages:0,
+    context_pointer:0,stress_pointer:0,domain_pointer:0,mailbox_pointer:0,marker_a:MARKER_A,marker_b:MARKER_B,steps:0,error_code:0 };
+align(64) struct Slot { value:context.Context }
+var CPUS:[16]Slot=[Slot { value:context.EMPTY };16];
+var TOPOLOGY:policy.Topology=policy.EMPTY_TOPOLOGY;
+var LOW:[16]u64=[0;16];
+var PLATFORM:platform.Report=platform.EMPTY_REPORT;
+var CONTROLS:preflight.State=preflight.EMPTY_STATE;
+var DOMAIN:tlb.Domain=tlb.EMPTY_DOMAIN;
+var TLB_OPS:tlb.Ops=tlb.Ops { context:0,send:send,clock:clock,pause:pause,timeout_ticks:1 };
+var START_OPS:policy.Ops=policy.Ops { context:0,send:send,delay:delay };
+var ATTEMPTED:bool=false;
+unsafe extern "sysv64" fn smp_prepare_trampoline(dst:*u8,physical:u64,root:u64,cpu:*context.Context)u64;
+unsafe extern "sysv64" fn smp_send_ipi(lapic:u64,apic:u64,command:u64,limit:u64)u64;
+unsafe extern "sysv64" fn smp_capture_mtrrs()u64;
+unsafe extern "sysv64" fn smp_current_xcr0()u64;
+unsafe extern "sysv64" fn smp_context_main()u64;
+unsafe extern "sysv64" fn smp_mailboxes()*tlb.Mailbox;
+unsafe extern "sysv64" fn smp_pause()void;
+unsafe extern "sysv64" fn smp_stress_begin()void;
+unsafe extern "sysv64" fn smp_stress_bsp(cpu:*context.Context)void;
+unsafe extern "sysv64" fn smp_stress_restore()void;
+unsafe extern "sysv64" fn smp_stress_reports()*Stress;
+unsafe extern "sysv64" fn smp_bsp_tables(cpu:*context.Context)void;
+
+unsafe fn cpu(id:usize)*context.Context { unsafe { return &CPUS[id].value; } }
+unsafe fn send(opaque:u64,target:u64,command:u64)u64 {
+    unsafe { return smp_send_ipi(PLATFORM.lapic_va,target,command,1000000); }
+}
+unsafe fn clock(opaque:u64)u64 { unsafe { return arch.read_tsc(); } }
+unsafe fn pause(opaque:u64)void { unsafe { smp_pause(); } return; }
+unsafe fn delay(opaque:u64,microseconds:u64)u64 {
+    unsafe {
+        if microseconds>1_000_000 || PLATFORM.tsc_hz==0 { return 1; }
+        let ticks=(PLATFORM.tsc_hz/1_000_000)*microseconds;
+        let start=arch.read_tsc();
+        while arch.read_tsc()-start<ticks { smp_pause(); }
+    }
+    return 0;
+}
+unsafe fn wait_value(pointer:*u64,value:u64)!void {
+    unsafe {
+        let started=arch.read_tsc();
+        while atomic_load(pointer)!=value {
+            let now=arch.read_tsc();if now<started || now-started>PLATFORM.tsc_hz*2 { return error.Timeout; }
+            smp_pause();
+        }
+    }
+    return;
+}
+unsafe fn low_pages()!void {
+    unsafe {
+        let view=startup.runtime_pointer();let raw=(*view).raw_map as *const u8;
+        let stride=(*view).descriptor_size as usize;var offset:usize=0;var found:usize=1;
+        while offset<(*view).raw_size as usize && found<TOPOLOGY.count as usize {
+            let kind=read_unaligned((raw+offset) as *const u32);
+            let attributes=read_unaligned((raw+offset+32) as *const u64);
+            if kind==7 && (attributes&0x8000_0000_0000_0000)==0 {
+                let first=read_unaligned((raw+offset+8) as *const u64);
+                let pages=read_unaligned((raw+offset+24) as *const u64);
+                var current=first;if current<4096 { current=4096; }
+                let end=first+pages*4096;
+                while current<end && current<0xa0000 && found<TOPOLOGY.count as usize {
+                    LOW[found]=current;found+=1;current+=4096;
+                }
+            }
+            offset+=stride;
+        }
+        if found!=TOPOLOGY.count as usize { return error.NoLowPage; }
+        INFO.low_pages=(found-1) as u64;
+    }
+    return;
+}
+unsafe fn remove(virtual:u64)!usize {
+    unsafe {
+        var retired=paging.EMPTY_RETIRED;
+        try paging.unmap_live(startup.space_pointer(),virtual,&retired);
+        let detached=paging.retired_tables(&retired);
+        // This wrapper includes the AP acknowledgement barrier once DOMAIN
+        // is active. No table page is reclaimed before it returns.
+        bridge.runtime_flush_root();
+        try paging.reclaim(startup.space_pointer(),&retired);
+        return detached;
+    }
+}
+unsafe fn stack(out:*context.Context,number:usize)!void {
+    unsafe {
+        var block=resources.Block { physical:0,virtual:0,pages:0 };
+        try resources.allocate(6,1,&block);
+        let a=try remove(block.virtual);let b=try remove(block.virtual+5*4096);
+        let bottom=block.virtual+4096;let top=bottom+16384;
+        if number==0 { (*out).stack_bottom=bottom;(*out).stack_top=top; }
+        if number==1 { (*out).df_bottom=bottom;(*out).df_top=top; }
+        if number==2 { (*out).nmi_bottom=bottom;(*out).nmi_top=top; }
+        if number==3 { (*out).exception_bottom=bottom;(*out).exception_top=top; }
+    }
+    return;
+}
+pub unsafe fn begin()!void {
+    unsafe {
+        if ATTEMPTED { return error.InvalidState; }ATTEMPTED=true;
+        object_memory.read_controls(&CONTROLS);
+        try platform.describe(&PLATFORM);
+        try policy.topology(acpi.inventory_pointer(),PLATFORM.lapic_id,&TOPOLOGY);
+        if TOPOLOGY.count==0 || TOPOLOGY.count>16 { return error.InvalidState; }
+        if !resources.is_applied() { try resources.apply(); }
+        if smp_capture_mtrrs()!=0 { return error.Hardware; }
+        try low_pages();
+        let root=startup.space_pointer();
+        var i:usize=1;
+        while i<TOPOLOGY.count as usize {
+            let c=cpu(i);(*c)=context.EMPTY;
+            (*c).self=c as u64;(*c).logical_id=i as u64;(*c).apic_id=TOPOLOGY.cpus[i].apic_id;(*c).epoch=1;
+            (*c).cr3=CONTROLS.cr3;(*c).cr0=CONTROLS.cr0;(*c).cr4=CONTROLS.cr4;
+            (*c).efer=CONTROLS.efer;(*c).pat=CONTROLS.pat;
+            if (CONTROLS.cr4&0x40000)!=0 { (*c).xcr0=smp_current_xcr0(); }
+            (*c).lapic_pa=PLATFORM.lapic_pa;(*c).lapic_va=PLATFORM.lapic_va;(*c).main=smp_context_main();
+            var n:usize=0;while n<4 { try stack(c,n);n+=1; }
+            var tables=resources.Block { physical:0,virtual:0,pages:0 };
+            try resources.allocate(2,1,&tables);(*c).gdt=tables.virtual;(*c).tss=tables.virtual+64;(*c).idt=tables.virtual+4096;
+            try policy.prepare(c,c);
+            let alias=LOW_ALIAS+i as u64*4096;
+            try paging.map_live(root,alias,LOW[i],paging.WRITE);devices.runtime_invalidate(alias);
+            if smp_prepare_trampoline(alias as *u8,LOW[i],CONTROLS.cr3,c)!=0 { return error.Hardware; }
+            try paging.protect_live(root,alias,0);devices.runtime_invalidate(alias);
+            try paging.map_live(root,LOW[i],LOW[i],paging.EXECUTE);devices.runtime_invalidate(LOW[i]);
+            i+=1;
+        }
+        (*cpu(0))=context.EMPTY;(*cpu(0)).self=cpu(0) as u64;(*cpu(0)).logical_id=0;(*cpu(0)).apic_id=TOPOLOGY.bsp_id;
+        (*cpu(0)).state=context.ONLINE;(*cpu(0)).epoch=1;(*cpu(0)).online_epoch=1;(*cpu(0)).cr3=CONTROLS.cr3;(*cpu(0)).cr4=CONTROLS.cr4;
+        (*cpu(0)).cr0=CONTROLS.cr0;(*cpu(0)).efer=CONTROLS.efer;(*cpu(0)).pat=CONTROLS.pat;
+        if (CONTROLS.cr4&0x40000)!=0 { (*cpu(0)).xcr0=smp_current_xcr0(); }
+        (*cpu(0)).stack_bottom=(*startup.runtime_pointer()).stack_bottom;(*cpu(0)).stack_top=(*startup.runtime_pointer()).stack_top;
+        (*cpu(0)).lapic_pa=PLATFORM.lapic_pa;(*cpu(0)).lapic_va=PLATFORM.lapic_va;smp_bsp_tables(cpu(0));
+        INFO.cpu_count=TOPOLOGY.count;INFO.context_pointer=cpu(0) as u64;INFO.stress_pointer=smp_stress_reports() as u64;
+        INFO.domain_pointer=&DOMAIN as u64;INFO.mailbox_pointer=smp_mailboxes() as u64;INFO.steps=1;
+        smp_stress_begin();
+        i=1;
+        while i<TOPOLOGY.count as usize {
+            try policy.arm(cpu(i),1);
+            try policy.startup(&START_OPS,(*cpu(i)).apic_id,LOW[i]);
+            try wait_value(&(*cpu(i)).state,context.ONLINE);
+            try wait_value(&(*(smp_stress_reports()+i)).ready,1);
+            try policy.ping(cpu(i),1);
+            if send(0,(*cpu(i)).apic_id,0xf1)!=0 { return error.Hardware; }
+            try wait_value(&(*cpu(i)).ping_ack,1);
+            INFO.ping_acks+=1;i+=1;
+        }
+        INFO.online=TOPOLOGY.count;INFO.steps|=2;
+        TLB_OPS.timeout_ticks=PLATFORM.tsc_hz;
+        try tlb.initialize(&DOMAIN,cpu(0),TOPOLOGY.count as usize,smp_mailboxes(),&TLB_OPS);
+        smp_stress_bsp(cpu(0));
+        let reports=smp_stress_reports();
+        var latest:u64=0;var earliest:u64=0xffff_ffff_ffff_ffff;
+        i=0;
+        while i<TOPOLOGY.count as usize {
+            try wait_value(&(*(reports+i)).iterations,ITERATIONS);
+            let waited=arch.read_tsc();
+            while atomic_load(&(*(reports+i)).end_tsc)==0 {
+                if arch.read_tsc()-waited>PLATFORM.tsc_hz*2 { return error.Timeout; }smp_pause();
+            }
+            let s=*(reports+i);
+            if s.ready!=1 || s.errors!=0 || s.gpr_checks!=1536 || s.xstate_checks!=512 || s.end_tsc<=s.start_tsc
+                || s.checksum!=MARKER_A+i as u64+ITERATIONS*(i as u64+1) { return error.StressFailed; }
+            INFO.iterations+=s.iterations;INFO.gpr_checks+=s.gpr_checks;INFO.xstate_checks+=s.xstate_checks;INFO.stress_errors+=s.errors;
+            if s.start_tsc>latest { latest=s.start_tsc; }if s.end_tsc<earliest { earliest=s.end_tsc; }
+            i+=1;
+        }
+        smp_stress_restore();
+        INFO.overlap_start=latest;INFO.overlap_end=earliest;
+        if latest>=earliest { return error.StressFailed; }INFO.steps|=4;
+        // Each AP's warmed translation must change after an actual targeted
+        // invalidation; probe never flushes on its own.
+        var a=resources.Block { physical:0,virtual:0,pages:0 };var b=a;
+        try resources.allocate(1,1,&a);try resources.allocate(1,1,&b);
+        *(a.virtual as *u64)=MARKER_A;*(b.virtual as *u64)=MARKER_B;
+        INFO.tables_before=(try paging.used_tables(root)) as u64;
+        try paging.map_live(root,PROBE,a.physical,paging.WRITE);devices.runtime_invalidate(PROBE);
+        try tlb.broadcast(&DOMAIN,PROBE,2,MARKER_A);
+        try paging.replace_live(root,PROBE,b.physical,paging.WRITE);devices.runtime_invalidate(PROBE);
+        try tlb.broadcast(&DOMAIN,PROBE,2,MARKER_B);
+        INFO.reclaimed=(try remove(PROBE)) as u64;
+        INFO.tables_after=(try paging.used_tables(root)) as u64;
+        if INFO.reclaimed!=3 || INFO.tables_before!=INFO.tables_after { return error.InvalidState; }
+        INFO.steps|=8;
+        i=1;
+        while i<TOPOLOGY.count as usize {
+            let x=try remove(LOW[i]);let y=try remove(LOW_ALIAS+i as u64*4096);
+            i+=1;
+        }
+        INFO.tlb_broadcasts=DOMAIN.broadcasts;INFO.tlb_sent=DOMAIN.sent;INFO.tlb_acks=DOMAIN.acknowledgements;
+        INFO.tlb_invalidations=DOMAIN.invalidations;INFO.tlb_full=DOMAIN.full_flushes;INFO.tlb_probes=DOMAIN.probes;INFO.steps|=16;
+    }
+    return;
+}
+pub fn report_pointer()*const Report { unsafe { return &INFO; } }
+export("smp_invalidate_all") fn invalidate(virtual:u64,scope:u64)u64 {
+    unsafe {
+        if DOMAIN.ready==0 { return 0; }
+        match tlb.broadcast(&DOMAIN,virtual,scope,0) { ok=>{return 0;},err(code)=>{return code;}, }
+    }
+}
+export("dong_smp_begin") fn entry()u64 {
+    unsafe { match begin() { ok=>{return 0;},err(code)=>{INFO.error_code=code;return code;}, } }
+}
+export("dong_smp_report") fn report()*const Report { return report_pointer(); }

@@ -1,0 +1,60 @@
+// Exact rational-nearest sampling of disjoint premultiplied WB window caches.
+// Column offsets are generated once per bounded 128-column vertical strip;
+// the native SSE2 loop reuses them for every destination row in that strip.
+module desktop.transform;
+import gfx.geometry as geo;
+import gfx.raster as raster;
+import gfx.errors as errors;
+struct Command {
+    source:*const u32,destination:*u32,source_stride:u64,destination_stride:u64,
+    width:u64,height:u64,x_offsets:*const u16,
+    y_index:u64,y_remainder:u64,y_step:u64,y_step_remainder:u64,y_denominator:u64,opacity:u64
+}
+unsafe extern "sysv64" fn svc_transform_rows(command:*const Command)void;
+pub unsafe extern "sysv64" fn svc_composite_opacity_rows(src:*const u32,dst:*u32,source_stride:usize,destination_stride:usize,width:usize,height:usize,alpha:u64)void;
+
+// Borrow/alias validation, limits, exact floor sampling, and Q8 [0,256]
+// source-over are the original primitive's contract. Target can extend off
+// screen; no pointer is derived until every dimension and clipped span is safe.
+pub unsafe fn scaled(dst:*raster.Surface,src:*const raster.Surface,target:*const geo.Rect,clip:*const geo.Rect,opacity:u64)!void {
+    unsafe {
+        try raster.disjoint(dst,src);
+        if !geo.valid(target) || !geo.valid(clip) || opacity>256
+            || (*src).width*(*src).height>524288
+            || (*target).left < -8192 || (*target).top < -8192
+            || (*target).right > 16384 || (*target).bottom > 16384 { return error.errors.InvalidRect; }
+        let dw=(*target).right-(*target).left;let dh=(*target).bottom-(*target).top;
+        if dw<=0 || dh<=0 || dw>8192 || dh>8192 { return error.errors.InvalidRect; }
+        var bounds=geo.EMPTY;raster.bounds(dst,&bounds);
+        var limited=geo.EMPTY;var visible=geo.EMPTY;
+        if !(try geo.intersect(&bounds,clip,&limited)) { return; }
+        if !(try geo.intersect(&limited,target,&visible)) || opacity==0 { return; }
+        let x=(visible.left-(*target).left) as u64;
+        let y=(visible.top-(*target).top) as u64;
+        let sw=(*src).width as u64;let sh=(*src).height as u64;
+        let width=dw as u64;let height=dh as u64;
+        let destination=(*dst).pixels.ptr+(visible.top as usize)*(*dst).stride+visible.left as usize;
+        if width==sw && height==sh {
+            svc_composite_opacity_rows((*src).pixels.ptr+(y as usize)*(*src).stride+x as usize,destination,
+                (*src).stride,(*dst).stride,(visible.right-visible.left) as usize,(visible.bottom-visible.top) as usize,opacity);
+            return;
+        }
+        var offsets:[128]u16=[0;128];var left:u64=0;
+        var index=x*sw/width;var remainder=x*sw%width;
+        let step=sw/width;let step_remainder=sw%width;
+        let columns=(visible.right-visible.left) as u64;
+        while left<columns {
+            var count=columns-left;if count>128 { count=128; }
+            var i:u64=0;while i<count {
+                offsets[i as usize]=(index*4) as u16;
+                index+=step;remainder+=step_remainder;
+                if remainder>=width { remainder-=width;index+=1; }i+=1;
+            }
+            var command=Command { source:(*src).pixels.ptr,destination:destination+left as usize,
+                source_stride:((*src).stride as u64)*4,destination_stride:((*dst).stride as u64)*4,
+                width:count,height:(visible.bottom-visible.top) as u64,x_offsets:&offsets[0],
+                y_index:y*sh/height,y_remainder:y*sh%height,y_step:sh/height,y_step_remainder:sh%height,y_denominator:height,opacity:opacity };
+            svc_transform_rows(&command);left+=count;
+        }
+    }return;
+}

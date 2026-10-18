@@ -1,0 +1,260 @@
+// Static x86-64 ELF image planner. Never maps memory or executes input bytes.
+// image is a stable readable borrow disjoint from out and parser stack storage.
+module exec.elf;
+
+pub error InvalidInput = 0x0403_0001;
+pub error BadHeader = 0x0403_0002;
+pub error Unsupported = 0x0403_0003;
+pub error BadRange = 0x0403_0004;
+pub error BadAlignment = 0x0403_0005;
+pub error BadPermissions = 0x0403_0006;
+pub error Overlap = 0x0403_0007;
+pub error Capacity = 0x0403_0008;
+pub error BadEntry = 0x0403_0009;
+pub const USER_MIN: u64 = 0x1_0000;
+pub const USER_LIMIT: u64 = 0x0000_0080_0000_0000;
+pub const MAX_IMAGE: usize = 0x100_0000;
+pub const MAX_PAGES: u64 = 16384;
+pub struct Segment {
+    pub virtual: u64, pub file_offset: u64, pub file_size: u64, pub memory_size: u64,
+    pub map_start: u64, pub map_size: u64, pub flags: u64, pub alignment: u64,
+}
+pub struct Reloc { pub target: u64, pub value: u64 }
+pub struct Plan { pub entry: u64, pub load_bias: u64, pub segment_count: u64, pub page_count: u64,
+    pub relocation_count: u64, pub rela_offset: u64, pub segments: [16]Segment }
+pub const EMPTY_SEGMENT: Segment = Segment { virtual: 0, file_offset: 0, file_size: 0, memory_size: 0, map_start: 0, map_size: 0, flags: 0, alignment: 0 };
+pub const EMPTY_PLAN: Plan = Plan { entry: 0, load_bias: 0, segment_count: 0, page_count: 0, relocation_count: 0, rela_offset: 0, segments: [EMPTY_SEGMENT;16] };
+const MAX: u64 = 0xffff_ffff_ffff_ffff;
+
+fn u8_at(raw: *const u8, at: usize) u64 { unsafe { return *(raw + at) as u64; } }
+fn u16_at(raw: *const u8, at: usize) u64 { unsafe { return read_unaligned((raw + at) as *const u16) as u64; } }
+fn u32_at(raw: *const u8, at: usize) u64 { unsafe { return read_unaligned((raw + at) as *const u32) as u64; } }
+fn u64_at(raw: *const u8, at: usize) u64 { unsafe { return read_unaligned((raw + at) as *const u64); } }
+fn file_range(offset: u64, size: u64, length: usize) !void {
+    if offset > length as u64 || size > length as u64 - offset { return error.BadRange; }
+    return;
+}
+fn user_range(start: u64, size: u64) !void {
+    if start < USER_MIN || start >= USER_LIMIT || size == 0 || size > USER_LIMIT - start { return error.BadRange; }
+    return;
+}
+fn add_bias(value: u64, bias: u64) !u64 {
+    if value > MAX - bias { return error.BadRange; }
+    return value + bias;
+}
+unsafe fn file_at(plan: *const Plan, address: u64, bytes: u64) !u64 {
+    unsafe {
+        var i: usize = 0;
+        while i < (*plan).segment_count as usize {
+            let segment = (*plan).segments[i];
+            if address >= segment.virtual && address - segment.virtual <= segment.file_size
+                && bytes <= segment.file_size - (address - segment.virtual) { return segment.file_offset + (address - segment.virtual); }
+            i += 1;
+        }
+    }
+    return error.BadRange;
+}
+unsafe fn relocation_at(image: []const u8, plan: *const Plan, index: u64, out: *Reloc) !void {
+    unsafe {
+        if (*plan).segment_count > 16 || (*plan).relocation_count > 128 || index >= (*plan).relocation_count { return error.BadRange; }
+        let offset = (*plan).rela_offset;
+        try file_range(offset,(*plan).relocation_count * 24,image.len);
+        let at = (offset + index * 24) as usize;
+        if u64_at(image.ptr,at + 8) != 8 { return error.Unsupported; } // symbol index zero, R_X86_64_RELATIVE
+        let target = try add_bias(u64_at(image.ptr,at),(*plan).load_bias);
+        if (target & 7) != 0 { return error.BadAlignment; }
+        var writable: bool = false; var i: usize = 0;
+        while i < (*plan).segment_count as usize {
+            let segment = (*plan).segments[i];
+            if (segment.flags & 2) != 0 && target >= segment.virtual && target - segment.virtual <= segment.memory_size
+                && 8 <= segment.memory_size - (target - segment.virtual) { writable = true; }
+            i += 1;
+        }
+        if !writable { return error.BadPermissions; }
+        let addend = u64_at(image.ptr,at + 16);
+        var value: u64 = 0;
+        if (addend & 0x8000_0000_0000_0000) == 0 { value = try add_bias(addend,(*plan).load_bias); }
+        else {
+            let magnitude = (~addend) + 1;
+            if (*plan).load_bias < magnitude { return error.BadRange; }
+            value = (*plan).load_bias - magnitude;
+        }
+        try user_range(value,1);
+        *out = Reloc { target: target, value: value };
+    }
+    return;
+}
+// plan must be the unchanged successful result for the same stable image.
+pub unsafe fn relocation(image: []const u8, plan: *const Plan, index: u64, out: *Reloc) !void {
+    unsafe {
+        if image.ptr == null || plan == null || out == null || image.len > MAX_IMAGE
+            || (image.ptr as u64) > MAX - image.len as u64 { return error.InvalidInput; }
+        try relocation_at(image,plan,index,out);
+    }
+    return;
+}
+
+pub unsafe fn validate(image: []const u8, load_bias: u64, out: *Plan) !void {
+    unsafe {
+        if image.ptr == null || out == null || image.len < 64 || image.len > MAX_IMAGE
+            || (image.ptr as u64) > MAX - image.len as u64 { return error.InvalidInput; }
+        let raw = image.ptr;
+        if u32_at(raw,0) != 0x464c_457f || u8_at(raw,4) != 2 || u8_at(raw,5) != 1 || u8_at(raw,6) != 1
+            || u8_at(raw,7) != 0 || u8_at(raw,8) != 0 { return error.BadHeader; }
+        var i: usize = 9;
+        while i < 16 { if u8_at(raw,i) != 0 { return error.BadHeader; } i += 1; }
+        let kind = u16_at(raw,16);
+        if (kind != 2 && kind != 3) || u16_at(raw,18) != 62 || u32_at(raw,20) != 1
+            || u32_at(raw,48) != 0 || u16_at(raw,52) != 64 || u16_at(raw,54) != 56 { return error.Unsupported; }
+        if (load_bias & 4095) != 0 || (kind == 2 && load_bias != 0) { return error.BadAlignment; }
+        let phoff = u64_at(raw,32); let count = u16_at(raw,56);
+        if count == 0 || count > 32 { return error.Capacity; }
+        if phoff < 64 || (phoff & 7) != 0 { return error.BadHeader; }
+        try file_range(phoff,count * 56,image.len);
+        // Sections do not create mappings. RELA is interpreted exclusively via
+        // PT_DYNAMIC; linked debug section relocations are outside this profile.
+        let shoff = u64_at(raw,40); let shsize = u16_at(raw,58);
+        let shcount = u16_at(raw,60); let names = u16_at(raw,62);
+        if shcount == 0 {
+            if shoff != 0 || names != 0 || (shsize != 0 && shsize != 64) { return error.Unsupported; }
+        } else {
+            if shcount > 4096 || shsize != 64 || shoff < 64 || (shoff & 7) != 0 || names >= shcount { return error.BadHeader; }
+            try file_range(shoff,shcount * 64,image.len);
+            i = 0;
+            while i < shcount as usize {
+                let at = (shoff as usize) + i * 64;
+                let typ = u32_at(raw,at + 4);
+                if typ == 9 || (typ == 4 && kind != 3) { return error.Unsupported; }
+                if typ != 8 { try file_range(u64_at(raw,at + 24),u64_at(raw,at + 32),image.len); }
+                i += 1;
+            }
+        }
+        var value = EMPTY_PLAN;
+        value.entry = try add_bias(u64_at(raw,24),load_bias); value.load_bias = load_bias;
+        var seen_stack: bool = false; var seen_phdr: bool = false;
+        var phdr_virtual: u64 = 0; var previous: u64 = 0; var have_previous: bool = false;
+        var dynamic_offset: u64 = 0; var dynamic_size: u64 = 0; var dynamic_virtual: u64 = 0;
+        i = 0;
+        while i < count as usize {
+            let at = (phoff as usize) + i * 56;
+            let typ = u32_at(raw,at); let flags = u32_at(raw,at + 4);
+            let offset = u64_at(raw,at + 8); let original = u64_at(raw,at + 16);
+            let filesz = u64_at(raw,at + 32); let memsz = u64_at(raw,at + 40); let alignment = u64_at(raw,at + 48);
+            if typ == 0 { i += 1; continue; }
+            try file_range(offset,filesz,image.len);
+            if typ == 1 {
+                if filesz > memsz { return error.BadRange; }
+                if (flags & ~7) != 0 || (flags & 4) == 0 || (flags & 3) == 3 { return error.BadPermissions; }
+                if alignment > 1 && ((alignment & (alignment - 1)) != 0 || alignment > 0x20_0000
+                    || (original & (alignment - 1)) != (offset & (alignment - 1)) || (load_bias & (alignment - 1)) != 0) { return error.BadAlignment; }
+                if (original & 4095) != (offset & 4095) { return error.BadAlignment; }
+                if have_previous && original < previous { return error.BadHeader; }
+                have_previous = true; previous = original;
+                if memsz != 0 {
+                    if value.segment_count == 16 { return error.Capacity; }
+                    let address = try add_bias(original,load_bias); try user_range(address,memsz);
+                    let end = address + memsz;
+                    let start = address & ~4095;
+                    let map_end = (end + 4095) & ~4095;
+                    if map_end > USER_LIMIT { return error.BadRange; }
+                    let pages = (map_end - start) / 4096;
+                    if pages > MAX_PAGES - value.page_count { return error.Capacity; }
+                    var j: usize = 0;
+                    while j < value.segment_count as usize {
+                        let other = value.segments[j];
+                        if start < other.map_start + other.map_size && other.map_start < map_end { return error.Overlap; }
+                        j += 1;
+                    }
+                    value.segments[value.segment_count as usize] = Segment { virtual: address, file_offset: offset,
+                        file_size: filesz, memory_size: memsz, map_start: start, map_size: map_end - start, flags: flags, alignment: alignment };
+                    value.segment_count += 1; value.page_count += pages;
+                }
+            } else if typ == 2 {
+                if kind != 3 || dynamic_size != 0 || filesz == 0 || filesz != memsz || filesz > 1024 || (filesz & 15) != 0 { return error.Unsupported; }
+                dynamic_offset = offset; dynamic_size = filesz; dynamic_virtual = try add_bias(original,load_bias);
+            } else if typ == 6 {
+                if seen_phdr || have_previous || offset != phoff || filesz != count * 56 || memsz != filesz || flags != 4 { return error.BadHeader; }
+                seen_phdr = true; phdr_virtual = try add_bias(original,load_bias);
+            } else if typ == 0x6474_e551 {
+                if seen_stack || flags != 6 || filesz != 0 || memsz != 0 { return error.BadPermissions; }
+                seen_stack = true;
+            } else if typ == 4 || typ == 0x6474_e550 {
+                if (flags & ~4) != 0 { return error.BadPermissions; }
+            } else { return error.Unsupported; }
+            i += 1;
+        }
+        if value.segment_count == 0 { return error.BadEntry; }
+        var entry_found: bool = false; var phdr_found: bool = !seen_phdr;
+        i = 0;
+        while i < value.segment_count as usize {
+            let segment = value.segments[i];
+            if (segment.flags & 1) != 0 && value.entry >= segment.virtual && value.entry - segment.virtual < segment.file_size { entry_found = true; }
+            if seen_phdr && phdr_virtual >= segment.virtual && phoff >= segment.file_offset
+                && phdr_virtual - segment.virtual == phoff - segment.file_offset
+                && phoff - segment.file_offset <= segment.file_size
+                && count * 56 <= segment.file_size - (phoff - segment.file_offset) { phdr_found = true; }
+            i += 1;
+        }
+        if !entry_found || !phdr_found { return error.BadEntry; }
+        if dynamic_size != 0 {
+            if (try file_at(&value,dynamic_virtual,dynamic_size)) != dynamic_offset { return error.BadRange; }
+            var rela: u64 = 0; var relasz: u64 = 0; var relaent: u64 = 0; var relacount: u64 = 0;
+            var strtab: u64 = 0; var strsz: u64 = 0; var symtab: u64 = 0; var syment: u64 = 0;
+            var seen: u64 = 0; var ended: bool = false; var cursor: u64 = 0;
+            while cursor < dynamic_size {
+                let at = (dynamic_offset + cursor) as usize;
+                let tag = u64_at(raw,at); let data = u64_at(raw,at + 8);
+                if ended { if tag != 0 || data != 0 { return error.BadHeader; } }
+                else if tag == 0 { if data != 0 { return error.BadHeader; } ended = true; }
+                else {
+                    var bit: u64 = 0;
+                    if tag == 7 { bit = 1; rela = data; }
+                    else if tag == 8 { bit = 2; relasz = data; }
+                    else if tag == 9 { bit = 4; relaent = data; }
+                    else if tag == 0x6fff_fff9 { bit = 8; relacount = data; }
+                    else if tag == 5 { bit = 16; strtab = data; }
+                    else if tag == 10 { bit = 32; strsz = data; }
+                    else if tag == 6 { bit = 64; symtab = data; }
+                    else if tag == 11 { bit = 128; syment = data; }
+                    else if tag == 4 || tag == 0x6fff_fef5 {
+                        bit = 256; var bytes: u64 = 8;
+                        if tag != 4 { bit = 512; bytes = 16; }
+                        let ignored = try file_at(&value,try add_bias(data,load_bias),bytes);
+                    } else if tag == 0x6fff_fffb { bit = 1024; if (data & ~0x800_0000) != 0 { return error.Unsupported; } }
+                    else if tag == 30 { bit = 2048; if (data & ~8) != 0 { return error.Unsupported; } }
+                    else if tag == 21 { bit = 4096; if data != 0 { return error.Unsupported; } }
+                    else { return error.Unsupported; }
+                    if (seen & bit) != 0 { return error.BadHeader; } seen |= bit;
+                }
+                cursor += 16;
+            }
+            if !ended { return error.BadHeader; }
+            if (seen & 48) != 0 {
+                if (seen & 48) != 48 || strsz == 0 { return error.BadHeader; }
+                let ignored = try file_at(&value,try add_bias(strtab,load_bias),strsz);
+            }
+            if (seen & 192) != 0 {
+                if (seen & 192) != 192 || syment != 24 { return error.BadHeader; }
+                let ignored = try file_at(&value,try add_bias(symtab,load_bias),24);
+            }
+            if (seen & 7) != 0 {
+                if (seen & 7) != 7 || relaent != 24 || relasz % 24 != 0 || relasz / 24 > 128 || relacount > relasz / 24 { return error.Unsupported; }
+                value.relocation_count = relasz / 24;
+                value.rela_offset = try file_at(&value,try add_bias(rela,load_bias),relasz);
+            } else if relacount != 0 { return error.BadHeader; }
+            var r: u64 = 0;
+            while r < value.relocation_count {
+                var a = Reloc { target: 0, value: 0 }; try relocation_at(image,&value,r,&a);
+                var j: u64 = 0;
+                while j < r {
+                    let other = try add_bias(u64_at(raw,(value.rela_offset + j * 24) as usize),load_bias);
+                    if a.target == other { return error.Overlap; }
+                    j += 1;
+                }
+                r += 1;
+            }
+        }
+        *out = value;
+    }
+    return;
+}

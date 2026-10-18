@@ -1,0 +1,111 @@
+// Pure service-handoff resource validation. Physical addresses remain numbers.
+// rawmap/handoff/forbidden are stable readable borrows, disjoint from out.
+module boot.service_resources;
+pub error InvalidInput = 0x0505_0001;
+pub error InvalidMap = 0x0505_0002;
+pub error InvalidHandoff = 0x0505_0003;
+pub error InvalidRange = 0x0505_0004;
+pub error InvalidOwnership = 0x0505_0005;
+pub error Conflict = 0x0505_0006;
+pub struct Handoff {
+    pub magic: u64, pub version: u64, pub size: u64, pub flags: u64,
+    pub bundle_physical: u64, pub bundle_bytes: u64, pub bundle_pages: u64,
+    pub arena_physical: u64, pub arena_bytes: u64, pub arena_pages: u64,
+    pub self_physical: u64, pub checksum: u64,
+}
+pub struct Span { pub physical: u64, pub length: u64 }
+pub struct Plan { pub handoff: Span, pub bundle: Span, pub arena: Span }
+pub const MAGIC: u64 = 0x3144_4e41_4856_5344;
+pub const EMPTY_SPAN: Span = Span { physical: 0, length: 0 };
+pub const EMPTY_PLAN: Plan = Plan { handoff: EMPTY_SPAN, bundle: EMPTY_SPAN, arena: EMPTY_SPAN };
+const MAX: u64 = 0xffff_ffff_ffff_ffff;
+const LIMIT: u64 = 0x1_0000_0000;
+unsafe fn u64_at(raw: *const u8, offset: usize) u64 { unsafe { return read_unaligned((raw + offset) as *const u64); } }
+unsafe fn u32_at(raw: *const u8, offset: usize) u64 { unsafe { return read_unaligned((raw + offset) as *const u32) as u64; } }
+unsafe fn map_valid(raw: []const u8, stride: usize) bool {
+    unsafe {
+        if raw.ptr == null || raw.len == 0 || raw.len > 65536 || stride < 40 || (stride & 7) != 0 || raw.len % stride != 0
+            || (raw.ptr as u64) > MAX - raw.len as u64 { return false; }
+        var a: usize = 0;
+        while a < raw.len {
+            let physical = u64_at(raw.ptr,a + 8); let pages = u64_at(raw.ptr,a + 24);
+            if u32_at(raw.ptr,a) > 15 || (physical & 4095) != 0 || pages == 0 || pages > (MAX - physical) / 4096 { return false; }
+            let end = physical + pages * 4096;
+            var b: usize = 0;
+            while b < a {
+                let old = u64_at(raw.ptr,b + 8); let stop = old + u64_at(raw.ptr,b + 24) * 4096;
+                if physical < stop && old < end { return false; } b += stride;
+            }
+            a += stride;
+        }
+    }
+    return true;
+}
+fn low_range(physical: u64, length: u64) bool {
+    return physical != 0 && physical < LIMIT && (physical & 4095) == 0 && length != 0 && (length & 4095) == 0 && length <= LIMIT - physical;
+}
+unsafe fn covered(raw: []const u8, stride: usize, span: *const Span) bool {
+    unsafe {
+        var cursor = (*span).physical; let end = cursor + (*span).length;
+        while cursor < end {
+            var found: bool = false; var at: usize = 0;
+            while at < raw.len && !found {
+                let physical = u64_at(raw.ptr,at + 8); let stop = physical + u64_at(raw.ptr,at + 24) * 4096;
+                if physical <= cursor && cursor < stop {
+                    if u32_at(raw.ptr,at) != 2 || (u64_at(raw.ptr,at + 32) & 0x8000_0000_0000_0000) != 0 { return false; }
+                    cursor = stop; if cursor > end { cursor = end; } found = true;
+                }
+                at += stride;
+            }
+            if !found { return false; }
+        }
+    }
+    return true;
+}
+// Pre-copy check: this does not read the handoff or dereference its PA.
+pub unsafe fn readable_handoff(rawmap: []const u8, stride: usize, physical: u64) bool {
+    unsafe {
+        if !map_valid(rawmap,stride) || !low_range(physical,4096) { return false; }
+        let span = Span { physical: physical, length: 4096 };
+        return covered(rawmap,stride,&span);
+    }
+}
+unsafe fn intersects(a: *const Span, b: *const Span) bool {
+    unsafe { return (*a).physical < (*b).physical + (*b).length && (*b).physical < (*a).physical + (*a).length; }
+}
+fn wrapping_add(a: u64, b: u64) u64 {
+    let low = (a & 0xffff_ffff) + (b & 0xffff_ffff);
+    let high = ((a >> 32) + (b >> 32) + (low >> 32)) & 0xffff_ffff;
+    return (high << 32) | (low & 0xffff_ffff);
+}
+pub unsafe fn validate(handoff: *const Handoff, physical: u64, rawmap: []const u8, stride: usize,
+                      forbidden: []const Span, out: *Plan) !void {
+    unsafe {
+        if handoff == null || out == null || forbidden.len > 64 || (forbidden.len != 0 && forbidden.ptr == null)
+            || (forbidden.ptr as u64) > MAX - (forbidden.len as u64 * sizeof(Span) as u64) { return error.InvalidInput; }
+        if !map_valid(rawmap,stride) { return error.InvalidMap; }
+        if !low_range(physical,4096) { return error.InvalidRange; }
+        let value = *handoff;
+        if value.magic != MAGIC || value.version != 1 || value.size != sizeof(Handoff) as u64 || value.flags != 1 || value.self_physical != physical { return error.InvalidHandoff; }
+        var sum: u64 = 0; var i: usize = 0;
+        while i < 12 { sum = wrapping_add(sum,u64_at(handoff as *const u8,i * 8)); i += 1; }
+        if sum != 0 { return error.InvalidHandoff; }
+        if value.bundle_bytes < 8192 || value.bundle_bytes > 0x400_0000 || !low_range(value.bundle_physical,value.bundle_bytes)
+            || value.bundle_pages != value.bundle_bytes / 4096 || value.arena_bytes != 0x800_0000 || value.arena_pages != 32768
+            || !low_range(value.arena_physical,value.arena_bytes) { return error.InvalidRange; }
+        let candidate = Plan { handoff: Span { physical: physical, length: 4096 },
+            bundle: Span { physical: value.bundle_physical, length: value.bundle_bytes },
+            arena: Span { physical: value.arena_physical, length: value.arena_bytes } };
+        if intersects(&candidate.handoff,&candidate.bundle) || intersects(&candidate.handoff,&candidate.arena) || intersects(&candidate.bundle,&candidate.arena) { return error.Conflict; }
+        i = 0;
+        while i < forbidden.len {
+            let span = forbidden[i];
+            if span.length == 0 || span.length > MAX - span.physical { return error.InvalidInput; }
+            if intersects(&candidate.handoff,&span) || intersects(&candidate.bundle,&span) || intersects(&candidate.arena,&span) { return error.Conflict; }
+            i += 1;
+        }
+        if !covered(rawmap,stride,&candidate.handoff) || !covered(rawmap,stride,&candidate.bundle) || !covered(rawmap,stride,&candidate.arena) { return error.InvalidOwnership; }
+        *out = candidate;
+    }
+    return;
+}

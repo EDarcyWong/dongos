@@ -1,0 +1,14 @@
+{
+  "name": "dong-language",
+  "displayName": "Dong Language",
+  "description": "Dong .dg syntax highlighting and language configuration for DongOS.",
+  "version": "0.1.0",
+  "publisher": "dongos",
+  "license": "UNLICENSED",
+  "engines": {"vscode": "^1.85.0"},
+  "categories": ["Programming Languages"],
+  "contributes": {
+    "languages": [{"id": "dong", "aliases": ["Dong", "dong"], "extensions": [".dg"], "configuration": "./language-configuration.json"}],
+    "grammars": [{"language": "dong", "scopeName": "source.dong", "path": "./syntaxes/dong.tmLanguage.json"}]
+  }
+}

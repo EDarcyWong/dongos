@@ -1,0 +1,16 @@
+module service_bundle_probe;
+import exec.bundle as bundle;
+import exec.sha256 as sha;
+export("bundle_inventory_size") fn size() usize { return sizeof(bundle.Inventory); }
+export("bundle_validate") fn validate(raw: *const u8, length: usize, out: *bundle.Inventory) u64 {
+    unsafe { match bundle.validate(slice_from_raw_parts(raw,length),out) { ok => { return 0; }, err(code) => { return code; }, } }
+}
+export("bundle_contents") fn contents(raw: *const u8, length: usize, inventory: *const bundle.Inventory, index: usize, pointer: **const u8, count: *usize) u64 {
+    unsafe {
+        var view = bundle.Contents { pointer: null, length: 0 };
+        match bundle.contents(slice_from_raw_parts(raw,length),inventory,index,&view) { ok => { *pointer = view.pointer; *count = view.length; return 0; }, err(code) => { return code; }, }
+    }
+}
+export("bundle_sha256") fn hash(raw: *const u8, length: usize, digest: *sha.Digest) u64 {
+    unsafe { match sha.hash(slice_from_raw_parts(raw,length),digest) { ok => { return 0; }, err(code) => { return code; }, } }
+}

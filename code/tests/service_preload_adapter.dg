@@ -1,0 +1,37 @@
+// Host-only model of root mappings; production retirement/catalog/caps execute.
+module service_preload_adapter;import user.shared_objects as shared;
+import user.abi as abi;
+pub struct Process{pub ready:u64,pub frame:abi.Frame}
+pub struct Contents{pub pointer:*const u8,pub length:usize}
+pub error Invalid=0x051b_0001;
+var ROOTS:[16]Process=[Process{ready:0,frame:abi.EMPTY};16];
+var PIN:[16]bool=[false;16];var DESTROYED:[16]u64=[0;16];var QUARANTINED:[16]u64=[0;16];
+pub var EPOCHS:[16]u64=[1;16];pub var PROVIDER:u64=1;var NEXT:u64=1;
+var IMAGE:[1]u8=[0x7f];var STAGE:u64=16;pub var STAGE_FAILED:bool=false;
+pub fn processes()*Process{unsafe{return &ROOTS[0];}}
+pub fn reset()void{unsafe{shared.reset();EPOCH=0;FAILED=false;UNSHARE_FAILED=false;RESOURCE_FAILED=false;var i:usize=0;while i<16{ROOTS[i]=Process{ready:0,frame:abi.EMPTY};
+    PIN[i]=false;DESTROYED[i]=0;QUARANTINED[i]=0;EPOCHS[i]=1;i+=1;}PROVIDER=1;NEXT=1;STAGE=16;STAGE_FAILED=false;}return;}
+pub fn dma_pinned(id:usize)bool{unsafe{return PIN[id];}}
+pub fn pin(id:usize)void{unsafe{PIN[id]=true;}return;}
+pub unsafe fn destroy(id:usize)!void{unsafe{if ROOTS[id].ready!=1||PIN[id]||STAGE!=16{return error.Invalid;}
+    ROOTS[id].ready=0;DESTROYED[id]+=1;
+}return;}
+pub unsafe fn revoke_owner(owner:u64)!void{return;}
+pub unsafe fn quarantine(id:usize)!void{unsafe{QUARANTINED[id]+=1;}return;}
+pub unsafe fn stage_random(id:usize,image:[]const u8)!void{unsafe{
+    if ROOTS[id].ready!=0||STAGE!=16{return error.Invalid;}STAGE=id as u64;ROOTS[id].ready=1;
+    NEXT+=1;EPOCHS[id]=NEXT;
+}return;}
+pub unsafe fn stage_commit(id:usize)!void{unsafe{if STAGE!=id as u64{return error.Invalid;}STAGE=16;}return;}
+pub unsafe fn stage_abort(id:usize)!void{unsafe{if STAGE!=id as u64{return error.Invalid;}ROOTS[id].ready=0;shared.abort_owner(id);STAGE=16;}return;}
+pub unsafe fn find(name:[]const u8,out:*Contents)!void{unsafe{*out=Contents{pointer:&IMAGE[0],length:1};}return;}
+pub fn get(which:u64,id:usize)u64{unsafe{if which==0{return DESTROYED[id];}if which==1{return QUARANTINED[id];}return PIN[id] as u64;}}
+
+// Explicit broker boundary model; the separate broker test executes real aliases.
+pub var EPOCH:u64=0;pub var FAILED:bool=false;pub var UNSHARE_FAILED:bool=false;pub var RESOURCE_FAILED:bool=false;
+pub unsafe fn initialize(epoch:u64)!void{unsafe{EPOCH=epoch;}return;}
+pub unsafe fn compositor_gone(epoch:u64)!void{return;}
+pub unsafe fn owner_gone(owner:u64)!void{return;}
+
+pub unsafe fn check_range(id:usize,address:u64,bytes:usize,write:bool)!void{return error.Invalid;}
+pub unsafe fn copy_out(id:usize,address:u64,input:[]const u8)!void{return error.Invalid;}

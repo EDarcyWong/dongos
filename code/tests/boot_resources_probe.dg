@@ -1,0 +1,26 @@
+module boot_resources_probe;
+
+import boot.abi as abi;
+import boot.memory_resources as resources;
+
+export("br_info_size") fn info_size() usize { return sizeof(abi.BootInfo); }
+export("br_info_align") fn info_align() usize { return alignof(abi.BootInfo); }
+export("br_span_size") fn span_size() usize { return sizeof(resources.Span); }
+export("br_span_align") fn span_align() usize { return alignof(resources.Span); }
+export("br_layout_size") fn layout_size() usize { return sizeof(resources.Layout); }
+export("br_layout_align") fn layout_align() usize { return alignof(resources.Layout); }
+export("br_resource_size") fn resource_size() usize { return sizeof(resources.Resource); }
+export("br_resource_align") fn resource_align() usize { return alignof(resources.Resource); }
+export("br_count") fn count() usize { return resources.COUNT; }
+export("br_collect") fn collect(
+    info: *const abi.BootInfo, info_physical: u64, raw: *const u8, raw_len: usize,
+    layout: *const resources.Layout, output: *resources.Resource, output_count: usize, used: *usize
+) u64 {
+    unsafe {
+        match resources.collect(info, info_physical, slice_from_raw_parts(raw, raw_len),
+                                layout, slice_from_raw_parts(output, output_count)) {
+            ok(value) => { *used = value; return 0; },
+            err(code) => { return code; },
+        }
+    }
+}

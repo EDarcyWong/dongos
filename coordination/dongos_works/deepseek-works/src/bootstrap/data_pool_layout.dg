@@ -1,0 +1,74 @@
+// Stable, deduplicated raw constant pool with per-blob alignment. Each distinct
+// (alignment, bytes) key is placed once, in first-occurrence order, at
+// align_up(cursor, alignment); gaps are 0x00 and equal keys share the first
+// offset. A dry run validates every blob and sizes the image before any write.
+module bootstrap.data_pool_layout;
+pub const OK:u64=0;pub const INVALID:u64=1;pub const CAPACITY:u64=2;
+pub struct Blob{pub first:usize,pub count:usize,pub alignment:usize}
+pub struct Result{pub used:usize,pub bytes:usize}
+const MAX:u64=0xffff_ffff_ffff_ffff;
+fn span(p:u64,n:u64)bool{return n==0||(p!=0&&n<=MAX-p);}
+fn overlap(a:u64,n:u64,b:u64,m:u64)bool{return n!=0&&m!=0&&a<b+m&&b<a+n;}
+unsafe fn valid(blobs:[]const Blob,raw:[]const u8,offsets:[]usize,image:[]u8,result:*Result)bool{unsafe{
+ if result==null||blobs.len>MAX/sizeof(Blob)||offsets.len>MAX/8{return false;}
+ let bp=blobs.ptr as u64;let rwp=raw.ptr as u64;let op=offsets.ptr as u64;let ip=image.ptr as u64;let rp=result as u64;
+ let bn=blobs.len*sizeof(Blob);let rwn=raw.len;let on=offsets.len*8;let imn=image.len;let rn=sizeof(Result);
+ if !span(bp,bn)||!span(rwp,rwn)||!span(op,on)||!span(ip,imn)||!span(rp,rn){return false;}
+ if (bn!=0&&(bp&7)!=0)||(on!=0&&(op&7)!=0)||(rp&7)!=0{return false;}
+ if overlap(op,on,bp,bn)||overlap(op,on,rwp,rwn)||overlap(ip,imn,bp,bn)||overlap(ip,imn,rwp,rwn)
+  ||overlap(rp,rn,bp,bn)||overlap(rp,rn,rwp,rwn)
+  ||overlap(op,on,ip,imn)||overlap(op,on,rp,rn)||overlap(ip,imn,rp,rn){return false;}
+ return true;
+}}
+// Bytes that round cursor up to a validated power-of-two alignment (1..16).
+fn pad(cursor:usize,alignment:usize)usize{let r=cursor&(alignment-1);if r==0{return 0;}return alignment-r;}
+// Whether align_up(cursor,alignment)+count stays within usize; the guard itself never wraps.
+fn fits(cursor:usize,alignment:usize,count:usize)bool{
+ let p=pad(cursor,alignment);if p>MAX-cursor{return false;}return count<=MAX-cursor-p;
+}
+// align_up(cursor,alignment); callers check fits first.
+fn start(cursor:usize,alignment:usize)usize{return cursor+pad(cursor,alignment);}
+// Same key: equal alignment and byte-for-byte equal content (never by length alone).
+fn same(blobs:[]const Blob,raw:[]const u8,i:usize,j:usize)bool{
+ let a=blobs[i];let b=blobs[j];
+ if a.alignment!=b.alignment{return false;}
+ if a.count!=b.count{return false;}
+ var k:usize=0;while k<a.count{if raw[a.first+k]!=raw[b.first+k]{return false;}k+=1;}return true;
+}
+// Index of the first blob with the same key as blobs[i], which is i itself when new.
+fn earliest(blobs:[]const Blob,raw:[]const u8,i:usize)usize{
+ var j:usize=0;while j<i{if same(blobs,raw,j,i){return j;}j+=1;}return i;
+}
+pub unsafe fn build(blobs:[]const Blob,raw:[]const u8,offsets:[]usize,image:[]u8,result:*Result)u64{unsafe{
+ if !valid(blobs,raw,offsets,image,result){return INVALID;}
+ var i:usize=0;
+ while i<blobs.len{
+  let b=blobs[i];let a=b.alignment;
+  if (a!=1&&a!=2&&a!=4&&a!=8&&a!=16)||b.first>raw.len||b.count>raw.len-b.first{return INVALID;}
+  i+=1;
+ }
+ // Dry run: final cursor over first occurrences, O(n^2 * compared bytes), overflow-checked.
+ var total:usize=0;i=0;
+ while i<blobs.len{
+  if earliest(blobs,raw,i)==i{
+   let b=blobs[i];if !fits(total,b.alignment,b.count){return INVALID;}
+   total=start(total,b.alignment)+b.count;
+  }
+  i+=1;
+ }
+ if offsets.len<blobs.len||image.len<total{return CAPACITY;}
+ var at:usize=0;i=0;
+ while i<blobs.len{
+  let j=earliest(blobs,raw,i);
+  if j<i{offsets[i]=offsets[j];}
+  else{
+   let b=blobs[i];let s=start(at,b.alignment);
+   while at<s{image[at]=0;at+=1;}
+   offsets[i]=s;var k:usize=0;
+   while k<b.count{image[s+k]=raw[b.first+k];k+=1;}
+   at=s+b.count;
+  }
+  i+=1;
+ }
+ *result=Result{used:blobs.len,bytes:total};return OK;
+}}

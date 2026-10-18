@@ -1,0 +1,48 @@
+// Fast RAM-cache chrome. Inputs remain stable, disjoint borrows for the call.
+// transparent=true promises every destination pixel in rect is initially zero;
+// opaque colors need no such promise. Partial-alpha overlays use render.rounded.
+module desktop.chrome;
+import gfx.geometry as geo;
+import gfx.raster as raster;
+import desktop.render as render;
+import desktop.theme as theme;
+
+unsafe fn fill(dst:*raster.Surface,area:*const geo.Rect,clip:*const geo.Rect,color:u32)!void {
+    unsafe {
+        var visible=geo.EMPTY;
+        if try geo.intersect(area,clip,&visible) { try raster.fill(dst,&visible,color); }
+    }return;
+}
+unsafe fn corner(dst:*raster.Surface,rect:*const geo.Rect,area:*const geo.Rect,clip:*const geo.Rect,radius:i64,color:u32)!void {
+    unsafe {
+        var visible=geo.EMPTY;
+        // Retain the original full rectangle: a corner's own bounds would
+        // change render.rounded's center and radius clamping.
+        if try geo.intersect(area,clip,&visible) { try render.rounded(dst,rect,&visible,radius,color); }
+    }return;
+}
+pub unsafe fn rounded(dst:*raster.Surface,rect:*const geo.Rect,clip:*const geo.Rect,radius:i64,color:u32,transparent:bool)!void {
+    unsafe {
+        // Same preflight and errors as render.rounded, before the first write.
+        try raster.validate(dst);
+        if !geo.valid(rect) || (*rect).left < -65536 || (*rect).top < -65536
+            || (*rect).right > 65536 || (*rect).bottom > 65536 { return error.render.InvalidRender; }
+        var bounds=geo.EMPTY;raster.bounds(dst,&bounds);
+        if radius<0 || radius>128 || !theme.valid_color(color) || !geo.contains(&bounds,clip) { return error.render.InvalidRender; }
+        if (color>>24)!=255 && !transparent { try render.rounded(dst,rect,clip,radius,color);return; }
+        var r=radius;let width=(*rect).right-(*rect).left;let height=(*rect).bottom-(*rect).top;
+        if r>width/2 { r=width/2; }if r>height/2 { r=height/2; }
+        let middle=geo.Rect { left:(*rect).left+r,top:(*rect).top,right:(*rect).right-r,bottom:(*rect).bottom };
+        try fill(dst,&middle,clip,color);
+        if r==0 { return; }
+        let left=geo.Rect { left:(*rect).left,top:(*rect).top+r,right:(*rect).left+r,bottom:(*rect).bottom-r };
+        let right=geo.Rect { left:(*rect).right-r,top:(*rect).top+r,right:(*rect).right,bottom:(*rect).bottom-r };
+        try fill(dst,&left,clip,color);try fill(dst,&right,clip,color);
+        let tl=geo.Rect { left:(*rect).left,top:(*rect).top,right:(*rect).left+r,bottom:(*rect).top+r };
+        let tr=geo.Rect { left:(*rect).right-r,top:(*rect).top,right:(*rect).right,bottom:(*rect).top+r };
+        let bl=geo.Rect { left:(*rect).left,top:(*rect).bottom-r,right:(*rect).left+r,bottom:(*rect).bottom };
+        let br=geo.Rect { left:(*rect).right-r,top:(*rect).bottom-r,right:(*rect).right,bottom:(*rect).bottom };
+        try corner(dst,rect,&tl,clip,radius,color);try corner(dst,rect,&tr,clip,radius,color);
+        try corner(dst,rect,&bl,clip,radius,color);try corner(dst,rect,&br,clip,radius,color);
+    }return;
+}

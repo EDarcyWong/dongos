@@ -1,0 +1,66 @@
+// ECAM discovery via authorized configuration callbacks; PA is never a pointer.
+module drivers.pci;
+pub error InvalidInput = 0x0501_0001;
+pub error InvalidRegion = 0x0501_0002;
+pub error IoFailure = 0x0501_0003;
+pub type Read32 = unsafe fn(context: u64, address: u64, out: *u32) u64;
+pub struct Region { pub base: u64, pub segment: u64, pub start_bus: u64, pub end_bus: u64 }
+pub struct Cursor { pub region: usize, pub index: u64 }
+pub struct Function { pub ecam: u64, pub segment: u64, pub bus: u64, pub device: u64, pub function: u64,
+    pub vendor: u64, pub device_id: u64, pub class: u64, pub subclass: u64, pub interface: u64, pub header: u64 }
+pub const EMPTY_CURSOR: Cursor = Cursor { region: 0, index: 0 };
+pub const EMPTY_FUNCTION: Function = Function { ecam: 0, segment: 0, bus: 0, device: 0, function: 0,
+    vendor: 0, device_id: 0, class: 0, subclass: 0, interface: 0, header: 0 };
+const LIMIT: u64 = 0x10_0000_0000_0000;
+pub unsafe fn read(reader: Read32, context: u64, ecam: u64, offset: u64) !u32 {
+    unsafe {
+        if (ecam & 4095) != 0 || ecam >= LIMIT || (offset & 3) != 0 || offset > 4092 { return error.InvalidInput; }
+        var result: u32 = 0;
+        if reader(context,ecam + offset,&result) != 0 { return error.IoFailure; }
+        return result;
+    }
+}
+pub unsafe fn next(reader: Read32, context: u64, regions: []const Region, cursor: *Cursor, out: *Function) !bool {
+    unsafe {
+        if cursor == null || out == null || regions.ptr == null || regions.len == 0 || regions.len > 8
+            || (*cursor).region > regions.len { return error.InvalidInput; }
+        var i: usize = 0;
+        while i < regions.len {
+            let region = regions[i];
+            if (region.base & 0xf_ffff) != 0 || region.base >= LIMIT || region.segment > 65535 || region.start_bus > region.end_bus || region.end_bus > 255
+                || (region.end_bus + 1) * 0x10_0000 > LIMIT - region.base { return error.InvalidRegion; }
+            var j: usize = 0;
+            while j < i {
+                let old = regions[j];
+                if (region.segment == old.segment && region.start_bus <= old.end_bus && old.start_bus <= region.end_bus)
+                    || (region.base + region.start_bus * 0x10_0000 < old.base + (old.end_bus + 1) * 0x10_0000
+                    && old.base + old.start_bus * 0x10_0000 < region.base + (region.end_bus + 1) * 0x10_0000) { return error.InvalidRegion; }
+                j += 1;
+            }
+            i += 1;
+        }
+        var position = *cursor;
+        while position.region < regions.len {
+            let region = regions[position.region];
+            let total = (region.end_bus - region.start_bus + 1) * 256;
+            if position.index > total { return error.InvalidInput; }
+            if position.index == total { position.region += 1; position.index = 0; continue; }
+            let index = position.index; let bus = region.start_bus + index / 256;
+            let device = (index % 256) / 8; let function = index % 8;
+            let base = region.base + bus * 0x10_0000 + device * 32768;
+            let identity = try read(reader,context,base,0);
+            if (identity & 65535) == 65535 { position.index = ((index / 8) + 1) * 8; continue; }
+            let header0 = ((try read(reader,context,base,12)) >> 16) & 255;
+            if function != 0 && (header0 & 128) == 0 { position.index = ((index / 8) + 1) * 8; continue; }
+            let ecam = base + function * 4096; let id = try read(reader,context,ecam,0);
+            position.index += 1;
+            if (id & 65535) == 65535 { continue; }
+            let class = try read(reader,context,ecam,8); let header = ((try read(reader,context,ecam,12)) >> 16) & 255;
+            let found = Function { ecam: ecam, segment: region.segment, bus: bus, device: device, function: function,
+                vendor: (id & 65535) as u64, device_id: (id >> 16) as u64, class: (class >> 24) as u64,
+                subclass: ((class >> 16) & 255) as u64, interface: ((class >> 8) & 255) as u64, header: header as u64 };
+            *cursor = position; *out = found; return true;
+        }
+        *cursor = position; return false;
+    }
+}

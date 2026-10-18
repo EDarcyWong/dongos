@@ -1,0 +1,8 @@
+module acpi_probe;
+import firmware.acpi as acpi;
+unsafe extern "sysv64" ("acpi_reader") fn reader(context: u64, physical: u64, length: usize) *const u8;
+export("acpi_inventory_size") fn size() usize { return sizeof(acpi.Inventory); }
+export("acpi_inventory_align") fn alignment() usize { return alignof(acpi.Inventory); }
+export("acpi_parse") fn parse(context: u64, rsdp: u64, out: *acpi.Inventory) u64 {
+    unsafe { match acpi.discover(reader,context,rsdp,out) { ok => { return 0; }, err(code) => { return code; }, } }
+}

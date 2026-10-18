@@ -1,0 +1,233 @@
+// Actual buddy-backed object storage on the active BSP root. Temporary pages
+// receive only one supervisor RW/NX alias, never a guessed HHDM pointer.
+module boot.object_memory;
+
+import boot.memory_startup as startup;
+import boot.preflight as preflight;
+import mm.phys_buddy as buddy;
+import mm.paging as paging;
+import mm.active_paging as active;
+import mm.fixed_cache as fixed;
+import mm.page_cache as cache;
+
+pub const WINDOW: u64 = 0xffff_b000_0000_1000;
+pub error InvalidIntegration = 0x020e_0001;
+pub struct Report {
+    pub root: u64, pub virtual: u64, pub physical: u64, pub reused_physical: u64,
+    pub object_size: u64, pub alignment: u64, pub capacity: u64, pub allocated: u64,
+    pub oom_error: u64, pub busy_error: u64, pub reused_object: u64,
+    pub free_before: u64, pub free_held: u64, pub free_after: u64,
+    pub tables_before: u64, pub tables_peak: u64, pub tables_after: u64,
+    pub invlpg_count: u64, pub reload_count: u64, pub retired_tables: u64,
+    pub checksum: u64, pub steps: u64, pub cr4: u64, pub rflags: u64,
+}
+
+var OWNER: cache.Owner = cache.EMPTY_OWNER;
+var META: [64]fixed.SlotMeta = [fixed.EMPTY_SLOT; 64];
+var HELD: [64]*u8 = [null; 64];
+var EXPECTED: [4096]u8 = [0; 4096];
+var PAGE_FLUSHES: u64 = 0;
+var ROOT_FLUSHES: u64 = 0;
+var RETIRED: u64 = 0;
+var BASE_TABLES: usize = 0;
+var BASE_FREE: usize = 0;
+var SAFE_FLUSH: bool = true;
+var ATTEMPTED: bool = false;
+
+pub unsafe extern "sysv64" ("memory_read_controls") fn read_controls(out: *preflight.State) void;
+unsafe extern "sysv64" ("object_memory_flush") fn hardware_flush(kind: u64, virtual: u64) void;
+
+unsafe fn flush(kind: u64, virtual: u64) void {
+    unsafe {
+        hardware_flush(kind,virtual);
+        // Completion of either invalidation must still precede release of
+        // the backing lease. Check the real shared buddy ledger in callback.
+        match buddy.free_pages(startup.allocator_pointer()) {
+            ok(count) => { if count + 1 != BASE_FREE { SAFE_FLUSH = false; } },
+            err(code) => { SAFE_FLUSH = false; },
+        }
+        if kind == active.FLUSH_ROOT {
+            match paging.used_tables(startup.space_pointer()) {
+                ok(used) => {
+                    if used < BASE_TABLES { SAFE_FLUSH = false; }
+                    else { RETIRED += (used - BASE_TABLES) as u64; }
+                },
+                err(code) => { SAFE_FLUSH = false; },
+            }
+        }
+        if kind == active.INVALIDATE_PAGE { PAGE_FLUSHES += 1; }
+        if kind == active.FLUSH_ROOT { ROOT_FLUSHES += 1; }
+    }
+}
+
+unsafe fn verify_payload() !void {
+    var i: usize = 0;
+    while i < 4096 {
+        unsafe {
+            if volatile_load((WINDOW as *const u8) + i) != EXPECTED[i] { return error.InvalidIntegration; }
+        }
+        i += 1;
+    }
+    return;
+}
+
+// Query plus an independent raw walk: public software Mapping alone cannot
+// prove which PA/permissions the CPU's actual active tree will consume.
+unsafe fn verify_mapping(physical: u64, root: u64) !void {
+    unsafe {
+        var found = paging.Mapping { physical: 0, flags: 0 };
+        try paging.query(startup.space_pointer(),WINDOW,&found);
+        if found.physical != physical || found.flags != paging.WRITE { return error.InvalidIntegration; }
+        var table = root;
+        let view = startup.runtime_pointer();
+        let pool = (*view).pool_physical;
+        let pool_bytes = (*view).pool_pages * 4096;
+        var level: usize = 0;
+        while level < 4 {
+            if (table & 4095) != 0 || table < pool || table - pool >= pool_bytes {
+                return error.InvalidIntegration;
+            }
+            let slot: usize = ((WINDOW >> (39 - 9 * level)) & 511) as usize;
+            let entry = volatile_load(((0xffff_8000_0000_0000 + table) as *const u64) + slot);
+            if level == 3 {
+                if (entry & ~0x60) != (physical | 0x8000_0000_0000_0003) { return error.InvalidIntegration; }
+            } else {
+                if (entry & ~0x000f_ffff_ffff_f020) != 7 { return error.InvalidIntegration; }
+                table = entry & 0x000f_ffff_ffff_f000;
+            }
+            level += 1;
+        }
+    }
+    return;
+}
+
+unsafe fn verify_empty() !void {
+    unsafe {
+        var found = paging.Mapping { physical: 0, flags: 0 };
+        match paging.query(startup.space_pointer(),WINDOW,&found) {
+            ok => { return error.InvalidIntegration; },
+            err(code) => { if code != 0x0203_0002 { return error.InvalidIntegration; } },
+        }
+    }
+    return;
+}
+
+pub unsafe fn run(out: *Report) !void {
+    if ATTEMPTED { return error.InvalidIntegration; }
+    ATTEMPTED = true;
+    unsafe {
+        let allocator = startup.allocator_pointer();
+        let space = startup.space_pointer();
+        if allocator == null || space == null { return error.InvalidIntegration; }
+        var before = preflight.EMPTY_STATE;
+        var state = preflight.EMPTY_STATE;
+        read_controls(&before);
+        let root = try paging.root_physical(space);
+        let free_before = try buddy.free_pages(allocator);
+        BASE_FREE = free_before;
+        BASE_TABLES = try paging.used_tables(space);
+        var steps: u64 = 0;
+        read_controls(&state);
+        try cache.create(&OWNER,allocator,space,&state,WINDOW,48,64,META[..],flush);
+        var info = cache.Info { physical: 0, virtual: 0, capacity: 0, free_objects: 0, mapped: 0, ready: 0 };
+        try cache.describe(&OWNER,&info);
+        let physical = info.physical;
+        let free_held = try buddy.free_pages(allocator);
+        let peak = try paging.used_tables(space);
+        if info.virtual != WINDOW || info.capacity != 64 || info.free_objects != 64
+            || info.ready != 1 || info.mapped != 1 || free_held + 1 != free_before
+            || peak != BASE_TABLES + 3 { return error.InvalidIntegration; }
+        try verify_mapping(physical,root);
+        steps |= 1;
+        var i: usize = 0;
+        while i < 4096 {
+            EXPECTED[i] = 0x5a;
+            volatile_store((WINDOW as *u8) + i,0x5a as u8);
+            i += 1;
+        }
+        i = 0;
+        while i < 64 {
+            let object = try cache.alloc(&OWNER);
+            if object as u64 != WINDOW + (i as u64) * 64 { return error.InvalidIntegration; }
+            HELD[i] = object;
+            try verify_payload();
+            var j: usize = 0;
+            while j < 48 {
+                let tag: u8 = ((i * 7 + j + 3) & 255) as u8;
+                volatile_store(object + j,tag);
+                EXPECTED[i * 64 + j] = tag;
+                j += 1;
+            }
+            try verify_payload();
+            i += 1;
+        }
+        steps |= 2;
+        var oom: u64 = 0;
+        match cache.alloc(&OWNER) { ok(value) => { return error.InvalidIntegration; }, err(code) => { oom = code; }, }
+        if oom != 0x0200_0007 { return error.InvalidIntegration; }
+        try verify_payload();
+        steps |= 4;
+        var busy: u64 = 0;
+        read_controls(&state);
+        match cache.destroy(&OWNER,&state) { ok => { return error.InvalidIntegration; }, err(code) => { busy = code; }, }
+        if busy != 0x020d_0001 || PAGE_FLUSHES != 1 || ROOT_FLUSHES != 0
+            || (try buddy.free_pages(allocator)) != free_held
+            || (try paging.used_tables(space)) != peak { return error.InvalidIntegration; }
+        try verify_payload();
+        steps |= 8;
+        try cache.free(&OWNER,HELD[17]);
+        try verify_payload();
+        let reused = try cache.alloc(&OWNER);
+        if reused != HELD[17] { return error.InvalidIntegration; }
+        try verify_payload();
+        steps |= 16;
+        i = 0;
+        while i < 64 { try cache.free(&OWNER,HELD[i]); try verify_payload(); i += 1; }
+        try cache.describe(&OWNER,&info);
+        if info.free_objects != 64 { return error.InvalidIntegration; }
+        var checksum: u64 = 0;
+        i = 0;
+        while i < 4096 { checksum += volatile_load((WINDOW as *const u8) + i) as u64; i += 1; }
+        steps |= 32;
+        read_controls(&state);
+        try cache.destroy(&OWNER,&state);
+        try verify_empty();
+        if (try buddy.free_pages(allocator)) != free_before
+            || (try paging.used_tables(space)) != BASE_TABLES { return error.InvalidIntegration; }
+        steps |= 64;
+        // Recreate using the same real buddy ledger. Read through the new VA
+        // before any caller writes: both the physical lease and bytes survive.
+        read_controls(&state);
+        try cache.create(&OWNER,allocator,space,&state,WINDOW,48,64,META[..],flush);
+        try cache.describe(&OWNER,&info);
+        let reused_physical = info.physical;
+        if reused_physical != physical { return error.InvalidIntegration; }
+        try verify_mapping(reused_physical,root);
+        try verify_payload();
+        volatile_store(WINDOW as *u8,0xc3 as u8);
+        if volatile_load(WINDOW as *const u8) != 0xc3 { return error.InvalidIntegration; }
+        steps |= 128;
+        read_controls(&state);
+        try cache.destroy(&OWNER,&state);
+        try verify_empty();
+        let free_after = try buddy.free_pages(allocator);
+        let tables_after = try paging.used_tables(space);
+        if free_after != free_before || tables_after != BASE_TABLES || PAGE_FLUSHES != 2
+            || ROOT_FLUSHES != 2 || RETIRED != 6 || !SAFE_FLUSH { return error.InvalidIntegration; }
+        steps |= 256;
+        read_controls(&state);
+        try preflight.unchanged(&before,&state);
+        try startup.validate_active(state.cr3);
+        steps |= 512;
+        *out = Report {
+            root: root, virtual: WINDOW, physical: physical, reused_physical: reused_physical,
+            object_size: 48, alignment: 64, capacity: 64, allocated: 64,
+            oom_error: oom, busy_error: busy, reused_object: reused as u64,
+            free_before: free_before as u64, free_held: free_held as u64, free_after: free_after as u64,
+            tables_before: BASE_TABLES as u64, tables_peak: peak as u64, tables_after: tables_after as u64,
+            invlpg_count: PAGE_FLUSHES, reload_count: ROOT_FLUSHES, retired_tables: RETIRED,
+            checksum: checksum, steps: steps, cr4: state.cr4, rflags: state.rflags,
+        };
+    }
+    return;
+}

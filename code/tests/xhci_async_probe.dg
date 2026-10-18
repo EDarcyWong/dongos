@@ -1,0 +1,39 @@
+module xhci_async_probe;
+import usb.bot as bot;
+import usb.xhci_transport as t;
+import usb.xhci_controller as c;
+import usb.enumerate as e;
+import usb.transport as io;
+import usb.xhci_ring as ring;
+import usb.xhci_trb as wire;
+import xhci_controller_probe as controller;
+export("xt_init") fn initialize(s:*t.State,h:*c.State)u64 {unsafe {match t.initialize(s,h) {ok=>{return 0;},err(code)=>{return code;},}}}
+export("xt_ops") fn ops()u64 {unsafe {return (&t.OPS) as u64;}}
+export("xt_port") fn port(s:*t.State,number:u64,out:*io.Port)u64 {unsafe {match t.probe_port(s,number,out) {ok=>{return 0;},err(code)=>{return code;},}}}
+export("xt_enum") fn enumerate(s:*e.State,transport:*t.State,setup:*const e.Setup)u64 {unsafe {
+    match e.initialize(s,&t.OPS,transport as u64,setup) {ok=>{return 0;},err(code)=>{return code;},}
+}}
+export("xt_control") fn control(s:*t.State,slot:u64,r:*ring.Producer,request:*const wire.Control,b:*const io.Buffer,end:u64,out:*u64)u64 {unsafe {
+    let region=wire.Region {physical:(*s).physical,bytes:(*s).bytes,physical_bits:(*(*s).controller).setup.physical_bits};
+    match io.control(&t.OPS,s as u64,slot,r,&region,request,b,end,out) {ok=>{return 0;},err(code)=>{return code;},}
+}}
+
+export("xa_post") fn post(s:*t.State,slot:u64,address:u64,r:*ring.Producer,b:*const io.Buffer,cookie:u64)u64 {unsafe {
+    match t.post(s,slot,address,r,b,cookie) {ok=>{return 0;},err(code)=>{return code;},}
+}}
+export("xa_poll") fn poll(s:*t.State,budget:u64,out:*t.Report,found:*u64)u64 {unsafe {
+    match t.poll(s,budget,out) {ok(value)=>{*found=0;if value {*found=1;}return 0;},err(code)=>{return code;},}
+}}
+export("xa_noop") fn noop(s:*t.State,end:u64)u64 {unsafe {
+    let command=wire.Command {kind:23,slot:0,context:0,context_bytes:0,block_set_address:0};var slot:u64=0;
+    return t.OPS.command(s as u64,&command,end,&slot);
+}}
+export("xa_recover") fn recover(s:*t.State,slot:u64,address:u64,r:*ring.Producer,end:u64)u64 {unsafe {return t.OPS.recover_endpoint(s as u64,slot,address,r,end);}}
+export("xa_bot_init") fn bot_init(s:*bot.State,transport:*t.State,input:*const bot.Setup)u64 {unsafe {
+    match bot.initialize(s,&t.OPS,transport as u64,input) {ok=>{return 0;},err(code)=>{return code;},}
+}}
+export("xa_bot_rw") fn bot_rw(s:*bot.State,lba:u64,count:u64,b:*const io.Buffer,inward:u64)u64 {unsafe {
+    match bot.read_write(s,lba,count,b,inward!=0) {ok=>{return 0;},err(code)=>{return code;},}
+}}
+export("xa_bot_sync") fn bot_sync(s:*bot.State)u64 {unsafe {match bot.synchronize(s) {ok=>{return 0;},err(code)=>{return code;},}}}
+export("xa_bot_recover") fn bot_recover(s:*bot.State)u64 {unsafe {match bot.recover(s) {ok=>{return 0;},err(code)=>{return code;},}}}

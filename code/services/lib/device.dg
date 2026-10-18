@@ -1,0 +1,23 @@
+module lib.device;
+import lib.sys as sys;
+import lib.device_abi as abi;
+pub unsafe fn enumerate(manager:u64,cursor:u64,out:*abi.Device)u64 {unsafe {
+    return sys.svc_call(abi.ENUMERATE,manager,cursor,out as u64,0,0,0);
+}}
+pub unsafe fn bind(manager:u64,token:u64,role:u64,out:*abi.Binding)u64 {unsafe {
+    return sys.svc_call(abi.BIND,manager,token,role,out as u64,0,0);
+}}
+pub unsafe fn bind_irq(port:u64,irq:u64,generation:u64,out:*abi.Irq)u64 {unsafe {
+    return sys.svc_call(abi.IRQ_BIND,port,irq,generation,out as u64,0,0);
+}}
+pub unsafe fn wait_irq(token:u64,after:u64,out:*abi.Irq,flags:u64,deadline:u64)u64 {unsafe {
+    return sys.svc_call(abi.IRQ_WAIT,token,after,out as u64,flags,deadline,0);
+}}
+pub fn acknowledge(token:u64,sequence:u64)u64 {unsafe {
+    return sys.svc_call(abi.IRQ_ACK,token,sequence,0,0,0,0);
+}}
+pub fn revoke(manager:u64,token:u64,generation:u64)u64 {unsafe {
+    return sys.svc_call(abi.REVOKE,manager,token,generation,0,0,0);
+}}
+
+pub unsafe fn bind_pci_irq(configuration:u64,incarnation:u64,out:*abi.Irq)u64{unsafe{return sys.svc_call(abi.PCI_IRQ_BIND,configuration,incarnation,out as u64,0,0,0);}}

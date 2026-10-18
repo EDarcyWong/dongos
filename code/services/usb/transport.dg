@@ -1,0 +1,61 @@
+// Synchronous bounded transport contract. Actual xHCI TD and command execution
+// belongs to the callback, which must retain all DMA until hardware completes.
+module usb.transport;
+import usb.xhci_trb as wire;
+import usb.xhci_ring as ring;
+pub error Invalid=0x0813_0001;
+pub error Stall=0x0813_0002;
+pub error Timeout=0x0813_0003;
+pub error IoFailure=0x0813_0004;
+pub error Disconnected=0x0813_0005;
+pub error Unsupported=0x0813_0006;
+pub error Protocol=0x0813_0007;
+pub struct Buffer {pub physical:u64,pub pointer:*u8,pub bytes:u64}
+pub const EMPTY:Buffer=Buffer {physical:0,pointer:null,bytes:0};
+pub struct Port {pub connected:u64,pub speed:u64}
+pub type ResetPort=unsafe fn(context:u64,port:u64,deadline:u64,out:*Port)u64;
+pub type Command=unsafe fn(context:u64,input:*const wire.Command,deadline:u64,slot:*u64)u64;
+pub type Control=unsafe fn(context:u64,slot:u64,producer:*ring.Producer,plan:*const wire.ControlPlan,buffer:*const Buffer,deadline:u64,actual:*u64)u64;
+pub type Bulk=unsafe fn(context:u64,slot:u64,address:u64,producer:*ring.Producer,buffer:*const Buffer,deadline:u64,actual:*u64)u64;
+pub type Recover=unsafe fn(context:u64,slot:u64,address:u64,producer:*ring.Producer,deadline:u64)u64;
+pub type Now=unsafe fn(context:u64,out:*u64)u64;
+pub type Fence=unsafe fn(context:u64)u64;
+pub struct Ops {pub reset_port:ResetPort,pub command:Command,pub control:Control,pub bulk:Bulk,pub recover_endpoint:Recover,pub now:Now,pub fence:Fence}
+pub fn status(code:u64)!void {
+    if code==0 {return;}if code==1 {return error.Stall;}if code==2 {return error.Timeout;}
+    if code==3 {return error.IoFailure;}if code==4 {return error.Disconnected;}if code==5 {return error.Unsupported;}return error.Protocol;
+}
+pub unsafe fn span(region:*const wire.Region,b:*const Buffer,zero:bool)!void {unsafe {
+    if b==null {return error.Invalid;}if (*b).bytes==0 {if zero&&(*b).pointer==null&&(*b).physical==0 {return;}return error.Invalid;}
+    if (*b).pointer==null||(*b).bytes>65536||(*b).pointer as u64>0xffff_ffff_ffff_ffff-(*b).bytes {return error.Invalid;}
+    match wire.span(region,(*b).physical,(*b).bytes,1) {ok=>{},err(e)=>{return error.Invalid;},}
+    if (*b).bytes>65536-((*b).physical&65535) {return error.Invalid;}
+}return;}
+pub unsafe fn deadline(ops:*const Ops,context:u64,hz:u64,milliseconds:u64,last:*u64)!u64 {unsafe {
+    if ops==null||last==null||hz<1000000||hz>16000000000||milliseconds==0||milliseconds>5000 {return error.Invalid;}
+    var value:u64=0;try status((*ops).now(context,&value));if value<*last {return error.Protocol;}
+    let cycles=(hz*milliseconds+999)/1000;if value>0xffff_ffff_ffff_ffff-cycles {return error.Protocol;}*last=value;return value+cycles;
+}}
+pub unsafe fn fence(ops:*const Ops,context:u64)!void {unsafe {if ops==null {return error.Invalid;}compiler_fence();try status((*ops).fence(context));compiler_fence();}return;}
+pub unsafe fn command(ops:*const Ops,context:u64,region:*const wire.Region,input:*const wire.Command,end:u64,out:*u64)!void {unsafe {
+    if ops==null||out==null {return error.Invalid;}var encoded=wire.EMPTY;
+    match wire.command(region,input,&encoded) {ok=>{},err(e)=>{return error.Invalid;},}
+    var slot:u64=0;try status((*ops).command(context,input,end,&slot));
+    if (*input).kind==9 {if slot==0||slot>255 {return error.Protocol;}}
+    else if slot!=(*input).slot {return error.Protocol;}*out=slot;
+}return;}
+pub unsafe fn control(ops:*const Ops,context:u64,slot:u64,producer:*ring.Producer,region:*const wire.Region,request:*const wire.Control,buffer:*const Buffer,end:u64,out:*u64)!void {unsafe {
+    if ops==null||slot==0||slot>255||producer==null||request==null||buffer==null||out==null {return error.Invalid;}
+    try span(region,buffer,true);if (*request).bytes!=(*buffer).bytes||(*request).data!=(*buffer).physical {return error.Invalid;}
+    var encoded=wire.EMPTY_CONTROL;match wire.control(region,request,&encoded) {ok=>{},err(e)=>{return error.Invalid;},}
+    if (*producer).ready!=1||(*producer).held!=1||(*producer).kind!=ring.TRANSFER||(*producer).slot!=slot||(*producer).endpoint!=1||(*producer).fault!=0||(*producer).pending!=0 {return error.Invalid;}
+    var actual:u64=0xffff_ffff_ffff_ffff;try status((*ops).control(context,slot,producer,&encoded,buffer,end,&actual));
+    if actual>(*buffer).bytes {return error.Protocol;}*out=actual;
+}return;}
+pub unsafe fn bulk(ops:*const Ops,context:u64,slot:u64,address:u64,producer:*ring.Producer,region:*const wire.Region,buffer:*const Buffer,end:u64,out:*u64)!void {unsafe {
+    if ops==null||slot==0||slot>255||address>255||(address&0x70)!=0||(address&15)==0||producer==null||out==null {return error.Invalid;}
+    try span(region,buffer,false);let endpoint=(address&15)*2+(address>>7);
+    if (*producer).ready!=1||(*producer).held!=1||(*producer).kind!=ring.TRANSFER||(*producer).slot!=slot||(*producer).endpoint!=endpoint||(*producer).fault!=0||(*producer).pending!=0 {return error.Invalid;}
+    var actual:u64=0xffff_ffff_ffff_ffff;try status((*ops).bulk(context,slot,address,producer,buffer,end,&actual));
+    if actual>(*buffer).bytes {return error.Protocol;}*out=actual;
+}return;}

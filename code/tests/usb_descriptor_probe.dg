@@ -1,0 +1,8 @@
+module usb_descriptor_probe;
+import usb.descriptor as d;
+export("ud_device") fn device(p:*const u8,n:usize,speed:u64,out:*d.Device)u64 {unsafe {match d.device(slice_from_raw_parts(p,n),speed,out) {ok=>{return 0;},err(e)=>{return e;},}}}
+export("ud_packet") fn packet(p:*const u8,n:usize,speed:u64,out:*u64)u64 {unsafe {match d.packet0(slice_from_raw_parts(p,n),speed) {ok(v)=>{*out=v;return 0;},err(e)=>{return e;},}}}
+export("ud_header") fn header(p:*const u8,n:usize,out:*u64)u64 {unsafe {match d.configuration_bytes(slice_from_raw_parts(p,n)) {ok(v)=>{*out=v as u64;return 0;},err(e)=>{return e;},}}}
+export("ud_config") fn config(p:*const u8,n:usize,speed:u64,out:*d.Configuration)u64 {unsafe {match d.configuration(slice_from_raw_parts(p,n),speed,out) {ok=>{return 0;},err(e)=>{return e;},}}}
+export("ud_language") fn language(p:*const u8,n:usize,preferred:u64,out:*u64)u64 {unsafe {match d.language(slice_from_raw_parts(p,n),preferred) {ok(v)=>{*out=v;return 0;},err(e)=>{return e;},}}}
+export("ud_string") fn string(p:*const u8,n:usize,out:*u8,capacity:usize,length:*u64)u64 {unsafe {match d.string_utf8(slice_from_raw_parts(p,n),slice_from_raw_parts(out,capacity)) {ok(v)=>{*length=v as u64;return 0;},err(e)=>{return e;},}}}

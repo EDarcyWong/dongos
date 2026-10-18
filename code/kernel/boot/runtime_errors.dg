@@ -1,0 +1,3 @@
+module boot.runtime_errors;
+
+pub error InvalidView = 0x0207_0001;

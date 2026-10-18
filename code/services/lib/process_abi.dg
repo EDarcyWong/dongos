@@ -1,0 +1,59 @@
+// Data-only process-control contract, shared with the kernel. Configuration
+// identifies a kernel-admitted image and role; it never grants raw authority.
+module lib.process_abi;
+pub const VERSION:u64=1;
+pub const LIMIT:usize=32;
+pub const AUTOSTART:u64=1;
+pub const RESTART:u64=2;
+pub const ESSENTIAL:u64=4;
+pub const ORDINARY:u64=8;
+pub const STOPPED:u64=0;
+pub const STARTING:u64=1;
+pub const READY:u64=2;
+pub const EXITED:u64=3;
+pub const FAULTED:u64=4;
+pub const KILLED:u64=5;
+pub const CONFIG:u64=0x80;
+pub const SPAWN:u64=0x81;
+pub const WAIT:u64=0x82;
+pub const KILL:u64=0x83;
+pub const MARK_READY:u64=0x84;
+pub const EXEC:u64=0x85;
+pub const INCARNATION:u64=0x86;
+pub const RUNTIME:u64=0x87;
+pub const RESTART_SERVICE:u64=0x88;
+pub const NONBLOCK:u64=0;
+pub const BLOCK:u64=1;
+pub error Invalid=0x0511_0001;
+pub error Cycle=0x0511_0002;
+pub error Stale=0x0511_0003;
+pub error Exhausted=0x0511_0004;
+pub error WouldBlock=0x0511_0005;
+pub error Dependency=0x0511_0006;
+pub error Timeout=0x0511_0007;
+pub error PeerGone=0x0511_0008;
+pub struct Config {
+    pub version:u64,pub id:u64,pub dependencies:u64,pub restart_limit:u64,
+    pub timeout_ticks:u64,pub flags:u64,pub image:u64,pub name_length:u64,
+    pub name:[32]u8,pub reserved:[4]u64,
+}
+pub const EMPTY_CONFIG:Config=Config {version:1,id:0,dependencies:0,restart_limit:0,
+    timeout_ticks:0,flags:0,image:0,name_length:0,name:[0;32],reserved:[0;4]};
+pub struct Snapshot {
+    pub version:u64,pub configuration:u64,pub process:u64,pub generation:u64,
+    pub state:u64,pub status:u64,pub sequence:u64,pub argument:u64,
+}
+pub const EMPTY_SNAPSHOT:Snapshot=Snapshot {version:1,configuration:0,process:0,generation:0,
+    state:0,status:0,sequence:0,argument:0};
+pub struct Event {
+    pub version:u64,pub sequence:u64,pub configuration:u64,pub generation:u64,
+    pub process:u64,pub state:u64,pub status:u64,pub flags:u64,
+}
+pub const EMPTY_EVENT:Event=Event {version:1,sequence:0,configuration:0,generation:0,
+    process:0,state:0,status:0,flags:0};
+pub struct Runtime {
+    pub version:u64,pub pcide:u64,pub switches:u64,pub retained:u64,
+    pub cr4:u64,pub user_root:u64,pub incarnation:u64,pub reserved:u64,
+}
+pub const EMPTY_RUNTIME:Runtime=Runtime {version:1,pcide:0,switches:0,retained:0,
+    cr4:0,user_root:0,incarnation:0,reserved:0};

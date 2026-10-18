@@ -1,0 +1,34 @@
+// One NASM line for a direct call to an internal symbol: "call <symbol>\n",
+// where <symbol> is exactly the integrated CR3 nasm_symbol encoding of the
+// module and item names (each 1..64 raw bytes). The encoding is produced in a
+// 266-byte local scratch; out is written once, after every check has passed.
+// Argument passing, call-site stack alignment and caller-saved registers stay
+// the caller's responsibility.
+module bootstrap.nasm_direct_call;
+import bootstrap.nasm_symbol as sym;
+pub const OK:u64=0;pub const INVALID:u64=1;pub const CAPACITY:u64=2;
+pub const NAME_LIMIT:usize=64;
+const MAX:u64=0xffff_ffff_ffff_ffff;
+// 10 + 2*(64+64) bytes: the longest CR3 symbol for two 64-byte names.
+const SCRATCH:usize=266;
+fn span(p:u64,n:u64)bool{return n==0||(p!=0&&n<=MAX-p);}
+fn overlap(a:u64,n:u64,b:u64,m:u64)bool{return n!=0&&m!=0&&a<b+m&&b<a+n;}
+pub unsafe fn emit(module_name:[]const u8,item_name:[]const u8,out:[]u8,written:*usize)u64{unsafe{
+ let wp=written as u64;let mp=module_name.ptr as u64;let ip=item_name.ptr as u64;let op=out.ptr as u64;
+ let mn=module_name.len;let inn=item_name.len;let on=out.len;
+ if written==null||(wp&7)!=0||!span(wp,8){return INVALID;}
+ if !span(mp,mn)||!span(ip,inn)||!span(op,on){return INVALID;}
+ // out and written are each disjoint from both whole inputs and from each other; inputs may overlap.
+ if overlap(wp,8,op,on)||overlap(wp,8,mp,mn)||overlap(wp,8,ip,inn)||overlap(op,on,mp,mn)||overlap(op,on,ip,inn){return INVALID;}
+ if mn==0||mn>NAME_LIMIT||inn==0||inn>NAME_LIMIT{return INVALID;}
+ var scratch:[266]u8=[0;266];var length:usize=0;
+ let status=sym.encode(module_name,item_name,slice_from_raw_parts(&scratch[0],SCRATCH),&length);
+ if status!=sym.OK{return INVALID;}
+ // "call " + symbol (at most 266) + LF: at most 272, no overflow possible.
+ let total=5+length+1;
+ if total>on{return CAPACITY;}
+ out[0]=99;out[1]=97;out[2]=108;out[3]=108;out[4]=32;
+ var i:usize=0;while i<length{out[5+i]=scratch[i];i+=1;}
+ out[5+length]=10;
+ *written=total;return OK;
+}}

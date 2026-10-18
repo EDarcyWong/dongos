@@ -1,0 +1,188 @@
+// All user GPR/xstate ownership belongs to user_domain. Real service mutation
+// executes only on BSP under the one global kernel lock. APs defer the captured
+// syscall/fault by temporarily constraining its runnable token to CPU0.
+module sched.user_bridge;
+import sched.user_domain as ud;
+import sched.user_entry_plan as ep;
+import sched.multicore as q;
+pub error Invalid=0x060b_0010;pub error Held=0x060b_0011;
+pub const SYSCALL:u64=256;pub const IDLE:u64=257;
+pub struct Pending{pub event:u64,pub affinity:u64,pub incarnation:u64,pub token:u64}
+pub struct Bridge{pub ready:u64,pub failed:u64,pub domain:*ud.Domain,pub pending:*Pending,pub headers:*u64,pub service_cpu:u64,pub calls:u64,pub deferred:u64}
+pub struct Counts{pub calls:u64,pub pci:u64,pub clock:u64,pub full:u64,pub skipped:u64,pub last_event:u64,pub last_op:u64}
+var ACTIVE:*Bridge=null;
+pub unsafe fn counts(slot:usize)*Counts{unsafe{if ACTIVE==null||slot>=16{return null;}return ((ACTIVE as u64)+576+slot as u64*56) as *Counts;}}
+unsafe extern "sysv64" fn user_bridge_service_policy(slot:u64,event:u64,frame:u64)u64;
+unsafe extern "sysv64" fn user_bridge_cpu()u64;
+unsafe extern "sysv64" fn user_bridge_clock()u64;
+unsafe extern "sysv64" fn user_bridge_copy(dst:u64,src:u64,bytes:u64)void;
+unsafe extern "sysv64" fn user_bridge_restore(pointer:u64)void;
+unsafe extern "sysv64" fn user_bridge_kick(cpu:u64)u64;
+unsafe extern "sysv64" fn user_bridge_eoi(cpu:u64,vector:u64)u64;
+unsafe extern "sysv64" fn user_bridge_timer(cpu:u64,needed:u64)u64;
+// These are resolved by the isolated services overlay, never by the old
+// dong_user_dispatch that saves/restores global BSP xstate and changes CURRENT.
+unsafe extern "sysv64" fn user_bridge_service(slot:u64,event:u64,frame:u64)u64;
+unsafe extern "sysv64" fn user_bridge_project()u64;
+unsafe extern "sysv64" fn user_bridge_interrupt(vector:u64)u64;
+unsafe fn checked(cpu:usize)!*ud.Domain{unsafe{
+ if ACTIVE==null||(*ACTIVE).ready!=1||(*ACTIVE).failed!=0||cpu>=16||user_bridge_cpu()!=cpu as u64{return error.Held;}
+ let d=(*ACTIVE).domain;if d==null||(*d).ready!=1||(*d).failed!=0||((*d).online&(1<<cpu as u64))==0{return error.Held;}return d;
+}}
+unsafe fn held()u64{unsafe{if ACTIVE!=null{
+ (*ACTIVE).failed=1;atomic_store(&(*(*ACTIVE).domain).failed,1);
+ let here=user_bridge_cpu();var id:usize=0;while id<16{
+  if id as u64!=here&&((*(*ACTIVE).domain).online&(1<<id as u64))!=0{let attempted=user_bridge_kick(id as u64);}id+=1;
+ }
+}}return 0xffff_ffff_ffff_ffff;}
+pub fn required_bytes()u64{return 1536;}
+pub unsafe fn initialize(arena:u64,bytes:u64,d:*ud.Domain,headers:*u64)!void{unsafe{
+ if arena==0||(arena&63)!=0||bytes<required_bytes()||bytes>0xffff_ffff_ffff_ffff-arena||d==null||(*d).ready!=1||((*d).online&1)==0||headers==null||ACTIVE!=null{return error.Invalid;}
+ let b=arena as *Bridge;(*b).ready=0;(*b).failed=0;(*b).domain=d;(*b).pending=(arena+64) as *Pending;(*b).headers=headers;
+ (*b).service_cpu=0;(*b).calls=0;(*b).deferred=0;
+ var id:usize=0;while id<16{let p=(*b).pending+id;(*p).event=0;(*p).affinity=0;(*p).incarnation=0;(*p).token=0;id+=1;}
+ var at=arena+576;while at<arena+1536{*(at as *u64)=0;at+=8;}
+ compiler_fence();(*b).ready=1;ACTIVE=b;
+}return;}
+pub fn pointer()*Bridge{return ACTIVE;}
+// Tri-state bridge for shared-memory backends called from actual perform().
+// 1 means the new entry mode has not activated: caller MUST run legacy(0,1).
+// Every active error is permanent held, never permission to use old PCID state.
+unsafe fn shared_barrier()!void{unsafe{
+ let d=try checked(0);if (*d).lock!=1||(*d).owner!=0||(*((*d).cpus)).mode!=ud.LOCKED||(*d).barrier!=0{return error.Held;}
+ let sequence=try ud.barrier_begin(d,0);try ud.barrier_wait(d,0,sequence,try deadline(d,0));
+}return;}
+pub export("dong_user_smp_barrier") fn global_barrier()u64{unsafe{
+ if ACTIVE==null{return 1;}
+ if (*ACTIVE).ready!=1||(*ACTIVE).failed!=0{return held();}
+ let header=*((*ACTIVE).headers) as *ep.Cpu;
+ if header==null{return held();}if (*header).ready!=2{return 1;}
+ match shared_barrier(){ok=>{return 0;},err(e)=>{return held();},}
+}}
+pub unsafe fn retire(slot:usize)!void{unsafe{
+ let d=try checked(0);if slot>=16||(*d).owner!=0||(*d).lock!=1{return error.Held;}
+ if (*((*d).processes+slot)).token==0{return;}
+ let sequence=try ud.retire_begin(d,0,slot);try ud.barrier_wait(d,0,sequence,try deadline(d,0));
+ try ud.retire_finish(d,0,slot);let pending=(*ACTIVE).pending+slot;
+ (*pending).event=0;(*pending).affinity=0;(*pending).incarnation=0;(*pending).token=0;
+}return;}
+unsafe fn deadline(d:*ud.Domain,cpu:usize)!u64{unsafe{
+ let header=*((*ACTIVE).headers+cpu) as *ep.Cpu;
+ if header==null||(*header).ready!=2||(*header).domain!=d as u64||(*header).logical_id!=cpu as u64||(*header).deadline_ticks==0{return error.Held;}
+ let now=user_bridge_clock();if now>0xffff_ffff_ffff_ffff-(*header).deadline_ticks{return error.Held;}return now+(*header).deadline_ticks;
+}}
+unsafe fn choose(d:*ud.Domain,cpu:usize)!u64{unsafe{
+ if cpu==0&&user_bridge_project()!=0{return error.Held;}
+ var attempts:usize=0;
+ while attempts<17{
+  var frame:u64=0;
+  if !(try ud.select(d,cpu,&frame)){
+   if user_bridge_timer(cpu as u64,0)!=0{return error.Held;}
+   try ud.unlock(d,cpu);try ud.park(d,cpu);return 0;
+  }
+  let c=(*d).cpus+cpu;let slot=(*c).slot as usize;let p=(*ACTIVE).pending+slot;
+  if (*p).event==0{
+   // One-shot quantum is necessary only with an eligible equal/higher-priority
+   // READY competitor. Core needs_quantum considers affinity and current CPU.
+   let need=try q.needs_quantum((*d).engine,cpu);
+   if user_bridge_timer(cpu as u64,need as u64)!=0{return error.Held;}
+   try ud.unlock(d,cpu);return frame;
+  }
+  if cpu!=0||(*p).token!=(*c).token||(*p).incarnation!=(*c).incarnation{return error.Held;}
+  try ud.selected_kernel(d,cpu);let process=(*d).processes+slot;
+  let serviced_token=(*p).token;let saved_affinity=(*p).affinity;
+  // Quiesce users before service-side mapping/capability mutation. IF0 lock
+  // waiters still poll, so ACKs never require entering this occupied BKL.
+  let policy=user_bridge_service_policy(slot as u64,(*p).event,(*process).frame);
+  if policy>1{return error.Held;}
+  let counter=counts(slot);let operation=*(((*process).frame+112) as *const u64);
+  if (*counter).calls==0xffff_ffff_ffff_ffff||(*counter).pci==0xffff_ffff_ffff_ffff||(*counter).clock==0xffff_ffff_ffff_ffff
+   ||(*counter).full>0xffff_ffff_ffff_fffd||(*counter).skipped>0xffff_ffff_ffff_fffd{return error.Held;}
+  (*counter).calls+=1;(*counter).last_event=(*p).event;(*counter).last_op=operation;
+  if (*p).event==257&&operation==0x60{(*counter).pci+=1;}
+  if (*p).event==257&&operation==0x73{(*counter).clock+=1;}
+  if policy==0{(*counter).full+=2;let before=try ud.barrier_begin(d,cpu);try ud.barrier_wait(d,cpu,before,try deadline(d,cpu));}
+  else{(*counter).skipped+=2;}
+  let status=user_bridge_service(slot as u64,(*p).event,(*process).frame);(*ACTIVE).calls+=1;
+  if status!=0{return error.Held;}
+  if policy==0{let after=try ud.barrier_begin(d,cpu);try ud.barrier_wait(d,cpu,after,try deadline(d,cpu));}
+  // The callback may have retired this token through retire_begin/finish.
+  if (*process).token==serviced_token{
+   try ud.release(d,cpu,q.BLOCKED);
+   try q.set_affinity((*d).engine,serviced_token,saved_affinity);
+  }
+  (*p).event=0;(*p).token=0;(*p).incarnation=0;(*p).affinity=0;
+  if user_bridge_project()!=0{return error.Held;}
+  attempts+=1;
+ }
+ return error.Held;
+}}
+unsafe fn capture(cpu:usize,frame:u64,event:u64)!u64{unsafe{
+ let d=try checked(cpu);let c=(*d).cpus+cpu;if frame==0||(frame&7)!=0{return error.Invalid;}
+ try ud.begin_entry(d,cpu);user_bridge_copy((*c).capture,frame,200);try ud.complete_entry(d,cpu);
+ let header=*((*ACTIVE).headers+cpu) as *ep.Cpu;user_bridge_restore((*header).kernel_xstate);
+ let limit=try deadline(d,cpu);let flushed=try ud.poll(d,cpu);try ud.acquire(d,cpu,limit);
+ let copied=try ud.drain(d,cpu);
+ // Retirement may have detached a delayed capture before this CPU gets BKL.
+ if !copied&&(*c).token!=0{return error.Held;}
+ if copied{
+  let slot=(*c).slot as usize;let token=(*c).token;
+  // Frame.cr3 is the normalized hardware root (both raw entries remove
+  // PCID low12 before storing it). A different trusted root is corruption,
+  // never an ordinary user policy violation or permission to run a service.
+  let process=(*d).processes+slot;
+  if *(((*process).frame+144) as *const u64)!=(*process).root{return error.Held;}
+  var deferred=event==SYSCALL||event<32;var service_event=event+1;
+  if !deferred{
+   if event!=0x40&&event!=0xf4&&event!=0xf3&&event!=0xf1&&event!=0xf2&&event!=0x51&&event!=0x5c&&event!=0x60&&event!=0xff{return error.Invalid;}
+   // Real interrupt delivery and EOI must finish even when a malicious
+   // user stack/flags cannot safely be returned. No foreign AP device IRQ.
+   if event==0x51||event==0x5c||event==0x60{if cpu!=0||user_bridge_interrupt(event)!=0{return error.Held;}}
+   else if user_bridge_eoi(cpu as u64,event)!=0{return error.Held;}
+   if !(try ud.captured_return_valid(d,cpu)){
+    deferred=true;service_event=258; // explicit invalid-return Frame, no fake CPU #GP
+   }
+  }
+  if deferred{
+   let p=(*ACTIVE).pending+slot;if (*p).event!=0{return error.Held;}
+   (*p).event=service_event;(*p).token=token;(*p).incarnation=(*c).incarnation;
+   (*p).affinity=(*(*d).engine).threads[slot].affinity;
+   try ud.release(d,cpu,q.BLOCKED);try q.set_affinity((*d).engine,token,1);try q.wake((*d).engine,token);
+   if cpu!=0{(*ACTIVE).deferred+=1;if user_bridge_kick(0)!=0{return error.Held;}}
+  }else{try ud.release(d,cpu,q.READY);}
+ }else{
+  // The BSP may retire/reuse the old process while this CPU waits for BKL.
+  // Its private capture/return_root still describe the interrupted hardware
+  // entry. Finish that IRQ even though there is no surviving user token.
+  if *(((*c).capture+144) as *const u64)!=(*c).return_root{return error.Held;}
+  if event!=SYSCALL&&event>=32{
+   if event!=0x40&&event!=0xf4&&event!=0xf3&&event!=0xf1&&event!=0xf2&&event!=0x51&&event!=0x5c&&event!=0x60&&event!=0xff{return error.Invalid;}
+   if event==0x51||event==0x5c||event==0x60{if cpu!=0||user_bridge_interrupt(event)!=0{return error.Held;}}
+   else if user_bridge_eoi(cpu as u64,event)!=0{return error.Held;}
+  }
+ }
+ return try choose(d,cpu);
+}}
+pub export("dong_user_smp_event") fn event(cpu:usize,frame:u64,vector:u64)u64{unsafe{
+ match capture(cpu,frame,vector){ok(next)=>{return next;},err(e)=>{return held();},}
+}}
+pub export("dong_user_smp_idle") fn idle(cpu:usize,vector:u64)u64{unsafe{
+ match idle_checked(cpu,vector){ok(next)=>{return next;},err(e)=>{return held();},}
+}}
+unsafe fn idle_checked(cpu:usize,vector:u64)!u64{unsafe{
+ let d=try checked(cpu);let c=(*d).cpus+cpu;
+ if (*c).mode!=ud.IDLE&&(*c).mode!=ud.KERNEL{return error.Held;}
+ if vector!=IDLE&&vector!=0x51&&vector!=0x5c&&vector!=0x60&&user_bridge_eoi(cpu as u64,vector)!=0{return error.Held;}
+ let limit=try deadline(d,cpu);let flushed=try ud.poll(d,cpu);try ud.acquire(d,cpu,limit);
+ let copied=try ud.drain(d,cpu);
+ if vector==0x51||vector==0x5c||vector==0x60{if cpu!=0||user_bridge_interrupt(vector)!=0{return error.Held;}}
+ if (*c).token!=0{try ud.release(d,cpu,q.READY);}
+ return try choose(d,cpu);
+}}
+pub export("dong_user_smp_return") fn returning(cpu:usize)u64{unsafe{
+ match commit(cpu){ok(done)=>{return done as u64;},err(e)=>{return held();},}
+}}
+unsafe fn commit(cpu:usize)!bool{unsafe{
+ let d=try checked(cpu);if try ud.commit_user(d,cpu){return true;}
+ try ud.cancel_return(d,cpu);let flushed=try ud.poll(d,cpu);return false;
+}}

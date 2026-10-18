@@ -1,0 +1,35 @@
+// Native-only exports appended to the exact candidate memory module.
+export("cp_setup") fn setup(alias:u64)u64{unsafe{ALIASES=alias;match initialize(0x100000){ok=>{return 0;},err(e)=>{return e;},}}}
+export("cp_enable") fn enable()u64{unsafe{match enable_arena(16384){ok=>{return 0;},err(e)=>{return e;},}}}
+export("cp_start") fn start(image:*const u8,bytes:usize,address_sample:u64,stack_sample:u64,commit:bool)u64{unsafe{
+ var layout=entropy.EMPTY_LAYOUT;match entropy.layout(address_sample,stack_sample,1,&layout){ok=>{},err(e)=>{return e;},}
+ match stage(3,slice_from_raw_parts(image,bytes),layout.bias,layout.stack){ok=>{},err(e)=>{return e;},}
+ if commit{match stage_commit(3){ok=>{},err(e)=>{return e;},}}
+}return 0;}
+export("cp_prepare") fn prepare(id:usize)u64{unsafe{match prepare_tables(id){ok=>{return 0;},err(e)=>{return e;},}}}
+export("cp_get") fn get(kind:u64,id:usize)u64{unsafe{
+ if kind==0{return pool_pages(id) as u64;}if kind==1{return paging.cp_used(&SPACES[id]);}
+ if kind==2{return DYNAMIC_TABLES[id] as u64;}if kind==3{return DYNAMIC_PHYSICAL[id];}
+ if kind==4{return PROCESSES[id].root;}if kind==5{return GENERATIONS[id];}if kind==6{return PROCESSES[id].ready;}
+ if kind==7{return *recycled(id) as u64;}if kind==8{return FRAME_COUNT as u64;}
+ if kind==9{return sizeof([STATIC_LIMIT][POOL_PAGES]paging.Table) as u64;}if kind==10{return paging.cp_count(&SPACES[id]);}
+ if kind==12{return table_at(id,0) as u64;}
+ return STAGE_ID as u64;
+}}
+export("cp_map") fn map(address:u64,pages:usize,physical:u64,flags:u64)u64{unsafe{
+ var i:usize=0;while i<pages{match paging.map_live(&SPACES[3],address+i as u64*4096,physical+i as u64*4096,flags){ok=>{},err(e)=>{return e;},}i+=1;}
+}return 0;}
+export("cp_destroy") fn destroy_test(id:usize)u64{unsafe{match destroy(id){ok=>{return 0;},err(e)=>{return e;},}}}
+export("cp_abort") fn abort_test()u64{unsafe{match stage_abort(3){ok=>{return 0;},err(e)=>{return e;},}}}
+export("cp_clean") fn clean()u64{unsafe{
+ var t:usize=0;while t<COMPOSITOR_POOL_PAGES{if META[3][t]!=0{return 0;}var s:usize=0;while s<512{if (*table_at(3,t)).entries[s]!=0{return 0;}s+=1;}t+=1;}
+ return 1;
+}}
+export("cp_share_high") fn share_high(address:u64)u64{unsafe{
+ let allocated=fresh();var index:usize=0;match allocated{ok(v)=>{index=v;},err(e)=>{return e;},}
+ match paging.replace_live(&SPACES[3],address,(*record(index)).physical,paging.USER|paging.WRITE){ok=>{},err(e)=>{return e;},}
+ match paging.init(&SPACES[0],TABLES[0][..],0x100000,META[0][..],48,true){ok=>{},err(e)=>{return e;},}
+ PROCESSES[0].ready=1;PROCESSES[0].root=0x100000;
+ match paging.map_live(&SPACES[0],0x44000000,(*record(index)).physical,paging.USER|paging.WRITE){ok=>{return index as u64;},err(e)=>{return e;},}
+}}
+export("cp_pin") fn pin(value:bool)void{unsafe{PINNED[3]=value;}return;}

@@ -1,0 +1,33 @@
+module alg.functions;
+
+import boot.calls as calls;
+
+type Operation = fn(u64,u64)u64;
+type Callback = extern "win64" fn(u64,u64,u64,u64,u64,u64,u64,u64)u64;
+const TABLE: [2]Operation = [add, multiply];
+const CALLBACK: Callback = callback;
+var CURRENT: Operation = add;
+
+fn add(a:u64,b:u64)u64 { return a+b; }
+fn multiply(a:u64,b:u64)u64 { return a*b; }
+fn choose() Operation { return add; }
+
+// The compiler emits a Win64 entry bridge protecting RDI/RSI and XMM6..15
+// before this ordinary SysV body calls the external assembly helper.
+extern "win64" fn callback(a:u64,b:u64,c:u64,d:u64,e:u64,f:u64,g:u64,h:u64)u64 {
+    unsafe { return calls.sysv_mix(a,b,c,d,e,f,g,h)+5; }
+}
+
+pub fn probe()u64 {
+    let first = CURRENT;
+    CURRENT = multiply;
+    if first != add { return 0; }
+    if CURRENT != multiply { return 0; }
+    let sysv = calls.sysv_mix;
+    let win64 = calls.win_mix;
+    unsafe {
+        return first(20,22) + TABLE[1](7,9)
+            + sysv(1,2,3,4,5,6,7,8) + win64(1,2,3,4,5,6,7,8)
+            + CALLBACK(1,2,3,4,5,6,7,8) + CURRENT(4,5) + choose()(9,10);
+    }
+}

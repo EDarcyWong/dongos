@@ -1,0 +1,28 @@
+module sched_probe;
+import sched.core as core;
+import sched.runtime as runtime;
+import sched.sync as sync;
+export("sp_engine_size") fn engine_size() usize { return sizeof(core.Engine); }
+export("sp_thread_size") fn thread_size() usize { return sizeof(core.Thread); }
+export("sp_wait_size") fn wait_size() usize { return sizeof(core.WaitQueue); }
+export("sp_init") fn init(engine: *core.Engine, quantum: u64) u64 {
+    unsafe { match core.init(engine, quantum) { ok => { return 0; }, err(code) => { return code; }, } }
+}
+export("sp_add") fn add(engine: *core.Engine, id: u64, priority: u64, frame: u64) u64 {
+    unsafe { match core.add(engine,id,priority,frame) { ok => { return 0; }, err(code) => { return code; }, } }
+}
+export("sp_tick") fn tick(engine: *core.Engine, frame: u64) u64 {
+    unsafe { match core.tick(engine,frame) { ok(value) => { return value; }, err(code) => { return code; }, } }
+}
+export("sp_wait") fn wait(engine: *core.Engine, queue: *core.WaitQueue, observed: u64) u64 {
+    unsafe { match core.wait(engine,queue,observed) { ok => { return 0; }, err(code) => { return code; }, } }
+}
+export("sp_wake") fn wake(engine: *core.Engine, queue: *core.WaitQueue) u64 {
+    unsafe { match core.wake_one(engine,queue) { ok(value) => { return value; }, err(code) => { return code; }, } }
+}
+export("sp_disable") fn disable(engine: *core.Engine) u64 {
+    unsafe { match core.preempt_disable(engine) { ok => { return 0; }, err(code) => { return code; }, } }
+}
+export("sp_enable") fn enable(engine: *core.Engine) u64 {
+    unsafe { match core.preempt_enable(engine) { ok => { return 0; }, err(code) => { return code; }, } }
+}

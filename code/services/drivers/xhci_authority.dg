@@ -1,0 +1,86 @@
+// Trusted kernel snapshots only. No MMIO, PCI write, DMA start or lease release.
+module drivers.xhci_authority;
+pub error Denied=0x0818_0001;
+pub struct Header {
+    pub owner:u64,pub incarnation:u64,pub binding_owner:u64,pub binding_incarnation:u64,
+    pub binding_token:u64,pub binding_role:u64,pub lease_owner:u64,pub lease_incarnation:u64,
+    pub lease_token:u64,pub lease_exclusive:u64,pub bar_exclusive:u64,pub bar_uncached:u64,
+    pub lease_private_nx:u64,pub attempted:u64,pub physical_bits:u64,pub bar_physical:u64,
+    pub bar_bytes:u64,pub lease_physical:u64,pub lease_bytes:u64,pub pci_command:u64,
+    pub class_code:u64,pub header_type:u64,pub msi_disabled:u64,pub msix_disabled:u64,
+    pub cap0:u64,pub hcs1:u64,pub hcs2:u64,pub hcc1:u64,pub dboff:u64,pub rtsoff:u64,pub pagesize:u64,
+}
+pub struct Bounds {pub operational:u64,pub runtime:u64,pub doorbells:u64,pub ports:u64,pub interrupters:u64,pub slots:u64,pub extended_first:u64,pub context_bytes:u64}
+pub struct Registers {pub usbcmd:u64,pub usbsts:u64,pub dnctrl:u64,pub dcbaap:u64,pub crcr:u64,pub config:u64}
+pub struct Interrupter {pub iman:u64,pub imod:u64,pub erstsz:u64,pub erstba:u64,pub erdp:u64}
+pub struct Extension {pub offset:u64,pub header:u64,pub name:u64,pub range:u64,pub slot:u64,pub legacy_control:u64}
+fn overlap(a:u64,n:u64,b:u64,m:u64)bool {return a<b+m&&b<a+n;}
+fn bound(offset:u64,bytes:u64,limit:u64)bool {return offset<=limit&&bytes<=limit-offset;}
+pub unsafe fn shape(header:*const Header,out:*Bounds)!void {unsafe {
+    if header==null||out==null {return error.Denied;}let h=*header;
+    if h.owner==0||h.incarnation==0||h.binding_owner!=h.owner||h.lease_owner!=h.owner
+        ||h.binding_incarnation!=h.incarnation||h.lease_incarnation!=h.incarnation||h.binding_token==0||h.binding_role!=4||h.lease_token==0
+        ||h.lease_exclusive!=1||h.bar_exclusive!=1||h.bar_uncached!=1||h.lease_private_nx!=1||h.attempted!=0
+        ||h.class_code!=0x0c0330||h.header_type>255||(h.header_type&127)!=0||h.pci_command>65535||(h.pci_command&0x407)!=0x402
+        ||h.msi_disabled!=1||h.msix_disabled!=1||h.physical_bits<32||h.physical_bits>52 {return error.Denied;}
+    let limit=(1 as u64)<<h.physical_bits;
+    if h.bar_physical==0||(h.bar_physical&4095)!=0||h.bar_bytes<4096||h.bar_bytes>0x1000_0000||(h.bar_bytes&(h.bar_bytes-1))!=0
+        ||h.bar_physical>=limit||h.bar_bytes>limit-h.bar_physical||h.lease_physical==0||(h.lease_physical&4095)!=0||h.lease_physical>=limit
+        ||h.lease_bytes!=131072||h.lease_bytes>limit-h.lease_physical||overlap(h.bar_physical,h.bar_bytes,h.lease_physical,h.lease_bytes) {return error.Denied;}
+    if h.cap0>0xffff_ffff||h.hcs1>0xffff_ffff||h.hcs2>0xffff_ffff||h.hcc1>0xffff_ffff||h.dboff>0xffff_ffff||h.rtsoff>0xffff_ffff||h.pagesize>0xffff_ffff {return error.Denied;}
+    let version=h.cap0>>16;let op=h.cap0&255;let ports=h.hcs1>>24;let interrupts=(h.hcs1>>8)&2047;let maximum=h.hcs1&255;
+    let scratch=((h.hcs2>>27)&31)|(((h.hcs2>>21)&31)<<5);
+    if (version!=0x100&&version!=0x110&&version!=0x120)||(h.cap0&0xff00)!=0||op<32||(op&3)!=0||maximum==0||ports==0||ports>32
+        ||interrupts==0||interrupts>1024||(h.hcs1&0x00f8_0000)!=0||scratch!=0||(h.hcs2&(1<<26))!=0||(h.pagesize&1)==0 {return error.Denied;}
+    if (h.hcc1&1)==0&&(h.lease_physical>=0x1_0000_0000||h.lease_bytes>0x1_0000_0000-h.lease_physical) {return error.Denied;}
+    let operational_bytes=0x400+ports*16;let runtime_bytes=0x20+interrupts*0x20;let doorbell_bytes=(maximum+1)*4;
+    if (h.dboff&3)!=0||(h.rtsoff&31)!=0||!bound(op,operational_bytes,h.bar_bytes)||!bound(h.rtsoff,runtime_bytes,h.bar_bytes)||!bound(h.dboff,doorbell_bytes,h.bar_bytes)
+        ||h.rtsoff<op||h.dboff<op||overlap(op,operational_bytes,h.rtsoff,runtime_bytes)||overlap(op,operational_bytes,h.dboff,doorbell_bytes)
+        ||overlap(h.rtsoff,runtime_bytes,h.dboff,doorbell_bytes) {return error.Denied;}
+    let extended=(h.hcc1>>16)*4;if extended!=0&&(extended<32||!bound(extended,4,h.bar_bytes)) {return error.Denied;}
+    var slots=maximum;if slots>8 {slots=8;}var context_bytes:u64=32;if (h.hcc1&4)!=0 {context_bytes=64;}
+    *out=Bounds {operational:op,runtime:h.rtsoff,doorbells:h.dboff,ports:ports,interrupters:interrupts,slots:slots,extended_first:extended,context_bytes:context_bytes};
+}return;}
+unsafe fn extensions(header:*const Header,b:*const Bounds,items:[]const Extension)!void {unsafe {
+    if items.ptr==null||items.len==0||items.len>64 {return error.Denied;}var expected=(*b).extended_first;var covered:u64=0;var legacy=false;var i:usize=0;
+    while i<items.len {
+        let e=items[i];if expected==0||e.offset!=expected||e.header>0xffff_ffff||e.name>0xffff_ffff||e.range>0xffff_ffff||e.slot>0xffff_ffff||e.legacy_control>0xffff_ffff {return error.Denied;}
+        let kind=e.header&255;let next=(e.header>>8)&255;var bytes:u64=0;
+        if kind==1 {
+            bytes=8;if legacy||(e.header&0xfeff_0000)!=0||(e.header&0x0100_0000)==0||e.legacy_control!=0||e.name!=0||e.range!=0||e.slot!=0 {return error.Denied;}legacy=true;
+        }else if kind==2 {
+            bytes=16;let major=e.header>>24;let first=e.range&255;let count=(e.range>>8)&255;
+            if (major!=2&&major!=3)||e.name!=0x2042_5355||(e.range&0xf000_0000)!=0||e.slot!=0||e.legacy_control!=0
+                ||first==0||first>(*b).ports+1||count>(*b).ports+1-first {return error.Denied;}
+            let mask=(((1 as u64)<<count)-1)<<(first-1);if (covered&mask)!=0 {return error.Denied;}covered|=mask;
+        }else {return error.Denied;}
+        if !bound(e.offset,bytes,(*header).bar_bytes)||(next!=0&&next*4<bytes) {return error.Denied;}
+        if next==0 {expected=0;}else {expected=e.offset+next*4;if !bound(expected,4,(*header).bar_bytes) {return error.Denied;}}i+=1;
+    }
+    if expected!=0||covered!=((1 as u64)<<(*b).ports)-1 {return error.Denied;}
+}return;}
+pub unsafe fn permit(header:*const Header,registers:*const Registers,interrupts:[]const Interrupter,ext:[]const Extension,dma:[]const u8)!u16 {unsafe {
+    if registers==null||interrupts.ptr==null||dma.ptr==null||dma.len!=131072 {return error.Denied;}
+    var b=Bounds {operational:0,runtime:0,doorbells:0,ports:0,interrupters:0,slots:0,extended_first:0,context_bytes:0};try shape(header,&b);
+    if interrupts.len!=b.interrupters as usize {return error.Denied;}try extensions(header,&b,ext);
+    let h=*header;let r=*registers;
+    // PCD may be raised for an attached root port while halted. HSE/HCE/CNR,
+    // event interrupts and every reset/save/run bit remain forbidden here.
+    if r.usbcmd!=0||(r.usbsts&~0x11)!=0||(r.usbsts&1)!=1||r.dnctrl!=0||r.dcbaap!=h.lease_physical
+        ||r.crcr!=h.lease_physical+4097||r.config!=b.slots {return error.Denied;}
+    var i:usize=0;while i<interrupts.len {
+        let p=interrupts[i];if i==0 {
+            // ERSTBA must still be zero: writing it can fetch ERST immediately.
+            if p.iman>1||p.imod!=0||p.erstsz!=1||p.erstba!=0||p.erdp!=h.lease_physical+8192 {return error.Denied;}
+        }else if p.iman!=0||p.imod!=0||p.erstsz!=0||p.erstba!=0||p.erdp!=0 {return error.Denied;}
+        i+=1;
+    }
+    // Only the initial reachable DMA pages: empty DCBAA, command/event rings,
+    // a valid invalid-cycle Link with TC, and the exact sole ERST entry.
+    var offset:usize=0;while offset<16384 {
+        var expected:u64=0;if offset==8176 {expected=h.lease_physical+4096;}
+        if offset==8184 {expected=(6<<10|2)<<32;}if offset==12288 {expected=h.lease_physical+8192;}if offset==12296 {expected=256;}
+        if read_unaligned((dma.ptr+offset) as *const u64)!=expected {return error.Denied;}offset+=8;
+    }
+    return (h.pci_command|4) as u16;
+}}

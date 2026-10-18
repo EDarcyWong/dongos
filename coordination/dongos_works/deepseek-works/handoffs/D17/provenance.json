@@ -1,0 +1,58 @@
+{
+  "from_task": "claude:C19",
+  "to_task": "deepseek:D17",
+  "candidate": "26617f0192664292a870cbfa4593e368",
+  "fingerprint": {
+    "claude-works/src/bootstrap/cfg_postorder.dg": "59cdad508a9d3609f94416ba7fd79f9f6602fc7f487af0554974dd456763a598",
+    "claude-works/src/bootstrap/cfg_postorder.md": "e897ba2ac8825694c20d6f74e7d4987d89bee39fdb7d80526ad8b3599d81008f",
+    "claude-works/tests/test_cfg_postorder.py": "f83d67149206952e46267685ce90c12658138745d78164286511cd124701780e",
+    "claude-works/deliveries/C19.md": "6423d54ccce651f21771f0e35057041a40e10f536add056f6f30bcc30ee6705b"
+  },
+  "copies": [
+    {
+      "source": "claude-works/src/bootstrap/cfg_postorder.dg",
+      "source_sha256": "59cdad508a9d3609f94416ba7fd79f9f6602fc7f487af0554974dd456763a598",
+      "target": "deepseek-works/src/bootstrap/cfg_postorder.dg",
+      "target_sha256": "59cdad508a9d3609f94416ba7fd79f9f6602fc7f487af0554974dd456763a598"
+    },
+    {
+      "source": "claude-works/src/bootstrap/cfg_postorder.md",
+      "source_sha256": "e897ba2ac8825694c20d6f74e7d4987d89bee39fdb7d80526ad8b3599d81008f",
+      "target": "deepseek-works/src/bootstrap/cfg_postorder.md",
+      "target_sha256": "e897ba2ac8825694c20d6f74e7d4987d89bee39fdb7d80526ad8b3599d81008f"
+    },
+    {
+      "source": "claude-works/tests/test_cfg_postorder.py",
+      "source_sha256": "f83d67149206952e46267685ce90c12658138745d78164286511cd124701780e",
+      "target": "deepseek-works/tests/test_cfg_postorder.py",
+      "target_sha256": "9c2f47b7b60782180f07cb82d03197245c35bec2caaa9dddf94dce56aa3fef60"
+    }
+  ],
+  "prior_verification": {
+    "passed": false,
+    "checks": [
+      {
+        "spec": "discover:claude-works/tests:test_cfg_postorder.py",
+        "passed": false,
+        "tests": 3,
+        "skips": 0,
+        "returncode": 1,
+        "cancelled": false,
+        "timed_out": false,
+        "elapsed_seconds": 3.843
+      }
+    ],
+    "source_stable": true,
+    "fingerprint": {
+      "claude-works/src/bootstrap/cfg_postorder.dg": "59cdad508a9d3609f94416ba7fd79f9f6602fc7f487af0554974dd456763a598",
+      "claude-works/src/bootstrap/cfg_postorder.md": "e897ba2ac8825694c20d6f74e7d4987d89bee39fdb7d80526ad8b3599d81008f",
+      "claude-works/tests/test_cfg_postorder.py": "f83d67149206952e46267685ce90c12658138745d78164286511cd124701780e",
+      "claude-works/deliveries/C19.md": "6423d54ccce651f21771f0e35057041a40e10f536add056f6f30bcc30ee6705b"
+    },
+    "summary": "定向复验失败或受测源码发生变化",
+    "finished_at": "2026-10-18T10:42:32+00:00",
+    "job": "88a7c837e2d342e49efbeb301dbb0b87"
+  },
+  "repairs": "原C19正式3项：正常边界与随机/深链两项通过，负控失败。bad-pre-emit尚未到Python的'post-order'断言，就被原生checks()的alias positive 0提前退出97；不要放宽正则把崩溃/构建失败/无关退出算成功。给原生协议加显式preflight开关或等效隔离，让正式实现仍跑全部41拒绝+3合法布局，坏源码负控跳过无关前置正例并诚实报告0，再到原指定语义断言；不得伪造已执行的预检数量。另有原case18/19对齐夹具遮蔽：arena+4的nodes、arena+260的edges不是合法数据。仅在saved快照前为case18把合法Node[2]={{0,1},{1,0}}复制到arena+4，为case19把uint64_t目标1复制到arena+260；其它条件保持合法。Codex已实际证明：分别只删np/ep对齐检查的坏董在原夹具两模式均退出0；这两处有限修正后正式源码均0，同坏董均退出93且分别命中invalid preflight 18/19 status 0。证据coordination项目任务目录.local/reviews/mcp-review-2a04a5ddb9d8/C19-alignment/result.json。只补这两处原夹具及原负控协议，保留原案例/四类负控/只读页/深链，不增加大矩阵；生产算法无新缺陷不改。",
+  "transfer_is_not_delivery": true
+}

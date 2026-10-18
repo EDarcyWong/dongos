@@ -1,0 +1,262 @@
+// CPL3 direct-root enumeration candidate: first three real NoOps, then actual
+// root-port reset, slot/address/configure commands and EP0 USB requests.
+// Per-device DMA and hardware slots remain held for this service lifetime.
+// This phase posts asynchronous boot HID IN TDs and logs completed raw reports.
+// Input4 remains the sole GUI/console writer; this entry does not write queues.
+// BOT stage reads capacity and LBA0, then sends SYNCHRONIZE CACHE. It never
+// writes media automatically. WRITE10 requires an accepted block2 RPC and
+// kernel-authenticated PID/dual-incarnation, with private DMA bounce buffers.
+module drivers.xhci_service;
+import lib.sys as sys;
+import drivers.pci as pci;
+import drivers.pci_inventory as pci_inventory;
+import lib.pci_inventory_abi as pci_inventory_abi;
+import drivers.virtio_pci as vp;
+import drivers.virtio_blk as dma;
+import usb.xhci_controller as controller;
+import usb.xhci_transport as transport;
+import usb.xhci_trb as wire;
+import usb.transport as io;
+import usb.enumerate as enumerator;
+import usb.descriptor as descriptor;
+import usb.bot as bot;
+import usb.block_proxy as block_proxy;
+import lib.usb_hid_abi as hid_abi;
+pub error Setup=0x0817_0001;
+pub const NO_MEDIA:u64=0x081a_0005;
+var BOOT:*const sys.Boot=null;
+var BARS:[6]vp.Bar=[vp.Bar {physical:0,length:0,handle:0};6];
+var VIRTUAL:u64=0;
+var LEASE:dma.Lease=dma.EMPTY_LEASE;
+var STATE:controller.State=controller.EMPTY_STATE;
+var TRANSPORT:transport.State=transport.EMPTY;
+// State is 223 u64 (1784 bytes), checked before any cast. BSS storage is
+// naturally aligned and never reset/reused after an attempted enumeration.
+var ENUMERATIONS:[3][223]u64=[[0;223];3];
+var ATTEMPTED:u64=0;
+var ENUMERATED:u64=0;
+var SKIPPED:u64=0;
+var HID_POSTED:u64=0;
+var HID_REPORTS:[3]u64=[0;3];
+var BOT_STORAGE:[3][64]u64=[[0;64];3];
+var BOT_READY:u64=0;
+var PROXY:block_proxy.State=block_proxy.EMPTY;
+var REQUEST:sys.Message=sys.EMPTY_MESSAGE;
+var RESPONSE:sys.Message=sys.EMPTY_MESSAGE;
+var HID_REQUEST:sys.Message=sys.EMPTY_MESSAGE;
+var HID_RESPONSE:sys.Message=sys.EMPTY_MESSAGE;
+var HID_CONNECTED:bool=false;
+var OPS:controller.Ops=controller.Ops {read:read32,write:write32,fence:fence,now:now,enable_bme:enable};
+unsafe fn configuration(context:u64,physical:u64,out:*u32)u64 {unsafe {return sys.svc_call(0x60,context,physical,out as u64,0,0,0);}}
+unsafe fn read32(context:u64,handle:u64,offset:u64,out:*u32)u64 {unsafe {
+    if out==null||handle==0||handle!=BARS[0].handle||(offset&3)!=0||offset>BARS[0].length||4>BARS[0].length-offset||VIRTUAL>0xffff_ffff_ffff_ffff-offset {return 1;}
+    *out=volatile_load((VIRTUAL+offset) as *const u32);return 0;
+}}
+unsafe fn write32(context:u64,handle:u64,offset:u64,value:u32)u64 {unsafe {
+    if handle==0||handle!=BARS[0].handle||(offset&3)!=0||offset>BARS[0].length||4>BARS[0].length-offset||VIRTUAL>0xffff_ffff_ffff_ffff-offset {return 1;}
+    volatile_store((VIRTUAL+offset) as *u32,value);return 0;
+}}
+unsafe fn fence(context:u64,phase:u64)u64 {unsafe {compiler_fence();sys.svc_fence();compiler_fence();}return 0;}
+unsafe fn now(context:u64,out:*u64)u64 {unsafe {if out==null {return 1;}*out=sys.svc_call(0x73,0,0,0,0,0,0);return 0;}}
+unsafe fn enable(context:u64)u64 {unsafe {return sys.svc_call(0x67,(*BOOT).configuration,0,0,0,0,0);}}
+unsafe fn hex(label:[]const u8,value:u64)void {unsafe {
+    if label.len>46 {return;}let digits="0123456789abcdef";var bytes:[64]u8=[0;64];var i:usize=0;
+    while i<label.len {bytes[i]=label[i];i+=1;}i=0;while i<16 {bytes[label.len+i]=digits[((value>>((15-i)*4))&15) as usize];i+=1;}
+    bytes[label.len+16]=13;bytes[label.len+17]=10;let ignored=sys.log(slice_from_raw_parts(&bytes[0],label.len+18));
+}return;}
+unsafe fn describe(s:*const enumerator.State)void {unsafe {
+    let binding=(*s).configuration.bindings[0];
+    hex("usb_port=0x",(*s).setup.port);hex("usb_slot=0x",(*s).slot);hex("usb_speed=0x",(*s).speed);
+    hex("usb_vid=0x",(*s).device.vendor);hex("usb_pid=0x",(*s).device.product);hex("usb_version=0x",(*s).device.usb);
+    hex("usb_kind=0x",binding.kind);hex("usb_ep0_packet=0x",(*s).packet);hex("usb_configuration=0x",(*s).configuration.value);
+    hex("usb_interface=0x",binding.interface);hex("usb_in_endpoint=0x",binding.in_address);hex("usb_out_endpoint=0x",binding.out_address);
+    hex("usb_in_packet=0x",binding.in_packet);hex("usb_out_packet=0x",binding.out_packet);hex("usb_scope_held=0x",(*s).held);
+    if binding.kind==descriptor.KEYBOARD {let logged=sys.log("DONGOS_XHCI_HID_KEYBOARD_ENUMERATED\r\n");}
+    else if binding.kind==descriptor.MOUSE {let logged=sys.log("DONGOS_XHCI_HID_MOUSE_ENUMERATED\r\n");}
+    else if binding.kind==descriptor.STORAGE {let logged=sys.log("DONGOS_XHCI_BOT_ENUMERATED\r\n");}
+}return;}
+unsafe fn enumerate_root()!void {unsafe {
+    if sizeof(enumerator.State)!=1784||sizeof([223]u64)!=1784||STATE.setup.bytes!=131072 {return error.Setup;}
+    try transport.initialize(&TRANSPORT,&STATE);var port:u64=1;
+    while port<=STATE.caps.ports {
+        var present=io.Port {connected:0,speed:0};
+        let probed=transport.probe_port(&TRANSPORT,port,&present);
+        match probed {ok=>{},err(e)=>{
+            hex("usb_probe_port=0x",port);hex("usb_probe_error=0x",e);
+            if e!=0x0819_0006 {return probed;}
+            SKIPPED+=1;let logged=sys.log("DONGOS_XHCI_PORT_UNSUPPORTED\r\n");port+=1;continue;
+        },}
+        if present.connected==0 {port+=1;continue;}
+        if ATTEMPTED==3 {
+            hex("usb_limit_port=0x",port);SKIPPED+=1;let logged=sys.log("DONGOS_XHCI_DEVICE_LIMIT\r\n");port+=1;continue;
+        }
+        let index=ATTEMPTED;ATTEMPTED+=1;
+        let offset:u64=16384+index*32768;
+        let setup=enumerator.Setup {
+            region:wire.Region {physical:STATE.setup.physical,bytes:STATE.setup.bytes,physical_bits:STATE.setup.physical_bits},
+            physical:STATE.setup.physical+offset,pointer:STATE.setup.pointer+offset as usize,
+            dcbaa_physical:STATE.setup.physical,dcbaa:STATE.setup.pointer as *u64,context_bytes:STATE.caps.context_bytes,
+            port:port,epoch:STATE.setup.epoch,hz:STATE.setup.tsc_hz,timeout_ms:STATE.setup.timeout_ms};
+        let device=&ENUMERATIONS[index as usize][0] as *enumerator.State;
+        let initialized=enumerator.initialize(device,&transport.OPS,&TRANSPORT as u64,&setup);
+        match initialized {ok=>{describe(device);ENUMERATED+=1;},err(e)=>{
+            hex("usb_rejected_port=0x",port);hex("usb_rejected_error=0x",e);hex("usb_rejected_phase=0x",(*device).phase);
+            hex("usb_rejected_slot=0x",(*device).slot);hex("usb_rejected_held=0x",(*device).held);
+            let logged=sys.log("DONGOS_XHCI_DEVICE_RETAINED\r\n");SKIPPED+=1;
+            // Unsupported descriptors or an endpoint STALL retain their scope
+            // and slot. An uncertain controller/TD outcome quarantines all DMA.
+            if TRANSPORT.fault!=0||TRANSPORT.ready!=1||STATE.info.fault!=0||STATE.info.ready!=1 {return initialized;}
+        },}
+        port+=1;
+    }
+    hex("usb_attempted=0x",ATTEMPTED);hex("usb_enumerated=0x",ENUMERATED);hex("usb_skipped=0x",SKIPPED);
+    hex("xhci_runtime_commands=0x",TRANSPORT.commands);hex("xhci_runtime_transfers=0x",TRANSPORT.transfers);
+    let logged=sys.log("DONGOS_XHCI_ENUM_DONE\r\n");
+}return;}
+unsafe fn post_hid(index:u64)!void {unsafe {
+    if index>=ATTEMPTED||index>=3 {return error.Setup;}
+    let device=&ENUMERATIONS[index as usize][0] as *enumerator.State;
+    let binding=(*device).configuration.bindings[0];
+    if (*device).ready!=1||(binding.kind!=descriptor.KEYBOARD&&binding.kind!=descriptor.MOUSE) {return error.Setup;}
+    let buffer=io.Buffer {physical:(*device).setup.physical+28672,pointer:(*device).setup.pointer+28672,bytes:8};
+    try transport.post(&TRANSPORT,(*device).slot,binding.in_address,&(*device).input,&buffer,index+1);
+}return;}
+unsafe fn start_hid()!void {unsafe {
+    var i:u64=0;while i<ATTEMPTED {
+        let device=&ENUMERATIONS[i as usize][0] as *enumerator.State;let binding=(*device).configuration.bindings[0];
+        if (*device).ready==1&&(binding.kind==descriptor.KEYBOARD||binding.kind==descriptor.MOUSE) {try post_hid(i);HID_POSTED+=1;}
+        i+=1;
+    }
+    hex("usb_hid_posted=0x",HID_POSTED);let logged=sys.log("DONGOS_XHCI_HID_POSTED\r\n");
+}return;}
+// Input4 is launched separately after devmgr READY. A report can complete
+// before that process is managed. Retry only a definitively unaccepted call;
+// after the first valid acknowledgement PeerGone is a runtime failure.
+unsafe fn deliver_hid(rpc:*const hid_abi.Report)!void {unsafe {
+    try hid_abi.encode(rpc,&HID_REQUEST);var attempts:usize=0;
+    loop {
+        HID_RESPONSE=sys.EMPTY_MESSAGE;
+        let status=sys.call((*BOOT).console,&HID_REQUEST,&HID_RESPONSE);
+        if status==0 {try hid_abi.acknowledged(rpc,&HID_RESPONSE);HID_CONNECTED=true;return;}
+        if status!=0x0402_0003&&(status!=0x0511_0008||HID_CONNECTED) {return error.Setup;}
+        if attempts==256 {return error.Setup;}attempts+=1;
+        if sys.yield_now()!=0 {return error.Setup;}
+    }
+}}
+unsafe fn pump_hid()!void {unsafe {
+    var report=transport.EMPTY_REPORT;var count:u64=0;
+    while count<3&&(try transport.poll(&TRANSPORT,64,&report)) {
+        if report.cookie==0||report.cookie>ATTEMPTED||report.cookie>3||report.epoch!=STATE.setup.epoch||report.status!=0 {return error.Setup;}
+        let index=report.cookie-1;let device=&ENUMERATIONS[index as usize][0] as *enumerator.State;
+        let binding=(*device).configuration.bindings[0];
+        if (*device).ready!=1||report.slot!=(*device).slot||report.address!=binding.in_address||report.bytes!=8
+            ||report.pointer!=(*device).setup.pointer+28672||report.generation!=(*device).input.generation {return error.Setup;}
+        if binding.kind==descriptor.KEYBOARD {if report.actual!=8 {return error.Setup;}}
+        else if binding.kind!=descriptor.MOUSE||report.actual<3||report.actual>8 {return error.Setup;}
+        if HID_REPORTS[index as usize]==0xffff_ffff_ffff_ffff {return error.Setup;}HID_REPORTS[index as usize]+=1;
+        var raw:u64=0;var i:u64=0;while i<report.actual {raw|=(*(report.pointer+i as usize) as u64)<<(i*8);i+=1;}
+        // Bounded bring-up evidence. Raw data is copied before reposting the
+        // same DMA buffer. No input/console shared queue is mapped or touched.
+        if HID_REPORTS[index as usize]<=16 {
+            hex("usb_hid_source=0x",report.cookie);hex("usb_hid_kind=0x",binding.kind);hex("usb_hid_bytes=0x",report.actual);
+            hex("usb_hid_generation=0x",report.generation);hex("usb_hid_raw=0x",raw);let logged=sys.log("DONGOS_XHCI_HID_REPORT\r\n");
+        }
+        if (*BOOT).console==0 {return error.Setup;}
+        let rpc=hid_abi.Report {source:report.cookie,kind:binding.kind,bytes:report.actual,sequence:report.generation,epoch:STATE.setup.epoch,raw:raw};
+        try deliver_hid(&rpc);
+        try post_hid(index);count+=1;
+    }
+}return;}
+unsafe fn start_storage()!void {unsafe {
+    if sizeof(bot.State)>512 {return error.Setup;}
+    var i:u64=0;while i<ATTEMPTED {
+        let device=&ENUMERATIONS[i as usize][0] as *enumerator.State;let binding=(*device).configuration.bindings[0];
+        if (*device).ready!=1||binding.kind!=descriptor.STORAGE {i+=1;continue;}
+        let storage=&BOT_STORAGE[i as usize][0] as *bot.State;
+        let setup=bot.Setup {
+            region:(*device).setup.region,slot:(*device).slot,interface:binding.interface,
+            in_address:binding.in_address,out_address:binding.out_address,ep0:&(*device).ep0,input:&(*device).input,output:&(*device).output,
+            scratch:io.Buffer {physical:(*device).setup.physical+24576,pointer:(*device).setup.pointer+24576,bytes:512},
+            hz:STATE.setup.tsc_hz,timeout_ms:STATE.setup.timeout_ms};
+        let initialized=bot.initialize(storage,&transport.OPS,&TRANSPORT as u64,&setup);
+        match initialized {ok=>{},err(e)=>{
+            hex("usb_bot_error=0x",e);hex("usb_bot_held=0x",(*storage).held);
+            if TRANSPORT.fault!=0||TRANSPORT.ready!=1 {return initialized;}i+=1;continue;
+        },}
+        hex("usb_bot_slot=0x",(*device).slot);hex("usb_bot_blocks=0x",(*storage).blocks);hex("usb_bot_block_bytes=0x",(*storage).block_bytes);
+        let buffer=io.Buffer {physical:(*device).setup.physical+28672,pointer:(*device).setup.pointer+28672,bytes:(*storage).block_bytes};
+        try bot.read_write(storage,0,1,&buffer,true);var head:u64=0;var n:u64=0;while n<8 {head|=(*(buffer.pointer+n as usize) as u64)<<(n*8);n+=1;}
+        hex("usb_bot_lba0_head=0x",head);try bot.synchronize(storage);BOT_READY+=1;
+        let logged=sys.log("DONGOS_XHCI_BOT_READ_SYNC_READY\r\n");i+=1;
+    }
+    hex("usb_bot_ready=0x",BOT_READY);
+}return;}
+unsafe fn start_proxy()!void {unsafe {
+    // A missing channel is the HID-only/PCI-block-present configuration.
+    // Kernel shares only block2's persistent data page frames into this VA.
+    if (*BOOT).channel==0&&(*BOOT).channel_address==0&&(*BOOT).channel_bytes==0 {return;}
+    if (*BOOT).channel==0||(*BOOT).channel_address!=0x5100_0000||(*BOOT).channel_bytes!=65536 {return error.Setup;}
+    var i:u64=0;while i<ATTEMPTED {
+        let storage=&BOT_STORAGE[i as usize][0] as *bot.State;
+        if (*storage).held==1&&(*storage).ready==1&&(*storage).fault==0&&(*storage).block_bytes==512 {
+            let bounce=io.Buffer {physical:(*storage).setup.scratch.physical+4096,pointer:(*storage).setup.scratch.pointer+4096,bytes:4096};
+            try block_proxy.initialize(&PROXY,storage,(*BOOT).channel_address as *u8,(*BOOT).channel_bytes,STATE.setup.epoch,&bounce);
+            hex("usb_proxy_blocks=0x",(*storage).blocks);let logged=sys.log("DONGOS_XHCI_BLOCK_RPC_READY\r\n");return;
+        }i+=1;
+    }
+    // USB HID remains available when no supported storage was enumerated.
+    // Keep the endpoint responsive: accepted block callers receive NoMedia.
+    let logged=sys.log("DONGOS_XHCI_BLOCK_NO_MEDIA\r\n");return;
+}}
+unsafe fn serve_block()!void {unsafe {
+    var ticket:u64=0;let received=sys.svc_call(0x25,(*BOOT).endpoint,&REQUEST as u64,&ticket as u64,0,0,0);
+    if received==0x0511_0005 {return;}if received!=0||ticket==0 {return error.Setup;}
+    let peer=sys.peer((*BOOT).endpoint,ticket);let epochs=sys.svc_call(0x2a,(*BOOT).endpoint,ticket,0,0,0,0);
+    RESPONSE=sys.EMPTY_MESSAGE;var result:u64=0;
+    if peer!=3||(epochs>>32)!=STATE.setup.epoch||(epochs&0xffff_ffff)==0||(epochs&0xffff_ffff)>0x0fff_ffff {
+        result=0x081a_0002;RESPONSE.words[0]=result;
+    }else if PROXY.ready!=1 {
+        result=NO_MEDIA;RESPONSE.words[0]=result;RESPONSE.words[3]=1;
+    }else {result=block_proxy.request(&PROXY,&REQUEST,peer,epochs,&RESPONSE);}
+    // Bounded protocol recovery restores endpoint ownership for a future RPC;
+    // it never retries the failed READ/WRITE or changes the original reply.
+    if PROXY.ready==1&&PROXY.storage!=null&&result!=0&&TRANSPORT.fault==0&&(*PROXY.storage).fault==1&&(*PROXY.storage).recoverable==1 {
+        match bot.recover(PROXY.storage) {ok=>{},err(e)=>{hex("usb_proxy_recovery_error=0x",e);},}
+    }
+    let replied=sys.svc_call(0x24,(*BOOT).endpoint,ticket,&RESPONSE as u64,0,0,0);if replied!=0 {return error.Setup;}
+    if TRANSPORT.fault!=0||TRANSPORT.ready!=1 {return error.Setup;}
+}return;}
+unsafe fn start()!void {unsafe {
+    BOOT=sys.boot();if BOOT==null||(*BOOT).version!=1||(*BOOT).configuration==0||(*BOOT).dma==0||(*BOOT).endpoint==0
+        ||(*BOOT).reserved1>(*BOOT).reserved2||(*BOOT).reserved2>255||(*BOOT).reserved3<1000000||(*BOOT).reserved3>16000000000 {return error.Setup;}
+    let region=pci.Region {base:(*BOOT).reserved0,segment:0,start_bus:(*BOOT).reserved1,end_bus:(*BOOT).reserved2};var cursor=pci.EMPTY_CURSOR;var device=pci.EMPTY_FUNCTION;var found=false;
+    while try next_configuration(slice_from_raw_parts(&region,1),&cursor,&device) {
+        if device.class==12&&device.subclass==3&&device.interface==48&&(device.header&127)==0 {found=true;break;}
+    }
+    if !found||sys.svc_call(0x61,(*BOOT).configuration,device.ecam,&BARS[0] as u64,0,0,0)!=0||BARS[0].handle==0||BARS[0].length<4096 {return error.Setup;}
+    VIRTUAL=sys.svc_call(0x62,BARS[0].handle,0,0,0,0,0);if VIRTUAL<0x6000_0000||VIRTUAL>=0x6800_0000 {return error.Setup;}
+    if sys.svc_call(0x63,(*BOOT).dma,controller.DMA_BYTES,4096,&LEASE as u64,0,0)!=0||LEASE.length!=controller.DMA_BYTES {return error.Setup;}
+    var command:u32=0;if configuration((*BOOT).configuration,device.ecam+4,&command)!=0 {return error.Setup;}
+    let epoch=sys.incarnation((*BOOT).endpoint);if epoch==0||epoch>0x0fff_ffff {return error.Setup;}
+    // Kernel grants are authoritative. These values describe their checked
+    // contract; enable syscall independently revalidates all hardware/ownership.
+    let setup=controller.Setup {bar:BARS[0].handle,bar_bytes:BARS[0].length,lease_token:LEASE.token,physical:LEASE.physical,pointer:LEASE.pointer,bytes:LEASE.length as u64,
+        physical_bits:52,epoch:epoch,tsc_hz:(*BOOT).reserved3,timeout_ms:1000,device_token:(*BOOT).configuration,exclusive:1,interrupts_off:3,pci_command:(command&65535) as u64};
+    try controller.initialize(&STATE,&OPS,0,&setup);try controller.noop(&STATE);try controller.noop(&STATE);
+    hex("xhci_version=0x",STATE.caps.version);hex("xhci_noops=0x",STATE.info.commands);hex("xhci_events=0x",STATE.info.events);
+    if (*BOOT).console==0 {return error.Setup;}
+    try enumerate_root();try start_hid();try start_storage();try start_proxy();
+}return;}
+export("service_main") fn main()u64 {unsafe {
+    match start() {ok=>{},err(e)=>{hex("xhci_error=0x",e);hex("xhci_phase=0x",STATE.info.phase);hex("xhci_held=0x",STATE.info.held);return e;},}
+    let ready=sys.ready_boot(BOOT);if ready!=0 {return ready;}let log=sys.log("DONGOS_XHCI_HID_BLOCK_RPC_READY\r\n");if log!=0 {return log;}
+    loop {match pump_hid() {ok=>{},err(e)=>{hex("usb_hid_error=0x",e);hex("xhci_held=0x",STATE.info.held);return e;},}match serve_block() {ok=>{},err(e)=>{hex("usb_proxy_error=0x",e);return e;},}let status=sys.yield_now();if status!=0 {return status;}}
+}}
+
+unsafe fn inventory_read(context:u64,cursor:u64,out:*pci_inventory_abi.Entry)u64{unsafe{
+ return sys.svc_call(pci_inventory_abi.ENUMERATE,context,cursor,out as u64,0,0,0);
+}}
+unsafe fn next_configuration(regions:[]const pci.Region,cursor:*pci.Cursor,out:*pci.Function)!bool{unsafe{
+ if (*BOOT).service_count>=7{return try pci_inventory.next(inventory_read,(*BOOT).configuration,regions,cursor,out);}
+ return try pci.next(configuration,(*BOOT).configuration,regions,cursor,out);
+}}

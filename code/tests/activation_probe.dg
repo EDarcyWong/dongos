@@ -1,0 +1,18 @@
+module activation_probe;
+
+import boot.activation as activation;
+import boot.preflight as preflight;
+import boot.runtime_view as runtime;
+
+export("activation_verify") fn verify(report: *const activation.Report,
+    before: *const preflight.State, plan: *const preflight.Plan, view: *const runtime.View) u64 {
+    unsafe {
+        match activation.verify(report,before,plan,view) {
+            ok => { return 0; }, err(code) => { return code; },
+        }
+    }
+}
+
+export("activation_empty") fn empty(report: *activation.Report) void {
+    unsafe { *report = activation.EMPTY_REPORT; }
+}

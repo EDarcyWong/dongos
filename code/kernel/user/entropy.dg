@@ -1,0 +1,27 @@
+// Hardware DRNG policy. No clock/boot timestamp fallback is permitted.
+module user.entropy;
+pub error EntropyUnavailable=0x0408_0001;
+pub error InvalidInput=0x0408_0002;
+pub struct Layout { pub bias:u64,pub stack:u64,pub source:u64 }
+pub const EMPTY_LAYOUT:Layout=Layout { bias:0,stack:0,source:0 };
+unsafe extern "sysv64" fn user_entropy64(out:*u64,source:*u64)u64;
+
+// Separate samples supply 12 address bits and 18 stack bits. The image
+// window stays below fixed IPC/BOOT/DMA apertures; ELF validation still owns
+// complete segment/stack/guard overlap checking. No distribution claim about
+// the hypervisor's emulated DRNG is made by this policy.
+pub unsafe fn layout(address_sample:u64,stack_sample:u64,source:u64,out:*Layout)!void {
+    unsafe {
+        if out==null || source==0 || source>3 { return error.InvalidInput; }
+        *out=Layout { bias:0x1000_0000+((address_sample&4095)<<16),
+            stack:0x0000_007f_fff0_0000-((stack_sample&0x3ffff)<<12),source:source };
+    }return;
+}
+pub unsafe fn generate(out:*Layout)!void {
+    unsafe {
+        if out==null { return error.InvalidInput; }
+        var address:u64=0;var stack:u64=0;var first:u64=0;var second:u64=0;
+        if user_entropy64(&address,&first)!=1 || user_entropy64(&stack,&second)!=1 { return error.EntropyUnavailable; }
+        try layout(address,stack,first|second,out);
+    }return;
+}

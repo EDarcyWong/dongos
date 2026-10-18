@@ -1,0 +1,67 @@
+module ipc_probe;
+import ipc.handles as h;
+import ipc.core as c;
+export("ip_table_size") fn table_size() usize { return sizeof(h.Table); }
+export("ip_endpoint_size") fn endpoint_size() usize { return sizeof(c.Endpoint); }
+export("ip_init") fn init(t:*h.Table) u64 { unsafe { match h.init(t) { ok=>{return 0;},err(e)=>{return e;}, } } }
+export("ip_install") fn install(t:*h.Table,k:u64,o:u64,r:u64,out:*u64) u64 {
+    unsafe { match h.install(t,k,o,r) { ok(v)=>{*out=v;return 0;},err(e)=>{return e;}, } }
+}
+export("ip_lookup") fn lookup(t:*const h.Table,v:u64,k:u64,r:u64,out:*h.View) u64 {
+    unsafe { match h.lookup(t,v,k,r,out) { ok=>{return 0;},err(e)=>{return e;}, } }
+}
+export("ip_close") fn close(t:*h.Table,v:u64) u64 { unsafe { match h.close(t,v) {ok=>{return 0;},err(e)=>{return e;},} } }
+export("ip_duplicate") fn duplicate(s:*const h.Table,t:*h.Table,v:u64,r:u64,out:*u64) u64 {
+    unsafe { match h.duplicate(s,t,v,r) {ok(x)=>{*out=x;return 0;},err(e)=>{return e;},} }
+}
+export("ip_transfer") fn transfer(s:*h.Table,t:*h.Table,v:u64,r:u64,out:*u64) u64 {
+    unsafe { match h.transfer(s,t,v,r) {ok(x)=>{*out=x;return 0;},err(e)=>{return e;},} }
+}
+export("ip_endpoint_init") fn endpoint_init(e:*c.Endpoint,id:u64,owner:u64) u64 {
+    unsafe { match c.endpoint_init(e,id,owner) {ok=>{return 0;},err(x)=>{return x;},} }
+}
+export("ip_send") fn send(e:*c.Endpoint,peer:u64,b:*const u8,n:usize) u64 {
+    unsafe { match c.send(e,peer,slice_from_raw_parts(b,n)) {ok=>{return 0;},err(x)=>{return x;},} }
+}
+export("ip_receive") fn receive(e:*c.Endpoint,peer:u64,out:*c.Message) u64 {
+    unsafe { match c.receive(e,peer,out) {ok=>{return 0;},err(x)=>{return x;},} }
+}
+export("ip_call") fn call(e:*c.Endpoint,peer:u64,b:*const u8,n:usize,out:*u64) u64 {
+    unsafe { match c.call(e,peer,slice_from_raw_parts(b,n)) {ok(v)=>{*out=v;return 0;},err(x)=>{return x;},} }
+}
+export("ip_accept") fn accept(e:*c.Endpoint,peer:u64,out:*c.Message,token:*u64) u64 {
+    unsafe { match c.accept(e,peer,out,token) {ok=>{return 0;},err(x)=>{return x;},} }
+}
+export("ip_reply") fn reply(e:*c.Endpoint,peer:u64,token:u64,b:*const u8,n:usize) u64 {
+    unsafe { match c.reply(e,peer,token,slice_from_raw_parts(b,n)) {ok=>{return 0;},err(x)=>{return x;},} }
+}
+export("ip_take_reply") fn take_reply(e:*c.Endpoint,peer:u64,token:u64,out:*c.Message) u64 {
+    unsafe { match c.take_reply(e,peer,token,out) {ok=>{return 0;},err(x)=>{return x;},} }
+}
+export("ip_cancel") fn cancel(e:*c.Endpoint,peer:u64,token:u64) u64 {
+    unsafe { match c.cancel(e,peer,token) {ok=>{return 0;},err(x)=>{return x;},} }
+}
+export("ip_detach") fn detach(e:*c.Endpoint,peer:u64) u64 {
+    unsafe { match c.detach(e,peer) {ok=>{return 0;},err(x)=>{return x;},} }
+}
+export("ip_notification_init") fn notification_init(n:*c.Notification) u64 {
+    unsafe { match c.notification_init(n) {ok=>{return 0;},err(x)=>{return x;},} }
+}
+export("ip_signal") fn signal(n:*c.Notification,bits:u64) u64 {
+    unsafe { match c.signal(n,bits) {ok=>{return 0;},err(x)=>{return x;},} }
+}
+export("ip_take_bits") fn take_bits(n:*c.Notification,mask:u64,out:*u64) u64 {
+    unsafe { match c.take_bits(n,mask,out) {ok=>{return 0;},err(x)=>{return x;},} }
+}
+export("ip_notification_close") fn notification_close(n:*c.Notification) u64 {
+    unsafe { match c.notification_close(n) {ok=>{return 0;},err(x)=>{return x;},} }
+}
+export("ip_memory_init") fn memory_init(m:*c.MemoryObject,id:u64,base:u64,size:u64,rights:u64) u64 {
+    unsafe { match c.memory_init(m,id,base,size,rights) {ok=>{return 0;},err(x)=>{return x;},} }
+}
+export("ip_shared_view") fn shared_view(t:*const h.Table,handle:u64,m:*const c.MemoryObject,off:u64,len:u64,rights:u64,out:*c.Region) u64 {
+    unsafe { match c.shared_view(t,handle,m,off,len,rights,out) {ok=>{return 0;},err(x)=>{return x;},} }
+}
+export("ip_memory_close") fn memory_close(m:*c.MemoryObject) u64 {
+    unsafe { match c.memory_close(m) {ok=>{return 0;},err(x)=>{return x;},} }
+}

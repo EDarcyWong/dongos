@@ -1,0 +1,126 @@
+module boot_probe;
+
+import boot.abi as abi;
+import boot.calls as calls;
+import boot.constants as cfg;
+import boot.state as state;
+import alg.slices as slices;
+import alg.aligned as aligned;
+import alg.intrinsics as intrinsics;
+import alg.functions as functions;
+import alg.l1 as l1;
+
+
+struct MemoryProbe { tag: u8, signed: i16, count: u32, words: [3]u64 }
+packed struct PackedProbe { tag: u8, value: u64 }
+
+// The P1 assembly kernel calls this using the SysV integer convention.
+// Debug overflow calls the kernel-provided __dong_panic interface.
+export("dong_add") fn add(a: u64, b: u64) u64 {
+    return a + b;
+}
+
+export("dong_sum_to") fn sum_to(limit: u64) u64 {
+    var sum: u64 = 0;
+    var current: u64 = 0;
+    while current < limit {
+        current += 1;
+        sum = add(sum, current);
+    }
+    return sum;
+}
+
+export("dong_boot_info") fn inspect_boot(info: abi.BootInfoPtr) u64 {
+    unsafe { return abi.read_magic(info); }
+}
+
+
+export("dong_memory_probe") fn memory_probe() u64 {
+    if sizeof(MemoryProbe) != 32 { return 0; }
+    if alignof(MemoryProbe) != 8 { return 0; }
+    if offsetof(MemoryProbe, words) != 8 { return 0; }
+    if sizeof(PackedProbe) != 9 { return 0; }
+    var record: MemoryProbe = MemoryProbe { tag: 7, signed: -3, count: 3, words: [10, 20, 30] };
+    let index: usize = 2;
+    record.words[index] += 5;
+    let pointer = &record;
+    let start = &record.words[0];
+    unsafe {
+        (*pointer).count += 1;
+        *(start + 1) += 2;
+    }
+    let narrow = (300 as u16) as u8;
+    var packed_value: PackedProbe = PackedProbe { tag: 1, value: 257 };
+    packed_value.value += 1;
+    let copied = record;
+    return copied.words[2] + (copied.count as u64) + (narrow as u64)
+        + packed_value.value + (copied.tag as u64) + ((0 - copied.signed) as u64) + copied.words[1];
+}
+
+
+export("dong_slice_probe") fn slice_probe() u64 {
+    var values: [5]u64 = [10, 20, 30, 40, 50];
+    let view = slices.window(values[..], 1, 4);
+    view[1] += 3;
+    var raw: []u64;
+    unsafe { raw = slice_from_raw_parts(view.ptr, view.len); }
+    raw[0] += 1;
+    let readonly: []const u64 = view;
+    if slices.fold(readonly) != 94 { return 0; }
+    if view[view.len..].len != 0 { return 0; }
+    let text = "董";
+    unsafe {
+        return slices.rollback(1, 2, 3, 4, 5, readonly, 6, 7)
+            + calls.sysv_mix(1, 2, 3, 4, 5, 6, 7, 8)
+            + calls.win_mix(1, 2, 3, 4, 5, 6, 7, 8)
+            + text.len + (text[0] as u64);
+    }
+}
+
+export("dong_constant_probe") fn constant_probe() u64 {
+    if !cfg.ENABLED { return 0; }
+    var values: cfg.Values = [7; cfg.COUNT];
+    values[1] += 1;
+    let batch = cfg.BatchAlias { tag: 1, values: values };
+    return (batch.values[0] as u64) + (batch.values[1] as u64) + (batch.values[2] as u64)
+        + cfg.ABI_BYTES + cfg.LAYOUT_SUM + cfg.FIELD_OFFSET + cfg.ELEMENT_BYTES + cfg.COUNT
+        + (cfg.NARROW as u64) + (cfg.MASK as u64);
+}
+
+export("dong_alignment_probe") fn alignment_probe() u64 {
+    return aligned.probe(1,2,3,4,5,6,7,8) + aligned.temporary();
+}
+
+export("dong_global_probe") fn global_probe() u64 {
+    if state.COUNT != 0 { return 0; }
+    state.COUNT += 2;
+    state.VIEW[0] += 3;
+    var copied = state.READ_ONLY;
+    copied[0] += 1;
+    if state.READ_ONLY[0] != 7 { return 0; }
+    unsafe {
+        *state.MIDDLE += 4;
+        if (state.PAGE_POINTER as usize) < 0xffff_ffff_8000_0000 { return 0; }
+        if ((state.PAGE_POINTER as usize) & 4095) != 0 { return 0; }
+        if state.ROOT.next != &state.ROOT { return 0; }
+    }
+    if state.PAGE.entries[2] != 0 { return 0; }
+    state.PAGE.entries[2] = 9;
+    return state.COUNT + state.VALUES[0] + state.VALUES[1] + state.VALUES[2]
+        + (state.READ_ONLY[0] as u64) + (state.READ_ONLY[1] as u64) + (state.READ_ONLY[2] as u64)
+        + state.TEXT.len + (state.TEXT[0] as u64) + (state.TEXT[3] as u64) + (state.TEXT[4] as u64)
+        + state.PAGE.entries[2] + state.ROOT.value + (state.CONFIG.tag as u64)
+        + (state.CONFIG.limits[1] as u64) + (copied[0] as u64);
+}
+
+export("dong_intrinsic_probe") fn intrinsic_probe() u64 {
+    return intrinsics.probe();
+}
+
+export("dong_function_probe") fn function_probe() u64 {
+    return functions.probe();
+}
+
+export("dong_l1_probe") fn remaining_l1_probe()u64 {
+    return l1.probe();
+}

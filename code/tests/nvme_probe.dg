@@ -1,0 +1,31 @@
+module nvme_probe;
+import drivers.nvme_core as core;
+export("nvme_sizes") fn sizes(out:*u64)void {unsafe {
+    out[0]=sizeof(core.Caps) as u64;out[1]=sizeof(core.Limits) as u64;out[2]=sizeof(core.Controller) as u64;
+    out[3]=sizeof(core.Namespace) as u64;out[4]=sizeof(core.Setup) as u64;out[5]=sizeof(core.Request) as u64;
+    out[6]=sizeof(core.Plan) as u64;out[7]=sizeof(core.Queue) as u64;out[8]=sizeof(core.Completion) as u64;
+}return;}
+export("nvme_limits") fn limits(c:*const core.Caps,depth:u64,out:*core.Limits)u64 {unsafe {
+    match core.limits(c,depth,out) {ok=>{return 0;},err(code)=>{return code;},}
+}}
+export("nvme_controller") fn controller(c:*const core.Caps,p:*const u8,n:usize,out:*core.Controller)u64 {unsafe {
+    match core.identify_controller(c,slice_from_raw_parts(p,n),out) {ok=>{return 0;},err(code)=>{return code;},}
+}}
+export("nvme_namespace") fn namespace(c:*const core.Controller,p:*const u8,n:usize,out:*core.Namespace)u64 {unsafe {
+    match core.identify_namespace(c,slice_from_raw_parts(p,n),out) {ok=>{return 0;},err(code)=>{return code;},}
+}}
+export("nvme_initialize") fn initialize(q:*core.Queue,c:*const core.Caps,s:*const core.Setup)u64 {unsafe {
+    match core.queue_initialize(q,c,s) {ok=>{return 0;},err(code)=>{return code;},}
+}}
+export("nvme_encode") fn encode(q:*const core.Queue,n:*const core.Namespace,r:*const core.Request,cid:u64,out:*core.Plan)u64 {unsafe {
+    match core.encode(q,n,r,cid,out) {ok=>{return 0;},err(code)=>{return code;},}
+}}
+export("nvme_submit") fn submit(q:*core.Queue,n:*const core.Namespace,r:*const core.Request,now:u64,timeout:u64,out:*core.Plan)u64 {unsafe {
+    match core.submit(q,n,r,now,timeout,out) {ok=>{return 0;},err(code)=>{return code;},}
+}}
+export("nvme_poll") fn poll(q:*core.Queue,epoch:u64,generation:u64,p:*const u8,n:usize,now:u64,out:*core.Completion,done:*u64)u64 {unsafe {
+    match core.poll(q,epoch,generation,slice_from_raw_parts(p,n),now,out) {ok(ready)=>{if ready {*done=1;}else {*done=0;}return 0;},err(code)=>{return code;},}
+}}
+export("nvme_poison") fn poison(q:*core.Queue,reason:u64)u64 {unsafe {
+    match core.poison(q,reason) {ok=>{return 0;},err(code)=>{return code;},}
+}}

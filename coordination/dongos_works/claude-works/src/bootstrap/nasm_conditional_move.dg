@@ -1,0 +1,42 @@
+// One NASM line for a 64-bit conditional move consuming flags left by an
+// upstream 64-bit cmp: "<cmovcc> <dest64>, <source64>\n". Condition codes are
+// the integrated CR6 predicate numbering (read-only constants). When the
+// condition holds the full source64 is copied, otherwise dest64 is kept; no
+// other register or flag changes, and no cmp/test/setcc or memory operand is
+// emitted. Built in a local buffer, copied to out after every check.
+module bootstrap.nasm_conditional_move;
+import bootstrap.branch_plan as bp;
+pub const OK:u64=0;pub const INVALID:u64=1;pub const CAPACITY:u64=2;
+const MAX:u64=0xffff_ffff_ffff_ffff;
+fn span(p:u64,n:u64)bool{return n==0||(p!=0&&n<=MAX-p);}
+fn overlap(a:u64,n:u64,b:u64,m:u64)bool{return n!=0&&m!=0&&a<b+m&&b<a+n;}
+fn copy(out:[]u8,at:usize,text:[]const u8)usize{
+ var i:usize=0;while i<text.len{out[at+i]=text[i];i+=1;}return at+text.len;
+}
+fn mnemonic(condition:u64)[]const u8{
+ if condition==bp.EQ{return "cmove ";}if condition==bp.NE{return "cmovne ";}
+ if condition==bp.ULT{return "cmovb ";}if condition==bp.ULE{return "cmovbe ";}
+ if condition==bp.UGT{return "cmova ";}if condition==bp.UGE{return "cmovae ";}
+ if condition==bp.SLT{return "cmovl ";}if condition==bp.SLE{return "cmovle ";}
+ if condition==bp.SGT{return "cmovg ";}return "cmovge ";
+}
+fn register(r:u64)[]const u8{
+ if r==0{return "rax";}if r==1{return "rcx";}if r==2{return "rdx";}if r==3{return "rbx";}
+ if r==4{return "rsp";}if r==5{return "rbp";}if r==6{return "rsi";}if r==7{return "rdi";}
+ if r==8{return "r8";}if r==9{return "r9";}if r==10{return "r10";}if r==11{return "r11";}
+ if r==12{return "r12";}if r==13{return "r13";}if r==14{return "r14";}return "r15";
+}
+pub unsafe fn emit(condition:u64,destination:u64,source:u64,out:[]u8,written:*usize)u64{unsafe{
+ let wp=written as u64;let op=out.ptr as u64;
+ if written==null||(wp&7)!=0||!span(wp,8){return INVALID;}
+ if !span(op,out.len){return INVALID;}
+ if overlap(wp,8,op,out.len){return INVALID;}
+ if condition>bp.SGE||destination>15||source>15{return INVALID;}
+ // Longest line "cmovae r15, r15\n" is 16 bytes: no length arithmetic can overflow.
+ var line:[24]u8=[0;24];let buffer=slice_from_raw_parts(&line[0],24);
+ var at=copy(buffer,0,mnemonic(condition));at=copy(buffer,at,register(destination));
+ buffer[at]=44;buffer[at+1]=32;at=copy(buffer,at+2,register(source));buffer[at]=10;at+=1;
+ if at>out.len{return CAPACITY;}
+ var i:usize=0;while i<at{out[i]=buffer[i];i+=1;}
+ *written=at;return OK;
+}}

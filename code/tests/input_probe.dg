@@ -1,0 +1,40 @@
+module input_probe;
+import input.events as ev;
+import input.ps2 as ps2;
+import input.virtio_input as vi;
+export("input_event_size") fn event_size() usize { return sizeof(ev.Event); }
+export("input_queue_size") fn queue_size() usize { return sizeof(ev.Queue); }
+export("input_keyboard_size") fn keyboard_size() usize { return sizeof(ps2.Keyboard); }
+export("input_mouse_size") fn mouse_size() usize { return sizeof(ps2.Mouse); }
+export("input_virtio_size") fn virtio_size() usize { return sizeof(vi.State); }
+export("input_init") fn init(q: *ev.Queue, k: *ps2.Keyboard, m: *ps2.Mouse, v: *vi.State) void {
+    unsafe { *q = ev.EMPTY_QUEUE; *k = ps2.EMPTY_KEYBOARD; *m = ps2.EMPTY_MOUSE; *v = vi.EMPTY_STATE; }
+    return;
+}
+export("input_pop") fn pop(q: *ev.Queue, out: *ev.Event, present: *u64) u64 {
+    unsafe { match ev.pop(q,out) { ok(value) => { *present = value as u64; return 0; }, err(code) => { return code; }, } }
+}
+export("input_push") fn push(q: *ev.Queue, e: *const ev.Event) u64 {
+    unsafe { match ev.push(q,e) { ok => { return 0; }, err(code) => { return code; }, } }
+}
+export("input_key") fn key(k: *ps2.Keyboard, q: *ev.Queue, byte: u8) u64 {
+    unsafe { match ps2.keyboard(k,q,byte) { ok => { return 0; }, err(code) => { return code; }, } }
+}
+export("input_mouse_init") fn mouse_init(m: *ps2.Mouse, id: u64) u64 {
+    unsafe { match ps2.init_mouse(m,id) { ok => { return 0; }, err(code) => { return code; }, } }
+}
+export("input_mouse") fn mouse(m: *ps2.Mouse, q: *ev.Queue, byte: u8) u64 {
+    unsafe { match ps2.mouse(m,q,byte) { ok => { return 0; }, err(code) => { return code; }, } }
+}
+export("input_abs") fn absolute(v: *vi.State, xmin: i64, xmax: i64, ymin: i64, ymax: i64, width: i64, height: i64) u64 {
+    unsafe { match vi.configure_absolute(v,xmin,xmax,ymin,ymax,width,height) { ok => { return 0; }, err(code) => { return code; }, } }
+}
+export("input_virtio") fn virtio(v: *vi.State, q: *ev.Queue, kind: u16, code: u16, value: i32) u64 {
+    unsafe { match vi.feed(v,q,kind,code,value) { ok => { return 0; }, err(code) => { return code; }, } }
+}
+export("input_wire") fn wire(v: *vi.State, q: *ev.Queue, bytes: *const u8, n: usize) u64 {
+    unsafe { match vi.feed_bytes(v,q,slice_from_raw_parts(bytes,n)) { ok => { return 0; }, err(code) => { return code; }, } }
+}
+export("input_restart") fn restart(v: *vi.State, q: *ev.Queue) u64 {
+    unsafe { match vi.restart(v,q) { ok => { return 0; }, err(code) => { return code; }, } }
+}

@@ -1,0 +1,63 @@
+// Pixel composition only. This does not create processes, windows or a desktop.
+module gfx.compositor;
+import gfx.geometry as geo;
+import gfx.raster as raster;
+import gfx.errors as errors;
+
+pub struct Window { pub surface: raster.Surface, pub rect: geo.Rect, pub opacity: u8, pub visible: bool }
+
+// All metadata/input buffers are stable for the entire call and disjoint from
+// output/working storage. Source windows may share read-only backing with each
+// other, but never alias the destination. order is bottom-to-top.
+pub unsafe fn compose(dst: *raster.Surface, windows: []const Window,
+                      damage: *const geo.Damage, background: u32) !void {
+    unsafe {
+        try raster.validate(dst);
+        try geo.validate_damage(damage);
+        if windows.len > 64 { return error.errors.Capacity; }
+        if windows.len != 0 && windows.ptr == null { return error.errors.InvalidSurface; }
+        var screen = geo.EMPTY; raster.bounds(dst,&screen);
+        let b = (*damage).bounds;
+        if b.left != 0 || b.top != 0 || b.right != screen.right || b.bottom != screen.bottom {
+            return error.errors.InvalidDamage;
+        }
+        // Complete preflight before the first output pixel is touched.
+        var i: usize = 0;
+        while i < windows.len {
+            if windows[i].visible {
+                try raster.disjoint(dst,&windows[i].surface);
+                var expected = geo.EMPTY;
+                try geo.from_xywh(windows[i].rect.left,windows[i].rect.top,
+                    windows[i].surface.width,windows[i].surface.height,&expected);
+                if expected.right != windows[i].rect.right || expected.bottom != windows[i].rect.bottom {
+                    return error.errors.InvalidRect;
+                }
+            }
+            i += 1;
+        }
+        var d: usize = 0;
+        while d < (*damage).count {
+            let area = (*damage).rects[d];
+            try raster.fill(dst,&area,background);
+            i = 0;
+            while i < windows.len {
+                if windows[i].visible {
+                    var clipped = geo.EMPTY;
+                    let visible = try geo.intersect(&area,&windows[i].rect,&clipped);
+                    if visible {
+                        let source = geo.Rect {
+                            left: clipped.left - windows[i].rect.left,
+                            top: clipped.top - windows[i].rect.top,
+                            right: clipped.right - windows[i].rect.left,
+                            bottom: clipped.bottom - windows[i].rect.top,
+                        };
+                        try raster.blit(dst,clipped.left,clipped.top,&windows[i].surface,&source,windows[i].opacity);
+                    }
+                }
+                i += 1;
+            }
+            d += 1;
+        }
+    }
+    return;
+}

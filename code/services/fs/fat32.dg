@@ -1,0 +1,577 @@
+// Bounded FAT32 superfloppy with mirrored FATs, directory trees and UTF-8 LFN.
+// Serialized caller-owned
+// storage and 512B callbacks. No hardware, heap, hidden caches or large locals.
+module fs.fat32;
+import fs.errors as errors;
+import fs.path as path;
+import fs.lfn as lfn;
+pub type Read = unsafe fn(context:u64,lba:u64,count:usize,out:*u8) u64;
+pub type Write = unsafe fn(context:u64,lba:u64,count:usize,input:*const u8) u64;
+pub type Flush = unsafe fn(context:u64) u64;
+pub struct Device { pub context:u64,pub capacity_sectors:u64,pub max_transfer_sectors:u64,pub read:Read,pub write:Write,pub flush:Flush }
+pub struct Volume {
+    pub device:*const Device,pub ready:u64,pub busy:u64,pub failed:u64,pub read_only:u64,pub dirty:u64,
+    pub total:u64,pub spc:u64,pub reserved:u64,pub fat_sectors:u64,pub data_start:u64,pub clusters:u64,pub root:u64,pub fsinfo:u64,pub backup:u64,
+}
+pub struct AuditFrame { pub directory:u64,pub parent:u64,pub raw:u64,pub limit:u64 }
+pub struct Scratch { pub sector:[512]u8,pub fat:[512]u8,pub entry:[32]u8,pub name:[11]u8,pub seen:[32768]u8,pub frames:[128]AuditFrame,pub group:lfn.Group,pub decoded:lfn.Name }
+pub struct PathEntry { pub entry:DirEntry,pub name_length:usize,pub has_lfn:u64,pub raw_index:u64,pub first_index:u64,pub group_count:u64,pub name:[1020]u8 }
+pub struct Workspace { pub candidate:PathEntry,pub selected:PathEntry,pub parents:[128]DirEntry,pub canonical:path.Path }
+pub const EMPTY_PATH_ENTRY:PathEntry=PathEntry{entry:EMPTY_ENTRY,name_length:0,has_lfn:0,raw_index:0,first_index:0,group_count:0,name:[0;1020]};
+pub const EMPTY_WORKSPACE:Workspace=Workspace{candidate:EMPTY_PATH_ENTRY,selected:EMPTY_PATH_ENTRY,parents:[EMPTY_ENTRY;128],canonical:path.EMPTY};
+pub struct DirEntry { pub name:[11]u8,pub attributes:u8,pub cluster:u64,pub size:u64,pub sector:u64,pub offset:u64 }
+pub const EMPTY_VOLUME:Volume=Volume{device:null,ready:0,busy:0,failed:0,read_only:0,dirty:0,total:0,spc:0,reserved:0,fat_sectors:0,data_start:0,clusters:0,root:0,fsinfo:0,backup:0};
+pub const EMPTY_SCRATCH:Scratch=Scratch{sector:[0;512],fat:[0;512],entry:[0;32],name:[0;11],seen:[0;32768],frames:[AuditFrame{directory:0,parent:0,raw:0,limit:0};128],group:lfn.EMPTY_GROUP,decoded:lfn.EMPTY_NAME};
+pub const EMPTY_ENTRY:DirEntry=DirEntry{name:[0;11],attributes:0,cluster:0,size:0,sector:0,offset:0};
+unsafe fn u16(p:*const u8,n:usize)u64{unsafe{return (*(p+n) as u64)|((*(p+n+1) as u64)<<8);}}
+unsafe fn u32(p:*const u8,n:usize)u64{unsafe{return u16(p,n)|(u16(p,n+2)<<16);}}
+unsafe fn put16(p:*u8,n:usize,value:u64)void{unsafe{*(p+n)=value as u8;*(p+n+1)=(value>>8) as u8;}}
+unsafe fn put32(p:*u8,n:usize,value:u64)void{unsafe{put16(p,n,value);put16(p,n+2,value>>16);}}
+unsafe fn read_sector(v:*const Volume,lba:u64,out:*u8)!void{unsafe{
+    if lba>=(*v).total{return error.errors.Corrupt;}
+    let d=*(*v).device;if d.read(d.context,lba,1,out)!=0{return error.errors.Io;}
+}return;}
+unsafe fn write_sector(v:*Volume,lba:u64,input:*const u8)!void{unsafe{
+    if lba>=(*v).total{return error.errors.Corrupt;}
+    let d=*(*v).device;if d.write(d.context,lba,1,input)!=0{(*v).failed=1;return error.errors.Io;}
+}return;}
+unsafe fn fat_get(v:*const Volume,w:*Scratch,cluster:u64)!u64{unsafe{
+    if cluster>=(*v).clusters+2{return error.errors.Corrupt;}
+    try read_sector(v,(*v).reserved+cluster/128,&(*w).fat[0]);
+    return u32(&(*w).fat[0],((cluster%128)*4) as usize)&0x0fff_ffff;
+}}
+unsafe fn fat_put(v:*Volume,w:*Scratch,cluster:u64,value:u64)!void{unsafe{
+    if cluster>=(*v).clusters+2{return error.errors.Corrupt;}
+    var copy:u64=0;while copy<2{
+        let lba=(*v).reserved+copy*(*v).fat_sectors+cluster/128;
+        try read_sector(v,lba,&(*w).fat[0]);
+        let off=((cluster%128)*4) as usize;
+        let old=u32(&(*w).fat[0],off);
+        put32(&(*w).fat[0],off,(old&0xf000_0000)|(value&0x0fff_ffff));
+        try write_sector(v,lba,&(*w).fat[0]);copy+=1;
+    }
+}return;}
+unsafe fn next(v:*const Volume,w:*Scratch,cluster:u64)!u64{unsafe{
+    if cluster<2||cluster>=(*v).clusters+2{return error.errors.Corrupt;}
+    let value=try fat_get(v,w,cluster);
+    if value>=0x0fff_fff8{return 0;}
+    if value<2||value>=0x0fff_fff0||value>=(*v).clusters+2{return error.errors.Corrupt;}
+    return value;
+}}
+unsafe fn chain_length(v:*const Volume,w:*Scratch,start:u64)!u64{unsafe{
+    if start==0{return 0;}
+    var slow=start;var fast=start;var count:u64=0;
+    while count<(*v).clusters{
+        slow=try next(v,w,slow);count+=1;
+        if fast!=0{fast=try next(v,w,fast);if fast!=0{fast=try next(v,w,fast);}}
+        if slow==0{return count;}
+        if slow==fast{return error.errors.Corrupt;}
+    }
+}return error.errors.Corrupt;}
+unsafe fn cluster_sector(v:*const Volume,cluster:u64)!u64{unsafe{
+    if cluster<2||cluster>=(*v).clusters+2{return error.errors.Corrupt;}
+    return (*v).data_start+(cluster-2)*(*v).spc;
+}}
+unsafe fn mount_inner(v:*Volume,d:*const Device,w:*Scratch)!void{unsafe{
+    let io=*d;if io.capacity_sectors<65536||io.capacity_sectors>0xffff_ffff||io.max_transfer_sectors==0||io.max_transfer_sectors>128{return error.errors.InvalidArgument;}
+    var c=EMPTY_VOLUME;c.device=d;c.total=io.capacity_sectors;
+    try read_sector(&c,0,&(*w).sector[0]);let b=&(*w).sector[0];
+    if u16(b,510)!=0xaa55||u16(b,11)!=512||u16(b,17)!=0||u16(b,19)!=0||u16(b,22)!=0||u16(b,42)!=0{return error.errors.InvalidBpb;}
+    c.spc=(*w).sector[13] as u64;c.reserved=u16(b,14);c.fat_sectors=u32(b,36);c.total=u32(b,32);c.root=u32(b,44);
+    let fsinfo=u16(b,48);let backup=u16(b,50);c.fsinfo=fsinfo;c.backup=backup;
+    if c.spc==0||c.spc>128||(c.spc&(c.spc-1))!=0||c.reserved<8||(*w).sector[16]!=2||c.fat_sectors==0
+        ||c.total>io.capacity_sectors||c.total<65536||u16(b,40)!=0||(*w).sector[21]!=0xf8{return error.errors.Unsupported;}
+    c.data_start=c.reserved+2*c.fat_sectors;
+    if c.data_start>=c.total{return error.errors.InvalidBpb;}
+    c.clusters=(c.total-c.data_start)/c.spc;
+    if c.clusters<65525||(c.clusters+2)*4>c.fat_sectors*512||c.root<2||c.root>=c.clusters+2{return error.errors.InvalidBpb;}
+    if c.clusters+2>262144{return error.errors.Unsupported;}
+    if fsinfo==0||fsinfo>=c.reserved||backup==0||backup>=c.reserved||backup+fsinfo>=c.reserved{return error.errors.InvalidBpb;}
+    try read_sector(&c,backup,&(*w).fat[0]);var i:usize=0;while i<512{if (*w).sector[i]!=(*w).fat[i]{return error.errors.Corrupt;}i+=1;}
+    try read_sector(&c,fsinfo,&(*w).sector[0]);
+    if u32(b,0)!=0x4161_5252||u32(b,484)!=0x6141_7272||u32(b,508)!=0xaa55_0000{return error.errors.Corrupt;}
+    let free_hint=u32(b,488);let next_hint=u32(b,492);
+    if (free_hint!=0xffff_ffff&&free_hint>c.clusters)||(next_hint!=0xffff_ffff&&(next_hint<2||next_hint>=c.clusters+2)){return error.errors.Corrupt;}
+    try read_sector(&c,backup+fsinfo,&(*w).fat[0]);i=0;while i<512{if (*w).sector[i]!=(*w).fat[i]{return error.errors.Corrupt;}i+=1;}
+    var sector:u64=0;while sector<c.fat_sectors{
+        try read_sector(&c,c.reserved+sector,&(*w).sector[0]);try read_sector(&c,c.reserved+c.fat_sectors+sector,&(*w).fat[0]);
+        i=0;while i<512{if (*w).sector[i]!=(*w).fat[i]{return error.errors.Corrupt;}i+=1;}sector+=1;
+    }
+    if (try fat_get(&c,w,0))!=0x0fff_fff8{return error.errors.Corrupt;}
+    let status=try fat_get(&c,w,1);if (status&0x03ff_ffff)!=0x03ff_ffff{return error.errors.Corrupt;}
+    if (status&0x0800_0000)==0{c.dirty=1;c.read_only=1;}if (status&0x0400_0000)==0{c.read_only=1;}
+    let root_count=try chain_length(&c,w,c.root);if root_count==0{return error.errors.Corrupt;}
+    try allocation_audit(&c,w,root_count);
+    c.ready=1;*v=c;
+}return;}
+pub unsafe fn mount(v:*Volume,d:*const Device,w:*Scratch)!void{unsafe{
+    if (*v).busy!=0{return error.errors.Busy;}if (*v).ready!=0{return error.errors.InvalidArgument;}
+    (*v).busy=1;var candidate=EMPTY_VOLUME;
+    let result=mount_inner(&candidate,d,w);match result{ok=>{*v=candidate;return;},err(e)=>{(*v).busy=0;return result;},}
+}}
+unsafe fn enter(v:*Volume,writing:bool)!void{unsafe{
+    if (*v).busy!=0{return error.errors.Busy;}if (*v).ready!=1{return error.errors.InvalidArgument;}
+    if (*v).failed!=0{return error.errors.NeedsCheck;}if writing&&(*v).read_only!=0{return error.errors.ReadOnly;}
+    (*v).busy=1;
+}return;}
+unsafe fn normalize(w:*Scratch,name:[]const u8)!void{unsafe{
+    if name.len==0||name.len>12||name.ptr==null{return error.errors.InvalidArgument;}
+    var i:usize=0;while i<11{(*w).name[i]=32;i+=1;}i=0;var base:usize=0;var ext:usize=0;var dotted:bool=false;
+    while i<name.len{var ch=name[i];if ch>=97&&ch<=122{ch-=32;}
+        if ch==46{if dotted||base==0{ return error.errors.InvalidArgument;}dotted=true;}
+        else{
+            if !((ch>=65&&ch<=90)||(ch>=48&&ch<=57)||ch==95||ch==45||ch==36){return error.errors.InvalidArgument;}
+            if dotted{if ext==3{return error.errors.InvalidArgument;}(*w).name[8+ext]=ch;ext+=1;}
+            else{if base==8{return error.errors.InvalidArgument;}(*w).name[base]=ch;base+=1;}
+        }i+=1;
+    }if base==0||(dotted&&ext==0){return error.errors.InvalidArgument;}
+}return;}
+unsafe fn decode(w:*Scratch,lba:u64,off:usize,out:*DirEntry)void{unsafe{
+    var item=EMPTY_ENTRY;var i:usize=0;while i<11{item.name[i]=(*w).sector[off+i];i+=1;}
+    item.attributes=(*w).sector[off+11];item.cluster=(u16(&(*w).sector[0],off+20)<<16)|u16(&(*w).sector[0],off+26);
+    item.size=u32(&(*w).sector[0],off+28);item.sector=lba;item.offset=off as u64;*out=item;
+}}
+unsafe fn mark_chain(v:*const Volume,w:*Scratch,start:u64)!u64{unsafe{
+    if start==0{return 0;}let count=try chain_length(v,w,start);var cluster=start;var n:u64=0;
+    while n<count{let at=(cluster/8) as usize;let bit=(1<<(cluster%8)) as u8;if ((*w).seen[at]&bit)!=0{return error.errors.Corrupt;}(*w).seen[at]|=bit;
+        cluster=try next(v,w,cluster);n+=1;}return count;
+}}
+unsafe fn allocation_audit(v:*Volume,w:*Scratch,root_count:u64)!void{unsafe{
+    var i:usize=0;while i<32768{(*w).seen[i]=0;i+=1;}
+    let marked=try mark_chain(v,w,(*v).root);
+    if root_count*(*v).spc*16>4096{return error.errors.Unsupported;}
+    (*w).frames[0]=AuditFrame{directory:(*v).root,parent:0,raw:0,limit:root_count*(*v).spc*16};
+    var depth:usize=1;var directories:u64=1;var item=EMPTY_ENTRY;
+    while depth!=0{
+        let frame=&(*w).frames[depth-1];
+        if (*frame).raw>=(*frame).limit{depth-=1;continue;}
+        let raw=(*frame).raw;(*frame).raw+=1;
+        let exists=try slot_in(v,w,(*frame).directory,raw,&item);if !exists{return error.errors.Corrupt;}
+        if item.name[0]==0{depth-=1;continue;}
+        if item.name[0]==0xe5{continue;}
+        if item.attributes==15{continue;}
+        if (item.attributes&0xc0)!=0||(item.attributes&0x18)==0x18{return error.errors.Corrupt;}
+        if (item.attributes&8)!=0{continue;}
+        try valid_short(&item);
+        if dot_kind(&item)!=0{
+            if (*frame).directory==(*v).root||raw>1{return error.errors.Corrupt;}
+            continue;
+        }
+        if (item.attributes&16)!=0{
+            if item.size!=0||item.cluster<2{return error.errors.Corrupt;}
+            let count=try mark_chain(v,w,item.cluster);
+            if count*(*v).spc*16>4096||depth==128||directories==4096{return error.errors.Unsupported;}
+            try check_dots(v,w,item.cluster,(*frame).directory);
+            (*w).frames[depth]=AuditFrame{directory:item.cluster,parent:(*frame).directory,raw:2,limit:count*(*v).spc*16};
+            depth+=1;directories+=1;
+        }else{
+            if item.cluster==0&&item.size!=0{return error.errors.Corrupt;}
+            let count=try mark_chain(v,w,item.cluster);
+            if count<(item.size+(*v).spc*512-1)/((*v).spc*512){return error.errors.Corrupt;}
+        }
+    }
+    // A separate streaming pass validates each LFN group. It follows only the
+    // already audited directory tree and never treats dot references as edges.
+    (*w).frames[0]=AuditFrame{directory:(*v).root,parent:0,raw:0,limit:0};depth=1;directories=1;
+    var record=EMPTY_PATH_ENTRY;
+    while depth!=0{
+        let frame=&(*w).frames[depth-1];let exists=try scan(v,w,(*frame).directory,&(*frame).raw,&record);
+        if !exists{depth-=1;continue;}
+        if (record.entry.attributes&16)!=0&&dot_kind(&record.entry)==0{
+            if depth==128||directories==4096{return error.errors.Unsupported;}directories+=1;
+            (*w).frames[depth]=AuditFrame{directory:record.entry.cluster,parent:(*frame).directory,raw:0,limit:0};depth+=1;
+        }
+    }
+    var sector:u64=0;while sector<(*v).fat_sectors{
+        try read_sector(v,(*v).reserved+sector,&(*w).fat[0]);i=0;
+        while i<128{let cluster=sector*128+i as u64;if cluster>=2&&cluster<(*v).clusters+2{
+            let value=u32(&(*w).fat[0],i*4)&0x0fff_ffff;let used=((*w).seen[(cluster/8) as usize]&(1<<(cluster%8)) as u8)!=0;
+            if !used&&value!=0&&value!=0x0fff_fff7{if (*v).dirty!=0{(*v).read_only=1;}else{return error.errors.Corrupt;}}
+        }i+=1;}sector+=1;
+    }
+}return;}
+// ordinal is a raw directory slot index. Empty/deleted/LFN/volume entries are
+// skipped by list/find, but an allocation caller can reuse exactly their slot.
+unsafe fn slot(v:*const Volume,w:*Scratch,ordinal:u64,out:*DirEntry)!bool{unsafe{
+    return slot_in(v,w,(*v).root,ordinal,out);
+}}
+unsafe fn slot_in(v:*const Volume,w:*Scratch,directory:u64,ordinal:u64,out:*DirEntry)!bool{unsafe{
+    if ordinal>=4096{return error.errors.Unsupported;}
+    let per=(*v).spc*16;var cluster=directory;var skip=ordinal/per;var traversed:u64=0;
+    while skip!=0{cluster=try next(v,w,cluster);if cluster==0{return false;}skip-=1;traversed+=1;if traversed>=(*v).clusters{return error.errors.Corrupt;}}
+    let relative=ordinal%per;let lba=(try cluster_sector(v,cluster))+relative/16;
+    try read_sector(v,lba,&(*w).sector[0]);let off=((relative%16)*32) as usize;decode(w,lba,off,out);var i:usize=0;while i<32{(*w).entry[i]=(*w).sector[off+i];i+=1;}return true;
+}}
+unsafe fn find(v:*const Volume,w:*Scratch,out:*DirEntry)!void{unsafe{
+    let count=try chain_length(v,w,(*v).root);var index:u64=0;var item=EMPTY_ENTRY;
+    while index<count*(*v).spc*16{
+        let exists=try slot(v,w,index,&item);if !exists{return error.errors.Corrupt;}
+        if item.name[0]==0{return error.errors.NotFound;}
+        if item.name[0]!=0xe5&&(item.attributes&0x0f)!=0x0f&&(item.attributes&8)==0{
+            var equal:bool=true;var i:usize=0;while i<11{if item.name[i]!=(*w).name[i]{equal=false;}i+=1;}
+            if equal{*out=item;return;}
+        }index+=1;
+    }
+}return error.errors.NotFound;}
+pub unsafe fn list(v:*Volume,w:*Scratch,index:u64,out:*DirEntry)!bool{unsafe{
+    try enter(v,false);let result=list_inner(v,w,index,out);
+    (*v).busy=0;return result;
+}}
+unsafe fn list_inner(v:*const Volume,w:*Scratch,wanted:u64,out:*DirEntry)!bool{unsafe{
+    let count=try chain_length(v,w,(*v).root);var raw:u64=0;var found:u64=0;var item=EMPTY_ENTRY;
+    while raw<count*(*v).spc*16{let exists=try slot(v,w,raw,&item);if !exists{return error.errors.Corrupt;}
+        if item.name[0]==0{return false;}
+        if item.name[0]!=0xe5&&(item.attributes&0x0f)!=0x0f&&(item.attributes&8)==0{
+            if found==wanted{*out=item;return true;}found+=1;
+        }raw+=1;
+    }return false;
+}}
+unsafe fn file(v:*const Volume,w:*Scratch,name:[]const u8,item:*DirEntry,writing:bool)!u64{unsafe{
+    try normalize(w,name);try find(v,w,item);if ((*item).attributes&0x10)!=0{return error.errors.Unsupported;}
+    if writing&&(((*item).attributes&1)!=0||(*v).read_only!=0){return error.errors.ReadOnly;}
+    let count=try chain_length(v,w,(*item).cluster);let bytes=(*v).spc*512;
+    if count<((*item).size+bytes-1)/bytes{return error.errors.Corrupt;}return count;
+}}
+unsafe fn nth(v:*const Volume,w:*Scratch,start:u64,index:u64)!u64{unsafe{
+    var cluster=start;var i:u64=0;while i<index{cluster=try next(v,w,cluster);if cluster==0{return error.errors.Corrupt;}i+=1;}return cluster;
+}}
+unsafe fn transfer_bytes(v:*Volume,w:*Scratch,start:u64,offset:u64,data:*u8,length:usize,writing:bool,zero:bool)!void{unsafe{
+    let cluster_bytes=(*v).spc*512;var cluster=try nth(v,w,start,offset/cluster_bytes);var within=offset%cluster_bytes;var done:usize=0;
+    while done<length{
+        let lba=(try cluster_sector(v,cluster))+within/512;let pos=(within%512) as usize;
+        try read_sector(v,lba,&(*w).sector[0]);var count:usize=512-pos;if count>length-done{count=length-done;}
+        var i:usize=0;while i<count{
+            if writing{if zero{(*w).sector[pos+i]=0;}else{(*w).sector[pos+i]=*(data+done+i);}}
+            else{*(data+done+i)=(*w).sector[pos+i];}i+=1;
+        }
+        if writing{try write_sector(v,lba,&(*w).sector[0]);}done+=count;within+=count as u64;
+        if within==cluster_bytes&&done<length{cluster=try next(v,w,cluster);if cluster==0{return error.errors.Corrupt;}within=0;}
+    }
+}return;}
+pub unsafe fn read(v:*Volume,w:*Scratch,name:[]const u8,offset:u64,out:[]u8)!usize{unsafe{
+    try enter(v,false);let result=read_inner(v,w,name,offset,out);(*v).busy=0;return result;
+}}
+unsafe fn read_inner(v:*Volume,w:*Scratch,name:[]const u8,offset:u64,out:[]u8)!usize{unsafe{
+    if out.len!=0&&out.ptr==null{return error.errors.InvalidArgument;}var item=EMPTY_ENTRY;let count=try file(v,w,name,&item,false);
+    if offset>=item.size||out.len==0{return 0;}var bytes=out.len;if bytes as u64>item.size-offset{bytes=(item.size-offset) as usize;}
+    try transfer_bytes(v,w,item.cluster,offset,out.ptr,bytes,false,false);return bytes;
+}}
+unsafe fn durable(v:*Volume)!void{unsafe{let d=*(*v).device;if d.flush(d.context)!=0{(*v).failed=1;return error.errors.Io;}}return;}
+unsafe fn begin_write(v:*Volume,w:*Scratch)!void{unsafe{
+    if (*v).dirty==0{
+        let status=try fat_get(v,w,1);(*v).dirty=1;try fat_put(v,w,1,status&~0x0800_0000);try durable(v);
+        var copy:u64=0;while copy<2{let lba=(*v).fsinfo+copy*(*v).backup;try read_sector(v,lba,&(*w).sector[0]);
+            put32(&(*w).sector[0],488,0xffff_ffff);put32(&(*w).sector[0],492,0xffff_ffff);try write_sector(v,lba,&(*w).sector[0]);copy+=1;}
+    }
+}return;}
+unsafe fn enough(v:*const Volume,w:*Scratch,needed:u64)!void{unsafe{
+    var count:u64=0;var cluster:u64=2;while cluster<(*v).clusters+2&&count<needed{if (try fat_get(v,w,cluster))==0{count+=1;}cluster+=1;}
+    if count<needed{return error.errors.NoSpace;}
+}return;}
+unsafe fn allocate(v:*Volume,w:*Scratch)!u64{unsafe{
+    var cluster:u64=2;while cluster<(*v).clusters+2{
+        if (try fat_get(v,w,cluster))==0{
+            try fat_put(v,w,cluster,0x0fff_ffff);var i:usize=0;while i<512{(*w).sector[i]=0;i+=1;}
+            let start=try cluster_sector(v,cluster);var sector:u64=0;while sector<(*v).spc{try write_sector(v,start+sector,&(*w).sector[0]);sector+=1;}
+            return cluster;
+        }cluster+=1;
+    }
+}return error.errors.NoSpace;}
+unsafe fn update(v:*Volume,w:*Scratch,item:*const DirEntry)!void{unsafe{
+    try read_sector(v,(*item).sector,&(*w).sector[0]);let off=(*item).offset as usize;
+    put16(&(*w).sector[0],off+20,(*item).cluster>>16);put16(&(*w).sector[0],off+26,(*item).cluster);put32(&(*w).sector[0],off+28,(*item).size);
+    try write_sector(v,(*item).sector,&(*w).sector[0]);
+}return;}
+unsafe fn grow(v:*Volume,w:*Scratch,item:*DirEntry,old_count:u64,new_size:u64)!void{unsafe{
+    let wanted=(new_size+(*v).spc*512-1)/((*v).spc*512);if wanted<=old_count{return;}
+    try enough(v,w,wanted-old_count);try begin_write(v,w);var last:u64=0;if old_count!=0{last=try nth(v,w,(*item).cluster,old_count-1);}
+    var count=old_count;while count<wanted{let cluster=try allocate(v,w);if last==0{(*item).cluster=cluster;}else{try fat_put(v,w,last,cluster);}last=cluster;count+=1;}
+}return;}
+pub unsafe fn write(v:*Volume,w:*Scratch,name:[]const u8,offset:u64,data:[]const u8)!usize{unsafe{
+    try enter(v,true);let result=write_inner(v,w,name,offset,data);match result{ok(n)=>{},err(e)=>{if e==0x0504_0004||e==0x0504_0005{(*v).failed=1;}},}(*v).busy=0;return result;
+}}
+unsafe fn write_inner(v:*Volume,w:*Scratch,name:[]const u8,offset:u64,data:[]const u8)!usize{unsafe{
+    if offset>0xffff_ffff||data.len as u64>0xffff_ffff-offset||(data.len!=0&&data.ptr==null){return error.errors.InvalidArgument;}
+    var item=EMPTY_ENTRY;let count=try file(v,w,name,&item,true);if data.len==0{return 0;}
+    let end=offset+data.len as u64;var size=item.size;if end>size{size=end;}try grow(v,w,&item,count,size);try begin_write(v,w);
+    if offset>item.size{try transfer_bytes(v,w,item.cluster,item.size,null,(offset-item.size) as usize,true,true);}
+    try transfer_bytes(v,w,item.cluster,offset,data.ptr as *u8,data.len,true,false);item.size=size;try durable(v);try update(v,w,&item);return data.len;
+}}
+pub unsafe fn create(v:*Volume,w:*Scratch,name:[]const u8)!void{unsafe{
+    try enter(v,true);let result=create_inner(v,w,name);match result{ok=>{},err(e)=>{if e==0x0504_0004||e==0x0504_0005{(*v).failed=1;}},}(*v).busy=0;return result;
+}}
+unsafe fn create_inner(v:*Volume,w:*Scratch,name:[]const u8)!void{unsafe{
+    try normalize(w,name);try root_namespace_free(v,w,name);var item=EMPTY_ENTRY;let lookup=find(v,w,&item);match lookup{ok=>{return error.errors.Exists;},err(e)=>{if e!=0x0504_0006{return lookup;}},}
+    let count=try chain_length(v,w,(*v).root);var index:u64=0;var found:bool=false;
+    while index<count*(*v).spc*16{let exists=try slot(v,w,index,&item);if !exists{return error.errors.Corrupt;}if item.name[0]==0||item.name[0]==0xe5{found=true;break;}index+=1;}
+    if !found{if count*(*v).spc*16>=4096{return error.errors.NoSpace;}try enough(v,w,1);try begin_write(v,w);let last=try nth(v,w,(*v).root,count-1);let fresh=try allocate(v,w);try fat_put(v,w,last,fresh);item.sector=try cluster_sector(v,fresh);item.offset=0;}
+    if found&&item.name[0]==0&&index+1<count*(*v).spc*16{
+        // Bytes beyond an old 00 terminator are unspecified, not live entries.
+        // Publish the next terminator before consuming this one.
+        try begin_write(v,w);var following=EMPTY_ENTRY;let exists=try slot(v,w,index+1,&following);if !exists{return error.errors.Corrupt;}
+        (*w).sector[following.offset as usize]=0;try write_sector(v,following.sector,&(*w).sector[0]);
+    }
+    try begin_write(v,w);try durable(v);try read_sector(v,item.sector,&(*w).sector[0]);let off=item.offset as usize;var i:usize=0;while i<32{(*w).sector[off+i]=0;i+=1;}
+    i=0;while i<11{(*w).sector[off+i]=(*w).name[i];i+=1;}(*w).sector[off+11]=0x20;
+    put16(&(*w).sector[0],off+16,0x21);put16(&(*w).sector[0],off+18,0x21);put16(&(*w).sector[0],off+24,0x21);
+    try write_sector(v,item.sector,&(*w).sector[0]);
+}return;}
+unsafe fn free_chain(v:*Volume,w:*Scratch,start:u64)!void{unsafe{
+    var cluster=start;var count:u64=0;while cluster!=0{let following=try next(v,w,cluster);try fat_put(v,w,cluster,0);cluster=following;count+=1;if count>(*v).clusters{return error.errors.Corrupt;}}
+}return;}
+pub unsafe fn truncate(v:*Volume,w:*Scratch,name:[]const u8,size:u64)!void{unsafe{
+    try enter(v,true);let result=truncate_inner(v,w,name,size);match result{ok=>{},err(e)=>{if e==0x0504_0004||e==0x0504_0005{(*v).failed=1;}},}(*v).busy=0;return result;
+}}
+unsafe fn truncate_inner(v:*Volume,w:*Scratch,name:[]const u8,size:u64)!void{unsafe{
+    if size>0xffff_ffff{return error.errors.InvalidArgument;}var item=EMPTY_ENTRY;let count=try file(v,w,name,&item,true);if size==item.size{return;}
+    if size>item.size{try grow(v,w,&item,count,size);try begin_write(v,w);try transfer_bytes(v,w,item.cluster,item.size,null,(size-item.size) as usize,true,true);item.size=size;try durable(v);try update(v,w,&item);return;}
+    try begin_write(v,w);let wanted=(size+(*v).spc*512-1)/((*v).spc*512);var rest=item.cluster;var last:u64=0;
+    if wanted!=0{last=try nth(v,w,item.cluster,wanted-1);rest=try next(v,w,last);}else{item.cluster=0;}
+    item.size=size;try update(v,w,&item);try durable(v);if last!=0{try fat_put(v,w,last,0x0fff_ffff);}try free_chain(v,w,rest);
+}return;}
+pub unsafe fn remove(v:*Volume,w:*Scratch,name:[]const u8)!void{unsafe{
+    try enter(v,true);let result=remove_inner(v,w,name);match result{ok=>{},err(e)=>{if e==0x0504_0004||e==0x0504_0005{(*v).failed=1;}},}(*v).busy=0;return result;
+}}
+unsafe fn remove_inner(v:*Volume,w:*Scratch,name:[]const u8)!void{unsafe{
+    var item=EMPTY_ENTRY;let count=try file(v,w,name,&item,true);var raw:u64=0;var record=EMPTY_PATH_ENTRY;var found:bool=false;
+    while try scan(v,w,(*v).root,&raw,&record){if record.entry.sector==item.sector&&record.entry.offset==item.offset{found=true;break;}}if !found{return error.errors.Corrupt;}
+    try begin_write(v,w);try read_sector(v,item.sector,&(*w).sector[0]);(*w).sector[item.offset as usize]=0xe5;
+    try write_sector(v,item.sector,&(*w).sector[0]);try durable(v);var n:u64=0;while n+1<record.group_count{let exists=try slot_in(v,w,(*v).root,record.first_index+n,&item);if !exists{return error.errors.Corrupt;}(*w).sector[item.offset as usize]=0xe5;try write_sector(v,item.sector,&(*w).sector[0]);n+=1;}try durable(v);try free_chain(v,w,record.entry.cluster);
+}return;}
+pub unsafe fn flush(v:*Volume,w:*Scratch)!void{unsafe{
+    try enter(v,true);let d=*(*v).device;if d.flush(d.context)!=0{(*v).failed=1;(*v).busy=0;return error.errors.Io;}
+    if (*v).dirty!=0{let result=flush_status(v,w);match result{ok=>{},err(e)=>{(*v).failed=1;(*v).busy=0;return result;},}}
+    if d.flush(d.context)!=0{(*v).failed=1;(*v).busy=0;return error.errors.Io;}(*v).dirty=0;(*v).busy=0;
+}return;}
+unsafe fn flush_status(v:*Volume,w:*Scratch)!void{unsafe{let status=try fat_get(v,w,1);try fat_put(v,w,1,status|0x0c00_0000);}return;}
+// UTF-8 names compare with ASCII case insensitivity and exact non-ASCII bytes.
+// This deliberately does not claim the Windows OEM/Unicode upcase tables.
+unsafe fn fold(ch:u8)u8{if ch>=97&&ch<=122{return ch-32;}return ch;}
+unsafe fn same(a:[]const u8,b:[]const u8)bool{unsafe{if a.len!=b.len{return false;}var i:usize=0;while i<a.len{if fold(a[i])!=fold(b[i]){return false;}i+=1;}return true;}}
+unsafe fn dot_kind(item:*const DirEntry)u64{unsafe{
+    if (*item).name[0]!=46{return 0;}var start:usize=1;var kind:u64=1;if (*item).name[1]==46{kind=2;start=2;}
+    var i=start;while i<11{if (*item).name[i]!=32{return 0;}i+=1;}return kind;
+}}
+unsafe fn valid_short(item:*const DirEntry)!void{unsafe{
+    if dot_kind(item)!=0{return;}if (*item).name[0]==32{return error.errors.Corrupt;}
+    var i:usize=0;var padded:bool=false;while i<11{if i==8{padded=false;}let ch=(*item).name[i];
+        if ch==32{padded=true;}else{if padded||(ch<32&&!(i==0&&ch==5))||ch==34||ch==42||ch==43||ch==44||ch==46||ch==47||ch==58||ch==59||ch==60||ch==61||ch==62||ch==63||ch==91||ch==92||ch==93||ch==124{return error.errors.Corrupt;}}i+=1;
+    }
+}return;}
+unsafe fn check_dots(v:*const Volume,w:*Scratch,directory:u64,parent:u64)!void{unsafe{
+    var item=EMPTY_ENTRY;var i:u64=0;while i<2{let exists=try slot_in(v,w,directory,i,&item);
+        if !exists||dot_kind(&item)!=i+1||item.attributes!=16||item.size!=0{return error.errors.Corrupt;}
+        if i==0{if item.cluster!=directory{return error.errors.Corrupt;}}
+        else{if item.cluster!=parent&&!(parent==(*v).root&&item.cluster==0){return error.errors.Corrupt;}}
+        i+=1;
+    }
+}return;}
+unsafe fn alias_name(out:*PathEntry)void{unsafe{
+    (*out).name_length=0;var i:usize=0;while i<11{if (*out).entry.name[i]>=128||(*out).entry.name[i]==5{return;}i+=1;}
+    i=0;while i<8&&(*out).entry.name[i]!=32{(*out).name[(*out).name_length]=(*out).entry.name[i];(*out).name_length+=1;i+=1;}
+    if (*out).entry.name[8]!=32{(*out).name[(*out).name_length]=46;(*out).name_length+=1;i=8;while i<11&&(*out).entry.name[i]!=32{(*out).name[(*out).name_length]=(*out).entry.name[i];(*out).name_length+=1;i+=1;}}
+}}
+// Raw cursor is private to a single serialized operation. EOF preserves output.
+// Invalid/orphan LFN groups degrade to alias lookup and poison write admission.
+unsafe fn scan(v:*Volume,w:*Scratch,directory:u64,raw:*u64,out:*PathEntry)!bool{unsafe{
+    let length=try chain_length(v,w,directory);let limit=length*(*v).spc*16;if limit>4096{return error.errors.Unsupported;}
+    var slots:usize=0;var first:u64=0;var item=EMPTY_ENTRY;
+    while (*raw)<limit{let index=*raw;*raw+=1;let exists=try slot_in(v,w,directory,index,&item);if !exists{return error.errors.Corrupt;}
+        if item.name[0]==0{if slots!=0{(*v).read_only=1;}return false;}
+        if item.name[0]==0xe5{if slots!=0{(*v).read_only=1;}slots=0;continue;}
+        if item.attributes==15{
+            if (item.name[0]&0x40)!=0{if slots!=0{(*v).read_only=1;}slots=0;first=index;}
+            else if slots==0{(*v).read_only=1;continue;}
+            if slots==20{(*v).read_only=1;slots=0;continue;}
+            var i:usize=0;while i<32{(*w).group.bytes[slots*32+i]=(*w).entry[i];i+=1;}slots+=1;continue;
+        }
+        if (item.attributes&8)!=0{if slots!=0{(*v).read_only=1;}slots=0;continue;}
+        try valid_short(&item);var candidate=EMPTY_PATH_ENTRY;candidate.entry=item;candidate.raw_index=index;candidate.first_index=index;candidate.group_count=1;
+        if slots!=0{var i:usize=0;while i<32{(*w).group.bytes[slots*32+i]=(*w).entry[i];i+=1;}
+            let decoded=lfn.decode((*w).group.bytes[0..(slots+1)*32],&(*w).decoded);
+            match decoded{ok=>{candidate.has_lfn=1;candidate.first_index=first;candidate.group_count=(slots+1) as u64;candidate.name_length=(*w).decoded.length;i=0;while i<candidate.name_length{candidate.name[i]=(*w).decoded.bytes[i];i+=1;}},err(e)=>{(*v).read_only=1;},}
+        }
+        if candidate.has_lfn==0{alias_name(&candidate);}*out=candidate;return true;
+    }
+    if slots!=0{(*v).read_only=1;}return false;
+}}
+unsafe fn alias_matches(item:*const DirEntry,name:[]const u8)bool{unsafe{
+    var bytes:[12]u8=[0;12];var length:usize=0;var i:usize=0;while i<11{if (*item).name[i]>=128||(*item).name[i]==5{return false;}i+=1;}
+    i=0;while i<8&&(*item).name[i]!=32{bytes[length]=(*item).name[i];length+=1;i+=1;}
+    if (*item).name[8]!=32{bytes[length]=46;length+=1;i=8;while i<11&&(*item).name[i]!=32{bytes[length]=(*item).name[i];length+=1;i+=1;}}
+    return same(bytes[0..length],name);
+}}
+unsafe fn find_path(v:*Volume,w:*Scratch,x:*Workspace,directory:u64,name:[]const u8,out:*PathEntry)!void{unsafe{
+    var raw:u64=0;var found:bool=false;
+    while try scan(v,w,directory,&raw,&(*x).candidate){
+        if dot_kind(&(*x).candidate.entry)==0&&(alias_matches(&(*x).candidate.entry,name)||((*x).candidate.has_lfn==1&&same((*x).candidate.name[0..(*x).candidate.name_length],name))){
+            if found{return error.errors.Corrupt;}*out=(*x).candidate;found=true;
+        }
+    }
+    if !found{return error.errors.NotFound;}
+}return;}
+unsafe fn checked_name(name:[]const u8)!void{unsafe{
+    let checked=path.validate_name(name);match checked{ok(n)=>{return;},err(e)=>{return error.errors.InvalidArgument;},}
+}}
+unsafe fn resolve(v:*Volume,w:*Scratch,x:*Workspace,input:[]const u8,out:*DirEntry)!void{unsafe{
+    if input.ptr==null||input.len==0||input.len>4096||(input.ptr as u64)>0xffff_ffff_ffff_ffff-input.len as u64||input[0]!=47{return error.errors.InvalidArgument;}
+    var item=EMPTY_ENTRY;item.cluster=(*v).root;item.attributes=16;var depth:usize=0;var at:usize=1;
+    while at<input.len{if input[at]==47{if (item.attributes&16)==0{return error.errors.Unsupported;}at+=1;continue;}
+        if (item.attributes&16)==0{return error.errors.Unsupported;}
+        let start=at;while at<input.len&&input[at]!=47{at+=1;}let name=input[start..at];
+        if name.len==1&&name[0]==46{continue;}
+        if name.len==2&&name[0]==46&&name[1]==46{if depth==0{return error.errors.InvalidArgument;}depth-=1;item=(*x).parents[depth];
+            if item.sector!=0{var parent_directory=(*v).root;if depth!=0{parent_directory=(*x).parents[depth-1].cluster;}var back_raw:u64=0;var recovered:bool=false;
+                while try scan(v,w,parent_directory,&back_raw,&(*x).candidate){if (*x).candidate.entry.sector==item.sector&&(*x).candidate.entry.offset==item.offset{(*x).selected=(*x).candidate;recovered=true;break;}}
+                if !recovered{return error.errors.Corrupt;}
+            }continue;}
+        try checked_name(name);if depth==128{return error.errors.Unsupported;}(*x).parents[depth]=item;depth+=1;
+        try find_path(v,w,x,item.cluster,name,&(*x).selected);item=(*x).selected.entry;
+    }
+    if input[input.len-1]==47&&(item.attributes&16)==0{return error.errors.Unsupported;}try checked_path(input,&(*x).canonical);*out=item;
+}return;}
+unsafe fn path_finish(v:*Volume,result:!void)!void{unsafe{match result{ok=>{},err(e)=>{if e==0x0504_0004||e==0x0504_0005{(*v).failed=1;}},}(*v).busy=0;return result;}}
+pub unsafe fn path_stat(v:*Volume,w:*Scratch,x:*Workspace,input:[]const u8,out:*PathEntry)!void{unsafe{
+    try enter(v,false);let result=stat_inner(v,w,x,input,out);(*v).busy=0;return result;
+}}
+unsafe fn stat_inner(v:*Volume,w:*Scratch,x:*Workspace,input:[]const u8,out:*PathEntry)!void{unsafe{
+    if out==null{return error.errors.InvalidArgument;}var item=EMPTY_ENTRY;try resolve(v,w,x,input,&item);
+    if item.sector==0{var candidate=EMPTY_PATH_ENTRY;candidate.entry=item;candidate.name_length=1;candidate.name[0]=47;*out=candidate;}
+    else{*out=(*x).selected;}
+}return;}
+pub unsafe fn path_list(v:*Volume,w:*Scratch,x:*Workspace,input:[]const u8,index:u64,out:*PathEntry)!bool{unsafe{
+    try enter(v,false);let result=path_list_inner(v,w,x,input,index,out);(*v).busy=0;return result;
+}}
+unsafe fn path_list_inner(v:*Volume,w:*Scratch,x:*Workspace,input:[]const u8,index:u64,out:*PathEntry)!bool{unsafe{
+    if out==null||index>=4096{return error.errors.InvalidArgument;}var directory=EMPTY_ENTRY;try resolve(v,w,x,input,&directory);if (directory.attributes&16)==0{return error.errors.Unsupported;}
+    var raw:u64=0;var found:u64=0;while try scan(v,w,directory.cluster,&raw,&(*x).candidate){if dot_kind(&(*x).candidate.entry)==0{if found==index{*out=(*x).candidate;return true;}found+=1;}}
+    return false;
+}}
+unsafe fn path_file(v:*Volume,w:*Scratch,x:*Workspace,input:[]const u8,item:*DirEntry,writing:bool)!u64{unsafe{
+    try resolve(v,w,x,input,item);if ((*item).attributes&16)!=0{return error.errors.Unsupported;}if writing&&(((*item).attributes&1)!=0||(*v).read_only!=0){return error.errors.ReadOnly;}
+    let count=try chain_length(v,w,(*item).cluster);if count<((*item).size+(*v).spc*512-1)/((*v).spc*512){return error.errors.Corrupt;}return count;
+}}
+pub unsafe fn path_read(v:*Volume,w:*Scratch,x:*Workspace,input:[]const u8,offset:u64,out:[]u8)!usize{unsafe{
+    try enter(v,false);let result=path_read_inner(v,w,x,input,offset,out);(*v).busy=0;return result;
+}}
+unsafe fn path_read_inner(v:*Volume,w:*Scratch,x:*Workspace,input:[]const u8,offset:u64,out:[]u8)!usize{unsafe{
+    if out.len!=0&&out.ptr==null{return error.errors.InvalidArgument;}var item=EMPTY_ENTRY;let count=try path_file(v,w,x,input,&item,false);
+    if offset>=item.size||out.len==0{return 0;}var bytes=out.len;if bytes as u64>item.size-offset{bytes=(item.size-offset) as usize;}
+    try transfer_bytes(v,w,item.cluster,offset,out.ptr,bytes,false,false);return bytes;
+}}
+pub unsafe fn path_write(v:*Volume,w:*Scratch,x:*Workspace,input:[]const u8,offset:u64,data:[]const u8)!usize{unsafe{
+    try enter(v,true);let result=path_write_inner(v,w,x,input,offset,data);match result{ok(n)=>{},err(e)=>{if e==0x0504_0004||e==0x0504_0005{(*v).failed=1;}},}(*v).busy=0;return result;
+}}
+unsafe fn path_write_inner(v:*Volume,w:*Scratch,x:*Workspace,input:[]const u8,offset:u64,data:[]const u8)!usize{unsafe{
+    if offset>0xffff_ffff||data.len as u64>0xffff_ffff-offset||(data.len!=0&&data.ptr==null){return error.errors.InvalidArgument;}
+    var item=EMPTY_ENTRY;let count=try path_file(v,w,x,input,&item,true);if data.len==0{return 0;}
+    let end=offset+data.len as u64;var size=item.size;if end>size{size=end;}try grow(v,w,&item,count,size);try begin_write(v,w);
+    if offset>item.size{try transfer_bytes(v,w,item.cluster,item.size,null,(offset-item.size) as usize,true,true);}
+    try transfer_bytes(v,w,item.cluster,offset,data.ptr as *u8,data.len,true,false);try durable(v);item.size=size;try update(v,w,&item);return data.len;
+}}
+pub unsafe fn path_truncate(v:*Volume,w:*Scratch,x:*Workspace,input:[]const u8,size:u64)!void{unsafe{
+    try enter(v,true);let result=path_truncate_inner(v,w,x,input,size);return path_finish(v,result);
+}}
+unsafe fn path_truncate_inner(v:*Volume,w:*Scratch,x:*Workspace,input:[]const u8,size:u64)!void{unsafe{
+    if size>0xffff_ffff{return error.errors.InvalidArgument;}var item=EMPTY_ENTRY;let count=try path_file(v,w,x,input,&item,true);if size==item.size{return;}
+    if size>item.size{try grow(v,w,&item,count,size);try begin_write(v,w);try transfer_bytes(v,w,item.cluster,item.size,null,(size-item.size) as usize,true,true);try durable(v);item.size=size;try update(v,w,&item);return;}
+    try begin_write(v,w);let wanted=(size+(*v).spc*512-1)/((*v).spc*512);var rest=item.cluster;var last:u64=0;
+    if wanted!=0{last=try nth(v,w,item.cluster,wanted-1);rest=try next(v,w,last);}else{item.cluster=0;}
+    item.size=size;try update(v,w,&item);try durable(v);if last!=0{try fat_put(v,w,last,0x0fff_ffff);}try free_chain(v,w,rest);
+}return;}
+unsafe fn leaf_parent(v:*Volume,w:*Scratch,x:*Workspace,input:[]const u8,parent:*DirEntry,start_out:*usize,end_out:*usize)!void{unsafe{
+    if input.ptr==null||input.len<2||input.len>4096||(input.ptr as u64)>0xffff_ffff_ffff_ffff-input.len as u64||input[0]!=47{return error.errors.InvalidArgument;}
+    var end=input.len;if input[end-1]==47{return error.errors.InvalidArgument;}var start=end;while start>0&&input[start-1]!=47{start-=1;}
+    try checked_name(input[start..end]);try resolve(v,w,x,input[0..start],parent);if ((*parent).attributes&16)==0{return error.errors.Unsupported;}
+    if ((*parent).attributes&1)!=0{return error.errors.ReadOnly;}try checked_path(input,&(*x).canonical);*start_out=start;*end_out=end;
+}return;}
+unsafe fn empty_lookup(v:*Volume,w:*Scratch,x:*Workspace,directory:u64,name:[]const u8)!void{unsafe{
+    let result=find_path(v,w,x,directory,name,&(*x).selected);match result{ok=>{return error.errors.Exists;},err(e)=>{if e!=0x0504_0006{return result;}},}
+}return;}
+unsafe fn choose_alias(v:*Volume,w:*Scratch,x:*Workspace,directory:u64,name:[]const u8)!bool{unsafe{
+    let short=normalize(w,name);match short{ok=>{return false;},err(e)=>{},}
+    var number:u64=1;while number<=4096{
+        var i:usize=0;while i<11{(*w).name[i]=32;i+=1;}(*w).name[0]=70;(*w).name[1]=126;
+        var value=number;i=8;while i>2{i-=1;(*w).name[i]=(48+value%10) as u8;value/=10;}
+        (*w).name[8]=68;(*w).name[9]=65;(*w).name[10]=84;
+        var text:[12]u8=[0;12];i=0;while i<8{text[i]=(*w).name[i];i+=1;}text[8]=46;text[9]=68;text[10]=65;text[11]=84;
+        let lookup=find_path(v,w,x,directory,text[0..12],&(*x).selected);match lookup{ok=>{},err(e)=>{if e==0x0504_0006{return true;}if e==0x0504_0004{return error.errors.Io;}if e==0x0504_0005{return error.errors.Corrupt;}return error.errors.Unsupported;},}number+=1;
+    }return error.errors.NoSpace;
+}}
+unsafe fn prepare_short(w:*Scratch,directory:bool,cluster:u64)void{unsafe{
+    var i:usize=0;while i<32{(*w).entry[i]=0;i+=1;}i=0;while i<11{(*w).entry[i]=(*w).name[i];i+=1;}
+    (*w).entry[11]=0x20;if directory{(*w).entry[11]=16;}
+    put16(&(*w).entry[0],16,0x21);put16(&(*w).entry[0],18,0x21);put16(&(*w).entry[0],24,0x21);
+    put16(&(*w).entry[0],20,cluster>>16);put16(&(*w).entry[0],26,cluster);
+}}
+unsafe fn write_raw(v:*Volume,w:*Scratch,directory:u64,index:u64,bytes:*const u8)!void{unsafe{
+    var item=EMPTY_ENTRY;let exists=try slot_in(v,w,directory,index,&item);if !exists{return error.errors.Corrupt;}var i:usize=0;while i<32{(*w).sector[item.offset as usize+i]=*(bytes+i);i+=1;}try write_sector(v,item.sector,&(*w).sector[0]);
+}return;}
+// Preflight a complete contiguous slot group. Expanding a directory is durable
+// before publishing any child, and an old 00 receives a durable successor first.
+unsafe fn reserve_slots(v:*Volume,w:*Scratch,directory:u64,slots:u64,extra:u64)!u64{unsafe{
+    let count=try chain_length(v,w,directory);let per=(*v).spc*16;var capacity=count*per;if capacity>4096||slots==0||slots>21{return error.errors.Unsupported;}
+    var at:u64=0;var run:u64=0;var start:u64=0;var ended:bool=false;var found:bool=false;var first_end:u64=4096;var item=EMPTY_ENTRY;
+    while at<capacity{if !ended{let exists=try slot_in(v,w,directory,at,&item);if !exists{return error.errors.Corrupt;}if item.name[0]==0{ended=true;first_end=at;}}
+        if ended||item.name[0]==0xe5{if run==0{start=at;}run+=1;if run==slots{found=true;break;}}else{run=0;}at+=1;
+    }
+    if !found{if run==0{start=capacity;}ended=true;if first_end==4096{first_end=capacity;}}
+    var need=start+slots;if ended{need+=1;}if need>4096{return error.errors.NoSpace;}
+    var growth:u64=0;if need>capacity{growth=(need-capacity+per-1)/per;}try enough(v,w,growth+extra);try begin_write(v,w);
+    var last=try nth(v,w,directory,count-1);var n:u64=0;while n<growth{let fresh=try allocate(v,w);try durable(v);try fat_put(v,w,last,fresh);last=fresh;n+=1;}
+    try durable(v);
+    if ended{let exists=try slot_in(v,w,directory,start+slots,&item);if !exists{return error.errors.Corrupt;}(*w).sector[item.offset as usize]=0;try write_sector(v,item.sector,&(*w).sector[0]);try durable(v);
+        // Bytes after an old end marker are unspecified. Keep that marker in
+        // place while making all newly exposed intermediate slots non-live.
+        var clear=first_end+1;while clear<start+slots{let present=try slot_in(v,w,directory,clear,&item);if !present{return error.errors.Corrupt;}(*w).sector[item.offset as usize]=0xe5;try write_sector(v,item.sector,&(*w).sector[0]);clear+=1;}try durable(v);
+    }
+    return start;
+}}
+unsafe fn initialize_directory(v:*Volume,w:*Scratch,directory:u64,parent:u64)!void{unsafe{
+    let lba=try cluster_sector(v,directory);var i:usize=0;while i<512{(*w).sector[i]=0;i+=1;}
+    i=0;while i<11{(*w).sector[i]=32;(*w).sector[32+i]=32;i+=1;}(*w).sector[0]=46;(*w).sector[32]=46;(*w).sector[33]=46;(*w).sector[11]=16;(*w).sector[43]=16;
+    put16(&(*w).sector[0],20,directory>>16);put16(&(*w).sector[0],26,directory);
+    var up=parent;if parent==(*v).root{up=0;}put16(&(*w).sector[0],52,up>>16);put16(&(*w).sector[0],58,up);
+    try write_sector(v,lba,&(*w).sector[0]);try durable(v);
+}return;}
+pub unsafe fn path_create(v:*Volume,w:*Scratch,x:*Workspace,input:[]const u8)!void{unsafe{
+    try enter(v,true);let result=path_create_inner(v,w,x,input,false);return path_finish(v,result);
+}}
+pub unsafe fn path_mkdir(v:*Volume,w:*Scratch,x:*Workspace,input:[]const u8)!void{unsafe{
+    try enter(v,true);let result=path_create_inner(v,w,x,input,true);return path_finish(v,result);
+}}
+unsafe fn path_create_inner(v:*Volume,w:*Scratch,x:*Workspace,input:[]const u8,directory:bool)!void{unsafe{
+    var parent=EMPTY_ENTRY;var start:usize=0;var end:usize=0;try leaf_parent(v,w,x,input,&parent,&start,&end);let name=input[start..end];
+    try empty_lookup(v,w,x,parent.cluster,name);let long=try choose_alias(v,w,x,parent.cluster,name);
+    if (*v).read_only!=0{return error.errors.ReadOnly;}prepare_short(w,directory,0);
+    if long{try lfn.encode(name,(*w).entry[0..32],&(*w).group);}else{(*w).group.count=1;var i:usize=0;while i<32{(*w).group.bytes[i]=(*w).entry[i];i+=1;}}
+    var extra:u64=0;if directory{extra=1;}let first=try reserve_slots(v,w,parent.cluster,(*w).group.count as u64,extra);
+    if directory{let cluster=try allocate(v,w);try initialize_directory(v,w,cluster,parent.cluster);let off=((*w).group.count-1)*32;put16(&(*w).group.bytes[0],off+20,cluster>>16);put16(&(*w).group.bytes[0],off+26,cluster);}
+    var n:usize=0;while n+1<(*w).group.count{try write_raw(v,w,parent.cluster,first+n as u64,&(*w).group.bytes[n*32]);n+=1;}
+    // LFN slots cannot become reachable through a new short entry until their
+    // complete bytes and every allocation/link are acknowledged durable.
+    try durable(v);try write_raw(v,w,parent.cluster,first+n as u64,&(*w).group.bytes[n*32]);try durable(v);
+}return;}
+pub unsafe fn path_remove(v:*Volume,w:*Scratch,x:*Workspace,input:[]const u8)!void{unsafe{
+    try enter(v,true);let result=path_remove_inner(v,w,x,input);return path_finish(v,result);
+}}
+unsafe fn path_remove_inner(v:*Volume,w:*Scratch,x:*Workspace,input:[]const u8)!void{unsafe{
+    var parent=EMPTY_ENTRY;var start:usize=0;var end:usize=0;try leaf_parent(v,w,x,input,&parent,&start,&end);
+    try find_path(v,w,x,parent.cluster,input[start..end],&(*x).selected);let item=(*x).selected.entry;let first=(*x).selected.first_index;let group=(*x).selected.group_count;
+    if (item.attributes&1)!=0{return error.errors.ReadOnly;}if (item.attributes&16)!=0{var raw:u64=0;while try scan(v,w,item.cluster,&raw,&(*x).candidate){if dot_kind(&(*x).candidate.entry)==0{return error.errors.Unsupported;}}}
+    if (*v).read_only!=0{return error.errors.ReadOnly;}try begin_write(v,w);var n:u64=0;var slot_item=EMPTY_ENTRY;
+    // First remove the short entry, then the now-unreachable LFN slots. A stop
+    // can leave orphan names on a dirty volume, never a live freed cluster.
+    let exists=try slot_in(v,w,parent.cluster,first+group-1,&slot_item);if !exists{return error.errors.Corrupt;}(*w).sector[slot_item.offset as usize]=0xe5;try write_sector(v,slot_item.sector,&(*w).sector[0]);try durable(v);
+    while n+1<group{let present=try slot_in(v,w,parent.cluster,first+n,&slot_item);if !present{return error.errors.Corrupt;}(*w).sector[slot_item.offset as usize]=0xe5;try write_sector(v,slot_item.sector,&(*w).sector[0]);n+=1;}
+    try durable(v);try free_chain(v,w,item.cluster);
+}return;}
+
+unsafe fn root_namespace_free(v:*Volume,w:*Scratch,name:[]const u8)!void{unsafe{
+    var raw:u64=0;var record=EMPTY_PATH_ENTRY;while try scan(v,w,(*v).root,&raw,&record){if alias_matches(&record.entry,name)||(record.has_lfn==1&&same(record.name[0..record.name_length],name)){return error.errors.Exists;}}
+    if (*v).read_only!=0{return error.errors.ReadOnly;}
+}return;}
+
+unsafe fn checked_path(input:[]const u8,out:*path.Path)!void{unsafe{
+    let canonical=path.normalize("/",input,out);match canonical{ok=>{return;},err(e)=>{return error.errors.InvalidArgument;},}
+}}

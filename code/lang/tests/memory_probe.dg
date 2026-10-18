@@ -1,0 +1,92 @@
+module memory_probe;
+
+struct Natural { a:u8, b:u32, c:i16, d:[3]u8 }
+packed struct Packed { a:u8, b:i32, c:u16 }
+align(16) struct Aligned { a:u8, b:u64 }
+
+export("dg_layout") fn layout(n:u64)u64 {
+    if n==0{return sizeof(Natural);} if n==1{return alignof(Natural);}
+    if n==2{return offsetof(Natural,b);} if n==3{return offsetof(Natural,c);}
+    if n==4{return offsetof(Natural,d);} if n==5{return sizeof(Packed);}
+    if n==6{return alignof(Packed);} if n==7{return offsetof(Packed,b);}
+    if n==8{return offsetof(Packed,c);} if n==9{return sizeof(Aligned);}
+    return alignof(Aligned);
+}
+
+fn next(p:*u64)u64 {unsafe{*p+=1;return *p;}}
+fn index(p:*u64)usize {unsafe{let old=*p;*p+=1;return old;}}
+fn rhs(p:*u64)u64 {unsafe{let old=*p;*p+=1;return old+6;}}
+fn mark(p:*u64,v:u64)u64 {unsafe{*p=*p*10+v;return v;}}
+fn signed8(a:i8)i8{return a;}
+fn signed16(a:i16)i16{return a;}
+fn unsigned32(a:u32)u32{return a;}
+export("dg_call_narrow") fn call_narrow(a:i8,b:i16,c:u32)i64 {
+    return (signed8(a)as i64)+(signed16(b)as i64)+(unsigned32(c)as i64);
+}
+
+export("dg_local_memory") fn local_memory()u64 {
+    var count:u64=0;
+    var a:[3]u64=[10,20,30];
+    unsafe {a[index(&count)]+=rhs(&count);}
+    return count*1000+a[0]*10+a[1];
+}
+export("dg_repeat") fn repeat()u64 {
+    var count:u64=0;
+    unsafe{let a:[3]u64=[next(&count);3];return count*100+a[0]+a[1]+a[2];}
+}
+export("dg_temporary_index") fn temporary_index()u64 {
+    var count:u64=0;
+    unsafe {return ([10,20,30][next(&count)] as u64)+[11,12,13].len+count*100;}
+}
+export("dg_len_effect") fn len_effect()u64 {
+    var count:u64=0;
+    unsafe {let length=[next(&count);2].len+1;return length+count*100;}
+}
+export("dg_nested_bounds") fn nested_bounds(n:usize)u64 {
+    let a:[2][2]u64=[[1,2],[3,4]];return a[n].len+0;
+}
+export("dg_struct_order") fn struct_order()u64 {
+    var order:u64=0;
+    unsafe {
+        let value=Natural{b:mark(&order,2)as u32,a:mark(&order,1)as u8,
+                          c:mark(&order,3)as i16,d:[4,5,6]};
+        return order*1000+(value.a as u64)*100+(value.b as u64)*10+(value.c as u64);
+    }
+}
+export("dg_aggregate") fn aggregate()u64 {
+    var original=Natural{a:7,b:40,c:-9,d:[1,2,3]};
+    var copy=original;
+    copy.b+=2; copy.d[1]=8;
+    var array:[2]Natural=[original,copy];
+    array[0]=array[1];
+    unsafe{let p=&copy;(*p).c=-11;}
+    if copy.c != -11{return 999;}
+    let aligned=Aligned{a:1,b:2};
+    unsafe{if ((&aligned as usize)&15)!=0{return 999;}}
+    return array[0].b as u64 + (array[0].d[1] as u64)*100 + (original.d[1] as u64)*1000;
+}
+export("dg_alias") fn alias()i64 {
+    var a:[3]i16=[-5,-6,-7];
+    unsafe {
+        let p=&a[0]; *(p+1)=-1234; *(p+2)-=1;
+        let q=(p+2)-1; *q+=1;
+        return (a[1]as i64)+(a[2]as i64);
+    }
+}
+export("dg_packed") fn packed_memory(p:*Packed)i64 {
+    unsafe {(*p).b+=1;return ((*p).b as i64)+((*p).c as i64);}
+}
+export("dg_pointer_index") fn pointer_index(p:*i32,n:usize)i64 {
+    unsafe{p[n]+=2;return p[n]as i64;}
+}
+export("dg_overlap") fn overlap(p:*u8)void {
+    unsafe{let first=p as *[4]u8;let second=(p+1)as *[4]u8;*second=*first;}
+}
+export("dg_overlap_reverse") fn overlap_reverse(p:*u8)void {
+    unsafe{let first=p as *[4]u8;let second=(p+1)as *[4]u8;*first=*second;}
+}
+export("dg_null") fn null_pointer(p:*u8)bool {return p==null;}
+export("dg_bounds") fn array_bounds(n:usize)u64 {let a:[3]u64=[1,2,3];return a[n];}
+export("dg_address_order") fn address_order(n:usize,d:u64)u64 {
+    var a:[2]u64=[10,20];a[n]=1/d;return a[0];
+}

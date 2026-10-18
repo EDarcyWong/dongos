@@ -1,0 +1,55 @@
+// Fixed four-window desktop layout. Candidate-only changes make every failure
+// atomic; no buffer ownership, presentation, or application payload is touched.
+module desktop.layout;
+import desktop.windows as windows;
+import gfx.geometry as geo;
+pub error InvalidLayout=0x0725_0001;
+pub error InvalidMetrics=0x0725_0002;
+pub error SerialExhausted=0x0725_0003;
+const MAX:u64=0xffff_ffff_ffff_ffff;
+fn scale(q:u64)bool { return q==256 || q==320 || q==384 || q==448 || q==512; }
+fn px(value:i64,q:u64)i64 { return (value*q as i64+128)/256; }
+fn minimum(a:i64,b:i64)i64 { if a<b { return a; }return b; }
+fn clamp(value:i64,high:i64)i64 { if value<0 { return 0; }if value>high { return high; }return value; }
+
+pub unsafe fn rescale(state:*windows.State,old_q8:u64,new_q8:u64)!void {
+    unsafe {
+        if state==null || !scale(old_q8) || !scale(new_q8) { return error.InvalidLayout; }
+        var candidate=*state;var prior=geo.EMPTY_DAMAGE;
+        // Public operation validates the entire original state and only clears
+        // this candidate's pending damage. It cannot mutate the caller on error.
+        try windows.take_damage(&candidate,&prior);
+        if candidate.count!=4 { return error.InvalidLayout; }
+        var i:usize=0;while i<16 {
+            if i<4 { if candidate.slots[i].status!=windows.LIVE { return error.InvalidLayout; } }
+            else { if candidate.slots[i].status==windows.LIVE || candidate.slots[i].status==windows.CLOSING { return error.InvalidLayout; } }
+            i+=1;
+        }
+        let sw=candidate.screen.right;let sh=candidate.screen.bottom;
+        let margin=px(110,new_q8);let border=px(24,new_q8);
+        if sw<=margin { return error.InvalidMetrics; }
+        i=0;while i<4 {
+            let slot=&candidate.slots[i];if (*slot).serial==MAX { return error.SerialExhausted; }
+            var width=(sw-margin)/2;width=minimum(width,px(720,new_q8));
+            if i==2 { width=minimum(width,px(640,new_q8)); }
+            if width<32 { return error.InvalidMetrics; }
+            var height=px(260,new_q8);if sh<850 { height=px(180,new_q8); }
+            let cache_limit=300000/(width+border)-border;
+            height=minimum(height,cache_limit);height=minimum(height,sh-px(142,new_q8));
+            if height<24 { return error.InvalidMetrics; }
+            let x=clamp((*slot).rect.left*new_q8 as i64/old_q8 as i64,sw-width);
+            let y=clamp((*slot).rect.top*new_q8 as i64/old_q8 as i64,sh-height-px(90,new_q8));
+            (*slot).rect=geo.Rect { left:x,top:y,right:x+width,bottom:y+height };
+            (*slot).requested=(*slot).rect;(*slot).min_width=minimum(200,width);(*slot).min_height=minimum(120,height);
+            (*slot).serial+=1;(*slot).acknowledged=(*slot).serial;i+=1;
+        }
+        candidate.grab=0;candidate.mode=0;candidate.buttons=0;
+        candidate.start_x=0;candidate.start_y=0;candidate.start_rect=geo.EMPTY;
+        // Validate all resulting geometry, focus/order and lifecycle fields
+        // before publishing; the final damage transaction is exactly full-screen.
+        try windows.take_damage(&candidate,&prior);
+        try geo.damage_add(&candidate.damage,&candidate.screen);
+        candidate.damage.full=true;
+        *state=candidate;
+    }return;
+}

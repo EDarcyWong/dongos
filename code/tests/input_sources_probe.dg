@@ -1,0 +1,14 @@
+module input_sources_probe;
+import input.sources as mix;import input.usb_rpc as rpc;import input.events as ev;import lib.abi as abi;
+var MIX:mix.State=mix.EMPTY;var RPC:rpc.State=rpc.EMPTY;var QUEUE:ev.Queue=ev.EMPTY_QUEUE;
+export("ip_reset") fn reset()u64{unsafe{MIX=mix.EMPTY;RPC=rpc.EMPTY;QUEUE=ev.EMPTY_QUEUE;match rpc.initialize(&RPC,7){ok=>{return 0;},err(e)=>{return e;},}}}
+export("ip_key") fn key(source:usize,code:u64,value:i64)u64{unsafe{let e=ev.Event{kind:ev.KEY,code:code,a:value,b:0};match mix.event(&MIX,source,&e,&QUEUE){ok=>{return 0;},err(e)=>{return e;},}}}
+export("ip_lost") fn lost(source:usize)u64{unsafe{match mix.lost(&MIX,source,&QUEUE){ok=>{return 0;},err(e)=>{return e;},}}}
+export("ip_report") fn report(peer:u64,session:u64,message:*const abi.Message,out:*abi.Message)u64{unsafe{match rpc.apply(&RPC,&MIX,peer,session,message,out,&QUEUE){ok=>{return 0;},err(e)=>{return e;},}}}
+export("ip_pop") fn pop(out:*ev.Event)u64{unsafe{match ev.pop(&QUEUE,out){ok(present)=>{return present as u64;},err(e)=>{return e;},}}}
+export("ip_size") fn size(which:u64)usize{if which==0{return sizeof(mix.State);}if which==1{return sizeof(rpc.State);}return sizeof(ev.Queue);}
+export("ip_pointer") fn pointer(which:u64)u64{unsafe{if which==0{return &MIX as u64;}if which==1{return &RPC as u64;}return &QUEUE as u64;}}
+export("ip_bits") fn bits(source:usize,word:usize)u64{unsafe{if source<4{return MIX.keys[source].down[word];}return MIX.combined.down[word];}}
+export("ip_mods") fn mods()u64{unsafe{return MIX.combined.modifiers;}}
+export("ip_fill") fn fill()void{unsafe{QUEUE=ev.EMPTY_QUEUE;var i:usize=0;while i<64{ev.append(&QUEUE,ev.RELATIVE,0,1,1);i+=1;}}return;}
+export("ip_departed") fn departed(through:u64)u64{unsafe{match rpc.departed(&RPC,&MIX,through,&QUEUE){ok=>{return 0;},err(e)=>{return e;},}}}

@@ -1,0 +1,16 @@
+module nvme_runtime_probe;
+import drivers.nvme as nv;
+import drivers.virtio_pci as vp;
+export("nr_reset") fn reset(s:*nv.State)void {unsafe {*s=nv.EMPTY_STATE;}return;}
+export("nr_sizes") fn sizes(out:*u64)void {unsafe {out[0]=sizeof(nv.State) as u64;out[1]=sizeof(nv.Ops) as u64;out[2]=sizeof(nv.Info) as u64;}return;}
+export("nr_init") fn initialize(s:*nv.State,b:*const vp.Bar,o:*const nv.Ops,c:u64)u64 {unsafe {
+    match nv.initialize(s,b,o,c) {ok=>{return 0;},err(e)=>{return e;},}
+}}
+export("nr_read") fn read(s:*nv.State,lba:u64,n:usize,out:*u8)u64 {unsafe {
+    match nv.read_sectors(s,lba,n,out) {ok=>{return 0;},err(e)=>{return e;},}
+}}
+export("nr_write") fn write(s:*nv.State,lba:u64,n:usize,input:*const u8)u64 {unsafe {
+    match nv.write_sectors(s,lba,n,input) {ok=>{return 0;},err(e)=>{return e;},}
+}}
+export("nr_flush") fn flush(s:*nv.State)u64 {unsafe {match nv.flush(s) {ok=>{return 0;},err(e)=>{return e;},}}}
+export("nr_mutant_hits") fn mutant_hits()u64 {return 0;}

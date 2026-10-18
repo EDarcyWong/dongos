@@ -1,0 +1,77 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "id": "u0",
+      "signed": false,
+      "value": "0",
+      "hex": "00"
+    },
+    {
+      "id": "u127",
+      "signed": false,
+      "value": "127",
+      "hex": "7f"
+    },
+    {
+      "id": "u128",
+      "signed": false,
+      "value": "128",
+      "hex": "8001"
+    },
+    {
+      "id": "u624485",
+      "signed": false,
+      "value": "624485",
+      "hex": "e58e26"
+    },
+    {
+      "id": "u64_max",
+      "signed": false,
+      "value": "18446744073709551615",
+      "hex": "ffffffffffffffffff01"
+    },
+    {
+      "id": "s0",
+      "signed": true,
+      "value": "0",
+      "hex": "00"
+    },
+    {
+      "id": "s_minus1",
+      "signed": true,
+      "value": "-1",
+      "hex": "7f"
+    },
+    {
+      "id": "s63",
+      "signed": true,
+      "value": "63",
+      "hex": "3f"
+    },
+    {
+      "id": "s64",
+      "signed": true,
+      "value": "64",
+      "hex": "c000"
+    },
+    {
+      "id": "s_minus64",
+      "signed": true,
+      "value": "-64",
+      "hex": "40"
+    },
+    {
+      "id": "s_minus65",
+      "signed": true,
+      "value": "-65",
+      "hex": "bf7f"
+    },
+    {
+      "id": "s_minus123456",
+      "signed": true,
+      "value": "-123456",
+      "hex": "c0bb78"
+    }
+  ]
+}

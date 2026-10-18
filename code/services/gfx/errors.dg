@@ -1,0 +1,11 @@
+module gfx.errors;
+
+pub error InvalidRect = 0x0701_0001;
+pub error InvalidSurface = 0x0701_0002;
+pub error Aliased = 0x0701_0003;
+pub error InvalidDamage = 0x0701_0004;
+pub error Capacity = 0x0701_0005;
+pub error InvalidAtlas = 0x0701_0006;
+pub error InvalidText = 0x0701_0007;
+pub error MissingGlyph = 0x0701_0008;
+

@@ -1,0 +1,207 @@
+// Bounded BSP priority scheduler. Every mutating call requires local IRQs off.
+// No heap, hardware access, callbacks, or references outside this object.
+module sched.core;
+
+pub const LIMIT: usize = 8;
+pub const UNUSED: u64 = 0;
+pub const READY: u64 = 1;
+pub const RUNNING: u64 = 2;
+pub const BLOCKED: u64 = 3;
+pub const NONE: u64 = 8;
+pub error InvalidArgument = 0x0304_0001;
+pub error InvalidState = 0x0304_0002;
+pub error WouldBlock = 0x0304_0003;
+pub error Overflow = 0x0304_0004;
+
+pub struct Thread {
+    pub state: u64, pub priority: u64, pub ticks: u64,
+    pub switches: u64, pub frame: u64, pub wait_next: u64,
+}
+pub struct Engine {
+    pub current: u64, pub ticks: u64, pub switches: u64, pub quantum: u64,
+    pub remaining: u64, pub preempt_depth: u64, pub pending: u64, pub count: u64,
+    pub threads: [8]Thread,
+}
+pub struct WaitQueue { pub head: u64, pub tail: u64, pub generation: u64 }
+pub const EMPTY_THREAD: Thread = Thread { state: 0, priority: 0, ticks: 0, switches: 0, frame: 0, wait_next: NONE };
+pub const EMPTY_ENGINE: Engine = Engine {
+    current: NONE, ticks: 0, switches: 0, quantum: 0, remaining: 0,
+    preempt_depth: 0, pending: 0, count: 0, threads: [EMPTY_THREAD; 8],
+};
+pub const EMPTY_WAIT: WaitQueue = WaitQueue { head: NONE, tail: NONE, generation: 0 };
+
+pub unsafe fn init(engine: *Engine, quantum: u64) !void {
+    if quantum == 0 || quantum > 1024 { return error.InvalidArgument; }
+    unsafe {
+        *engine = EMPTY_ENGINE;
+        (*engine).quantum = quantum;
+        (*engine).remaining = quantum;
+    }
+    return;
+}
+
+pub unsafe fn add(engine: *Engine, id: u64, priority: u64, frame: u64) !void {
+    if id >= 8 || priority >= 32 || frame == 0 || (frame & 7) != 0 { return error.InvalidArgument; }
+    unsafe {
+        if (*engine).quantum == 0 || (*engine).threads[id as usize].state != UNUSED { return error.InvalidState; }
+        (*engine).threads[id as usize] = Thread { state: READY, priority: priority, ticks: 0, switches: 0, frame: frame, wait_next: NONE };
+        (*engine).count += 1;
+        if (*engine).current == NONE {
+            (*engine).current = id;
+            (*engine).threads[id as usize].state = RUNNING;
+        }
+    }
+    return;
+}
+
+// Highest priority wins (zero is highest). Scan after current for FIFO rotation
+// among equal priorities; blocked and unallocated slots are never candidates.
+unsafe fn choose(engine: *const Engine) u64 {
+    unsafe {
+        var best: u64 = NONE;
+        var priority: u64 = 32;
+        var distance: u64 = 1;
+        while distance <= 8 {
+            let id = ((*engine).current + distance) % 8;
+            let item = (*engine).threads[id as usize];
+            if (item.state == READY || item.state == RUNNING) && item.priority < priority {
+                best = id;
+                priority = item.priority;
+            }
+            distance += 1;
+        }
+        return best;
+    }
+}
+
+// Save the current interrupt frame before choosing the next context. The IRQ
+// assembly owns actual xstate/GPR preservation and validates the returned frame.
+pub unsafe fn tick(engine: *Engine, frame: u64) !u64 {
+    if frame == 0 || (frame & 7) != 0 { return error.InvalidArgument; }
+    unsafe {
+        let current = (*engine).current;
+        if current >= 8 || (*engine).quantum == 0 || (*engine).remaining == 0
+            || ((*engine).threads[current as usize].state != RUNNING && (*engine).threads[current as usize].state != BLOCKED) {
+            return error.InvalidState;
+        }
+        if (*engine).ticks == 0xffff_ffff_ffff_ffff || (*engine).threads[current as usize].ticks == 0xffff_ffff_ffff_ffff {
+            return error.Overflow;
+        }
+        let selected = choose(engine);
+        if selected == NONE { return error.WouldBlock; }
+        let switches = (*engine).preempt_depth == 0 && selected != current
+            && ((*engine).remaining == 1 || (*engine).pending != 0
+                || (*engine).threads[current as usize].state == BLOCKED
+                || (*engine).threads[selected as usize].priority < (*engine).threads[current as usize].priority);
+        if switches && ((*engine).switches == 0xffff_ffff_ffff_ffff
+            || (*engine).threads[selected as usize].switches == 0xffff_ffff_ffff_ffff) { return error.Overflow; }
+        (*engine).threads[current as usize].frame = frame;
+        (*engine).ticks += 1;
+        (*engine).threads[current as usize].ticks += 1;
+        if (*engine).remaining > 1 { (*engine).remaining -= 1; }
+        else { (*engine).remaining = 0; }
+        if (*engine).preempt_depth != 0 {
+            (*engine).pending = 1;
+            if (*engine).remaining == 0 { (*engine).remaining = 1; }
+            return current;
+        }
+        let next_priority = (*engine).threads[selected as usize].priority;
+        let current_priority = (*engine).threads[current as usize].priority;
+        if (*engine).threads[current as usize].state == RUNNING && (*engine).remaining != 0
+            && next_priority >= current_priority && (*engine).pending == 0 { return current; }
+        if (*engine).threads[current as usize].state == RUNNING { (*engine).threads[current as usize].state = READY; }
+        (*engine).current = selected;
+        (*engine).threads[selected as usize].state = RUNNING;
+        (*engine).remaining = (*engine).quantum;
+        (*engine).pending = 0;
+        if selected != current {
+            (*engine).switches += 1;
+            (*engine).threads[selected as usize].switches += 1;
+        }
+        return selected;
+    }
+}
+
+pub unsafe fn preempt_disable(engine: *Engine) !void {
+    unsafe {
+        if (*engine).preempt_depth == 0xffff_ffff_ffff_ffff { return error.Overflow; }
+        (*engine).preempt_depth += 1;
+    }
+    return;
+}
+pub unsafe fn preempt_enable(engine: *Engine) !void {
+    unsafe {
+        if (*engine).preempt_depth == 0 { return error.InvalidState; }
+        (*engine).preempt_depth -= 1;
+        // A pending request is honored by the next real IRQ; this API cannot
+        // synchronously change stacks while its caller still holds C locals.
+    }
+    return;
+}
+
+unsafe fn valid_queue(engine: *const Engine, queue: *const WaitQueue) bool {
+    unsafe {
+        if (*queue).head == NONE { return (*queue).tail == NONE; }
+        if (*queue).head >= 8 || (*queue).tail >= 8 { return false; }
+        var next = (*queue).head;
+        var visited: u64 = 0;
+        var last: u64 = NONE;
+        while next != NONE {
+            if next >= 8 || (visited & (1 << next)) != 0 { return false; }
+            if (*engine).threads[next as usize].state != BLOCKED { return false; }
+            visited |= 1 << next;
+            last = next;
+            next = (*engine).threads[next as usize].wait_next;
+        }
+        return last == (*queue).tail;
+    }
+}
+
+// The caller checks its predicate and takes this generation snapshot under the
+// same IRQ-disabled critical section. A changed generation refuses the sleep.
+pub unsafe fn wait(engine: *Engine, queue: *WaitQueue, observed: u64) !void {
+    unsafe {
+        let current = (*engine).current;
+        if current >= 8 || (*engine).preempt_depth != 0 || (*queue).generation != observed
+            || (*engine).threads[current as usize].state != RUNNING { return error.InvalidState; }
+        var other: u64 = NONE;
+        var id: usize = 0;
+        while id < 8 {
+            if id as u64 != current && (*engine).threads[id].state == READY { other = id as u64; }
+            id += 1;
+        }
+        if other == NONE { return error.WouldBlock; }
+        if !valid_queue(engine, queue) { return error.InvalidState; }
+        (*engine).threads[current as usize].state = BLOCKED;
+        (*engine).threads[current as usize].wait_next = NONE;
+        if (*queue).tail == NONE { (*queue).head = current; }
+        else { (*engine).threads[(*queue).tail as usize].wait_next = current; }
+        (*queue).tail = current;
+        (*engine).pending = 1;
+        (*engine).remaining = 1;
+    }
+    return;
+}
+
+pub unsafe fn wake_one(engine: *Engine, queue: *WaitQueue) !u64 {
+    unsafe {
+        if (*queue).generation == 0xffff_ffff_ffff_ffff { return error.Overflow; }
+        if !valid_queue(engine, queue) { return error.InvalidState; }
+        let first = (*queue).head;
+        if first == NONE {
+            if (*queue).tail != NONE { return error.InvalidState; }
+            (*queue).generation += 1;
+            return NONE;
+        }
+        if first >= 8 || (*queue).tail >= 8 || (*engine).threads[first as usize].state != BLOCKED { return error.InvalidState; }
+        let next = (*engine).threads[first as usize].wait_next;
+        if next > NONE || (next == NONE && (*queue).tail != first) { return error.InvalidState; }
+        (*queue).head = next;
+        if next == NONE { (*queue).tail = NONE; }
+        (*queue).generation += 1;
+        (*engine).threads[first as usize].wait_next = NONE;
+        (*engine).threads[first as usize].state = READY;
+        (*engine).pending = 1;
+        return first;
+    }
+}

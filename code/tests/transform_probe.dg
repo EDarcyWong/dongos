@@ -1,0 +1,10 @@
+module transform_probe;
+import desktop.transform as transform;
+import gfx.geometry as geo;
+import gfx.raster as raster;
+export("transform_sizes") fn sizes(out:*u64)void {
+    unsafe { out[0]=sizeof(raster.Surface) as u64;out[1]=sizeof(geo.Rect) as u64; }return;
+}
+export("transform_scaled") fn scaled(dst:*raster.Surface,src:*const raster.Surface,target:*const geo.Rect,clip:*const geo.Rect,opacity:u64)u64 {
+    unsafe { match transform.scaled(dst,src,target,clip,opacity) { ok=>{return 0;},err(code)=>{return code;}, } }
+}

@@ -1,0 +1,6 @@
+module service_launch_trace;
+pub unsafe extern "sysv64" fn launch_adapter_event(op:u64,slot:u64,cfg:u64,generation:u64,argument:u64)u64;
+
+pub const SERVICE_START:u64=6;
+pub const SERVICE_STOP:u64=8;
+pub var EVENTS:u64=0;pub unsafe fn event(kind:u64,cfg:u64,generation:u64,detail:u64)void{unsafe{EVENTS+=1;}return;}

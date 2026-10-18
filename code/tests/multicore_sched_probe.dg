@@ -1,0 +1,12 @@
+module multicore_sched_probe;
+import sched.multicore as s;
+export("multi_init") fn init(e:*s.Engine,mask:u64)u64{unsafe{match s.initialize(e,mask){ok=>{return 0;},err(code)=>{return code;},}}}
+export("multi_audit") fn audit(e:*const s.Engine)u64{unsafe{match s.audit(e){ok=>{return 0;},err(code)=>{return code;},}}}
+export("multi_admit") fn admit(e:*s.Engine,id:usize,p:u64,affinity:u64,frame:u64,out:*u64)u64{unsafe{match s.admit(e,id,p,affinity,frame,out){ok=>{return 0;},err(code)=>{return code;},}}}
+export("multi_acquire") fn acquire(e:*s.Engine,cpu:usize,out:*s.Dispatch,found:*u64)u64{unsafe{match s.acquire(e,cpu,out){ok(value)=>{*found=value as u64;return 0;},err(code)=>{return code;},}}}
+export("multi_release") fn release(e:*s.Engine,cpu:usize,t:u64,state:u64,frame:u64)u64{unsafe{match s.release(e,cpu,t,state,frame){ok=>{return 0;},err(code)=>{return code;},}}}
+export("multi_wake") fn wake(e:*s.Engine,t:u64)u64{unsafe{match s.wake(e,t){ok=>{return 0;},err(code)=>{return code;},}}}
+export("multi_affinity") fn affinity(e:*s.Engine,t:u64,mask:u64)u64{unsafe{match s.set_affinity(e,t,mask){ok=>{return 0;},err(code)=>{return code;},}}}
+export("multi_priority") fn priority(e:*s.Engine,t:u64,p:u64)u64{unsafe{match s.set_priority(e,t,p){ok=>{return 0;},err(code)=>{return code;},}}}
+export("multi_remove") fn remove(e:*s.Engine,t:u64)u64{unsafe{match s.remove(e,t){ok=>{return 0;},err(code)=>{return code;},}}}
+export("multi_balance") fn balance(e:*s.Engine,src:usize,dst:usize,out:*s.Move,found:*u64)u64{unsafe{match s.rebalance(e,src,dst,out){ok(value)=>{*found=value as u64;return 0;},err(code)=>{return code;},}}}

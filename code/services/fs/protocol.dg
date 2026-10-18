@@ -1,0 +1,49 @@
+// Every IPC message is64B; file/block bytes use an authorized shared channel.
+module fs.protocol;
+pub const READY: u64 = 1;
+pub const READ: u64 = 2;
+pub const WRITE: u64 = 3;
+pub const FLUSH: u64 = 4;
+pub const CREATE: u64 = 5;
+pub const REMOVE: u64 = 6;
+pub const LIST: u64 = 7;
+pub const TRUNCATE: u64 = 8;
+// Request: op,offset-or-lba,count-or-size,nameBytes,dataOffset,0,0,0.
+// Reply: status,result,capacity,readonly,completed,0,0,0.
+pub const CHANNEL_BYTES: u64 = 65536;
+pub const NAME_BYTES: usize = 16;
+// Version 2 paths remain raw until the filesystem walks every component.
+pub const VERSION:u64=2;
+pub const PATH_STAT:u64=0x100;
+pub const PATH_LIST:u64=0x101;
+pub const PATH_READ:u64=0x102;
+pub const PATH_WRITE:u64=0x103;
+pub const PATH_CREATE:u64=0x104;
+pub const PATH_MKDIR:u64=0x105;
+pub const PATH_REMOVE:u64=0x106;
+pub const PATH_TRUNCATE:u64=0x107;
+pub const PATH_APPEND:u64=0x108;
+pub const PATH_BYTES:u64=4096;
+pub const PATH_DATA:u64=4096;
+pub const PATH_PAYLOAD:u64=61440;
+pub const PATH_RECORD_PREFIX:u64=80;
+pub const PATH_RECORD_MAX:u64=1100;
+// Caller-bound file grants. Request: op,handle,offset,count,rights-or-list-
+// generation,pathBytes,version=3,reserved=0. Path starts at 0; data at 4096.
+pub const HANDLE_VERSION:u64=3;
+pub const H_ROOT:u64=0x200;
+pub const H_OPEN:u64=0x201;
+pub const H_DUP:u64=0x202;
+pub const H_CLOSE:u64=0x203;
+pub const H_STAT:u64=0x204;
+pub const H_LIST:u64=0x205;
+pub const H_READ:u64=0x206;
+pub const H_WRITE:u64=0x207;
+pub const H_APPEND:u64=0x208;
+pub const H_TRUNCATE:u64=0x209;
+pub const H_REMOVE:u64=0x20a;
+pub const H_CREATE:u64=0x20b;
+pub const H_MKDIR:u64=0x20c;
+pub const H_SYNC:u64=0x20d;
+pub const H_SCOPE:u64=0x20e;
+pub const H_SCOPE_SYNC:u64=0x20f;

@@ -1,0 +1,226 @@
+// Real bounded i8042 transport in a separate CPL3 process. Only this process
+// holds the port capability; packet decoding and key state stay in userspace.
+module drivers.input_service;
+import lib.sys as sys;
+import input.events as events;
+import input.ps2 as ps2;
+import drivers.tablet_service as tablet;
+import lib.device as device;
+import lib.device_abi as device_abi;
+import input.console as console;
+import input.sources as sources;
+import input.usb_rpc as usb_rpc;
+pub var TABLET:bool=false;
+pub var INTERRUPTS:bool=false;
+pub var PS2_ACTIVE:bool=true;
+pub var INPUT_ERRORS:u64=0;
+var KEYBOARD:ps2.Keyboard=ps2.EMPTY_KEYBOARD;
+var MOUSE:ps2.Mouse=ps2.EMPTY_MOUSE;
+var KEY_EVENTS:events.Queue=events.EMPTY_QUEUE;
+var MOUSE_EVENTS:events.Queue=events.EMPTY_QUEUE;
+var MERGED:events.Queue=events.EMPTY_QUEUE;
+var SOURCES:sources.State=sources.EMPTY;
+var USB_RPC:usb_rpc.State=usb_rpc.EMPTY;
+var USB_REQUEST:sys.Message=sys.EMPTY_MESSAGE;
+var USB_RESPONSE:sys.Message=sys.EMPTY_MESSAGE;
+var USB_TICKET:u64=0;
+var KEY_PENDING:bool=false;
+var MOUSE_PENDING:bool=false;
+var CONSOLE:console.State=console.EMPTY_STATE;
+var IRQ_KEY:device_abi.Irq=device_abi.EMPTY_IRQ;
+var IRQ_MOUSE:device_abi.Irq=device_abi.EMPTY_IRQ;
+var KEY_EVENT:device_abi.Irq=device_abi.EMPTY_IRQ;
+var MOUSE_EVENT:device_abi.Irq=device_abi.EMPTY_IRQ;
+var CONFIGURATION:u64=0;
+pub error Transport=0x0731_0001;
+unsafe extern "sysv64" fn svc_vector_clobber()void;
+unsafe fn write(cap:u64,port:u64,value:u64)!void {
+    unsafe { var n:usize=0;while n<10000 {
+        let status=sys.svc_call(0x76,cap,port,value,0,0,0);
+        if status==0 { return; }if status!=1 { return error.Transport; }
+        if (n&255)==255 { let y=sys.yield_now(); }n+=1;
+    } }return error.Transport;
+}
+unsafe fn read(cap:u64)!u64 {
+    unsafe { var n:usize=0;while n<10000 {
+        let byte=sys.svc_call(0x75,cap,0,0,0,0,0);
+        if byte!=0x10000 { if byte>511 { return error.Transport; }return byte; }
+        if (n&255)==255 { let y=sys.yield_now(); }n+=1;
+    } }return error.Transport;
+}
+unsafe fn key_command(cap:u64,value:u64)!void {
+    unsafe {var tries:usize=0;while tries<3 {
+        try write(cap,0x60,value);let response=try read(cap);
+        if response==0xfa {return;}if response!=0xfe {return error.Transport;}tries+=1;
+    }}return error.Transport;
+}
+unsafe fn mouse_command(cap:u64,value:u64)!void {
+    unsafe {var tries:usize=0;while tries<3 {
+        try write(cap,0x64,0xd4);try write(cap,0x60,value);let response=try read(cap);
+        if response==0x1fa {return;}if response!=0x1fe {return error.Transport;}tries+=1;
+    }}return error.Transport;
+}
+unsafe fn start(cap:u64)!void {
+    unsafe {
+        try write(cap,0x64,0xad);try write(cap,0x64,0xa7);
+        var n:usize=0;while n<256 { if sys.svc_call(0x75,cap,0,0,0,0,0)==0x10000 { break; }n+=1; }
+        try write(cap,0x64,0x20);let configuration=(try read(cap))&255;
+        // Polling driver: IRQ1/12 masked, translation disabled, both clocks on.
+        try write(cap,0x64,0x60);try write(cap,0x60,configuration&~0x73);
+        CONFIGURATION=configuration&~0x73;
+        try write(cap,0x64,0xae);try write(cap,0x64,0xa8);
+        try key_command(cap,0xf5);try key_command(cap,0xf0);try key_command(cap,2);try key_command(cap,0xf4);
+        try mouse_command(cap,0xf6);try mouse_command(cap,0xf4);
+        try ps2.init_mouse(&MOUSE,0);
+    }return;
+}
+// A failed i8042 transport never confers USB authority. Only the kernel's
+// current, live cfg13 READY incarnation permits the USB-only fallback.
+unsafe fn usb_ready(boot:*const sys.Boot)!bool{unsafe{
+    var attempt:usize=0;while attempt<1024{
+        let value=sys.svc_call(0x2f,(*boot).endpoint,0,0,0,0,0);
+        if value!=0{
+            let incarnation=value&0xffff_ffff;
+            if value>>32!=0x5548_5244||incarnation==0||incarnation>0x0fff_ffff{return error.Transport;}
+            return true;
+        }
+        attempt+=1;if attempt<1024{if sys.yield_now()!=0{return error.Transport;}}
+    }
+}return false;}
+unsafe fn prepare_irq(boot:*const sys.Boot)!void {unsafe {
+    if (*boot).service_count<7 {return;}
+    let generation=sys.incarnation((*boot).endpoint);
+    if generation==0||generation>0x0fff_ffff {return error.Transport;}
+    let keyboard=device.bind_irq((*boot).console,1,generation,&IRQ_KEY);
+    if keyboard==0x0512_000a {
+        let log=sys.log("DONGOS_INPUT_POLL_FALLBACK\r\n");if log!=0 {return error.Transport;}return;
+    }
+    if keyboard!=0 {return error.Transport;}
+    if device.bind_irq((*boot).console,12,generation,&IRQ_MOUSE)!=0 {return error.Transport;}
+    if IRQ_KEY.version!=1||IRQ_KEY.token==0||IRQ_KEY.irq!=1||IRQ_KEY.vector!=0x51||IRQ_KEY.generation!=generation
+        ||IRQ_MOUSE.version!=1||IRQ_MOUSE.token==0||IRQ_MOUSE.irq!=12||IRQ_MOUSE.vector!=0x5c||IRQ_MOUSE.generation!=generation {return error.Transport;}
+    try write((*boot).console,0x64,0x60);try write((*boot).console,0x60,CONFIGURATION|3);
+    INTERRUPTS=true;
+}return;}
+unsafe fn flush(queue:*events.Queue,characters:*console.Queue,modern:bool)!bool {unsafe {
+    while MERGED.count!=0 {
+        let event=MERGED.items[MERGED.head];
+        var routed:u64=console.PASS;
+        if modern {routed=try console.key(&CONSOLE,characters,&event);}
+        if routed==console.MODE_ON||routed==console.MODE_OFF {
+            events.loss(queue,events.SYN_DROPPED);
+            var marker="DONGOS_INPUT_CONSOLE_ON\r\n";if routed==console.MODE_OFF {marker="DONGOS_INPUT_CONSOLE_OFF\r\n";}
+            if sys.log(marker)!=0 {return error.Transport;}
+        }else if routed==console.PASS {
+            if (*queue).count==64{return false;}
+            try events.push(queue,&event);
+        }
+        var consumed=events.EMPTY_EVENT;let present=try events.pop(&MERGED,&consumed);
+    }
+}return true;}
+unsafe fn collect(local:*events.Queue)!bool{unsafe{
+    while (*local).count!=0{
+        let event=(*local).items[(*local).head];
+        match sources.event(&SOURCES,0,&event,&MERGED){ok=>{},err(e)=>{if e==0x081e_0002{return false;}return error.Transport;},}
+        var consumed=events.EMPTY_EVENT;let present=try events.pop(local,&consumed);
+        if event.kind==events.LOST{KEYBOARD=ps2.EMPTY_KEYBOARD;MOUSE=ps2.EMPTY_MOUSE;KEY_EVENTS=events.EMPTY_QUEUE;MOUSE_EVENTS=events.EMPTY_QUEUE;return true;}
+    }return true;
+}}
+unsafe fn keyboard(queue:*events.Queue,characters:*console.Queue,modern:bool,byte:u8)!void {unsafe {
+    try ps2.keyboard(&KEYBOARD,&KEY_EVENTS,byte);
+}return;}
+unsafe fn usb_pump(boot:*const sys.Boot)!void{unsafe{
+    var n:usize=0;while n<4&&MERGED.count<=8{
+        let received=sys.svc_call(0x25,(*boot).endpoint,&USB_REQUEST as u64,&USB_TICKET as u64,0,0,0);
+        if received==0x0511_0005{return;}if received!=0{return error.Transport;}
+        let peer=sys.peer((*boot).endpoint,USB_TICKET);
+        let session=sys.svc_call(0x2a,(*boot).endpoint,USB_TICKET,0,0,0,0);
+        USB_RESPONSE=sys.EMPTY_MESSAGE;
+        match usb_rpc.apply(&USB_RPC,&SOURCES,peer,session,&USB_REQUEST,&USB_RESPONSE,&MERGED){
+            ok=>{},err(e)=>{USB_RESPONSE.words[0]=e;},
+        }
+        if sys.svc_call(0x24,(*boot).endpoint,USB_TICKET,&USB_RESPONSE as u64,0,0,0)!=0{return error.Transport;}
+        n+=1;
+    }
+}return;}
+unsafe fn usb_departures(boot:*const sys.Boot)!void{unsafe{
+    if MERGED.count>8{return;}
+    let value=sys.svc_call(0x2e,(*boot).endpoint,0,0,0,0,0);
+    var through:u64=0;
+    if value!=0{
+        through=value&0xffff_ffff;
+        if value>>32!=0x5548_4450||through==0||through>0x0fff_ffff{return error.Transport;}
+    }
+    try usb_rpc.departed(&USB_RPC,&SOURCES,through,&MERGED);
+}return;}
+unsafe fn drain(boot:*const sys.Boot,queue:*events.Queue,characters:*console.Queue,modern:bool)!bool {unsafe {
+    var count:usize=0;
+    while count<4096 {
+        if !(try collect(&KEY_EVENTS))||!(try collect(&MOUSE_EVENTS)){let flushed=try flush(queue,characters,modern);return false;}
+        if !(try flush(queue,characters,modern))||MERGED.count>8{return false;}
+        let byte=sys.svc_call(0x75,(*boot).console,0,0,0,0,0);
+        if byte==0x10000 {return true;}
+        if (byte&0x20000)!=0&&byte<=0x201ff {
+            INPUT_ERRORS+=1;
+            if (byte&256)!=0 {try ps2.reset_mouse(&MOUSE,&MOUSE_EVENTS,events.BAD_SEQUENCE);}
+            else {try ps2.reset_keyboard(&KEYBOARD,&KEY_EVENTS,events.BAD_SEQUENCE);}
+        }else {
+            if byte>511 {return error.Transport;}
+            if (byte&256)!=0 {if !TABLET {try ps2.mouse(&MOUSE,&MOUSE_EVENTS,(byte&255) as u8);}}
+            else {try keyboard(queue,characters,modern,byte as u8);}
+        }
+        count+=1;
+    }
+}return error.Transport;}
+unsafe fn irq_poll(token:u64,out:*device_abi.Irq)!bool {unsafe {
+    let after=(*out).sequence;let status=device.wait_irq(token,after,out,device_abi.NONBLOCK,0);
+    if status==0x0512_0006 {return false;}if status!=0 {return error.Transport;}
+    if (*out).version!=1||(*out).token!=token||(*out).sequence<=after||(*out).flags!=3 {return error.Transport;}
+    return true;
+}}
+unsafe fn run()!void {
+    unsafe {
+        let boot=sys.boot();
+        if boot==null||(*boot).version!=1 || (*boot).process!=5 || (*boot).service_count<5 || (*boot).channel_address!=0x5400_0000 { return error.Transport; }
+        let queue=(*boot).channel_address as *events.Queue;
+        let modern=(*boot).service_count>=7;let characters=console.ADDRESS as *console.Queue;
+        if modern {try console.initialize(characters);}
+        *queue=events.EMPTY_QUEUE;
+        let epoch=sys.incarnation((*boot).endpoint);try usb_rpc.initialize(&USB_RPC,epoch);
+        let started=start((*boot).console);match started{ok=>{},err(original)=>{
+            if !(try usb_ready(boot)){return started;}PS2_ACTIVE=false;
+        },}TABLET=try tablet.setup();
+        if PS2_ACTIVE{try prepare_irq(boot);}
+        if TABLET { let ready=sys.log("DONGOS_INPUT_VIRTIO_TABLET_READY\r\n"); }
+        var marker="DONGOS_INPUT_PS2_READY\r\n";if !PS2_ACTIVE{marker="DONGOS_INPUT_USB_READY\r\n";}
+        let log=sys.log(marker);
+        let ready=sys.ready_boot(boot);if ready!=0 {return error.Transport;}
+        if INTERRUPTS {let marker=sys.log("DONGOS_INPUT_IRQ_READY\r\n");if marker!=0 {return error.Transport;}}
+        // Clear bytes queued during setup even if their IRQ was coalesced
+        // before the first WAIT. Any accepted notification is ACKed below.
+        if PS2_ACTIVE{let initial_drained=try drain(boot,queue,characters,modern);}
+        loop {
+            let flushed=try flush(queue,characters,modern);
+            if flushed{try usb_departures(boot);try usb_pump(boot);}
+            if INTERRUPTS {
+                if !KEY_PENDING{KEY_PENDING=try irq_poll(IRQ_KEY.token,&KEY_EVENT);}
+                if !MOUSE_PENDING{MOUSE_PENDING=try irq_poll(IRQ_MOUSE.token,&MOUSE_EVENT);}
+                if KEY_PENDING||MOUSE_PENDING{
+                    let drained=try drain(boot,queue,characters,modern);
+                    if drained{
+                        if KEY_PENDING{if device.acknowledge(IRQ_KEY.token,KEY_EVENT.sequence)!=0{return error.Transport;}KEY_PENDING=false;}
+                        if MOUSE_PENDING{if device.acknowledge(IRQ_MOUSE.token,MOUSE_EVENT.sequence)!=0{return error.Transport;}MOUSE_PENDING=false;}
+                    }
+                }
+            }else if PS2_ACTIVE{
+                let drained=try drain(boot,queue,characters,modern);
+            }
+            if TABLET&&MERGED.count<=8 {try tablet.poll(&MOUSE_EVENTS);let collected=try collect(&MOUSE_EVENTS);}
+            let final_flushed=try flush(queue,characters,modern);
+            sys.svc_fence();svc_vector_clobber();let y=sys.yield_now();if y!=0 {return error.Transport;}
+        }
+    }
+}
+export("service_main") fn main()u64 {
+    unsafe { match run() { ok=>{return 0;},err(code)=>{return code;}, } }
+}

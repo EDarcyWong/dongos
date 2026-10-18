@@ -1,0 +1,46 @@
+// CFG guard emitted before an integer division (dividend RDI, divisor RSI,
+// matching CR19). Only RAX and flags are scratch. Unsigned (3 lines):
+//   test rsi, rsi / jz __dong_b<zero> / jmp __dong_b<success>
+// Signed (8 lines) additionally routes MIN/-1 to the overflow block, comparing
+// RDI against the full 64-bit MIN loaded into RAX (there is no cmp r64,imm64).
+// No division, panic or error policy here; upstream defines the three blocks.
+// Labels use the integrated CR4 decimal encoder; out is written once.
+module bootstrap.nasm_division_guard;
+import bootstrap.decimal_integer as dec;
+pub const OK:u64=0;pub const INVALID:u64=1;pub const CAPACITY:u64=2;
+pub const NONE:u64=0xffff_ffff_ffff_ffff;
+const MAX:u64=0xffff_ffff_ffff_ffff;
+fn span(p:u64,n:u64)bool{return n==0||(p!=0&&n<=MAX-p);}
+fn overlap(a:u64,n:u64,b:u64,m:u64)bool{return n!=0&&m!=0&&a<b+m&&b<a+n;}
+fn copy(out:[]u8,at:usize,text:[]const u8)usize{
+ var i:usize=0;while i<text.len{out[at+i]=text[i];i+=1;}return at+text.len;
+}
+// "<prefix>__dong_b<digits>\n"
+fn jump(out:[]u8,at:usize,prefix:[]const u8,digits:[]const u8)usize{
+ var p=copy(out,at,prefix);p=copy(out,p,"__dong_b");p=copy(out,p,digits);out[p]=10;return p+1;
+}
+pub unsafe fn emit(signed:bool,zero_target:u64,overflow_target:u64,success_target:u64,out:[]u8,written:*usize)u64{unsafe{
+ let wp=written as u64;let op=out.ptr as u64;
+ if written==null||(wp&7)!=0||!span(wp,8){return INVALID;}
+ if !span(op,out.len){return INVALID;}
+ if overlap(wp,8,op,out.len){return INVALID;}
+ // All three targets are validated, even overflow_target when unsigned.
+ if zero_target==NONE||overflow_target==NONE||success_target==NONE{return INVALID;}
+ var zd:[24]u8=[0;24];var zn:usize=0;var od:[24]u8=[0;24];var on:usize=0;var sd:[24]u8=[0;24];var sn:usize=0;
+ if dec.encode(zero_target,64,false,slice_from_raw_parts(&zd[0],24),&zn)!=dec.OK{return INVALID;}
+ if dec.encode(overflow_target,64,false,slice_from_raw_parts(&od[0],24),&on)!=dec.OK{return INVALID;}
+ if dec.encode(success_target,64,false,slice_from_raw_parts(&sd[0],24),&sn)!=dec.OK{return INVALID;}
+ let zero=slice_from_raw_parts(&zd[0],zn);let overflow=slice_from_raw_parts(&od[0],on);let success=slice_from_raw_parts(&sd[0],sn);
+ // Signed text is at most 14+12+28+12+28+12+28+28 = 162 bytes (20-digit labels); 192 is a fixed sufficient bound.
+ var text:[192]u8=[0;192];let buffer=slice_from_raw_parts(&text[0],192);
+ var at=copy(buffer,0,"test rsi, rsi\n");at=jump(buffer,at,"jz ",zero);
+ if signed{
+  at=copy(buffer,at,"cmp rsi, -1\n");at=jump(buffer,at,"jne ",success);
+  at=copy(buffer,at,"mov rax, 0x8000000000000000\n");at=copy(buffer,at,"cmp rdi, rax\n");
+  at=jump(buffer,at,"je ",overflow);
+ }
+ at=jump(buffer,at,"jmp ",success);
+ if at>out.len{return CAPACITY;}
+ var i:usize=0;while i<at{out[i]=buffer[i];i+=1;}
+ *written=at;return OK;
+}}

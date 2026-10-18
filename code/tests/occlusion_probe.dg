@@ -1,0 +1,10 @@
+module occlusion_probe;
+import desktop.occlusion as occ;
+import gfx.geometry as geo;
+export("occlusion_sizes") fn sizes(out:*[3]u64)void { unsafe { (*out)[0]=sizeof(occ.Part) as u64;(*out)[1]=sizeof(occ.Plan) as u64;(*out)[2]=occ.CAPACITY as u64; } }
+export("occlusion_partition") fn partition(clip:*const geo.Rect,opaque:*const [4]geo.Rect,count:u64,out:*occ.Plan)u64 {
+    unsafe { match occ.partition(clip,opaque,count,out) { ok=>{return 0;},err(code)=>{return code;}, } }
+}
+export("occlusion_interior") fn interior(sw:u64,sh:u64,source:*const geo.Rect,target:*const geo.Rect,out:*geo.Rect)u64 {
+    unsafe { match occ.opaque_interior(sw,sh,source,target,out) { ok=>{return 0;},err(code)=>{return code;}, } }
+}

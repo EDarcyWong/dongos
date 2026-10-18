@@ -1,0 +1,14 @@
+module chrome_probe;
+import desktop.chrome as chrome;
+import desktop.render as render;
+import gfx.geometry as geo;
+import gfx.raster as raster;
+export("chrome_sizes") fn sizes(out:*u64)void {
+    unsafe { out[0]=sizeof(raster.Surface) as u64;out[1]=sizeof(geo.Rect) as u64; }return;
+}
+export("chrome_fast") fn fast(dst:*raster.Surface,rect:*const geo.Rect,clip:*const geo.Rect,radius:i64,color:u32,transparent:bool)u64 {
+    unsafe { match chrome.rounded(dst,rect,clip,radius,color,transparent) { ok=>{return 0;},err(code)=>{return code;}, } }
+}
+export("chrome_reference") fn reference(dst:*raster.Surface,rect:*const geo.Rect,clip:*const geo.Rect,radius:i64,color:u32)u64 {
+    unsafe { match render.rounded(dst,rect,clip,radius,color) { ok=>{return 0;},err(code)=>{return code;}, } }
+}

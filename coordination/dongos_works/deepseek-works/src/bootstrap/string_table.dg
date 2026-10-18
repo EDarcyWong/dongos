@@ -1,0 +1,66 @@
+// Stable, deduplicated NUL-terminated string table. table[0] is NUL; each
+// distinct name (byte-for-byte) is appended once, in first-occurrence order,
+// followed by one NUL; equal names share the first copy's offset. A dry run
+// validates every name and sizes the table before anything is written.
+module bootstrap.string_table;
+pub const OK:u64=0;pub const INVALID:u64=1;pub const CAPACITY:u64=2;
+pub struct Name{pub first:usize,pub count:usize}
+pub struct Result{pub used:usize,pub bytes:usize}
+const MAX:u64=0xffff_ffff_ffff_ffff;
+fn span(p:u64,n:u64)bool{return n==0||(p!=0&&n<=MAX-p);}
+fn overlap(a:u64,n:u64,b:u64,m:u64)bool{return n!=0&&m!=0&&a<b+m&&b<a+n;}
+unsafe fn valid(names:[]const Name,bytes:[]const u8,offsets:[]usize,table:[]u8,result:*Result)bool{unsafe{
+ if result==null||names.len>MAX/sizeof(Name)||offsets.len>MAX/8{return false;}
+ let np=names.ptr as u64;let bp=bytes.ptr as u64;let op=offsets.ptr as u64;let tp=table.ptr as u64;let rp=result as u64;
+ let nn=names.len*sizeof(Name);let bn=bytes.len;let on=offsets.len*8;let tn=table.len;let rn=sizeof(Result);
+ if !span(np,nn)||!span(bp,bn)||!span(op,on)||!span(tp,tn)||!span(rp,rn){return false;}
+ if (nn!=0&&(np&7)!=0)||(on!=0&&(op&7)!=0)||(rp&7)!=0{return false;}
+ if overlap(op,on,np,nn)||overlap(op,on,bp,bn)||overlap(tp,tn,np,nn)||overlap(tp,tn,bp,bn)
+  ||overlap(rp,rn,np,nn)||overlap(rp,rn,bp,bn)
+  ||overlap(op,on,tp,tn)||overlap(op,on,rp,rn)||overlap(tp,tn,rp,rn){return false;}
+ return true;
+}}
+// Byte-for-byte equality of two validated names (never by length or hash alone).
+fn same(names:[]const Name,bytes:[]const u8,i:usize,j:usize)bool{
+ let a=names[i].first;let b=names[j].first;let n=names[i].count;if n!=names[j].count{return false;}
+ var k:usize=0;while k<n{if bytes[a+k]!=bytes[b+k]{return false;}k+=1;}return true;
+}
+// Index of the first name equal to names[i], which is i itself when new.
+fn earliest(names:[]const Name,bytes:[]const u8,i:usize)usize{
+ var j:usize=0;while j<i{if same(names,bytes,j,i){return j;}j+=1;}return i;
+}
+// Returns true when a name of count bytes plus its NUL terminator fits after
+// total without wrapping usize. total==MAX is short-circuited first so the
+// guard itself never underflows (MAX-total-1 is only computed when total<MAX).
+pub fn grow_ok(total:usize,count:usize)bool{
+ if total==MAX{return false;}
+ return count<=MAX-total-1;
+}
+pub unsafe fn build(names:[]const Name,bytes:[]const u8,offsets:[]usize,table:[]u8,result:*Result)u64{unsafe{
+ if !valid(names,bytes,offsets,table,result){return INVALID;}
+ var i:usize=0;
+ while i<names.len{
+  let s=names[i];if s.count==0||s.first>bytes.len||s.count>bytes.len-s.first{return INVALID;}
+  var k:usize=0;while k<s.count{if bytes[s.first+k]==0{return INVALID;}k+=1;}
+  i+=1;
+ }
+ // Dry run: deduplicated size, O(n^2 * compared bytes), overflow-checked.
+ var total:usize=1;i=0;
+ while i<names.len{
+  if earliest(names,bytes,i)==i{let c=names[i].count;if !grow_ok(total,c){return INVALID;}total+=c+1;}
+  i+=1;
+ }
+ if offsets.len<names.len||table.len<total{return CAPACITY;}
+ table[0]=0;var at:usize=1;i=0;
+ while i<names.len{
+  let j=earliest(names,bytes,i);
+  if j<i{offsets[i]=offsets[j];}
+  else{
+   let s=names[i];offsets[i]=at;var k:usize=0;
+   while k<s.count{table[at+k]=bytes[s.first+k];k+=1;}
+   table[at+s.count]=0;at+=s.count+1;
+  }
+  i+=1;
+ }
+ *result=Result{used:names.len,bytes:total};return OK;
+}}

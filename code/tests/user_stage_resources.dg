@@ -1,0 +1,13 @@
+// Explicit native physical-reservation boundary. No buddy or MMIO executes.
+module boot.service_memory;
+pub struct Block{pub physical:u64,pub virtual:u64,pub pages:usize}
+pub error Exhausted=0x0507_0002;
+var CALLS:u64=0;var NEXT:u64=0x20_0000;var FAIL:u64=0;
+export("stage_resources_reset") fn reset(fail:u64)void{unsafe{CALLS=0;NEXT=0x20_0000;FAIL=fail;}return;}
+export("stage_resources_fail") fn fail(fail:u64)void{unsafe{FAIL=fail;}return;}
+export("stage_resources_calls") fn calls()u64{unsafe{return CALLS;}}
+pub unsafe fn reserve(pages:usize,alignment:usize,out:*Block)!void{unsafe{
+    CALLS+=1;if CALLS==FAIL{return error.Exhausted;}
+    *out=Block{physical:NEXT,virtual:0,pages:pages};NEXT+=pages as u64*4096;
+}return;}
+pub unsafe fn allocate(pages:usize,alignment:usize,out:*Block)!void{return error.Exhausted;}

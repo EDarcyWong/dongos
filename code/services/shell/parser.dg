@@ -1,0 +1,45 @@
+// Bounded UTF-8 shell decoder. Caller owns both output and private workspace.
+module shell.parser;
+pub error Syntax=0x050d_0001;
+pub error TooLong=0x050d_0002;
+pub error InvalidUtf8=0x050d_0003;
+pub const LIMIT:usize=8192;
+pub struct Parsed {pub count:u64,pub verb_start:usize,pub verb_length:usize,pub path_start:usize,pub path_length:usize,pub body_start:usize,pub body_length:usize,pub bytes:[8192]u8}
+pub const EMPTY:Parsed=Parsed{count:0,verb_start:0,verb_length:0,path_start:0,path_length:0,body_start:0,body_length:0,bytes:[0;8192]};
+unsafe fn utf8(bytes:[]const u8)!void{unsafe{
+    var at:usize=0;while at<bytes.len{let first=bytes[at] as u32;var value=first;var count:usize=1;var minimum:u32=0;
+        if first>=128{if first>=0xc2&&first<=0xdf{count=2;value=first&31;minimum=128;}else if first>=0xe0&&first<=0xef{count=3;value=first&15;minimum=2048;}else if first>=0xf0&&first<=0xf4{count=4;value=first&7;minimum=65536;}else{return error.InvalidUtf8;}}
+        if count>bytes.len-at{return error.InvalidUtf8;}var n:usize=1;while n<count{let ch=bytes[at+n] as u32;if (ch&0xc0)!=0x80{return error.InvalidUtf8;}value=(value<<6)|(ch&63);n+=1;}
+        if value<minimum||value>0x10ffff||(value>=0xd800&&value<=0xdfff){return error.InvalidUtf8;}at+=count;
+    }
+}return;}
+unsafe fn put(out:*Parsed,used:*usize,value:u8)!void{unsafe{if *used==8192{return error.TooLong;}(*out).bytes[*used]=value;*used+=1;}return;}
+unsafe fn path_token(line:[]const u8,at:*usize,out:*Parsed,used:*usize)!void{unsafe{
+    var quoted:bool=false;while *at<line.len{let ch=line[*at];
+        if !quoted&&(ch==32||ch==9){break;}
+        if ch==34{quoted=!quoted;*at+=1;continue;}
+        if quoted&&ch==92{*at+=1;if *at==line.len{return error.Syntax;}let escaped=line[*at];if escaped!=34&&escaped!=92{return error.Syntax;}try put(out,used,escaped);*at+=1;continue;}
+        try put(out,used,ch);*at+=1;
+    }
+    if quoted{return error.Syntax;}
+}return;}
+// Only the path decodes double quotes, and inside them only backslash/backslash
+// and backslash/quote escapes. A single quote is an ordinary name byte. The
+// payload is copied literally, including quotes, backslashes and internal spaces.
+// Workspace must not overlap line or output. Failure preserves all output bytes.
+pub unsafe fn parse(line:[]const u8,out:*Parsed,work:*Parsed)!void{unsafe{
+    let size=sizeof(Parsed) as u64;let max:u64=0xffff_ffff_ffff_ffff;let oa=out as u64;let wa=work as u64;let la=line.ptr as u64;
+    if out==null||work==null||oa%8!=0||wa%8!=0||oa>max-size||wa>max-size{return error.Syntax;}
+    if line.len>8192{return error.TooLong;}if (line.len!=0&&line.ptr==null)||la>max-line.len as u64{return error.Syntax;}
+    if (oa<wa+size&&wa<oa+size)||(line.len!=0&&la<wa+size&&wa<la+line.len as u64){return error.Syntax;}
+    try utf8(line);var n:usize=0;while n<line.len{if (line[n]<32&&line[n]!=9)||line[n]==127{return error.Syntax;}n+=1;}
+    (*work).count=0;(*work).verb_start=0;(*work).verb_length=0;(*work).path_start=0;(*work).path_length=0;(*work).body_start=0;(*work).body_length=0;n=0;while n<8192{(*work).bytes[n]=0;n+=1;}
+    var at:usize=0;var used:usize=0;while at<line.len&&(line[at]==32||line[at]==9){at+=1;}
+    if at==line.len{*out=*work;return;}
+    while at<line.len&&line[at]!=32&&line[at]!=9{if line[at]>=128||line[at]==34{return error.Syntax;}try put(work,&used,line[at]);at+=1;}
+    (*work).verb_length=used;if used==0||used>16{return error.Syntax;}(*work).count=1;
+    while at<line.len&&(line[at]==32||line[at]==9){at+=1;}if at==line.len{*out=*work;return;}
+    (*work).path_start=used;try path_token(line,&at,work,&used);(*work).path_length=used-(*work).path_start;(*work).count=2;
+    while at<line.len&&(line[at]==32||line[at]==9){at+=1;}if at==line.len{*out=*work;return;}
+    (*work).body_start=used;while at<line.len{try put(work,&used,line[at]);at+=1;}(*work).body_length=used-(*work).body_start;(*work).count=3;*out=*work;
+}return;}

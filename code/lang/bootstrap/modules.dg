@@ -1,0 +1,152 @@
+// Native explicit-root module graph. Source bytes are borrowed from an I/O
+// provider's canonical catalog; no host parser/resolver or implicit search.
+module bootstrap.modules;
+import bootstrap.lexer as lex;
+import bootstrap.expression as ast;
+import bootstrap.syntax as syntax;
+pub const NONE:usize=0xffff_ffff_ffff_ffff;
+pub const OK:u64=0;pub const INVALID:u64=1;pub const MISSING:u64=2;pub const AMBIGUOUS:u64=3;
+pub const PATH:u64=4;pub const CYCLE:u64=5;pub const CAPACITY:u64=6;pub const LEX:u64=7;
+pub const SYNTAX:u64=8;pub const ROOT_REQUIRED:u64=9;pub const DUP_ALIAS:u64=10;pub const DEPTH:u64=11;
+pub struct Source{pub root:usize,pub path:[]const u8,pub bytes:[]const u8}
+pub struct Unit{pub source_index:usize,pub skip:usize,pub token_start:usize,pub token_count:usize,
+ pub string_start:usize,pub string_count:usize,pub node_start:usize,pub node_count:usize,pub root:usize}
+pub struct Edge{pub from:usize,pub to:usize,pub import_node:usize,pub alias_token:usize}
+pub struct Result{pub count:usize,pub token_used:usize,pub string_used:usize,pub node_used:usize,
+ pub edge_used:usize,pub code:u64,pub error_source:usize,pub error_start:usize,pub detail:u64}
+struct Region{p:u64,n:usize}
+struct State{roots:usize,sources:[]const Source,units:[]Unit,tokens:[]lex.Token,strings:[]u8,nodes:[]ast.Node,
+ edges:[]Edge,states:[]u8,used:usize,token_used:usize,string_used:usize,node_used:usize,edge_used:usize,
+ status:u64,error_source:usize,error_start:usize,detail:u64,limit:usize}
+fn span(p:u64,n:usize)bool{return n==0||(p!=0&&n<=NONE-p);}
+fn overlap(a:*const Region,b:*const Region)bool{unsafe{return (*a).n!=0&&(*b).n!=0&&(*a).p<(*b).p+(*b).n&&(*b).p<(*a).p+(*a).n;}}
+fn equal(a:[]const u8,b:[]const u8)bool{
+ if a.len!=b.len{return false;}var i:usize=0;while i<a.len{if a[i]!=b[i]{return false;}i+=1;}return true;
+}
+fn canonical(path:[]const u8)bool{
+ if path.len<4||path[0]==47||path[path.len-3]!=46||path[path.len-2]!=100||path[path.len-1]!=103{return false;}
+ var at:usize=0;var first:usize=0;
+ while at<path.len{let c=path[at];if c==0||c==92||c==58{return false;}
+  if c==47{let n=at-first;if n==0||(n==1&&path[first]==46)||(n==2&&path[first]==46&&path[first+1]==46){return false;}first=at+1;}
+  at+=1;
+ }return first<path.len-3;
+}
+pub unsafe fn unit_source(sources:[]const Source,unit:*const Unit)[]const u8{unsafe{
+ let bytes=sources[(*unit).source_index].bytes;return slice_from_raw_parts(bytes.ptr+(*unit).skip,bytes.len-(*unit).skip);
+}}
+pub unsafe fn unit_tokens(tokens:[]const lex.Token,unit:*const Unit)[]const lex.Token{unsafe{return slice_from_raw_parts(tokens.ptr+(*unit).token_start,(*unit).token_count);}}
+pub unsafe fn unit_nodes(nodes:[]const ast.Node,unit:*const Unit)[]const ast.Node{unsafe{return slice_from_raw_parts(nodes.ptr+(*unit).node_start,(*unit).node_count);}}
+unsafe fn reject(s:*State,code:u64,source:usize,start:usize,detail:u64)usize{unsafe{
+ if (*s).status==0{(*s).status=code;(*s).error_source=source;(*s).error_start=start;(*s).detail=detail;}return NONE;
+}}
+unsafe fn token_text(s:*State,unit:*const Unit,t:usize)[]const u8{unsafe{
+ let bytes=unit_source((*s).sources,unit);let token=(*s).tokens[(*unit).token_start+t];return slice_from_raw_parts(bytes.ptr+token.start,token.end-token.start);
+}}
+unsafe fn path_matches(s:*State,unit:*const Unit,id:usize,path:[]const u8)bool{unsafe{
+ if path.len<3{return false;}var end=path.len-3;var at=id;
+ while true{
+  let node=(*s).nodes[(*unit).node_start+at];let text=token_text(s,unit,node.token);
+  if text.len>end{return false;}var i:usize=0;while i<text.len{if path[end-text.len+i]!=text[i]{return false;}i+=1;}
+  end-=text.len;
+  if node.kind==ast.NAME{return end==0;}
+  if node.kind!=ast.FIELD||end==0||path[end-1]!=47{return false;}end-=1;at=node.a;
+ }
+}}
+unsafe fn alias_token(s:*State,unit:*const Unit,id:usize)usize{unsafe{
+ let item=(*s).nodes[(*unit).node_start+id];if item.b!=NONE{return (*s).nodes[(*unit).node_start+item.b].token;}
+ return (*s).nodes[(*unit).node_start+item.a].token;
+}}
+unsafe fn locate(s:*State,unit:*const Unit,path_node:usize,token:usize)usize{unsafe{
+ var found:usize=NONE;var i:usize=0;
+ while i<(*s).sources.len{if path_matches(s,unit,path_node,(*s).sources[i].path){
+  if found!=NONE{return reject(s,AMBIGUOUS,(*unit).source_index,(*s).tokens[(*unit).token_start+token].start,0);}found=i;
+ }i+=1;}
+ if found==NONE{return reject(s,MISSING,(*unit).source_index,(*s).tokens[(*unit).token_start+token].start,0);}return found;
+}}
+unsafe fn visit(s:*State,index:usize,depth:usize)usize{unsafe{
+ if (*s).status!=0{return NONE;}
+ if (*s).states[index]==1{return reject(s,CYCLE,index,0,0);}
+ if (*s).states[index]==2{var i:usize=0;while i<(*s).used{if (*s).units[i].source_index==index{return i;}i+=1;}return reject(s,INVALID,index,0,0);}
+ if depth>=(*s).limit{return reject(s,DEPTH,index,0,0);}
+ if (*s).used==(*s).units.len{return reject(s,CAPACITY,index,0,1);}
+ (*s).states[index]=1;let id=(*s).used;(*s).used+=1;
+ let raw=(*s).sources[index].bytes;var skip:usize=0;
+ if raw.len>=3&&raw[0]==239&&raw[1]==187&&raw[2]==191{skip=3;}
+ let source=slice_from_raw_parts(raw.ptr+skip,raw.len-skip);
+ let ts=(*s).token_used;let ss=(*s).string_used;let ns=(*s).node_used;
+ var lr=lex.EMPTY_RESULT;
+ let lexed=lex.lex(source,slice_from_raw_parts((*s).tokens.ptr+ts,(*s).tokens.len-ts),
+  slice_from_raw_parts((*s).strings.ptr+ss,(*s).strings.len-ss),&lr);
+ (*s).token_used+=lr.count;(*s).string_used+=lr.used;
+ if lexed!=0{var code=LEX;if lexed==lex.TOKEN_CAPACITY||lexed==lex.STRING_CAPACITY{code=CAPACITY;}
+  return reject(s,code,index,lr.error_start,lexed);
+ }
+ var parsed=ast.Result{root:NONE,used:0,next:0,error_code:0,error_token:0};
+ let status=syntax.parse(syntax.MODULE,source,slice_from_raw_parts((*s).tokens.ptr+ts,lr.count),0,
+  slice_from_raw_parts((*s).nodes.ptr+ns,(*s).nodes.len-ns),(*s).limit,&parsed);
+ (*s).node_used+=parsed.used;
+ if status!=0{var code=SYNTAX;if status==ast.CAPACITY{code=CAPACITY;}else if status==ast.DEPTH{code=DEPTH;}
+  return reject(s,code,index,(*s).tokens[ts+parsed.error_token].start,status);
+ }
+ let unit=Unit{source_index:index,skip:skip,token_start:ts,token_count:lr.count,string_start:ss,string_count:lr.used,
+  node_start:ns,node_count:parsed.used,root:parsed.root};(*s).units[id]=unit;
+ let root=(*s).nodes[ns+parsed.root];
+ if (*s).roots!=0{
+  if !path_matches(s,&unit,root.a,(*s).sources[index].path){return reject(s,PATH,index,(*s).tokens[ts+(*s).nodes[ns+root.a].token].start,0);}
+  let located=locate(s,&unit,root.a,(*s).nodes[ns+root.a].token);if (*s).status!=0{return NONE;}
+  if located!=index{return reject(s,PATH,index,0,0);}
+ }
+ var item=root.b;
+ while item!=NONE{
+  let imported=(*s).nodes[ns+item];if imported.kind==ast.IMPORT{
+   if (*s).roots==0{return reject(s,ROOT_REQUIRED,index,(*s).tokens[ts+imported.token].start,0);}
+   let alias=alias_token(s,&unit,item);var previous=root.b;
+   while previous!=item{let old=(*s).nodes[ns+previous];
+    if old.kind==ast.IMPORT&&equal(token_text(s,&unit,alias_token(s,&unit,previous)),token_text(s,&unit,alias)){
+     return reject(s,DUP_ALIAS,index,(*s).tokens[ts+imported.token].start,0);
+    }previous=old.next;
+   }
+   let target=locate(s,&unit,imported.a,imported.token);if (*s).status!=0{return NONE;}
+   if (*s).edge_used==(*s).edges.len{return reject(s,CAPACITY,index,(*s).tokens[ts+imported.token].start,2);}
+   let edge=(*s).edge_used;(*s).edge_used+=1;
+   let dependency=visit(s,target,depth+1);if (*s).status!=0{return NONE;}
+   (*s).edges[edge]=Edge{from:id,to:dependency,import_node:item,alias_token:alias};
+  }item=imported.next;
+ }
+ (*s).states[index]=2;return id;
+}}
+pub unsafe fn load(entry:usize,roots:usize,sources:[]const Source,units:[]Unit,tokens:[]lex.Token,strings:[]u8,
+ nodes:[]ast.Node,edges:[]Edge,states:[]u8,max_depth:usize,result:*Result)u64{unsafe{
+ if result==null||entry>=sources.len||max_depth==0||max_depth>256||sources.len>NONE/sizeof(Source)
+  ||units.len>NONE/sizeof(Unit)||tokens.len>NONE/sizeof(lex.Token)||nodes.len>NONE/sizeof(ast.Node)||edges.len>NONE/sizeof(Edge){return INVALID;}
+ let source_region=Region{p:sources.ptr as u64,n:sources.len*sizeof(Source)};
+ if !span(source_region.p,source_region.n)||(source_region.p&7)!=0{return INVALID;}
+ let regions=[Region{p:units.ptr as u64,n:units.len*sizeof(Unit)},Region{p:tokens.ptr as u64,n:tokens.len*sizeof(lex.Token)},
+  Region{p:strings.ptr as u64,n:strings.len},Region{p:nodes.ptr as u64,n:nodes.len*sizeof(ast.Node)},
+  Region{p:edges.ptr as u64,n:edges.len*sizeof(Edge)},Region{p:states.ptr as u64,n:states.len},Region{p:result as u64,n:sizeof(Result)}];
+ var i:usize=0;
+ while i<regions.len{let r=regions[i];if !span(r.p,r.n)||overlap(&r,&source_region){return INVALID;}
+  if r.n!=0&&i!=2&&i!=5&&(r.p&7)!=0{return INVALID;}
+  var j:usize=0;while j<i{if overlap(&r,&regions[j]){return INVALID;}j+=1;}i+=1;
+ }
+ i=0;while i<sources.len{let source=sources[i];let p=Region{p:source.path.ptr as u64,n:source.path.len};let b=Region{p:source.bytes.ptr as u64,n:source.bytes.len};
+  if !span(p.p,p.n)||!span(b.p,b.n){return INVALID;}
+  if (roots==0&&source.root!=NONE)||(roots!=0&&source.root>=roots){return INVALID;}
+  var j:usize=0;while j<regions.len{if overlap(&p,&regions[j])||overlap(&b,&regions[j]){return INVALID;}j+=1;}
+  if !canonical(source.path){return INVALID;}i+=1;
+ }
+ var s=State{roots:roots,sources:sources,units:units,tokens:tokens,strings:strings,nodes:nodes,edges:edges,states:states,
+  used:0,token_used:0,string_used:0,node_used:0,edge_used:0,status:0,error_source:entry,error_start:0,detail:0,limit:max_depth};
+ if states.len<sources.len{reject(&s,CAPACITY,entry,0,3);}
+ else{i=0;while i<sources.len{states[i]=0;i+=1;}visit(&s,entry,0);}
+ var count=s.used;if s.status!=0{count=0;}
+ *result=Result{count:count,token_used:s.token_used,string_used:s.string_used,node_used:s.node_used,edge_used:s.edge_used,
+  code:s.status,error_source:s.error_source,error_start:s.error_start,detail:s.detail};return s.status;
+}}
+export("dong_bootstrap_modules") pub unsafe fn load_raw(entry:usize,roots:usize,sources:*const Source,count:usize,
+ units:*Unit,unit_capacity:usize,tokens:*lex.Token,token_capacity:usize,strings:*u8,string_capacity:usize,
+ nodes:*ast.Node,node_capacity:usize,edges:*Edge,edge_capacity:usize,states:*u8,state_capacity:usize,depth:usize,result:*Result)u64{unsafe{
+ return load(entry,roots,slice_from_raw_parts(sources,count),slice_from_raw_parts(units,unit_capacity),
+  slice_from_raw_parts(tokens,token_capacity),slice_from_raw_parts(strings,string_capacity),slice_from_raw_parts(nodes,node_capacity),
+  slice_from_raw_parts(edges,edge_capacity),slice_from_raw_parts(states,state_capacity),depth,result);
+}}

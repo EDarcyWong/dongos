@@ -1,0 +1,143 @@
+// Pure device/IRQ authority ledger. Callers provide kernel-read hardware
+// snapshots and serialize MMIO isolation before committing revocation here.
+module user.device_manager;
+import lib.device_abi as abi;
+import drivers.device_policy as policy;
+pub const LIMIT:usize=32;
+const MAX:u64=0x00ff_ffff_ffff_ffff;
+pub struct IrqState {pub view:abi.Irq,pub owner:u64,pub device_token:u64,pub live:u64,pub serial:u64}
+pub const EMPTY_IRQ_STATE:IrqState=IrqState {view:abi.EMPTY_IRQ,owner:0,device_token:0,live:0,serial:0};
+pub struct Table {
+    pub initialized:u64,pub count:usize,pub devices:[32]abi.Device,
+    pub bindings:[4]abi.Binding,pub interrupts:[2]IrqState,
+}
+pub const EMPTY:Table=Table {initialized:0,count:0,devices:[abi.EMPTY_DEVICE;32],
+    bindings:[abi.EMPTY_BINDING;4],interrupts:[EMPTY_IRQ_STATE;2]};
+unsafe fn valid(raw:*const abi.Device)!void {unsafe {
+    if raw==null {return error.abi.Invalid;}let d=*raw;
+    if d.version!=1||d.token!=0||d.next_cursor!=0||d.flags!=0||d.generation!=0||d.reserved!=0 {return error.abi.Invalid;}
+    if d.kind==abi.I8042 {
+        if d.ecam!=0||d.segment!=0||d.bus!=0||d.device!=0||d.function!=0||d.vendor!=0
+            ||d.device_id!=0||d.class_code!=0||d.header!=0 {return error.abi.Invalid;}
+    }else if d.kind==abi.PCI {
+        if d.ecam==0||(d.ecam&4095)!=0||d.ecam>=0x10_0000_0000_0000||d.segment>65535
+            ||d.bus>255||d.device>31||d.function>7||d.vendor==0||d.vendor>=65535
+            ||d.device_id>65535||d.class_code>0xff_ffff||d.header>255 {return error.abi.Invalid;}
+    }else {return error.abi.Invalid;}
+}return;}
+pub unsafe fn same_identity(left:*const abi.Device,right:*const abi.Device)bool {unsafe {
+    return policy.same_identity(left,right);
+}}
+// Rank matches the block driver's selection order; zero means unsupported.
+// This is a matcher only. A user-provided Device can never admit a grant.
+pub unsafe fn rank(d:*const abi.Device,role:u64)u64 {unsafe {
+    return policy.rank(d,role);
+}}
+unsafe fn require(t:*const Table)!void {unsafe {
+    if t==null||(*t).initialized!=1||(*t).count>LIMIT {return error.abi.Invalid;}
+}return;}
+pub unsafe fn initialize(t:*Table)!void {unsafe {
+    if t==null||(*t).initialized!=0 {return error.abi.Invalid;}
+    *t=EMPTY;(*t).initialized=1;
+}return;}
+pub unsafe fn register(t:*Table,hardware:*const abi.Device,out:*abi.Device)!void {unsafe {
+    try require(t);try valid(hardware);if out==null {return error.abi.Invalid;}
+    var i:usize=0;while i<(*t).count {
+        let old=&(*t).devices[i];
+        if ((*old).kind==abi.I8042&&(*hardware).kind==abi.I8042)
+            ||((*old).kind==abi.PCI&&(*hardware).kind==abi.PCI&&(*old).ecam==(*hardware).ecam) {
+            if !same_identity(old,hardware)||((*old).flags&abi.REVOKED)!=0 {return error.abi.Removed;}
+            *out=*old;return;
+        }i+=1;
+    }
+    if (*t).count==LIMIT {return error.abi.Capacity;}
+    var d=*hardware;d.generation=1;d.token=(1<<8)|((*t).count as u64+1);
+    if rank(&d,abi.BLOCK)!=0||rank(&d,abi.TABLET)!=0||rank(&d,abi.PS2)!=0||rank(&d,abi.XHCI)!=0 {d.flags=abi.SUPPORTED;}
+    (*t).devices[(*t).count]=d;(*t).count+=1;*out=d;
+}return;}
+unsafe fn index(t:*const Table,token:u64)!usize {unsafe {
+    try require(t);let slot=token&255;
+    if slot==0||slot>(*t).count as u64 {return error.abi.Stale;}
+    let i=(slot-1) as usize;let d=(*t).devices[i];
+    if d.token!=token||d.generation!=(token>>8)||(d.flags&abi.REVOKED)!=0 {return error.abi.Stale;}
+    return i;
+}}
+pub unsafe fn enumerate(t:*const Table,cursor:u64,out:*abi.Device)!void {unsafe {
+    try require(t);if out==null||cursor>(*t).count as u64 {return error.abi.Invalid;}
+    var d=abi.EMPTY_DEVICE;if cursor<(*t).count as u64 {d=(*t).devices[cursor as usize];d.next_cursor=cursor+1;}
+    *out=d;
+}return;}
+pub unsafe fn bind(t:*Table,token:u64,hardware:*const abi.Device,role:u64,out:*abi.Binding)!void {unsafe {
+    let i=try index(t,token);try valid(hardware);
+    if out==null||role==0||role>4 {return error.abi.Invalid;}
+    let old=&(*t).devices[i];if !same_identity(old,hardware) {return error.abi.Removed;}
+    if rank(old,role)==0 {return error.abi.Denied;}
+    if (*t).bindings[(role-1) as usize].device_token!=0||((*old).flags&abi.BOUND)!=0 {return error.abi.Busy;}
+    var config:u64=4;var irq:u64=0;
+    if role==abi.BLOCK {config=2;}else if role==abi.PS2 {irq=(1<<1)|(1<<12);}else if role==abi.XHCI {config=13;}
+    let result=abi.Binding {version:1,device_token:token,role:role,configuration_id:config,
+        generation:(*old).generation,irq_mask:irq,flags:abi.BOUND,reserved:0};
+    (*old).flags|=abi.BOUND;(*t).bindings[(role-1) as usize]=result;*out=result;
+}return;}
+pub unsafe fn binding(t:*const Table,role:u64,out:*abi.Binding)!void {unsafe {
+    try require(t);if role==0||role>4||out==null {return error.abi.Invalid;}
+    let value=(*t).bindings[(role-1) as usize];if value.device_token==0 {return error.abi.WouldBlock;}
+    let checked=try index(t,value.device_token);*out=value;
+}return;}
+// Hardware IRQ masking, bus-master disable and mapping quarantine precede this
+// commit. Tokens are retired permanently; this ledger never reuses DMA leases.
+pub unsafe fn revoke(t:*Table,token:u64,generation:u64)!void {unsafe {
+    let i=try index(t,token);if generation!=(*t).devices[i].generation {return error.abi.Stale;}
+    if generation==MAX {return error.abi.Capacity;}
+    (*t).devices[i].flags|=abi.REVOKED;(*t).devices[i].generation+=1;
+    var n:usize=0;while n<4 {if (*t).bindings[n].device_token==token {(*t).bindings[n].flags|=abi.REVOKED;}n+=1;}
+    n=0;while n<2 {if (*t).interrupts[n].device_token==token {(*t).interrupts[n].live=0;(*t).interrupts[n].view.flags=abi.MASKED;}n+=1;}
+}return;}
+unsafe fn irq_index(t:*const Table,token:u64,owner:u64)!usize {unsafe {
+    try require(t);let slot=token&255;if slot==0||slot>2||owner==0 {return error.abi.Stale;}
+    let i=(slot-1) as usize;let s=(*t).interrupts[i];
+    if s.live!=1||s.view.token!=token||s.owner!=owner {return error.abi.Stale;}
+    let checked=try index(t,s.device_token);return i;
+}}
+// Caller must install a masked IOAPIC route, validate output, commit this state,
+// then unmask with readback. Any final hardware failure is masked/revoked.
+pub unsafe fn irq_bind(t:*Table,owner:u64,generation:u64,source:u64,gsi:u64,out:*abi.Irq)!void {unsafe {
+    try require(t);if owner==0||generation==0||(source!=1&&source!=12)||gsi>0xffff_ffff||out==null {return error.abi.Invalid;}
+    let binding=(*t).bindings[2];let checked=try index(t,binding.device_token);
+    if binding.role!=abi.PS2||(binding.flags&abi.REVOKED)!=0 {return error.abi.Denied;}
+    var i:usize=0;if source==12 {i=1;}
+    let old=(*t).interrupts[i];if old.live!=0 {return error.abi.Busy;}if old.serial==MAX {return error.abi.Capacity;}
+    let serial=old.serial+1;let view=abi.Irq {version:1,token:(serial<<8)|(i as u64+1),irq:source,gsi:gsi,
+        vector:0x50+source,generation:generation,sequence:0,flags:0};
+    (*t).interrupts[i]=IrqState {view:view,owner:owner,device_token:binding.device_token,live:1,serial:serial};*out=view;
+}return;}
+// ISR has already masked this IOAPIC input. EOI follows even on refusal.
+pub unsafe fn irq_signal(t:*Table,vector:u64,out:*abi.Irq)!u64 {unsafe {
+    try require(t);var i:usize=0;if vector==0x5c {i=1;}else if vector!=0x51 {return error.abi.Invalid;}
+    let old=(*t).interrupts[i];if out==null||old.live!=1 {return error.abi.Stale;}
+    let checked=try index(t,old.device_token);
+    if (old.view.flags&abi.PENDING)!=0 {return error.abi.Busy;}
+    if old.view.sequence==0xffff_ffff_ffff_ffff {return error.abi.Capacity;}
+    (*t).interrupts[i].view.sequence+=1;(*t).interrupts[i].view.flags=abi.MASKED|abi.PENDING;
+    *out=(*t).interrupts[i].view;return old.owner;
+}}
+pub unsafe fn irq_poll(t:*const Table,token:u64,owner:u64,after:u64,out:*abi.Irq)!void {unsafe {
+    let i=try irq_index(t,token,owner);if out==null {return error.abi.Invalid;}
+    let view=(*t).interrupts[i].view;if after>view.sequence {return error.abi.Stale;}
+    if (view.flags&abi.PENDING)==0||after==view.sequence {return error.abi.WouldBlock;}
+    *out=view;
+}return;}
+// Validate token and exact delivered sequence before hardware unmask; commit
+// this only after readback. A failed ACK keeps the pending event and mask.
+pub unsafe fn irq_validate_ack(t:*const Table,token:u64,owner:u64,sequence:u64)!void {unsafe {
+    let i=try irq_index(t,token,owner);let view=(*t).interrupts[i].view;
+    if sequence==0||sequence!=view.sequence||view.flags!=(abi.MASKED|abi.PENDING) {return error.abi.Stale;}
+}return;}
+pub unsafe fn irq_ack(t:*Table,token:u64,owner:u64,sequence:u64)!void {unsafe {
+    try irq_validate_ack(t,token,owner,sequence);let i=try irq_index(t,token,owner);(*t).interrupts[i].view.flags=0;
+}return;}
+pub unsafe fn irq_revoke_owner(t:*Table,owner:u64)!void {unsafe {
+    try require(t);if owner==0 {return error.abi.Invalid;}var i:usize=0;while i<2 {
+        if (*t).interrupts[i].owner==owner {(*t).interrupts[i].live=0;(*t).interrupts[i].view.flags=abi.MASKED;}i+=1;
+    }
+}return;}

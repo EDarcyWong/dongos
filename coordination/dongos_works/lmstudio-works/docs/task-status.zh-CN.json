@@ -1,0 +1,40 @@
+{
+  "version": 1,
+  "items": [
+    {
+      "state": "todo",
+      "label": "待领取",
+      "description": "尚未领取"
+    },
+    {
+      "state": "in_progress",
+      "label": "进行中",
+      "description": "已领取正在执行"
+    },
+    {
+      "state": "submitted",
+      "label": "待复验",
+      "description": "已提交等待独立复验"
+    },
+    {
+      "state": "rework",
+      "label": "返修",
+      "description": "需要修复再交付"
+    },
+    {
+      "state": "accepted",
+      "label": "已验收",
+      "description": "独立复验通过但尚未集成"
+    },
+    {
+      "state": "integrated",
+      "label": "已集成",
+      "description": "已完成集成及相关检查"
+    },
+    {
+      "state": "paused",
+      "label": "暂停",
+      "description": "暂停等待恢复"
+    }
+  ]
+}

@@ -1,0 +1,57 @@
+// Only the compositor may invoke these calls. The kernel authenticates its
+// real endpoint/current incarnation and the accepted client ticket, and picks
+// every mapping address. No caller-supplied PA, VA or owner authorizes memory.
+module lib.window_broker;
+import lib.window_broker_abi as abi;
+import lib.sys as sys;
+pub type Lease=abi.Lease;
+pub type Font=abi.Font;
+pub type Peer=abi.Peer;
+pub const EMPTY_LEASE:Lease=abi.EMPTY_LEASE;
+pub const EMPTY_FONT:Font=abi.EMPTY_FONT;
+pub const EMPTY_PEER:Peer=abi.EMPTY_PEER;
+pub const BAD:u64=0x0746_0001;
+fn address(value:u64,bytes:u64)bool {
+    return value>=65536&&(value&4095)==0&&value<0x0000_8000_0000_0000&&bytes<=0x0000_8000_0000_0000-value;
+}
+fn owner(value:u64)bool{return value>>32!=0&&(value&0xffff_ffff)!=0;}
+pub fn scale(value:u64)bool{return value==256||value==320||value==384||value==448||value==512;}
+pub unsafe fn allocate(endpoint:u64,ticket:u64,window:u64,width:u64,height:u64,stride:u64,out:*Lease)u64{unsafe{
+    if endpoint==0||ticket==0||window==0||out==null||width==0||width>1920||height==0||height>1080
+        ||stride<width*4||stride>8192||(stride&3)!=0||stride>abi.MAX_WINDOW_BYTES/height{return BAD;}
+    var next=EMPTY_LEASE;
+    let status=sys.svc_call(abi.ALLOCATE,endpoint,ticket,window,(height<<32)|width,stride,(&next) as u64);
+    if status!=0{return status;}
+    if next.version!=abi.VERSION||next.lease==0||!owner(next.owner)||next.epoch==0||next.epoch>0xffff_ffff
+        ||window>>32!=next.epoch||next.bytes!=stride*height||next.width!=width||next.height!=height||next.stride!=stride
+        ||!address(next.client_address,next.bytes)||!address(next.server_address,next.bytes){return BAD;}
+    *out=next;return 0;
+}}
+// Ticket zero is intentional: teardown also runs after the client has exited.
+// The kernel accepts only a lease it issued to this exact compositor epoch;
+// same-epoch already-revoked leases are idempotent, unknown IDs are errors.
+pub unsafe fn revoke(endpoint:u64,lease:u64)u64{unsafe{
+    if endpoint==0||lease==0{return BAD;}return sys.svc_call(abi.REVOKE,endpoint,0,lease,0,0,0);
+}}
+pub unsafe fn font(endpoint:u64,ticket:u64,requested:u64,out:*Font)u64{unsafe{
+    if endpoint==0||ticket==0||out==null||!scale(requested){return BAD;}var next=EMPTY_FONT;
+    let status=sys.svc_call(abi.FONT,endpoint,ticket,requested,(&next) as u64,0,0);if status!=0{return status;}
+    if next.version!=abi.VERSION||!owner(next.owner)||next.epoch==0||next.epoch>0xffff_ffff
+        ||next.bytes<48||next.bytes>abi.MAX_TOTAL_BYTES||next.scale!=requested||next.pixels!=requested/16
+        ||next.glyphs==0||next.glyphs>65536||!address(next.client_address,next.bytes)||!address(next.server_address,next.bytes){return BAD;}
+    *out=next;return 0;
+}}
+pub unsafe fn peer(endpoint:u64,ticket:u64,out:*Peer)u64{unsafe{
+    if endpoint==0||ticket==0||out==null{return BAD;}var next=EMPTY_PEER;
+    let status=sys.svc_call(abi.PEER,endpoint,ticket,(&next) as u64,0,0,0);if status!=0{return status;}
+    if next.version!=abi.VERSION||!owner(next.owner)||next.epoch==0||next.epoch>0xffff_ffff||next.role>abi.SETTINGS{return BAD;}
+    *out=next;return 0;
+}}
+// Trusted lifecycle drain: owner is (PID<<32)|last departed incarnation, role0.
+// Empty owner0 is allowed only here; the kernel coalesces maximum per PID.
+pub unsafe fn departed(endpoint:u64,out:*Peer)u64{unsafe{
+    if endpoint==0||out==null{return BAD;}var next=EMPTY_PEER;
+    let status=sys.svc_call(abi.PEER,endpoint,0,(&next) as u64,0,0,0);if status!=0{return status;}
+    if next.version!=abi.VERSION||next.epoch==0||next.epoch>0xffff_ffff||next.role!=0
+        ||(next.owner!=0&&!owner(next.owner)){return BAD;}*out=next;return 0;
+}}

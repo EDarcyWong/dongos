@@ -1,0 +1,83 @@
+// Appended verbatim to a copy of user.memory for private native setup only.
+// The production destroy/fresh/reference code above is unchanged.
+var TEST_ALT:[POOL_PAGES]paging.Table=[EMPTY_TABLE;POOL_PAGES];
+export("reclaim_setup") fn test_setup(alias:u64)void {
+    unsafe {
+        FRAME_COUNT=4;REUSE_FROM=0;EXTENDED=null;EXTENDED_LIMIT=0;EXTENDED_RECYCLED=null;TEST_REFERENCE_CALLS=0;
+        var id:usize=0;
+        while id<LIMIT {
+            PROCESSES[id]=EMPTY_PROCESS;PINNED[id]=false;
+            var t:usize=0;
+            while t<POOL_PAGES {
+                if id<STATIC_LIMIT {
+                    var s:usize=0;while s<512 { TABLES[id][t].entries[s]=0;s+=1; }
+                }
+                META[id][t]=0;t+=1;
+            }
+            id+=1;
+        }
+        id=0;while id<3 {
+            FRAMES[id]=Frame { physical:0x20_0000+id as u64*4096,virtual:alias+id as u64*4096,writable:1 };
+            RECYCLED[id]=0;PROCESSES[id].ready=1;PROCESSES[id].root=0x10_0000+id as u64*0x20_000;
+            TABLES[id][0].entries[0]=0x40_0000+id as u64*4096+7;META[id][0]=1;META[id][1]=1;id+=1;
+        }
+        FRAMES[0].writable=0;
+        TABLES[0][1].entries[0]=0x20_0005;
+        TABLES[0][1].entries[1]=0x8000_0000_0020_1007;
+        TABLES[1][1].entries[0]=0x8000_0000_0020_1007;
+        TABLES[2][1].entries[0]=0x8000_0000_0020_2007;
+        PINNED[2]=true;RECYCLED[2]=2;
+        FRAMES[3]=Frame {physical:0x20_3000,virtual:alias+3*4096,writable:1};RECYCLED[3]=0;
+        PROCESSES[8].ready=1;PROCESSES[8].root=0x20_0000;
+        DYNAMIC_TABLES[8]=&TEST_ALT[0];
+        TEST_ALT[0].entries[0]=0x50_0007;TEST_ALT[1].entries[0]=0x8000_0000_0020_1007;
+        META[8][0]=1;META[8][1]=1;
+    }
+}
+export("reclaim_destroy") fn test_destroy(id:usize)u64 {
+    unsafe { match destroy(id) { ok=>{return 0;},err(code)=>{return code;}, } }
+}
+export("reclaim_state") fn test_state(index:usize)u64 { unsafe { return *recycled(index) as u64; } }
+export("reclaim_writable") fn test_writable(index:usize)u64 { unsafe { return (*record(index)).writable; } }
+export("reclaim_root_entry") fn test_entry(index:usize)u64 { unsafe { return (*table_at(index,0)).entries[0]; } }
+export("reclaim_ready") fn test_ready(index:usize)u64 { unsafe { return PROCESSES[index].ready; } }
+export("reclaim_fresh") fn test_fresh()u64 { unsafe { match fresh() { ok(index)=>{return index as u64;},err(code)=>{return code;}, } } }
+export("reclaim_alias_setup") fn test_alias_setup()u64 { unsafe {
+    match paging.init(&SPACES[0],TABLES[0][..],0x10_0000,META[0][..],48,true) {ok=>{},err(code)=>{return code;},}
+    match paging.map_live(&SPACES[0],0x1000_0000,FRAMES[0].physical,paging.USER|paging.EXECUTE) {ok=>{},err(code)=>{return code;},}
+    match paging.map_live(&SPACES[0],0x1000_1000,FRAMES[1].physical,paging.USER|paging.WRITE) {ok=>{},err(code)=>{return code;},}
+    match paging.map_live(&SPACES[0],0x1000_2000,FRAMES[1].physical,paging.USER) {ok=>{},err(code)=>{return code;},}
+    match paging.map_live(&SPACES[0],0x6000_0000,0x900_0000,paging.USER|paging.WRITE|paging.UNCACHED) {ok=>{},err(code)=>{return code;},}
+    match paging.map_live(&SPACES[0],0x6000_1000,FRAMES[1].physical,paging.USER|paging.WRITE|paging.UNCACHED) {ok=>{},err(code)=>{return code;},}
+    match paging.map_live(&SPACES[0],0x7000_1000,0xa00_0000,paging.USER) {ok=>{},err(code)=>{return code;},}
+    match paging.init(&SPACES[1],TABLES[1][..],0x12_0000,META[1][..],48,true) {ok=>{},err(code)=>{return code;},}
+}return 0;}
+export("reclaim_alias") fn test_alias(id:usize,virtual:u64,write:bool,out:*u64)u64 { unsafe {
+    match owned_alias(id,virtual,write) {ok(value)=>{*out=value;return 0;},err(code)=>{return code;},}
+}}
+export("reclaim_set_writable") fn test_set_writable(index:usize,value:u64)void {unsafe {(*record(index)).writable=value;}return;}
+export("reclaim_share_at") fn test_share_at(source:usize,target:usize,source_virtual:u64,target_virtual:u64,write:bool)u64 {unsafe {
+    match share_at(source,target,source_virtual,target_virtual,write) {ok=>{return 0;},err(code)=>{return code;},}
+}}
+export("reclaim_share_same") fn test_share_same(virtual:u64)u64 {unsafe {
+    match share(0,1,virtual,true) {ok=>{return 0;},err(code)=>{return code;},}
+}}
+export("reclaim_tables_snapshot") fn test_tables_snapshot(id:usize,out:*u8)usize {unsafe {
+    runtime_copy_bytes(out,(&TABLES[id][0]) as *const u8,POOL_PAGES*4096);
+    runtime_copy_bytes(out+POOL_PAGES*4096,(&META[id][0]) as *const u8,POOL_PAGES);
+    runtime_copy_bytes(out+POOL_PAGES*4096+POOL_PAGES,(&SPACES[id]) as *const u8,sizeof(paging.Space));
+}return POOL_PAGES*4096+POOL_PAGES+sizeof(paging.Space);}
+
+// Test-only transparent call counter. The harness renames the production
+// referenced() body to referenced_impl(); that exact body still executes.
+var TEST_REFERENCE_CALLS:u64=0;
+unsafe fn referenced(physical:u64)bool {unsafe {TEST_REFERENCE_CALLS+=1;return referenced_impl(physical);}}
+export("reclaim_reference_calls") fn test_reference_calls()u64 {unsafe {return TEST_REFERENCE_CALLS;}}
+export("reclaim_large") fn test_large(frames:*Frame,states:*u8)void {unsafe {
+    var i:usize=0;while i<6200 {
+        if i<4 {*(frames+i)=FRAMES[i];*(states+i)=RECYCLED[i];}
+        else {*(frames+i)=Frame {physical:0x1000_0000+i as u64*4096,virtual:FRAMES[0].virtual+i as u64*4096,writable:1};*(states+i)=0;}
+        i+=1;
+    }
+    EXTENDED=frames;EXTENDED_RECYCLED=states;EXTENDED_LIMIT=6200;FRAME_COUNT=6200;REUSE_FROM=0;
+}return;}

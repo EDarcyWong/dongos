@@ -1,0 +1,6 @@
+module input_service_probe;
+import drivers.input_service as input;
+import input.console as console;
+export("input_errors") fn errors()u64 {unsafe {return input.INPUT_ERRORS;}}
+export("input_interrupts") fn interrupts()u64 {unsafe {return input.INTERRUPTS as u64;}}
+export("input_console_pop") fn pop(q:*console.Queue,out:*u8,present:*u64)u64 {unsafe {match console.pop(q,out) {ok(v)=>{*present=v as u64;return 0;},err(e)=>{return e;},}}}

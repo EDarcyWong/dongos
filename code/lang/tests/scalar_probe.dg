@@ -1,0 +1,46 @@
+module scalar_probe;
+
+export("dg_add") fn add(a:u64,b:u64)u64{return a+b;}
+export("dg_sub") fn sub(a:u64,b:u64)u64{return a-b;}
+export("dg_mul") fn mul(a:u64,b:u64)u64{return a*b;}
+export("dg_div") fn div(a:u64,b:u64)u64{return a/b;}
+export("dg_mod") fn mod(a:u64,b:u64)u64{return a%b;}
+export("dg_uneg") fn uneg(a:u64)u64{return -a;}
+export("dg_iadd") fn iadd(a:i64,b:i64)i64{return a+b;}
+export("dg_isub") fn isub(a:i64,b:i64)i64{return a-b;}
+export("dg_imul") fn imul(a:i64,b:i64)i64{return a*b;}
+export("dg_idiv") fn idiv(a:i64,b:i64)i64{return a/b;}
+export("dg_imod") fn imod(a:i64,b:i64)i64{return a%b;}
+export("dg_ineg") fn ineg(a:i64)i64{return -a;}
+export("dg_shl") fn shl(a:u64,b:usize)u64{return a<<b;}
+export("dg_shr") fn shr(a:u64,b:usize)u64{return a>>b;}
+export("dg_sar") fn sar(a:i64,b:usize)i64{return a>>b;}
+export("dg_litshift") fn litshift(b:usize)u64{return 1<<b;}
+export("dg_bits") fn bits(a:u64,b:u64)u64{return ~(a&b)^((a|b)>>1);}
+export("dg_and") fn and(a:bool,d:u64)bool{return a && (1/d==1);}
+export("dg_or") fn or(a:bool,d:u64)bool{return a || (1/d==1);}
+export("dg_not") fn not(a:bool)bool{return !a;}
+export("dg_ult") fn ult(a:u64,b:u64)bool{return a<b;}
+export("dg_ilt") fn ilt(a:i64,b:i64)bool{return a<b;}
+export("dg_equal") fn equal(a:bool,b:bool)bool{return a==b;}
+export("dg_factorial") fn factorial(n:u64)u64{
+    if n==0{return 1;}
+    return n*factorial(n-1);
+}
+export("dg_loop") fn loop_probe(n:u64)u64{
+    var total:u64=0;
+    var i:u64=0;
+    while i<n {
+        i+=1;
+        if i==2{continue;}
+        if i==5{break;}
+        total+=i;
+    }
+    return total;
+}
+export("dg_six") fn six(a:u64,b:u64,c:u64,d:u64,e:u64,f:u64)u64{
+    return add(add(a,b*10),add(c*100,add(d*1000,add(e*10000,f*100000))));
+}
+export("dg_zero") fn zero()i64{return -9223372036854775808;}
+export("dg_order") fn order(a:u64,d:u64)u64{return choose(add(a,1),div(1,d));}
+fn choose(a:u64,b:u64)u64{return a+b;}

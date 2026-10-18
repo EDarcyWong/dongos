@@ -1,0 +1,182 @@
+// One leased physical page, one exclusive live RW/NX mapping, one object cache.
+// BSP-only. Storage and every pointer retained here must outlive the Owner.
+module mm.page_cache;
+
+import mm.phys_buddy as buddy;
+import mm.paging as paging;
+import mm.active_paging as active;
+import mm.fixed_cache as fixed;
+import mm.errors as errors;
+import boot.preflight as preflight;
+
+pub error InUse = 0x020d_0001;
+pub error CleanupRequired = 0x020d_0002;
+
+pub struct Info {
+    pub physical: u64, pub virtual: u64, pub capacity: u64,
+    pub free_objects: u64, pub mapped: u64, pub ready: u64,
+}
+
+pub struct Owner {
+    held: bool, mapped: bool, ready: bool, busy: bool,
+    physical: u64, virtual: u64, capacity: usize,
+    allocator: *buddy.Allocator,
+    context: active.Context,
+    cache: fixed.Cache,
+}
+
+pub const EMPTY_OWNER: Owner = Owner {
+    held: false, mapped: false, ready: false, busy: false,
+    physical: 0, virtual: 0, capacity: 0, allocator: null,
+    context: active.EMPTY_CONTEXT, cache: fixed.EMPTY_CACHE,
+};
+
+fn canonical(address: u64) bool {
+    let upper = address >> 48;
+    if (address & 0x0000_8000_0000_0000) == 0 { return upper == 0; }
+    return upper == 0xffff;
+}
+
+// All ordinary configuration failures precede physical allocation and writes
+// to Owner/metadata. Metadata validity/non-overlap remain unsafe preconditions.
+fn capacity(virtual: u64, object_size: usize, alignment: usize,
+            metadata: []fixed.SlotMeta) !usize {
+    if virtual == 0 || (virtual & 4095) != 0 || !canonical(virtual)
+        || virtual > 0xffff_ffff_ffff_ffff - 4096
+        || object_size == 0 || object_size > 4096 || alignment == 0
+        || alignment > 4096 || (alignment & (alignment - 1)) != 0 {
+        return error.errors.InvalidArgument;
+    }
+    let stride = (object_size + alignment - 1) & ~(alignment - 1);
+    let count = 4096 / stride;
+    if metadata.len < count { return error.errors.MetadataTooSmall; }
+    if metadata.ptr == null { return error.errors.InvalidArgument; }
+    return count;
+}
+
+unsafe fn install(owner: *Owner, space: *paging.Space,
+                  state: *const preflight.State, object_size: usize,
+                  alignment: usize, metadata: []fixed.SlotMeta,
+                  flush: active.Flush) !void {
+    unsafe {
+        var context = active.EMPTY_CONTEXT;
+        try active.bind(&context,space,state,(*owner).virtual,1,(*owner).physical,1,flush);
+        (*owner).context = context;
+        try active.map(&(*owner).context,state,(*owner).virtual,(*owner).physical,paging.WRITE);
+        (*owner).mapped = true;
+        let bytes = slice_from_raw_parts((*owner).virtual as *u8,4096);
+        try fixed.init(&(*owner).cache,bytes,object_size,alignment,metadata);
+        (*owner).ready = true;
+    }
+    return;
+}
+
+// Caller holds Owner.busy. A successful unmap includes full local TLB/walk
+// invalidation and detached-table reclamation before the physical page is free.
+// Keep the lease on every error. After an unmap success, never unmap it twice.
+unsafe fn release_storage(owner: *Owner, state: *const preflight.State) !void {
+    unsafe {
+        if (*owner).mapped {
+            try active.unmap(&(*owner).context,state,(*owner).virtual);
+            (*owner).mapped = false;
+            (*owner).ready = false;
+            (*owner).cache = fixed.EMPTY_CACHE;
+        }
+        try buddy.free((*owner).allocator,(*owner).physical,0);
+        *owner = EMPTY_OWNER;
+    }
+    return;
+}
+
+pub unsafe fn create(owner: *Owner, allocator: *buddy.Allocator, space: *paging.Space,
+                     state: *const preflight.State, virtual: u64, object_size: usize,
+                     alignment: usize, metadata: []fixed.SlotMeta,
+                     flush: active.Flush) !void {
+    unsafe {
+        if (*owner).busy { return error.active.Busy; }
+        if (*owner).held { return error.errors.AlreadyInitialized; }
+        let count = try capacity(virtual,object_size,alignment,metadata);
+        let physical = try buddy.alloc(allocator,0);
+        *owner = Owner {
+            held: true, mapped: false, ready: false, busy: true,
+            physical: physical, virtual: virtual, capacity: count, allocator: allocator,
+            context: active.EMPTY_CONTEXT, cache: fixed.EMPTY_CACHE,
+        };
+        let result = install(owner,space,state,object_size,alignment,metadata,flush);
+        match result {
+            ok => { (*owner).busy = false; return; },
+            err(code) => {
+                (*owner).ready = false;
+                match release_storage(owner,state) {
+                    ok => {},
+                    err(cleanup) => {
+                        (*owner).busy = false;
+                        return error.CleanupRequired;
+                    },
+                }
+            },
+        }
+        return result;
+    }
+}
+
+pub unsafe fn alloc(owner: *Owner) !*u8 {
+    unsafe {
+        if (*owner).busy { return error.active.Busy; }
+        if !(*owner).ready { return error.errors.NotInitialized; }
+        return fixed.alloc(&(*owner).cache);
+    }
+}
+
+pub unsafe fn free(owner: *Owner, object: *u8) !void {
+    unsafe {
+        if (*owner).busy { return error.active.Busy; }
+        if !(*owner).ready { return error.errors.NotInitialized; }
+        return fixed.free(&(*owner).cache,object);
+    }
+}
+
+pub unsafe fn describe(owner: *Owner, out: *Info) !void {
+    unsafe {
+        if (*owner).busy { return error.active.Busy; }
+        if !(*owner).ready { return error.errors.NotInitialized; }
+        let free_count = try fixed.free_count(&(*owner).cache);
+        *out = Info {
+            physical: (*owner).physical, virtual: (*owner).virtual,
+            capacity: (*owner).capacity as u64, free_objects: free_count as u64,
+            mapped: 1, ready: 1,
+        };
+    }
+    return;
+}
+
+pub unsafe fn destroy(owner: *Owner, state: *const preflight.State) !void {
+    unsafe {
+        if (*owner).busy { return error.active.Busy; }
+        if !(*owner).held { return error.errors.NotInitialized; }
+        if (*owner).ready {
+            if (try fixed.free_count(&(*owner).cache)) != (*owner).capacity {
+                return error.InUse;
+            }
+        }
+        (*owner).busy = true;
+        let result = release_storage(owner,state);
+        match result {
+            ok => {},
+            err(code) => {
+                // Ordinary rejected controls leave the mapping and cache
+                // usable. If a post-commit retirement error detached it, pin
+                // the page and block object APIs rather than expose a stale VA.
+                if (*owner).mapped {
+                    var mapping = paging.Mapping { physical: 0, flags: 0 };
+                    match active.query(&(*owner).context,(*owner).virtual,&mapping) {
+                        ok => {},
+                        err(query_error) => { (*owner).ready = false; },
+                    }
+                }
+            },
+        }
+        (*owner).busy = false;
+        return result;
+    }
+}

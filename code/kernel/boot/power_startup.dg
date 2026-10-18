@@ -1,0 +1,61 @@
+// Optional early ACPI capture; persistent state is values/errors only. No old
+// HHDM pointer, Reader callback or firmware table slice survives this phase.
+module boot.power_startup;
+import boot.abi as abi;
+import boot.acpi_startup as startup;
+import firmware.acpi as acpi;
+import firmware.power_runtime as runtime;
+
+pub const POWER_OBJECT:u64=0x0800_0001;
+pub error NotReady=0x0803_0001;
+pub error InvalidAction=0x0803_0002;
+pub error Capacity=0x0803_0003;
+pub error ExecutionReturned=0x0803_0004;
+pub var PREPARED:runtime.Prepared=runtime.EMPTY;
+pub var CAPTURE_ERROR:u64=0;
+pub var REQUESTS:u64=0;
+pub var LAST_ACTION:u64=0;
+var ATTEMPTED:bool=false;
+var CAPTURED:bool=false;
+
+unsafe fn collected(reader:acpi.Reader,context:u64,inventory:*const acpi.Inventory)void {
+    unsafe {
+        match runtime.capture(reader,context,inventory,&PREPARED) {
+            ok=>{},err(code)=>{CAPTURE_ERROR=code;return;},
+        }
+        if PREPARED.aml_tables==0 {CAPTURE_ERROR=PREPARED.reset_error;return;}
+        compiler_fence();CAPTURED=true;
+    }return;
+}
+
+// A failed optional operation disables power and preserves normal ACPI boot.
+// Only the first real early-boot attempt may consume the prepared Reader.
+pub unsafe fn prepare_optional(info:*const abi.BootInfo)void {
+    unsafe {
+        if ATTEMPTED {return;}ATTEMPTED=true;
+        match startup.with_prepared_reader(info,collected) {
+            ok=>{},err(code)=>{CAPTURE_ERROR=code;},
+        }
+    }return;
+}
+
+pub fn validate_request(action:u64)!void {
+    unsafe {
+        if action!=1 && action!=2 {return error.InvalidAction;}
+        if !CAPTURED || CAPTURE_ERROR!=0 || PREPARED.version!=1 || PREPARED.aml_tables==0 || PREPARED.aml_tables>16 {return error.NotReady;}
+        if (action==1 && PREPARED.reset_error!=0) || (action==2 && PREPARED.shutdown_error!=0) {return error.NotReady;}
+        if REQUESTS==0xffff_ffff_ffff_ffff {return error.Capacity;}
+    }return;
+}
+
+// Caller authorizes the current process and completes all synchronous FS/IPC
+// work before this call. No DMA lease is freed and no SMI handoff is attempted.
+// A device-model return can never be reported as a successful power operation.
+pub unsafe fn request_q35(action:u64)!void {
+    unsafe {
+        try validate_request(action);
+        REQUESTS+=1;LAST_ACTION=action;compiler_fence();
+        try runtime.execute_q35(&PREPARED,action);
+    }
+    return error.ExecutionReturned;
+}

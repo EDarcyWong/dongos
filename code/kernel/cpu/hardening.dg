@@ -1,0 +1,113 @@
+// Optional supervisor access controls for the active four-level BSP address
+// space. This module only enumerates, plans and verifies; the privileged write
+// and its serialized readback belong to the caller's assembly transition.
+module cpu.hardening;
+
+import boot.preflight as preflight;
+import arch.x86_64 as arch;
+
+pub const SMEP: u64 = 0x10_0000;
+pub const SMAP: u64 = 0x20_0000;
+pub const UMIP: u64 = 0x800;
+pub const MASK: u64 = 0x30_0800;
+
+pub struct Features { pub max_basic: u64, pub leaf7_ebx: u64, pub leaf7_ecx: u64 }
+pub struct Plan { pub supported: u64, pub cr4: u64 }
+pub struct Report {
+    pub max_basic: u64, pub leaf7_ebx: u64, pub leaf7_ecx: u64,
+    pub supported: u64, pub cr4_before: u64, pub cr4_after: u64,
+    pub rflags_before: u64, pub rflags_after: u64,
+    pub cr0: u64, pub cr3: u64, pub efer: u64, pub pat: u64, pub steps: u64,
+}
+pub const EMPTY_FEATURES: Features = Features { max_basic: 0, leaf7_ebx: 0, leaf7_ecx: 0 };
+pub const EMPTY_PLAN: Plan = Plan { supported: 0, cr4: 0 };
+pub const EMPTY_REPORT: Report = Report {
+    max_basic: 0, leaf7_ebx: 0, leaf7_ecx: 0, supported: 0,
+    cr4_before: 0, cr4_after: 0, rflags_before: 0, rflags_after: 0,
+    cr0: 0, cr3: 0, efer: 0, pat: 0, steps: 0,
+};
+pub error InvalidControls = 0x020c_0001;
+pub error InvalidReadback = 0x020c_0002;
+
+pub fn supported(max_basic: u64, ebx: u64, ecx: u64) u64 {
+    if max_basic < 7 { return 0; }
+    var mask: u64 = 0;
+    if (ebx & 0x80) != 0 { mask |= SMEP; }
+    if (ebx & 0x10_0000) != 0 { mask |= SMAP; }
+    if (ecx & 4) != 0 { mask |= UMIP; }
+    return mask;
+}
+
+// Caller provides a valid aligned writable Features object and an environment
+// in which CPUID is available. The arch wrapper preserves nonvolatile RBX.
+pub unsafe fn detect(out: *Features) void {
+    var raw: arch.CpuId = arch.CpuId { eax: 0, ebx: 0, ecx: 0, edx: 0 };
+    unsafe {
+        arch.cpuid(0, 0, &raw);
+        let maximum: u64 = raw.eax as u64;
+        var value = EMPTY_FEATURES;
+        value.max_basic = maximum;
+        if maximum >= 7 {
+            arch.cpuid(7, 0, &raw);
+            value.leaf7_ebx = raw.ebx as u64;
+            value.leaf7_ecx = raw.ecx as u64;
+        }
+        *out = value;
+    }
+}
+
+// Pointers denote aligned live objects, inputs readable and output writable;
+// output must not overlap either input. Every error preserves the full output.
+// Do not clear a pre-existing optional bit on an unsupported CPU: reject it.
+pub unsafe fn plan(features: *const Features, before: *const preflight.State, out: *Plan) !void {
+    unsafe {
+        let f = *features;
+        let b = *before;
+        if f.max_basic > 0xffff_ffff || f.leaf7_ebx > 0xffff_ffff || f.leaf7_ecx > 0xffff_ffff
+            || (f.max_basic < 7 && (f.leaf7_ebx != 0 || f.leaf7_ecx != 0)) {
+            return error.InvalidControls;
+        }
+        let mask = supported(f.max_basic, f.leaf7_ebx, f.leaf7_ecx);
+        if (b.cr0 & 0x8001_0001) != 0x8001_0001 || (b.cr0 & 0x6000_0000) != 0
+            || b.cr3 == 0 || (b.cr3 & 4095) != 0
+            || (b.cr4 & 32) == 0 || (b.cr4 & 0x0082_1080) != 0
+            || (b.efer & 0xd00) != 0xd00
+            || (b.rflags & 0x60600) != 0 || (b.rflags & 2) == 0
+            || (b.pat & 255) != 6 || ((b.pat >> 24) & 255) != 0
+            || (b.cr4 & MASK & ~mask) != 0 {
+            return error.InvalidControls;
+        }
+        *out = Plan { supported: mask, cr4: b.cr4 | mask };
+    }
+    return;
+}
+
+// All pointers denote aligned readable live objects. No argument is modified.
+// Arithmetic flags may change across the assembly transition; IF/DF/VM/AC
+// must be clear and fixed RFLAGS bit 1 set in both actual snapshots.
+pub unsafe fn verify(features: *const Features, before: *const preflight.State,
+                     after: *const preflight.State, planned: *const Plan, report: *const Report) !void {
+    unsafe {
+        var expected = EMPTY_PLAN;
+        match plan(features, before, &expected) {
+            ok => {},
+            err(code) => { return error.InvalidReadback; },
+        }
+        let f = *features;
+        let b = *before;
+        let a = *after;
+        let p = *planned;
+        let r = *report;
+        if p.supported != expected.supported || p.cr4 != expected.cr4
+            || a.cr0 != b.cr0 || a.cr3 != b.cr3 || a.cr4 != expected.cr4
+            || a.efer != b.efer || a.pat != b.pat
+            || (a.rflags & 0x60600) != 0 || (a.rflags & 2) == 0
+            || r.max_basic != f.max_basic || r.leaf7_ebx != f.leaf7_ebx || r.leaf7_ecx != f.leaf7_ecx
+            || r.supported != expected.supported || r.cr4_before != b.cr4 || r.cr4_after != a.cr4
+            || r.rflags_before != b.rflags || r.rflags_after != a.rflags
+            || r.cr0 != a.cr0 || r.cr3 != a.cr3 || r.efer != a.efer || r.pat != a.pat || r.steps != 7 {
+            return error.InvalidReadback;
+        }
+    }
+    return;
+}

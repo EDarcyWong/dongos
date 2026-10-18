@@ -1,0 +1,131 @@
+// Exact bounded clipping policy; no allocation, pixels, surfaces or globals.
+module desktop.occlusion;
+import gfx.geometry as geo;
+pub error Invalid=0x0727_0001;
+pub const CAPACITY:usize=81;
+pub struct Part { pub rect:geo.Rect,pub first:u64 }
+pub struct Plan { pub count:u64,pub parts:[81]Part }
+pub const EMPTY_PART:Part=Part { rect:geo.EMPTY,first:0 };
+pub const EMPTY_PLAN:Plan=Plan { count:0,parts:[EMPTY_PART;81] };
+const MAX:i64=0x7fff_ffff_ffff_ffff;
+
+unsafe fn insert(edges:*[10]i64,count:usize,value:i64)usize {
+    unsafe {
+        var at:usize=0;
+        while at<count && (*edges)[at]<value { at+=1; }
+        if at<count && (*edges)[at]==value { return count; }
+        var i=count;
+        while i>at { (*edges)[i]=(*edges)[i-1];i-=1; }
+        (*edges)[at]=value;
+    }return count+1;
+}
+unsafe fn highest(x:i64,y:i64,opaque:*const [4]geo.Rect,count:usize)u8 {
+    unsafe {
+        var owner:u8=0;var i:usize=0;
+        while i<count {
+            let r=(*opaque)[i];
+            if r.left<=x && x<r.right && r.top<=y && y<r.bottom { owner=(i+1) as u8; }
+            i+=1;
+        }return owner;
+    }
+}
+unsafe fn classify(xs:*const [10]i64,nx:usize,ys:*const [10]i64,ny:usize,opaque:*const [4]geo.Rect,count:usize,cells:*[81]u8)void {
+    unsafe {
+        var y:usize=0;
+        while y+1<ny {
+            var x:usize=0;
+            while x+1<nx { (*cells)[y*9+x]=highest((*xs)[x],(*ys)[y],opaque,count);x+=1; }
+            y+=1;
+        }
+    }
+}
+unsafe fn publish(xs:*const [10]i64,nx:usize,ys:*const [10]i64,ny:usize,cells:*const [81]u8,out:*Plan)void {
+    // Validation/classification is complete before the first store. The grid
+    // bounds prove <=81 runs; no fallible work occurs during publication.
+    unsafe {
+        var used:usize=0;var y:usize=0;
+        while y+1<ny {
+            var x:usize=0;
+            while x+1<nx {
+                let first=(*cells)[y*9+x] as u64;let begin=x;
+                x+=1;
+                while x+1<nx && (*cells)[y*9+x] as u64==first { x+=1; }
+                let left=(*xs)[begin];let right=(*xs)[x];
+                let top=(*ys)[y];let bottom=(*ys)[y+1];
+                var found=false;var i:usize=0;
+                while i<used && !found {
+                    if (*out).parts[i].first==first && (*out).parts[i].rect.left==left
+                        && (*out).parts[i].rect.right==right && (*out).parts[i].rect.bottom==top {
+                        (*out).parts[i].rect.bottom=bottom;found=true;
+                    }i+=1;
+                }
+                if !found {
+                    (*out).parts[used]=Part { rect:geo.Rect { left:left,top:top,right:right,bottom:bottom },first:first };
+                    used+=1;
+                }
+            }y+=1;
+        }
+        (*out).count=used as u64;
+        while used<CAPACITY { (*out).parts[used]=Part { rect:geo.EMPTY,first:0 };used+=1; }
+    }
+}
+// Opaque rectangles are trusted alpha=255 regions in bottom-to-top Z order.
+// first=0 requires background and all windows; first=k starts at Z index k-1.
+// Opaque inputs may be empty or outside clip. count=0 permits opaque=null.
+// All i64 coordinates are supported. Invalid input leaves every output byte
+// unchanged. Snapshots also permit output storage to alias input rectangles.
+pub unsafe fn partition(clip:*const geo.Rect,opaque:*const [4]geo.Rect,count:u64,out:*Plan)!void {
+    unsafe {
+        if out==null || !geo.valid(clip) || count>4 || (count!=0 && opaque==null) { return error.Invalid; }
+        let bounds=*clip;var cuts=[geo.EMPTY;4];var i:usize=0;
+        while i<count as usize {
+            if !geo.valid(&(*opaque)[i]) { return error.Invalid; }
+            // Intersection is total after rectangle validity has been checked.
+            let visible=try geo.intersect(&bounds,&(*opaque)[i],&cuts[i]);i+=1;
+        }
+        var xs=[0 as i64;10];var ys=[0 as i64;10];var nx:usize=0;var ny:usize=0;
+        nx=insert(&xs,nx,bounds.left);nx=insert(&xs,nx,bounds.right);
+        ny=insert(&ys,ny,bounds.top);ny=insert(&ys,ny,bounds.bottom);
+        i=0;
+        while i<count as usize {
+            if !geo.empty(&cuts[i]) {
+                nx=insert(&xs,nx,cuts[i].left);nx=insert(&xs,nx,cuts[i].right);
+                ny=insert(&ys,ny,cuts[i].top);ny=insert(&ys,ny,cuts[i].bottom);
+            }i+=1;
+        }
+        var cells=[0 as u8;81];
+        classify(&xs,nx,&ys,ny,&cuts,count as usize,&cells);
+        publish(&xs,nx,&ys,ny,&cells,out);
+    }return;
+}
+fn extent(left:i64,right:i64)!i64 {
+    if left>=right || (left<0 && right>MAX+left) { return error.Invalid; }
+    let size=right-left;
+    if size>8192 { return error.Invalid; }
+    return size;
+}
+fn ceiling(position:i64,target:i64,source:u64)i64 {
+    // 0<=position<=source<=8192 and 1<=target<=8192, so no product overflows.
+    return (position*target+source as i64-1)/(source as i64);
+}
+// Exact inverse image of a rectangular opaque source under nearest-floor
+// sampling: floor((x-target.left)*SW/TW) lies inside [sleft,sright).
+// This does not establish source opacity; callers must prove alpha=255 and
+// effective window opacity=256. Empty source/intersection results stay empty.
+pub unsafe fn opaque_interior(sw:u64,sh:u64,source:*const geo.Rect,target:*const geo.Rect,out:*geo.Rect)!void {
+    unsafe {
+        if out==null || sw==0 || sh==0 || sw>8192 || sh>8192 || !geo.valid(source) || !geo.valid(target) {
+            return error.Invalid;
+        }
+        if (*source).left<0 || (*source).top<0 || (*source).right>sw as i64 || (*source).bottom>sh as i64 {
+            return error.Invalid;
+        }
+        let tw=try extent((*target).left,(*target).right);let th=try extent((*target).top,(*target).bottom);
+        let value=geo.Rect {
+            left:(*target).left+ceiling((*source).left,tw,sw),
+            top:(*target).top+ceiling((*source).top,th,sh),
+            right:(*target).left+ceiling((*source).right,tw,sw),
+            bottom:(*target).top+ceiling((*source).bottom,th,sh) };
+        *out=value;
+    }return;
+}

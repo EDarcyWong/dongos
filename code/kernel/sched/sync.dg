@@ -1,0 +1,23 @@
+// Kernel-only BSP wrappers. spin.Lock by itself has no IRQ/preemption policy.
+module sched.sync;
+import sched.core as core;
+pub struct Lock { pub state: u32 }
+pub const EMPTY_LOCK: Lock = Lock { state: 0 };
+unsafe extern "sysv64" ("sched_irq_save") fn irq_save_raw() u64;
+unsafe extern "sysv64" ("sched_irq_restore") fn irq_restore_raw(flags: u64) void;
+unsafe extern "sysv64" ("sched_lock_irqsave") fn lock_raw(lock: *Lock) u64;
+unsafe extern "sysv64" ("sched_unlock_irqrestore") fn unlock_raw(lock: *Lock, flags: u64) void;
+unsafe extern "sysv64" ("sched_park") fn park_raw(engine: *core.Engine) void;
+pub unsafe fn irq_save() u64 { unsafe { return irq_save_raw(); } }
+pub unsafe fn irq_restore(flags: u64) void { unsafe { irq_restore_raw(flags); } }
+pub unsafe fn lock(lock: *Lock) u64 { unsafe { return lock_raw(lock); } }
+pub unsafe fn unlock(lock: *Lock, flags: u64) void { unsafe { unlock_raw(lock, flags); } }
+// Predicate must be checked by the caller while IRQs are disabled. The same
+// token is restored only after the thread has actually been woken and selected.
+pub unsafe fn wait(engine: *core.Engine, queue: *core.WaitQueue, observed: u64) !void {
+    unsafe {
+        try core.wait(engine, queue, observed);
+        park_raw(engine);
+    }
+    return;
+}

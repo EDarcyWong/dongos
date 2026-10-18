@@ -1,0 +1,188 @@
+// mm.memory_map — normalize a raw UEFI memory map plus explicit reserved ranges
+// into maximal contiguous usable page segments for mm.phys_buddy. Computes only;
+// does not publish to an allocator or touch page tables. Physical addresses are
+// plain u64 values.
+
+module mm.memory_map;
+
+import mm.errors as mmerr;
+import core.errors as coreerr;
+
+pub const PAGE_SIZE: usize = 4096;
+
+const PAGE: u64 = 4096;
+const U64_MAX: u64 = 0xffff_ffff_ffff_ffff;
+const CONVENTIONAL: u32 = 7;
+const RUNTIME_BIT: u64 = 0x8000000000000000;
+
+pub struct ReservedRange { pub base: u64, pub length: u64 }
+pub struct PageRange { pub start_page: usize, pub page_count: usize }
+
+fn read_u32_at(bytes: *const u8, offset: usize) u32 {
+    unsafe {
+        let p: *const u32 = (bytes + offset) as *const u32;
+        return read_unaligned(p);
+    }
+}
+
+fn read_u64_at(bytes: *const u8, offset: usize) u64 {
+    unsafe {
+        let p: *const u64 = (bytes + offset) as *const u64;
+        return read_unaligned(p);
+    }
+}
+
+fn is_power_of_two(value: usize) bool {
+    if value == 0 { return false; }
+    return (value & (value - 1)) == 0;
+}
+
+pub unsafe fn normalize(
+    raw: []const u8,
+    descriptor_size: usize,
+    descriptor_version: u64,
+    arena_base: u64,
+    arena_pages: usize,
+    reserved: []const ReservedRange,
+    scratch: []u8,
+    output: []PageRange
+) !usize {
+    // 1. Arena geometry.
+    if arena_pages == 0 || arena_pages > (1 << 20) { return error.mmerr.InvalidArgument; }
+    if !is_power_of_two(arena_pages) { return error.mmerr.InvalidArgument; }
+    let arena_bytes: u64 = (arena_pages as u64) * PAGE;
+    if (arena_base % arena_bytes) != 0 { return error.mmerr.InvalidArgument; }
+    if arena_base > U64_MAX - arena_bytes { return error.mmerr.InvalidArgument; }
+    // 2. Map parameters.
+    if descriptor_version != 1 { return error.mmerr.InvalidArgument; }
+    if descriptor_size < 40 || (descriptor_size % 8) != 0 { return error.mmerr.InvalidArgument; }
+    if raw.len > 65536 { return error.mmerr.InvalidArgument; }
+    if (raw.len % descriptor_size) != 0 { return error.mmerr.InvalidArgument; }
+    // 3. Scratch capacity.
+    if scratch.len < arena_pages { return error.mmerr.MetadataTooSmall; }
+
+    let count: usize = raw.len / descriptor_size;
+    let arena_end: u64 = arena_base + arena_bytes;
+
+    // 4. Validate every descriptor (alignment, zero pages, endpoint overflow).
+    var i: usize = 0;
+    while i < count {
+        let start: u64 = read_u64_at(raw.ptr, i * descriptor_size + 8);
+        let pages: u64 = read_u64_at(raw.ptr, i * descriptor_size + 24);
+        if (start % PAGE) != 0 { return error.mmerr.InvalidArgument; }
+        if pages == 0 { return error.mmerr.InvalidArgument; }
+        if pages > (U64_MAX - start) / PAGE { return error.mmerr.InvalidArgument; }
+        i += 1;
+    }
+    // 4b. Pairwise overlap check (descriptors may be unordered).
+    var a: usize = 0;
+    while a < count {
+        let sa: u64 = read_u64_at(raw.ptr, a * descriptor_size + 8);
+        let pa: u64 = read_u64_at(raw.ptr, a * descriptor_size + 24);
+        let ea: u64 = sa + pa * PAGE;
+        var b: usize = a + 1;
+        while b < count {
+            let sb: u64 = read_u64_at(raw.ptr, b * descriptor_size + 8);
+            let pb: u64 = read_u64_at(raw.ptr, b * descriptor_size + 24);
+            let eb: u64 = sb + pb * PAGE;
+            if sa < eb && sb < ea { return error.mmerr.InvalidArgument; }
+            b += 1;
+        }
+        a += 1;
+    }
+    // 5. Reserved endpoint validation (non-zero length only).
+    var r: usize = 0;
+    while r < reserved.len {
+        let rl: u64 = reserved[r].length;
+        if rl != 0 {
+            if reserved[r].base > U64_MAX - rl { return error.mmerr.InvalidArgument; }
+        }
+        r += 1;
+    }
+
+    // 6. Mark usable pages (ConventionalMemory, not runtime), clipped to arena.
+    var p: usize = 0;
+    while p < arena_pages {
+        scratch[p] = 0;
+        p += 1;
+    }
+    var d: usize = 0;
+    while d < count {
+        let dtype: u32 = read_u32_at(raw.ptr, d * descriptor_size + 0);
+        let dattr: u64 = read_u64_at(raw.ptr, d * descriptor_size + 32);
+        if dtype == CONVENTIONAL && (dattr & RUNTIME_BIT) == 0 {
+            let dstart: u64 = read_u64_at(raw.ptr, d * descriptor_size + 8);
+            let dpages: u64 = read_u64_at(raw.ptr, d * descriptor_size + 24);
+            let dend: u64 = dstart + dpages * PAGE;
+            if dend > arena_base && dstart < arena_end {
+                var lo: u64 = dstart;
+                if arena_base > lo { lo = arena_base; }
+                var hi: u64 = dend;
+                if arena_end < hi { hi = arena_end; }
+                let first: usize = ((lo - arena_base) / PAGE) as usize;
+                let last: usize = ((hi - arena_base) / PAGE) as usize;
+                var q: usize = first;
+                while q < last {
+                    scratch[q] = 1;
+                    q += 1;
+                }
+            }
+        }
+        d += 1;
+    }
+    // 7. Apply reserved ranges: any page intersecting reserved bytes is excluded.
+    var rr: usize = 0;
+    while rr < reserved.len {
+        let rb: u64 = reserved[rr].base;
+        let rl: u64 = reserved[rr].length;
+        if rl != 0 {
+            let rend: u64 = rb + rl;
+            if rend > arena_base && rb < arena_end {
+                var lo: u64 = rb;
+                if arena_base > lo { lo = arena_base; }
+                var hi: u64 = rend;
+                if arena_end < hi { hi = arena_end; }
+                let first: usize = ((lo - arena_base) / PAGE) as usize;
+                let last: usize = ((hi - arena_base - 1) / PAGE) as usize;
+                var q: usize = first;
+                while q <= last {
+                    scratch[q] = 0;
+                    q += 1;
+                }
+            }
+        }
+        rr += 1;
+    }
+
+    // 8. Count maximal contiguous usable segments.
+    var segments: usize = 0;
+    var c: usize = 0;
+    while c < arena_pages {
+        if scratch[c] == 1 {
+            segments += 1;
+            while c < arena_pages && scratch[c] == 1 { c += 1; }
+        } else {
+            c += 1;
+        }
+    }
+    // 9. Output capacity, then write.
+    if segments > output.len { return error.coreerr.BufferTooSmall; }
+    var w: usize = 0;
+    var o: usize = 0;
+    while w < arena_pages {
+        if scratch[w] == 1 {
+            let start: usize = w;
+            var pcnt: usize = 0;
+            while w < arena_pages && scratch[w] == 1 {
+                pcnt += 1;
+                w += 1;
+            }
+            output[o].start_page = start;
+            output[o].page_count = pcnt;
+            o += 1;
+        } else {
+            w += 1;
+        }
+    }
+    return segments;
+}

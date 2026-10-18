@@ -1,0 +1,23 @@
+// Read the independent loader page only while the original low4G root is live.
+module boot.trace_handoff;
+import boot.trace as trace;
+import boot.service_resources as resources;
+pub error Invalid=0x0611_0001;
+const MAX:u64=0xffff_ffff_ffff_ffff;
+pub unsafe fn adopt(raw:[]const u8,stride:usize,physical:u64,tag:u64,stamp:*const trace.Stamp,
+ forbidden:[]const resources.Span,out:*trace.Trace)!void{unsafe{
+ if tag!=trace.MAGIC||stamp==null||out==null||((out as u64)&63)!=0||forbidden.len>64
+  ||(forbidden.len!=0&&forbidden.ptr==null)||!resources.readable_handoff(raw,stride,physical){return error.Invalid;}
+ let target=out as u64;if target>MAX-4096||(target<physical+4096&&physical<target+4096){return error.Invalid;}
+ var i:usize=0;while i<forbidden.len{let item=forbidden[i];
+  if item.length==0||item.physical>MAX-item.length||(physical<item.physical+item.length&&item.physical<physical+4096){return error.Invalid;}i+=1;}
+ // Complete the numeric map/overlap proof before the first physical read.
+ let source=physical as *const trace.Trace;try trace.validate(source);
+ if (*source).header.state!=2||(*source).header.count!=2||(*source).header.clock_source!=0
+  ||(*source).header.configuration_count!=0||(*source).header.started_mask!=0||(*source).header.ready_mask!=0
+  ||(*source).header.required_client_mask!=0||(*source).header.loader_cpu!=(*stamp).cpu{return error.Invalid;}
+ if (*stamp).tsc<=(*source).header.last_tsc{return error.Invalid;}
+ i=0;while i<512{*((out as *u64)+i)=*((source as *const u64)+i);i+=1;}
+ let event=trace.Event{kind:trace.KERNEL_ENTRY,subject:0,generation:0,detail:0};
+ try trace.record(out,&event,(*stamp).tsc,(*stamp).cpu);
+}return;}

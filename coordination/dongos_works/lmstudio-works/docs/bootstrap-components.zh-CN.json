@@ -1,0 +1,47 @@
+{
+  "version": 1,
+  "items": [
+    {
+      "module": "bootstrap.cfg_reachability",
+      "title": "控制流可达性",
+      "summary": "检查控制流图合法性与节点可达性",
+      "source": "lang/bootstrap/cfg_reachability.dg"
+    },
+    {
+      "module": "bootstrap.sysv_integer_args",
+      "title": "整数参数规划",
+      "summary": "规划SysV整数标量及双字参数位置，非完整ABI",
+      "source": "lang/bootstrap/sysv_integer_args.dg"
+    },
+    {
+      "module": "bootstrap.parallel_moves",
+      "title": "并行复制转换",
+      "summary": "将并行复制转换为含临时位置的顺序复制",
+      "source": "lang/bootstrap/parallel_moves.dg"
+    },
+    {
+      "module": "bootstrap.stack_slots",
+      "title": "栈帧槽位布局",
+      "summary": "规划向下增长栈帧的槽位布局",
+      "source": "lang/bootstrap/stack_slots.dg"
+    },
+    {
+      "module": "bootstrap.switch_cases",
+      "title": "分支值排序",
+      "summary": "有符号分支值排序和重复检查",
+      "source": "lang/bootstrap/switch_cases.dg"
+    },
+    {
+      "module": "bootstrap.cleanup_plan",
+      "title": "退出清理顺序",
+      "summary": "规划作用域退出清理顺序，不执行清理体",
+      "source": "lang/bootstrap/cleanup_plan.dg"
+    },
+    {
+      "module": "bootstrap.nasm_bytes",
+      "title": "NASM字节编码",
+      "summary": "将原始字节编码为NASM db文本，非完整后端",
+      "source": "lang/bootstrap/nasm_bytes.dg"
+    }
+  ]
+}

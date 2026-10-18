@@ -1,0 +1,40 @@
+// Conservative linear assignment of closed intervals, sorted by start, to at
+// most 16 registers. A register stays busy until a later start exceeds its
+// interval's end (old end < new start); the lowest-numbered free register wins,
+// otherwise a fresh spill slot. Never evicts and never reuses a spill slot, so
+// this is deterministic, not optimal. Every check precedes any write.
+module bootstrap.register_slots;
+pub const OK:u64=0;pub const INVALID:u64=1;pub const CAPACITY:u64=2;
+pub const REGISTER:u64=0;pub const SPILL:u64=1;
+pub struct Interval{pub start:usize,pub end:usize}
+pub struct Location{pub kind:u64,pub index:usize}
+pub struct Result{pub used:usize,pub spill_slots:usize}
+const MAX:u64=0xffff_ffff_ffff_ffff;
+const REGISTERS:usize=16;
+fn span(p:u64,n:u64)bool{return n==0||(p!=0&&n<=MAX-p);}
+fn overlap(a:u64,n:u64,b:u64,m:u64)bool{return n!=0&&m!=0&&a<b+m&&b<a+n;}
+unsafe fn valid(input:[]const Interval,out:[]Location,result:*Result)bool{unsafe{
+ if result==null||input.len>MAX/sizeof(Interval)||out.len>MAX/sizeof(Location){return false;}
+ let ip=input.ptr as u64;let op=out.ptr as u64;let rp=result as u64;
+ let ib=input.len*sizeof(Interval);let ob=out.len*sizeof(Location);let rb=sizeof(Result);
+ if !span(ip,ib)||!span(op,ob)||!span(rp,rb)||(ib!=0&&(ip&7)!=0)||(ob!=0&&(op&7)!=0)||(rp&7)!=0{return false;}
+ if overlap(op,ob,ip,ib)||overlap(rp,rb,ip,ib)||overlap(op,ob,rp,rb){return false;}
+ return true;
+}}
+pub unsafe fn assign(input:[]const Interval,register_count:usize,out:[]Location,result:*Result)u64{unsafe{
+ if !valid(input,out,result)||register_count==0||register_count>REGISTERS{return INVALID;}
+ // Data: start<=end and starts non-decreasing; nothing is written yet.
+ let n=input.len;var prev:usize=0;var i:usize=0;
+ while i<n{let s=input[i];if s.start>s.end||s.start<prev{return INVALID;}prev=s.start;i+=1;}
+ if out.len<n{return CAPACITY;}
+ // busy[r]!=0: register r holds an interval ending at ends[r] (MAX never frees).
+ var busy:[16]u8=[0;16];var ends:[16]usize=[0;16];var spills:usize=0;i=0;
+ while i<n{
+  let s=input[i];var r:usize=0;
+  while r<register_count{if busy[r]==0||ends[r]<s.start{break;}r+=1;}
+  if r<register_count{busy[r]=1;ends[r]=s.end;out[i]=Location{kind:REGISTER,index:r};}
+  else{out[i]=Location{kind:SPILL,index:spills};spills+=1;}
+  i+=1;
+ }
+ *result=Result{used:n,spill_slots:spills};return OK;
+}}

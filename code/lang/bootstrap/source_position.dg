@@ -1,0 +1,28 @@
+// Byte offset -> 1-based line/column (Unicode scalars) and the current line's
+// byte range, over strictly valid UTF-8. Only LF ends a line; CR, TAB, NUL and
+// U+FEFF each count as one column. Nothing is written unless the result is OK.
+module bootstrap.source_position;
+import core.utf8 as utf8;
+pub const OK:u64=0;pub const INVALID:u64=1;pub const UTF8:u64=2;pub const BOUNDARY:u64=3;
+pub struct Position{pub line:usize,pub column:usize,pub line_start:usize,pub line_end:usize}
+const MAX:u64=0xffff_ffff_ffff_ffff;
+fn span(p:u64,n:u64)bool{return n==0||(p!=0&&n<=MAX-p);}
+fn overlap(a:u64,n:u64,b:u64,m:u64)bool{return n!=0&&m!=0&&a<b+m&&b<a+n;}
+pub unsafe fn locate(source:[]const u8,byte_offset:usize,out:*Position)u64{unsafe{
+ let sp=source.ptr as u64;let op=out as u64;let on=sizeof(Position);
+ if out==null||(op&7)!=0||!span(op,on)||!span(sp,source.len)||overlap(sp,source.len,op,on){return INVALID;}
+ if byte_offset>source.len{return INVALID;}
+ // The whole source, including the tail after byte_offset, must be strict UTF-8.
+ if !utf8.validate(source){return UTF8;}
+ var line:usize=1;var column:usize=1;var start:usize=0;var at:usize=0;
+ var d=utf8.Decode{scalar:0,width:0};
+ while at<byte_offset{
+  if !utf8.decode(source,at,&d){return UTF8;}
+  if d.width>byte_offset-at{return BOUNDARY;}
+  // line and column are at most source.len+1, which cannot wrap.
+  if d.scalar==10{line+=1;column=1;start=at+1;}else{column+=1;}
+  at+=d.width;
+ }
+ var end=byte_offset;while end<source.len&&source[end]!=10{end+=1;}
+ *out=Position{line:line,column:column,line_start:start,line_end:end};return OK;
+}}

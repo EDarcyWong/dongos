@@ -1,0 +1,23 @@
+// Explicit empty-map owner boundary. Real tagged policy and bind_owner execute.
+// Tagged object backing cannot be represented by these lifecycle fixtures.
+module user.shared_objects;
+import ipc.shared_core as object_core;import ipc.handles as handles;
+var REG:object_core.Registry=object_core.Registry{ready:0,pool_physical:0,pool_alias:0,
+ owners:[0;16],objects:[object_core.EMPTY_OBJECT;8],maps:[[object_core.EMPTY_MAP;4];16]};
+var OBJECT_REGISTRY:*object_core.Registry=null;var OBJECT_FAILED:bool=false;
+var ABORTS:[16]u64=[0;16];pub var UNSUPPORTED:bool=false;
+pub fn reset()void{unsafe{REG.ready=0;OBJECT_REGISTRY=&REG;OBJECT_FAILED=false;UNSUPPORTED=false;ABORTS=[0;16];
+ match object_core.initialize(&REG,0x100000,0x200000){ok=>{},err(e)=>{OBJECT_FAILED=true;},}}return;}
+pub fn tagged(identity:u64)bool{return object_core.tagged(identity);}
+pub unsafe fn check_ref(identity:u64,increase:bool)!void{return error.handles.Denied;}
+pub unsafe fn retain(identity:u64)void{unsafe{UNSUPPORTED=true;}return;}
+pub unsafe fn drop(identity:u64)void{unsafe{UNSUPPORTED=true;}return;}
+pub fn bound_owner(id:usize)u64{unsafe{return REG.owners[id];}}
+pub unsafe fn bind_owner(id:usize,owner:u64)!void{unsafe{try object_core.bind_owner(&REG,id,owner);}return;}
+// EXACT_PRODUCTION_OBJECT_ABORT_OWNER
+pub unsafe fn abort_owner(id:usize)void{unsafe{object_abort_owner(id);ABORTS[id]+=1;}return;}
+pub fn abort_count(id:usize)u64{unsafe{return ABORTS[id];}}
+pub unsafe fn owner_gone(id:usize,owner:u64)!void{unsafe{
+ if REG.owners[id]!=owner{return error.handles.InvalidArgument;}
+ object_abort_owner(id);if OBJECT_FAILED{return error.handles.Denied;}
+}return;}

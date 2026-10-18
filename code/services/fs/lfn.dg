@@ -1,0 +1,122 @@
+// Complete-group codec only. No allocation, streaming state or disk I/O.
+module fs.lfn;
+import fs.path as path;
+pub error InvalidArgument=0x050b_0001;
+pub error Corrupt=0x050b_0002;
+pub error InvalidUnicode=0x050b_0003;
+pub error InvalidName=0x050b_0004;
+pub error TooLong=0x050b_0005;
+pub struct Group {pub count:usize,pub bytes:[672]u8}
+pub struct Name {pub length:usize,pub units:usize,pub bytes:[1020]u8}
+pub const EMPTY_GROUP:Group=Group{count:0,bytes:[0;672]};
+pub const EMPTY_NAME:Name=Name{length:0,units:0,bytes:[0;1020]};
+const MAX:u64=0xffff_ffff_ffff_ffff;
+const OFFSETS:[13]usize=[1,3,5,7,9,14,16,18,20,22,24,28,30];
+unsafe fn span(input:[]const u8,limit:usize)!void {unsafe {
+    if input.len>limit {return error.TooLong;}
+    if (input.len!=0&&input.ptr==null)||(input.ptr as u64)>MAX-input.len as u64 {return error.InvalidArgument;}
+}return;}
+pub unsafe fn checksum(alias:[]const u8)!u8 {unsafe {
+    try span(alias,11);if alias.len!=11 {return error.InvalidArgument;}
+    var value:u32=0;var i:usize=0;while i<11 {
+        value=(((value&1)<<7)|(value>>1))+(alias[i] as u32);value&=255;i+=1;
+    }return value as u8;
+}}
+unsafe fn short_entry(entry:[]const u8)!void {unsafe {
+    try span(entry,32);if entry.len!=32 {return error.InvalidArgument;}
+    if entry[0]==0||entry[0]==0xe5||entry[0]==32||(entry[11]&0xc8)!=0 {return error.Corrupt;}
+    var i:usize=0;var padded:bool=false;while i<11 {
+        if i==8 {padded=false;}
+        let ch=entry[i];
+        if ch==32 {padded=true;}
+        else {
+            if padded||((ch<32)&&!(i==0&&ch==5))||ch==34||ch==42||ch==43||ch==44||ch==46||ch==47
+                ||ch==58||ch==59||ch==60||ch==61||ch==62||ch==63||ch==91||ch==92||ch==93||ch==124 {return error.Corrupt;}
+        }i+=1;
+    }
+}return;}
+unsafe fn word(input:[]const u8,index:usize)u32 {unsafe {
+    return (input[index] as u32)|((input[index+1] as u32)<<8);
+}}
+unsafe fn put_word(bytes:*[672]u8,index:usize,value:u32)void {unsafe {
+    (*bytes)[index]=value as u8;(*bytes)[index+1]=(value>>8) as u8;
+}return;}
+// The validator has proved every UTF-8 scalar, so this conversion never repairs.
+pub unsafe fn encode(name:[]const u8,entry:[]const u8,out:*Group)!void {unsafe {
+    if out==null||(out as u64)%8!=0||(out as u64)>MAX-sizeof(Group) as u64 {return error.InvalidArgument;}
+    try short_entry(entry);let units=try path.validate_name(name);
+    var words:[260]u32=[0xffff;260];var at:usize=0;var used:usize=0;
+    while at<name.len {
+        let first=name[at] as u32;var cp=first;var count:usize=1;
+        if first>=0xf0 {cp=first&7;count=4;}
+        else if first>=0xe0 {cp=first&15;count=3;}
+        else if first>=0xc0 {cp=first&31;count=2;}
+        var j:usize=1;while j<count {cp=(cp<<6)|((name[at+j] as u32)&63);j+=1;}
+        if cp>=0x10000 {cp-=0x10000;words[used]=0xd800+(cp>>10);used+=1;words[used]=0xdc00+(cp&1023);used+=1;}
+        else {words[used]=cp;used+=1;}
+        at+=count;
+    }
+    let slots=(units+12)/13;if units%13!=0 {words[units]=0;}
+    let sum=try checksum(entry[0..11]);var candidate=EMPTY_GROUP;candidate.count=slots+1;
+    var physical:usize=0;while physical<slots {
+        let ordinal=slots-physical;let base=physical*32;candidate.bytes[base]=ordinal as u8;
+        if physical==0 {candidate.bytes[base]|=0x40;}
+        candidate.bytes[base+11]=15;candidate.bytes[base+13]=sum;
+        var j:usize=0;while j<13 {put_word(&candidate.bytes,base+OFFSETS[j],words[(ordinal-1)*13+j]);j+=1;}
+        physical+=1;
+    }
+    var j:usize=0;while j<32 {candidate.bytes[slots*32+j]=entry[j];j+=1;}
+    *out=candidate;
+}return;}
+unsafe fn emit(candidate:*Name,cp:u32)!void {unsafe {
+    if cp<32||cp==34||cp==42||cp==47||cp==58||cp==60||cp==62||cp==63||cp==92||cp==124||cp==0xffff {return error.InvalidName;}
+    var n:usize=1;if cp>=0x10000 {n=4;}else if cp>=0x800 {n=3;}else if cp>=128 {n=2;}
+    if n>1020-(*candidate).length {return error.TooLong;}
+    let at=(*candidate).length;
+    if n==1 {(*candidate).bytes[at]=cp as u8;}
+    else if n==2 {(*candidate).bytes[at]=(0xc0|(cp>>6)) as u8;(*candidate).bytes[at+1]=(0x80|(cp&63)) as u8;}
+    else if n==3 {(*candidate).bytes[at]=(0xe0|(cp>>12)) as u8;(*candidate).bytes[at+1]=(0x80|((cp>>6)&63)) as u8;(*candidate).bytes[at+2]=(0x80|(cp&63)) as u8;}
+    else {(*candidate).bytes[at]=(0xf0|(cp>>18)) as u8;(*candidate).bytes[at+1]=(0x80|((cp>>12)&63)) as u8;(*candidate).bytes[at+2]=(0x80|((cp>>6)&63)) as u8;(*candidate).bytes[at+3]=(0x80|(cp&63)) as u8;}
+    (*candidate).length+=n;
+}return;}
+pub unsafe fn decode(entries:[]const u8,out:*Name)!void {unsafe {
+    if out==null||(out as u64)%8!=0||(out as u64)>MAX-sizeof(Name) as u64 {return error.InvalidArgument;}
+    try span(entries,672);if entries.len<64||entries.len%32!=0 {return error.Corrupt;}
+    let slots=entries.len/32-1;let entry=entries[slots*32..entries.len];try short_entry(entry);
+    let sum=try checksum(entry[0..11]);var physical:usize=0;
+    while physical<slots {
+        let base=physical*32;var ordinal=(slots-physical) as u8;if physical==0 {ordinal|=0x40;}
+        if entries[base]!=ordinal||entries[base+11]!=15||entries[base+12]!=0
+            ||entries[base+26]!=0||entries[base+27]!=0 {return error.Corrupt;}
+        if entries[base+13]!=sum {return error.Corrupt;}
+        physical+=1;
+    }
+    // Logical order is the reverse of physical slots. Validate padding while
+    // holding a pending high surrogate across slot boundaries.
+    var candidate=EMPTY_NAME;var logical:usize=0;var ended:bool=false;var high:u32=0;
+    while logical<slots*13 {
+        let base=(slots-1-logical/13)*32;let unit=word(entries,base+OFFSETS[logical%13]);
+        if ended {if unit!=0xffff {return error.Corrupt;}}
+        else if unit==0 {
+            if high!=0 {return error.InvalidUnicode;}
+            if candidate.units==0||logical<=(slots-1)*13 {return error.Corrupt;}
+            ended=true;
+        }
+        else {
+            if unit==0xffff {return error.Corrupt;}
+            if candidate.units==255 {return error.TooLong;}
+            candidate.units+=1;
+            if high!=0 {
+                if unit<0xdc00||unit>0xdfff {return error.InvalidUnicode;}
+                try emit(&candidate,0x10000+((high-0xd800)<<10)+(unit-0xdc00));high=0;
+            }
+            else if unit>=0xd800&&unit<=0xdbff {high=unit;}
+            else if unit>=0xdc00&&unit<=0xdfff {return error.InvalidUnicode;}
+            else {try emit(&candidate,unit);}
+        }logical+=1;
+    }
+    if high!=0 {return error.InvalidUnicode;}
+    if candidate.units==0 {return error.Corrupt;}
+    if (candidate.length==1&&candidate.bytes[0]==46)||(candidate.length==2&&candidate.bytes[0]==46&&candidate.bytes[1]==46) {return error.InvalidName;}
+    *out=candidate;
+}return;}

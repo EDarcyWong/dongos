@@ -1,0 +1,58 @@
+module user.memory;
+import user.abi as abi;import ipc.shared_core as core;
+pub const LIMIT:usize=16;
+pub struct Process{pub ready:u64,pub root:u64,pub frame:abi.Frame,pub plan:[1072]u8}
+pub const EMPTY:Process=Process{ready:0,root:0,frame:abi.EMPTY,plan:[0;1072]};
+var PROCESSES:[16]Process=[EMPTY;16];var WORDS:[16]u64=[0;16];
+pub var OBJECT_FAILED:bool=false;
+pub var SHARED:core.Registry=core.Registry{ready:0,pool_physical:0,pool_alias:0,owners:[0;16],objects:[core.EMPTY_OBJECT;8],maps:[[core.EMPTY_MAP;4];16]};
+pub var STAGE_FAILED:bool=false;pub var UNSHARE_FAILED:bool=false;pub var RESOURCE_FAILED:bool=false;
+var STAGE:usize=16;
+pub error Invalid=0x0406_0004;
+pub unsafe extern "sysv64" fn gui_event(kind:u64,a:u64,b:u64,c:u64,d:u64)u64;
+unsafe extern "sysv64" fn gui_validate(id:u64,address:u64,bytes:u64,write:u64)u64;
+pub unsafe extern "sysv64" fn runtime_copy_bytes(out:*u8,input:*const u8,bytes:usize)void;
+pub fn processes()*Process{unsafe{return &PROCESSES[0];}}
+pub fn frame_count()usize{return 0;}
+pub unsafe fn reset()void{unsafe{var i:usize=0;while i<16{PROCESSES[i]=EMPTY;i+=1;}STAGE=16;OBJECT_FAILED=false;SHARED.ready=0;let initialized=core.initialize(&SHARED,0x100000,0x200000);match initialized{ok=>{},err(e)=>{OBJECT_FAILED=true;},}STAGE_FAILED=false;UNSHARE_FAILED=false;RESOURCE_FAILED=false;}return;}
+pub unsafe fn check_range(id:usize,address:u64,bytes:usize,write:bool)!void{unsafe{
+ if id>=16||gui_validate(id as u64,address,bytes as u64,write as u64)!=0{return error.Invalid;}
+}return;}
+pub unsafe fn copy_in(id:usize,address:u64,out:[]u8)!void{unsafe{
+ try check_range(id,address,out.len,false);runtime_copy_bytes(out.ptr,address as *const u8,out.len);
+}return;}
+pub unsafe fn copy_out(id:usize,address:u64,input:[]const u8)!void{unsafe{
+ try check_range(id,address,input.len,true);if address!=0x7000_0000{runtime_copy_bytes(address as *u8,input.ptr,input.len);}
+}return;}
+pub unsafe fn anonymous(id:usize,address:u64)!u64{unsafe{
+ if gui_event(10,id as u64,address,0,0)!=0{return error.Invalid;}return 0x100_0000+id as u64*0x1000;
+}}
+pub unsafe fn readonly_data(id:usize,address:u64)!void{unsafe{
+ if gui_event(11,id as u64,address,0,0)!=0{return error.Invalid;}
+}return;}
+pub unsafe fn owned_alias(id:usize,address:u64,write:bool)!u64{unsafe{return &WORDS[id] as u64;}}
+pub unsafe fn share(source:usize,target:usize,address:u64,write:bool)!void{return;}
+pub unsafe fn share_at(source:usize,target:usize,source_address:u64,target_address:u64,write:bool)!void{return;}
+pub unsafe fn allocate_shared(source:usize,target:usize,source_address:u64,target_address:u64,pages:usize)!void{unsafe{
+ if gui_event(20,source as u64,target as u64,source_address,pages as u64)!=0{return error.Invalid;}
+}return;}
+pub unsafe fn unshare_range(id:usize,address:u64,pages:usize)!void{unsafe{
+ if gui_event(21,id as u64,address,pages as u64,0)!=0{UNSHARE_FAILED=true;return error.Invalid;}
+}return;}
+pub fn dma_pinned(id:usize)bool{return false;}
+pub unsafe fn destroy(id:usize)!void{unsafe{
+ if gui_event(22,id as u64,0,0,0)!=0{return error.Invalid;}PROCESSES[id].ready=0;
+}return;}
+pub unsafe fn stage_random(id:usize,image:[]const u8)!void{unsafe{
+ if STAGE!=16||PROCESSES[id].ready!=0{return error.Invalid;}
+ STAGE=id;PROCESSES[id].ready=1;PROCESSES[id].root=0x100_0000+id as u64*4096;
+ if gui_event(30,id as u64,0,0,0)!=0{return error.Invalid;}
+}return;}
+pub unsafe fn stage_abort(id:usize)!void{unsafe{
+ if STAGE!=id{return error.Invalid;}PROCESSES[id].ready=0;STAGE=16;SHARED.owners[id]=0;
+ if gui_event(31,id as u64,0,0,0)!=0{return error.Invalid;}
+}return;}
+pub unsafe fn stage_commit(id:usize)!void{unsafe{
+ if STAGE!=id{return error.Invalid;}STAGE=16;
+ if gui_event(32,id as u64,0,0,0)!=0{return error.Invalid;}
+}return;}

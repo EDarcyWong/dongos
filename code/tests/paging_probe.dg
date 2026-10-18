@@ -1,0 +1,37 @@
+module paging_probe;
+import mm.paging as pg;
+import core.errors;
+
+export("pg_space_size") fn space_size()usize{return sizeof(pg.Space);}
+export("pg_space_align") fn space_align()usize{return alignof(pg.Space);}
+export("pg_table_size") fn table_size()usize{return sizeof(pg.Table);}
+export("pg_table_align") fn table_align()usize{return alignof(pg.Table);}
+export("pg_mapping_size") fn mapping_size()usize{return sizeof(pg.Mapping);}
+export("pg_uncached_flag") fn uncached_flag()u64{return pg.UNCACHED;}
+export("pg_reset") fn reset(state:*pg.Space)void{unsafe{*state=pg.EMPTY_SPACE;}}
+export("pg_init") fn initialize(state:*pg.Space,pool:*pg.Table,count:usize,physical:u64,
+                                 metadata:*u8,metadata_len:usize,bits:usize,nx:bool)u64{
+    unsafe{
+        let tables=slice_from_raw_parts(pool,count);
+        let bytes=slice_from_raw_parts(metadata,metadata_len);
+        match pg.init(state,tables,physical,bytes,bits,nx){ok=>{return 0;},err(code)=>{return code;},}
+    }
+}
+export("pg_root") fn root(state:*const pg.Space,out:*u64)u64{
+    unsafe{match pg.root_physical(state){ok(value)=>{*out=value;return 0;},err(code)=>{return code;},}}
+}
+export("pg_used") fn used(state:*const pg.Space,out:*usize)u64{
+    unsafe{match pg.used_tables(state){ok(value)=>{*out=value;return 0;},err(code)=>{return code;},}}
+}
+export("pg_map") fn map(state:*pg.Space,virtual:u64,physical:u64,flags:u64)u64{
+    unsafe{match pg.map(state,virtual,physical,flags){ok=>{return 0;},err(code)=>{return code;},}}
+}
+export("pg_unmap") fn unmap(state:*pg.Space,virtual:u64)u64{
+    unsafe{match pg.unmap(state,virtual){ok=>{return 0;},err(code)=>{return code;},}}
+}
+export("pg_protect") fn protect(state:*pg.Space,virtual:u64,flags:u64)u64{
+    unsafe{match pg.protect(state,virtual,flags){ok=>{return 0;},err(code)=>{return code;},}}
+}
+export("pg_query") fn query(state:*const pg.Space,virtual:u64,out:*pg.Mapping)u64{
+    unsafe{match pg.query(state,virtual,out){ok=>{return 0;},err(code)=>{return code;},}}
+}

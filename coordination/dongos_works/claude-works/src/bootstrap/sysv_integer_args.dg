@@ -1,0 +1,54 @@
+// x86-64 SysV argument locations for the INTEGER class only: kind 0 is one
+// machine word, kind 1 a two-word INTEGER aggregate. A pair needs two free
+// registers or goes wholly to the stack without consuming a lone remaining
+// register. A first pass validates and sizes everything; the second writes.
+module bootstrap.sysv_integer_args;
+pub const OK:u64=0;pub const INVALID:u64=1;pub const CAPACITY:u64=2;
+pub const REGISTER:u64=0;pub const STACK:u64=1;
+pub struct Location{pub kind:u64,pub index:usize}
+pub struct Result{pub used:usize,pub stack_bytes:usize}
+const MAX:u64=0xffff_ffff_ffff_ffff;
+const REGISTERS:usize=6;
+fn span(p:u64,n:u64)bool{return n==0||(p!=0&&n<=MAX-p);}
+fn overlap(a:u64,n:u64,b:u64,m:u64)bool{return n!=0&&m!=0&&a<b+m&&b<a+n;}
+unsafe fn valid(kinds:[]const u8,out:[]Location,result:*Result)bool{unsafe{
+ if result==null||out.len>MAX/sizeof(Location){return false;}
+ let kp=kinds.ptr as u64;let op=out.ptr as u64;let rp=result as u64;
+ let kn=kinds.len;let on=out.len*sizeof(Location);let rn=sizeof(Result);
+ if !span(kp,kn)||!span(op,on)||!span(rp,rn)||(on!=0&&(op&7)!=0)||(rp&7)!=0{return false;}
+ if overlap(op,on,kp,kn)||overlap(rp,rn,kp,kn)||overlap(op,on,rp,rn){return false;}
+ return true;
+}}
+pub unsafe fn plan(kinds:[]const u8,out:[]Location,result:*Result)u64{unsafe{
+ if !valid(kinds,out,result){return INVALID;}
+ // Pass 1: kinds, word count and stack size, all overflow-checked.
+ var words:usize=0;var regs:usize=0;var stack:usize=0;var i:usize=0;
+ while i<kinds.len{
+  let k=kinds[i];
+  if k==0{
+   if words==MAX{return INVALID;}words+=1;
+   if regs<REGISTERS{regs+=1;}else{if stack>MAX-8{return INVALID;}stack+=8;}
+  }else if k==1{
+   if words>MAX-2{return INVALID;}words+=2;
+   if regs+2<=REGISTERS{regs+=2;}else{if stack>MAX-16{return INVALID;}stack+=16;}
+  }else{return INVALID;}
+  i+=1;
+ }
+ if stack>MAX-15{return INVALID;}let stack_bytes=(stack+15)&~(15 as usize);
+ if out.len<words{return CAPACITY;}
+ // Pass 2: the same walk, now writing each machine word's location.
+ var at:usize=0;regs=0;stack=0;i=0;
+ while i<kinds.len{
+  if kinds[i]==0{
+   if regs<REGISTERS{out[at]=Location{kind:REGISTER,index:regs};regs+=1;}
+   else{out[at]=Location{kind:STACK,index:stack};stack+=8;}
+   at+=1;
+  }else{
+   if regs+2<=REGISTERS{out[at]=Location{kind:REGISTER,index:regs};out[at+1]=Location{kind:REGISTER,index:regs+1};regs+=2;}
+   else{out[at]=Location{kind:STACK,index:stack};out[at+1]=Location{kind:STACK,index:stack+8};stack+=16;}
+   at+=2;
+  }
+  i+=1;
+ }
+ *result=Result{used:words,stack_bytes:stack_bytes};return OK;
+}}

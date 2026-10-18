@@ -1,0 +1,5 @@
+// Diagnostic one-shot marks; caller never supplies a timestamp or identity.
+module lib.boot_trace;
+import lib.sys as sys;
+pub const BOOT_MARK:u64=0x89;
+pub fn mark(kind:u64)u64{unsafe{return sys.svc_call(BOOT_MARK,kind,0,0,0,0,0);}}

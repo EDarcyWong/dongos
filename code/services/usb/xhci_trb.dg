@@ -1,0 +1,91 @@
+// Candidate production wire encoders, Intel xHCI 1.2b sections 6.4/6.5.
+// Bus addresses are integers inside an admitted DMA region, never CPU casts.
+module usb.xhci_trb;
+pub error Invalid=0x0810_0001;
+pub error Bounds=0x0810_0002;
+pub error Unsupported=0x0810_0003;
+pub error Busy=0x0810_0004;
+pub error Faulted=0x0810_0005;
+pub error BadCompletion=0x0810_0006;
+pub error DeviceError=0x0810_0007;
+pub error Exhausted=0x0810_0008;
+pub error IoFailure=0x0810_0009;
+pub struct Trb {pub parameter:u64,pub status:u32,pub control:u32}
+pub const EMPTY:Trb=Trb {parameter:0,status:0,control:0};
+pub struct Region {pub physical:u64,pub bytes:u64,pub physical_bits:u64}
+pub unsafe fn span(r:*const Region,physical:u64,bytes:u64,alignment:u64)!void {unsafe {
+    if r==null||(*r).physical_bits<32||(*r).physical_bits>52||alignment==0||(alignment&(alignment-1))!=0 {return error.Invalid;}
+    let limit=(1 as u64)<<(*r).physical_bits;
+    if (*r).physical==0||(*r).physical>=limit||(*r).bytes==0||(*r).bytes>limit-(*r).physical
+        ||physical<(*r).physical||physical>=limit||bytes==0||bytes>limit-physical
+        ||physical-(*r).physical>(*r).bytes||bytes>(*r).bytes-(physical-(*r).physical)||(physical&(alignment-1))!=0 {return error.Bounds;}
+}return;}
+pub struct Command {pub kind:u64,pub slot:u64,pub context:u64,pub context_bytes:u64,pub block_set_address:u64}
+pub unsafe fn command(r:*const Region,input:*const Command,out:*Trb)!void {unsafe {
+    if input==null||out==null {return error.Invalid;}let c=*input;var result=EMPTY;
+    if c.kind!=9&&c.kind!=10&&c.kind!=11&&c.kind!=12&&c.kind!=13&&c.kind!=23 {return error.Unsupported;}
+    if c.slot>255||c.block_set_address>1 {return error.Invalid;}
+    if c.kind==9||c.kind==23 {
+        if c.slot!=0||c.context!=0||c.context_bytes!=0||c.block_set_address!=0 {return error.Invalid;}
+    }else {
+        if c.slot==0 {return error.Invalid;}
+        if c.kind==10 {if c.context!=0||c.context_bytes!=0||c.block_set_address!=0 {return error.Invalid;}}
+        else {
+            if c.context_bytes!=1056&&c.context_bytes!=2112 {return error.Invalid;}
+            try span(r,c.context,c.context_bytes,64);result.parameter=c.context;
+            if c.kind!=11&&c.block_set_address!=0 {return error.Invalid;}
+        }
+    }
+    result.control=((c.kind<<10)|(c.slot<<24)|(c.block_set_address<<9)) as u32;*out=result;
+}return;}
+pub unsafe fn normal(r:*const Region,physical:u64,bytes:u64,input:bool,out:*Trb)!void {unsafe {
+    if out==null||bytes==0||bytes>65536 {return error.Invalid;}try span(r,physical,bytes,1);
+    if bytes>65536-(physical&65535) {return error.Bounds;}
+    var control:u32=(1<<10)|(1<<5);if input {control|=1<<2;}
+    *out=Trb {parameter:physical,status:bytes as u32,control:control};
+}return;}
+pub struct Control {pub request_type:u64,pub request:u64,pub value:u64,pub index:u64,pub bytes:u64,pub data:u64}
+pub struct ControlPlan {pub count:usize,pub trbs:[3]Trb}
+pub const EMPTY_CONTROL:ControlPlan=ControlPlan {count:0,trbs:[EMPTY;3]};
+pub unsafe fn control(r:*const Region,input:*const Control,out:*ControlPlan)!void {unsafe {
+    if input==null||out==null {return error.Invalid;}let c=*input;
+    if c.request_type>255||c.request>255||c.value>65535||c.index>65535||c.bytes>65535 {return error.Invalid;}
+    // SET_ADDRESS is issued through Address Device, never a USB setup TD.
+    if c.request_type==0&&c.request==5 {return error.Unsupported;}
+    if c.bytes==0 {if c.data!=0 {return error.Invalid;}}
+    else {try span(r,c.data,c.bytes,1);if c.bytes>65536-(c.data&65535) {return error.Bounds;}}
+    let inward=(c.request_type&128)!=0;var result=EMPTY_CONTROL;var transfer_type:u64=0;
+    if c.bytes!=0 {transfer_type=2;if inward {transfer_type=3;}}
+    result.trbs[0]=Trb {parameter:c.request_type|(c.request<<8)|(c.value<<16)|(c.index<<32)|(c.bytes<<48),
+        status:8,control:((2<<10)|(1<<6)|(transfer_type<<16)) as u32};
+    var status_index:usize=1;var status_in=true;
+    if c.bytes!=0 {
+        var flags:u32=3<<10;if inward {flags|=(1<<16)|(1<<2);status_in=false;}
+        result.trbs[1]=Trb {parameter:c.data,status:c.bytes as u32,control:flags};status_index=2;
+    }
+    var flags:u32=(4<<10)|(1<<5);if status_in {flags|=1<<16;}
+    result.trbs[status_index]=Trb {parameter:0,status:0,control:flags};result.count=status_index+1;*out=result;
+}return;}
+pub struct Event {pub kind:u64,pub parameter:u64,pub code:u64,pub residual:u64,pub slot:u64,pub endpoint:u64,pub port:u64,pub cycle:u64}
+pub const EMPTY_EVENT:Event=Event {kind:0,parameter:0,code:0,residual:0,slot:0,endpoint:0,port:0,cycle:0};
+pub unsafe fn event(raw:*const Trb,out:*Event)!void {unsafe {
+    if raw==null||out==null {return error.Invalid;}let t=*raw;let kind=((t.control>>10)&63) as u64;
+    let code=(t.status>>24) as u64;var result=EMPTY_EVENT;
+    if code==0||code>36 {return error.Unsupported;}
+    result.kind=kind;result.parameter=t.parameter;result.code=code;result.residual=(t.status&0xff_ffff) as u64;result.cycle=(t.control&1) as u64;
+    if kind==32 {
+        // Event Data cookies are a separate protocol, not interpreted as PA.
+        if (t.control&0x00e0_03fe)!=0||(t.parameter&15)!=0 {return error.Unsupported;}
+        result.endpoint=((t.control>>16)&31) as u64;result.slot=(t.control>>24) as u64;
+        if result.endpoint==0||result.slot==0 {return error.BadCompletion;}
+    }else if kind==33 {
+        if (t.control&0x00ff_03fe)!=0||(t.parameter&15)!=0 {return error.BadCompletion;}
+        result.slot=(t.control>>24) as u64;
+    }else if kind==34 {
+        if (t.control&0xffff_03fe)!=0||(t.parameter&0xffff_ffff_00ff_ffff)!=0||result.residual!=0||code!=1 {return error.BadCompletion;}
+        result.port=(t.parameter>>24)&255;if result.port==0 {return error.BadCompletion;}
+    }else if kind==37 {
+        if (t.control&0xffff_03fe)!=0||t.parameter!=0||result.residual!=0 {return error.BadCompletion;}
+    }else {return error.Unsupported;}
+    *out=result;
+}return;}

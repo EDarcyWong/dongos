@@ -1,0 +1,92 @@
+// core.bitset — allocation-free bitset with LSB-first bit order. bit i lives
+// in byte i/8 at bit i%8; 0 means free, 1 means occupied. Only bits in
+// [0, bit_count) are valid logical bits; the high tail bits of the last byte
+// and any bytes past storage_bytes(bit_count) are never read or written.
+
+module core.bitset;
+
+const MAX_USIZE: usize = 0xffff_ffff_ffff_ffff;
+
+// Ceiling of bit_count / 8. Computed without bit_count + 7, so it cannot
+// overflow even for USIZE_MAX.
+pub fn storage_bytes(bit_count: usize) usize {
+    let rem: usize = bit_count % 8;
+    if rem == 0 { return bit_count / 8; }
+    return bit_count / 8 + 1;
+}
+
+// Write the value of logical bit index into *out. Returns false and leaves
+// *out unchanged when index is not in [0, bit_count). Never touches storage.
+pub unsafe fn test(bytes: []const u8, bit_count: usize, index: usize, out: *bool) bool {
+    if storage_bytes(bit_count) > bytes.len { return false; }
+    if index >= bit_count { return false; }
+    unsafe {
+        let byte_index: usize = index / 8;
+        let bit_index: usize = index % 8;
+        let byte: usize = bytes[byte_index] as usize;
+        let bit: usize = (byte >> bit_index) & 1;
+        *out = bit != 0;
+    }
+    return true;
+}
+
+// Set or clear bits [start, start+count). Returns false and leaves every byte
+// unchanged on an invalid range. count == 0 succeeds without touching memory.
+// Only the selected bits change; every other bit in the storage is preserved.
+pub unsafe fn set_range(bytes: []u8, bit_count: usize, start: usize, count: usize, value: bool) bool {
+    if storage_bytes(bit_count) > bytes.len { return false; }
+    if start > bit_count { return false; }
+    if count > bit_count - start { return false; }
+    if count == 0 { return true; }
+    var i: usize = 0;
+    while i < count {
+        unsafe {
+            let idx: usize = start + i;
+            let byte_index: usize = idx / 8;
+            let bit_index: usize = idx % 8;
+            let mask: usize = 1 << bit_index;
+            if value {
+                bytes[byte_index] = (bytes[byte_index] as usize | mask) as u8;
+            } else {
+                bytes[byte_index] = (bytes[byte_index] as usize & ~mask) as u8;
+            }
+        }
+        i += 1;
+    }
+    return true;
+}
+
+// Find the lowest start s >= start such that bits [s, s+count) are all clear
+// (0). Read-only; never occupies a bit. Returns false and leaves *out
+// unchanged when storage is short, start is out of range, the run cannot fit,
+// or no such run exists.
+pub unsafe fn find_clear_run(bytes: []const u8, bit_count: usize, start: usize, count: usize, out: *usize) bool {
+    if storage_bytes(bit_count) > bytes.len { return false; }
+    if start > bit_count { return false; }
+    if count > bit_count - start { return false; }
+    if count == 0 {
+        unsafe { *out = start; }
+        return true;
+    }
+    let end: usize = bit_count - count;
+    var s: usize = start;
+    while s <= end {
+        var ok: bool = true;
+        var i: usize = 0;
+        while i < count {
+            unsafe {
+                let idx: usize = s + i;
+                let byte: usize = bytes[idx / 8] as usize;
+                let bit: usize = (byte >> (idx % 8)) & 1;
+                if bit != 0 { ok = false; }
+            }
+            i += 1;
+        }
+        if ok {
+            unsafe { *out = s; }
+            return true;
+        }
+        s += 1;
+    }
+    return false;
+}

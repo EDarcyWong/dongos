@@ -1,0 +1,17 @@
+module usb_device_probe;
+import usb.enumerate as e;
+import usb.bot as b;
+import usb.hid_boot as h;
+import usb.transport as t;
+import input.events as v;
+import usb_descriptor_probe as descriptor;
+export("ue_init") fn enum_init(s:*e.State,o:*const t.Ops,c:u64,p:*const e.Setup)u64 {unsafe {match e.initialize(s,o,c,p) {ok=>{return 0;},err(code)=>{return code;},}}}
+export("ub_init") fn bot_init(s:*b.State,o:*const t.Ops,c:u64,p:*const b.Setup)u64 {unsafe {match b.initialize(s,o,c,p) {ok=>{return 0;},err(code)=>{return code;},}}}
+export("ub_capacity") fn capacity(s:*b.State)u64 {unsafe {match b.capacity(s) {ok=>{return 0;},err(code)=>{return code;},}}}
+export("ub_rw") fn rw(s:*b.State,lba:u64,count:u64,p:*const t.Buffer,inward:u64)u64 {unsafe {match b.read_write(s,lba,count,p,inward!=0) {ok=>{return 0;},err(code)=>{return code;},}}}
+export("ub_sync") fn sync(s:*b.State)u64 {unsafe {match b.synchronize(s) {ok=>{return 0;},err(code)=>{return code;},}}}
+export("ub_recover") fn recover(s:*b.State)u64 {unsafe {match b.recover(s) {ok=>{return 0;},err(code)=>{return code;},}}}
+export("uh_key") fn key(s:*h.Keyboard,q:*v.Queue,p:*const u8,n:usize)u64 {unsafe {match h.keyboard(s,q,slice_from_raw_parts(p,n)) {ok=>{return 0;},err(code)=>{return code;},}}}
+export("uh_repeat") fn repeat(s:*h.Keyboard,q:*v.Queue,u:u64)u64 {unsafe {match h.repeat(s,q,u) {ok=>{return 0;},err(code)=>{return code;},}}}
+export("uh_mouse") fn mouse(s:*h.Mouse,q:*v.Queue,p:*const u8,n:usize)u64 {unsafe {match h.mouse(s,q,slice_from_raw_parts(p,n)) {ok=>{return 0;},err(code)=>{return code;},}}}
+export("uh_map") fn map(u:u64)u64 {return h.evdev(u);}

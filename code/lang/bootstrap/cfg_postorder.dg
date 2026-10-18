@@ -1,0 +1,63 @@
+// Deterministic iterative DFS post-order of a control-flow graph from one entry.
+// Every node's edge range and every referenced target is validated, reachable
+// or not; only after all descriptor, graph and capacity checks pass are marks,
+// work, out and used written. work is an explicit frame stack (no recursion).
+module bootstrap.cfg_postorder;
+import bootstrap.cfg_reachability as cfg;
+pub const OK:u64=0;pub const INVALID:u64=1;pub const CAPACITY:u64=2;pub const WORKSPACE:u64=3;
+// node: the node being expanded; next: absolute index in edges of its next unread edge.
+pub struct Frame{pub node:usize,pub next:usize}
+const MAX:u64=0xffff_ffff_ffff_ffff;
+fn span(p:u64,n:u64)bool{return n==0||(p!=0&&n<=MAX-p);}
+fn overlap(a:u64,n:u64,b:u64,m:u64)bool{return n!=0&&m!=0&&a<b+m&&b<a+n;}
+unsafe fn valid(nodes:[]const cfg.Node,edges:[]const usize,out:[]usize,marks:[]u8,work:[]Frame,used:*usize)bool{unsafe{
+ if used==null||nodes.len>MAX/sizeof(cfg.Node)||edges.len>MAX/8||out.len>MAX/8||work.len>MAX/sizeof(Frame){return false;}
+ let np=nodes.ptr as u64;let ep=edges.ptr as u64;let op=out.ptr as u64;let mp=marks.ptr as u64;let wp=work.ptr as u64;let up=used as u64;
+ let nn=nodes.len*sizeof(cfg.Node);let en=edges.len*8;let on=out.len*8;let mn=marks.len;let wn=work.len*sizeof(Frame);
+ if !span(np,nn)||!span(ep,en)||!span(op,on)||!span(mp,mn)||!span(wp,wn)||!span(up,8){return false;}
+ if (nn!=0&&(np&7)!=0)||(en!=0&&(ep&7)!=0)||(on!=0&&(op&7)!=0)||(wn!=0&&(wp&7)!=0)||(up&7)!=0{return false;}
+ // Read-only nodes/edges may overlap each other; every writable object is
+ // separate from both inputs and from every other writable object.
+ if overlap(op,on,np,nn)||overlap(op,on,ep,en)||overlap(mp,mn,np,nn)||overlap(mp,mn,ep,en)
+  ||overlap(wp,wn,np,nn)||overlap(wp,wn,ep,en)||overlap(up,8,np,nn)||overlap(up,8,ep,en){return false;}
+ if overlap(op,on,mp,mn)||overlap(op,on,wp,wn)||overlap(op,on,up,8)
+  ||overlap(mp,mn,wp,wn)||overlap(mp,mn,up,8)||overlap(wp,wn,up,8){return false;}
+ return true;
+}}
+// O(nodes + sum of count over all nodes): the unreferenced edges tail is never read.
+fn graph(nodes:[]const cfg.Node,edges:[]const usize)bool{
+ var k:usize=0;
+ while k<nodes.len{
+  let node=nodes[k];if node.first>edges.len||node.count>edges.len-node.first{return false;}
+  var e=node.first;while e<node.first+node.count{if edges[e]>=nodes.len{return false;}e+=1;}
+  k+=1;
+ }
+ return true;
+}
+pub unsafe fn order(nodes:[]const cfg.Node,edges:[]const usize,entry:usize,out:[]usize,marks:[]u8,work:[]Frame,used:*usize)u64{unsafe{
+ if !valid(nodes,edges,out,marks,work,used)||nodes.len==0||entry>=nodes.len{return INVALID;}
+ if !graph(nodes,edges){return INVALID;}
+ let n=nodes.len;
+ if out.len<n{return CAPACITY;}
+ if marks.len<n||work.len<n{return WORKSPACE;}
+ // Nothing below can fail. marks: 0 unseen, 1 discovered (its frame is on the stack), 2 emitted.
+ var i:usize=0;while i<n{marks[i]=0;i+=1;}
+ marks[entry]=1;work[0].node=entry;work[0].next=nodes[entry].first;
+ var top:usize=1;var count:usize=0;
+ // Each step either consumes one edge of the top frame or pops it, so the loop
+ // runs O(reachable nodes + sum of count over reachable nodes) times.
+ while top!=0{
+  let v=work[top-1].node;let e=work[top-1].next;let node=nodes[v];
+  // graph() proved first+count<=edges.len, so the sum cannot wrap.
+  if e<node.first+node.count{
+   work[top-1].next=e+1;let t=edges[e];
+   // Discovered targets (on the stack via a back edge, or already emitted) are
+   // never re-entered; each node is pushed once, so top never exceeds n.
+   if marks[t]==0{marks[t]=1;work[top].node=t;work[top].next=nodes[t].first;top+=1;}
+  }else{
+   // Every child has been handled: emit v in post-order.
+   marks[v]=2;out[count]=v;count+=1;top-=1;
+  }
+ }
+ *used=count;return OK;
+}}

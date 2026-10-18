@@ -1,0 +1,158 @@
+// Single-segment leased command/transfer and event rings. Only one submission
+// may be in flight per producer ring; all DMA is retained after any fault.
+module usb.xhci_ring;
+import usb.xhci_trb as wire;
+pub const COMMAND:u64=1;
+pub const TRANSFER:u64=2;
+pub type Fence=unsafe fn(context:u64,phase:u64)u64;
+pub struct Ops {pub fence:Fence}
+pub struct Setup {pub physical:u64,pub pointer:*u8,pub entries:u64,pub physical_bits:u64,pub epoch:u64,pub kind:u64,pub slot:u64,pub endpoint:u64}
+pub struct Producer {
+    pub ready:u64,pub fault:u64,pub held:u64,pub physical:u64,pub pointer:*u8,pub entries:u64,
+    pub enqueue:u64,pub cycle:u64,pub epoch:u64,pub generation:u64,pub pending:u64,
+    pub kind:u64,pub slot:u64,pub endpoint:u64,pub count:usize,
+    pub slots:[8]u64,pub trbs:[8]wire.Trb,pub busy:u64,
+}
+pub const EMPTY_PRODUCER:Producer=Producer {ready:0,fault:0,held:0,physical:0,pointer:null,entries:0,
+    enqueue:0,cycle:1,epoch:0,generation:0,pending:0,kind:0,slot:0,endpoint:0,count:0,
+    slots:[0;8],trbs:[wire.EMPTY;8],busy:0};
+pub struct Plan {
+    pub epoch:u64,pub generation:u64,pub first:u64,pub count:usize,pub next:u64,pub next_cycle:u64,
+    pub link:u64,pub link_cycle:u64,pub slots:[8]u64,pub cycles:[8]u64,pub trbs:[8]wire.Trb,
+}
+pub const EMPTY_PLAN:Plan=Plan {epoch:0,generation:0,first:0,count:0,next:0,next_cycle:0,
+    link:0,link_cycle:0,slots:[0;8],cycles:[0;8],trbs:[wire.EMPTY;8]};
+unsafe fn setup(s:*const Setup)!void {unsafe {
+    if s==null||(*s).pointer==null||((*s).pointer as u64&63)!=0||(*s).entries<16||(*s).entries>256
+        ||(*s).epoch==0||((*s).physical&63)!=0 {return error.wire.Invalid;}
+    let bytes=(*s).entries*16;
+    if bytes>4096-((*s).physical&4095)||bytes>65536-((*s).physical&65535)
+        ||((*s).pointer as u64)>0xffff_ffff_ffff_ffff-bytes {return error.wire.Bounds;}
+    let region=wire.Region {physical:(*s).physical,bytes:bytes,physical_bits:(*s).physical_bits};
+    try wire.span(&region,(*s).physical,bytes,64);
+}return;}
+unsafe fn store(pointer:*u8,value:*const wire.Trb)void {unsafe {
+    volatile_store(pointer as *u64,(*value).parameter);volatile_store((pointer+8) as *u32,(*value).status);
+    volatile_store((pointer+12) as *u32,(*value).control);
+}return;}
+unsafe fn barrier(ops:*const Ops,context:u64,phase:u64)!void {unsafe {
+    compiler_fence();if ops==null||(*ops).fence(context,phase)!=0 {return error.wire.IoFailure;}compiler_fence();
+}return;}
+pub unsafe fn producer_initialize(r:*Producer,s:*const Setup)!void {unsafe {
+    if r==null||(*r).ready!=0 {return error.wire.Invalid;}try setup(s);
+    if (*s).kind!=COMMAND&&(*s).kind!=TRANSFER {return error.wire.Invalid;}
+    if (*s).kind==COMMAND {if (*s).slot!=0||(*s).endpoint!=0 {return error.wire.Invalid;}}
+    else if (*s).slot==0||(*s).slot>255||(*s).endpoint==0||(*s).endpoint>31 {return error.wire.Invalid;}
+    var i:u64=0;while i<(*s).entries {store((*s).pointer+(i*16) as usize,&wire.EMPTY);i+=1;}
+    let link=wire.Trb {parameter:(*s).physical,status:0,control:(6<<10)|2};store((*s).pointer+(((*s).entries-1)*16) as usize,&link);
+    *r=EMPTY_PRODUCER;(*r).physical=(*s).physical;(*r).pointer=(*s).pointer;(*r).entries=(*s).entries;
+    (*r).epoch=(*s).epoch;(*r).kind=(*s).kind;(*r).slot=(*s).slot;(*r).endpoint=(*s).endpoint;(*r).held=1;(*r).ready=1;
+}return;}
+unsafe fn valid(r:*const Producer)!void {unsafe {
+    if r==null||(*r).ready!=1||(*r).held!=1||(*r).pointer==null||(*r).entries<16||(*r).entries>256
+        ||(*r).enqueue>=(*r).entries-1||(*r).cycle>1||(*r).count>8 {return error.wire.Invalid;}
+    if (*r).fault!=0 {return error.wire.Faulted;}
+    if (*r).busy!=0 {return error.wire.Busy;}
+}return;}
+pub unsafe fn plan(r:*const Producer,trbs:[]const wire.Trb,out:*Plan)!void {unsafe {
+    try valid(r);if (*r).pending!=0 {return error.wire.Busy;}
+    if out==null||trbs.ptr==null||trbs.len==0||trbs.len>8||trbs.len as u64>(*r).entries-2 {return error.wire.Invalid;}
+    if (*r).generation==0xffff_ffff_ffff_ffff {return error.wire.Exhausted;}
+    if (*r).kind==COMMAND&&trbs.len!=1 {return error.wire.Invalid;}
+    var p=EMPTY_PLAN;p.epoch=(*r).epoch;p.generation=(*r).generation+1;p.first=(*r).enqueue;p.count=trbs.len;
+    var cursor=(*r).enqueue;var cycle=(*r).cycle;var i:usize=0;
+    while i<trbs.len {
+        let t=trbs[i];let kind=(t.control>>10)&63;
+        if (t.control&1)!=0||kind==0||kind==6||kind>=32 {return error.wire.Invalid;}
+        if (*r).kind==COMMAND {if kind<9||kind>23 {return error.wire.Unsupported;}}
+        else {
+            if kind>4 {return error.wire.Unsupported;}
+            if i+1==trbs.len {if (t.control&(1<<5))==0||(t.control&(1<<4))!=0 {return error.wire.Invalid;}}
+            else if (t.control&(1<<5))!=0 {return error.wire.Invalid;}
+        }
+        p.slots[i]=cursor;p.cycles[i]=cycle;p.trbs[i]=t;cursor+=1;
+        if cursor==(*r).entries-1 {p.link=1;p.link_cycle=cycle;cursor=0;cycle^=1;}
+        i+=1;
+    }
+    p.next=cursor;p.next_cycle=cycle;*out=p;
+}return;}
+// Caller must keep plan private and immutable. Cycle is deliberately invalid
+// while all payload/link bytes are staged; the first TRB is published last.
+pub unsafe fn publish(r:*Producer,p:*const Plan,ops:*const Ops,context:u64)!void {unsafe {
+    try valid(r);if p==null||ops==null||(*r).pending!=0 {return error.wire.Invalid;}
+    if (*p).count==0||(*p).count>8 {return error.wire.BadCompletion;}
+    var expected=EMPTY_PLAN;try plan(r,(*p).trbs[0..(*p).count],&expected);
+    let actual=p as *const u8;let checked=(&expected) as *const u8;var byte:usize=0;
+    while byte<sizeof(Plan) {if *(actual+byte)!=*(checked+byte) {return error.wire.BadCompletion;}byte+=1;}
+    (*r).busy=1;(*r).pending=2;
+    var i:usize=0;while i<(*p).count {
+        var t=(*p).trbs[i];t.control|=((*p).cycles[i]^1) as u32;
+        store((*r).pointer+((*p).slots[i]*16) as usize,&t);i+=1;
+    }
+    if (*p).link!=0 {let link=wire.Trb {parameter:(*r).physical,status:0,control:((6<<10)|2|((*p).link_cycle^1)) as u32};
+        store((*r).pointer+(((*r).entries-1)*16) as usize,&link);}
+    let first=barrier(ops,context,1);match first {ok=>{},err(e)=>{(*r).fault=1;(*r).busy=0;return first;},}
+    (*r).count=(*p).count;(*r).generation=(*p).generation;(*r).pending=1;
+    i=0;while i<(*p).count {(*r).slots[i]=(*p).slots[i];(*r).trbs[i]=(*p).trbs[i];i+=1;}
+    if (*p).link!=0 {volatile_store(((*r).pointer+(((*r).entries-1)*16+12) as usize) as *u32,((6<<10)|2|(*p).link_cycle) as u32);}
+    i=(*p).count;while i>1 {i-=1;volatile_store(((*r).pointer+((*p).slots[i]*16+12) as usize) as *u32,(*p).trbs[i].control|(*p).cycles[i] as u32);}
+    compiler_fence();volatile_store(((*r).pointer+((*p).slots[0]*16+12) as usize) as *u32,(*p).trbs[0].control|(*p).cycles[0] as u32);
+    (*r).enqueue=(*p).next;(*r).cycle=(*p).next_cycle;
+    let last=barrier(ops,context,2);match last {ok=>{},err(e)=>{(*r).fault=1;(*r).busy=0;return last;},}
+    (*r).busy=0;
+}return;}
+pub struct Completion {pub generation:u64,pub index:usize,pub code:u64,pub residual:u64,pub final:u64}
+pub unsafe fn complete(r:*Producer,epoch:u64,generation:u64,event:*const wire.Event,out:*Completion)!void {unsafe {
+    try valid(r);if event==null||out==null {return error.wire.Invalid;}
+    if (*r).pending!=1||epoch!=(*r).epoch||generation!=(*r).generation {return error.wire.BadCompletion;}
+    let e=*event;var i:usize=0;var found:usize=8;
+    while i<(*r).count {if e.parameter==(*r).physical+(*r).slots[i]*16 {found=i;}i+=1;}
+    var bad=found==8;
+    if (*r).kind==COMMAND {
+        if e.kind!=33||e.endpoint!=0 {bad=true;}
+        let kind=((*r).trbs[0].control>>10)&63;let slot=((*r).trbs[0].control>>24) as u64;
+        if kind==9 {if e.slot==0||e.slot>255 {bad=true;}}else if e.slot!=slot {bad=true;}
+    }else {if e.kind!=32||e.slot!=(*r).slot||e.endpoint!=(*r).endpoint {bad=true;}}
+    if bad {(*r).fault=1;return error.wire.BadCompletion;}
+    if e.code!=1&&e.code!=13 {(*r).fault=1;return error.wire.DeviceError;}
+    if (*r).kind==COMMAND&&e.code!=1 {(*r).fault=1;return error.wire.BadCompletion;}
+    var final:u64=0;if (*r).kind==COMMAND {final=1;}
+    else {
+        let t=(*r).trbs[found];if e.residual>(t.status&0x1_ffff) as u64 {(*r).fault=1;return error.wire.BadCompletion;}
+        if (t.control&(1<<5))!=0 {final=1;}
+        else if e.code!=13 {(*r).fault=1;return error.wire.BadCompletion;}
+    }
+    *out=Completion {generation:generation,index:found,code:e.code,residual:e.residual,final:final};
+    if final!=0 {(*r).pending=0;(*r).count=0;}
+}return;}
+pub struct Consumer {pub ready:u64,pub fault:u64,pub held:u64,pub physical:u64,pub pointer:*u8,pub entries:u64,pub head:u64,pub cycle:u64,pub epoch:u64,pub consumed:u64,pub busy:u64}
+pub const EMPTY_CONSUMER:Consumer=Consumer {ready:0,fault:0,held:0,physical:0,pointer:null,entries:0,head:0,cycle:1,epoch:0,consumed:0,busy:0};
+pub unsafe fn consumer_initialize(r:*Consumer,s:*const Setup)!void {unsafe {
+    if r==null||(*r).ready!=0 {return error.wire.Invalid;}try setup(s);
+    if (*s).kind!=0||(*s).slot!=0||(*s).endpoint!=0 {return error.wire.Invalid;}
+    var i:u64=0;while i<(*s).entries {store((*s).pointer+(i*16) as usize,&wire.EMPTY);i+=1;}
+    *r=EMPTY_CONSUMER;(*r).physical=(*s).physical;(*r).pointer=(*s).pointer;(*r).entries=(*s).entries;(*r).epoch=(*s).epoch;(*r).held=1;(*r).ready=1;
+}return;}
+pub unsafe fn poll(r:*Consumer,ops:*const Ops,context:u64,out:*wire.Event)!bool {unsafe {
+    if r==null||(*r).ready!=1||(*r).held!=1||(*r).pointer==null||(*r).entries<16||(*r).entries>256
+        ||(*r).head>=(*r).entries||(*r).cycle>1||out==null {return error.wire.Invalid;}
+    if (*r).fault!=0 {return error.wire.Faulted;}
+    if (*r).busy!=0 {return error.wire.Busy;}
+    let pointer=(*r).pointer+((*r).head*16) as usize;let control=volatile_load((pointer+12) as *const u32);
+    if (control&1) as u64!=(*r).cycle {return false;}
+    if (*r).consumed==0xffff_ffff_ffff_ffff {return error.wire.Exhausted;}
+    (*r).busy=1;
+    let done=barrier(ops,context,3);match done {ok=>{},err(e)=>{(*r).fault=1;(*r).busy=0;return error.wire.IoFailure;},}
+    let raw=wire.Trb {parameter:volatile_load(pointer as *const u64),status:volatile_load((pointer+8) as *const u32),control:volatile_load((pointer+12) as *const u32)};
+    if raw.control!=control {(*r).fault=1;(*r).busy=0;return error.wire.BadCompletion;}
+    var value=wire.EMPTY_EVENT;match wire.event(&raw,&value) {ok=>{},err(e)=>{(*r).fault=1;(*r).busy=0;return error.wire.BadCompletion;},}
+    (*r).head+=1;if (*r).head==(*r).entries {(*r).head=0;(*r).cycle^=1;}(*r).consumed+=1;(*r).busy=0;*out=value;return true;
+}}
+pub unsafe fn erdp(r:*const Consumer,clear_busy:bool)!u64 {unsafe {
+    if r==null||(*r).ready!=1||(*r).fault!=0||(*r).head>=(*r).entries {return error.wire.Invalid;}
+    var value=(*r).physical+(*r).head*16;if clear_busy {value|=8;}return value;
+}}
+pub unsafe fn erst(s:*const Setup,out:[]u8)!void {unsafe {
+    try setup(s);if out.ptr==null||out.len!=16 {return error.wire.Invalid;}
+    write_unaligned(out.ptr as *u64,(*s).physical);write_unaligned((out.ptr+8) as *u32,(*s).entries as u32);write_unaligned((out.ptr+12) as *u32,0);
+}return;}

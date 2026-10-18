@@ -1,0 +1,188 @@
+// Isolated trusted-driver polling prototype. No PCI configuration or free.
+module drivers.nvme;
+import drivers.nvme_core as core;
+import drivers.virtio_pci as vp;
+import drivers.virtio_blk as blk;
+pub error InvalidInput=0x0521_0001;
+pub error AlreadyInitialized=0x0521_0002;
+pub error Busy=0x0521_0003;
+pub error NotReady=0x0521_0004;
+pub error IoFailure=0x0521_0005;
+pub error Unsupported=0x0521_0006;
+pub error ClockFailure=0x0521_0007;
+pub error Timeout=0x0521_0008;
+pub error BadCompletion=0x0521_0009;
+pub error CleanupRequired=0x0521_000a;
+pub error DeviceError=0x0521_000b;
+pub const DEPTH:u64=2;
+pub const CC_DISABLED:u64=0x0046_0000;
+pub const CC_ENABLED:u64=0x0046_0001;
+const MAX:u64=0xffff_ffff_ffff_ffff;
+pub type Enable=unsafe fn(context:u64)u64;
+// Kernel-calibrated monotonic milliseconds with eventual progress while polling.
+pub type Now=unsafe fn(context:u64,out_ms:*u64)u64;
+pub struct Ops {pub read:vp.Read,pub write:vp.Write,pub fence:vp.Fence,pub acquire:blk.Acquire,pub release:blk.Release,pub enable:Enable,pub now:Now}
+pub struct Info {pub capacity_sectors:u64,pub max_transfer_sectors:u64,pub readonly:u64,pub ready:u64,pub faulted:u64,pub held:u64,pub completed:u64}
+pub const EMPTY_INFO:Info=Info {capacity_sectors:0,max_transfer_sectors:0,readonly:0,ready:0,faulted:0,held:0,completed:0};
+pub struct State {
+    pub info:Info,pub lease:blk.Lease,pub bar:vp.Bar,pub ops:*const Ops,pub context:u64,
+    pub caps:core.Caps,pub limits:core.Limits,pub controller:core.Controller,pub namespace:core.Namespace,
+    pub admin:core.Queue,pub io:core.Queue,pub busy:u64,pub enabled:u64,pub clock_seen:u64,pub last_ms:u64,
+    pub phase:u64,pub published:u64,pub last_csts:u64,pub last_cqe:[16]u8,pub last_kind:u64,
+}
+pub const EMPTY_STATE:State=State {info:EMPTY_INFO,lease:blk.EMPTY_LEASE,bar:vp.Bar {physical:0,length:0,handle:0},ops:null,context:0,
+    caps:core.Caps {cap:0,version:0,physical_bits:36},limits:core.Limits {ready_timeout_ms:0,doorbell_stride:0,max_queue_entries:0},
+    controller:core.EMPTY_CONTROLLER,namespace:core.EMPTY_NAMESPACE,admin:core.EMPTY_QUEUE,io:core.EMPTY_QUEUE,
+    busy:0,enabled:0,clock_seen:0,last_ms:0,phase:0,published:0,last_csts:0,last_cqe:[0;16],last_kind:0};
+unsafe fn read(s:*State,offset:u64)!u64 {unsafe {
+    let area=vp.Area {handle:(*s).bar.handle,offset:0,length:(*s).bar.length,bar:0};
+    return try vp.read((*(*s).ops).read,(*s).context,&area,offset,4);
+}}
+unsafe fn write(s:*State,offset:u64,value:u64)!void {unsafe {
+    let area=vp.Area {handle:(*s).bar.handle,offset:0,length:(*s).bar.length,bar:0};
+    try vp.write((*(*s).ops).write,(*s).context,&area,offset,4,value);
+}return;}
+unsafe fn read64(s:*State,offset:u64)!u64 {unsafe {let low=try read(s,offset);return low|((try read(s,offset+4))<<32);}}
+unsafe fn address(s:*State,offset:u64,value:u64)!void {unsafe {
+    try write(s,offset,value&0xffff_ffff);try write(s,offset+4,value>>32);
+    if (try read64(s,offset))!=value {return error.IoFailure;}
+}return;}
+unsafe fn fence(s:*State,kind:u64)!void {unsafe {
+    compiler_fence();if (*(*s).ops).fence((*s).context,kind)!=0 {return error.IoFailure;}compiler_fence();
+}return;}
+unsafe fn now(s:*State)!u64 {unsafe {
+    var value:u64=0;if (*(*s).ops).now((*s).context,&value)!=0 {return error.ClockFailure;}
+    if (*s).clock_seen!=0 && value<(*s).last_ms {return error.ClockFailure;}
+    (*s).clock_seen=1;(*s).last_ms=value;return value;
+}}
+unsafe fn poison(s:*State)void {unsafe {
+    (*s).info.ready=0;(*s).info.faulted=1;(*s).busy=0;
+    if (*s).admin.ready==1 && (*s).admin.fault==0 {match core.poison(&(*s).admin,0x0521_000a) {ok=>{},err(code)=>{},}}
+    if (*s).io.ready==1 && (*s).io.fault==0 {match core.poison(&(*s).io,0x0521_000a) {ok=>{},err(code)=>{},}}
+}return;}
+unsafe fn status(s:*State)!u64 {unsafe {
+    let value=try read(s,0x1c);(*s).last_csts=value;
+    if (value&2)!=0 {return error.DeviceError;}
+    if (value&0x20)!=0 {return error.Unsupported;}
+    return value;
+}}
+unsafe fn healthy(s:*State)!void {unsafe {
+    if ((try status(s))&0x2f)!=1 {return error.DeviceError;}
+}return;}
+unsafe fn wait_ready(s:*State,ready:u64,initial_shutdown:bool)!void {unsafe {
+    let start=try now(s);
+    loop {
+        let value=try status(s);let tick=try now(s);
+        if tick-start>=(*s).limits.ready_timeout_ms {return error.Timeout;}
+        if (value&1)==ready {
+            // A firmware-completed shutdown must be reset before new commands.
+            // This exception only permits the observation preceding EN clear;
+            // normal readiness and all command polling still require SHST0.
+            if (value&0x0c)!=0 && !(initial_shutdown && (value&0x0c)==8) {return error.Unsupported;}return;
+        }
+    }
+}}
+fn doorbell(stride:u64,qid:u64,completion:bool)u64 {var index=qid*2;if completion {index+=1;}return 0x1000+index*stride;}
+unsafe fn execute(s:*State,q:*core.Queue,kind:u64,lba:u64,count:usize,input:*const u8,output:*u8)!u64 {unsafe {
+    try healthy(s);let raw=(*s).lease.pointer;let request=core.Request {kind:kind,lba:lba,sectors:count as u64,data_offset:0};
+    var plan=core.EMPTY_PLAN;try core.submit(q,&(*s).namespace,&request,try now(s),5000,&plan);(*s).last_kind=kind;
+    var i:usize=0;
+    if kind==core.IDENTIFY_CONTROLLER || kind==core.IDENTIFY_NAMESPACE || kind==core.READ || kind==core.WRITE {
+        let offset=(plan.data_physical-(*s).lease.physical) as usize;
+        while i<plan.bytes as usize {if kind==core.WRITE {*(raw+offset+i)=*(input+i);}else{*(raw+offset+i)=0;}i+=1;}
+    }
+    i=0;while i<16 {write_unaligned((raw+core.PRP_LIST as usize+i*8) as *u64,plan.prps[i]);i+=1;}
+    var sq=core.ASQ;if (*q).qid==1 {sq=core.IOSQ;}
+    let slot=(sq+plan.sq_slot*64) as usize;i=0;while i<64 {*(raw+slot+i)=plan.command[i];i+=1;}
+    try fence(s,1);(*s).published=1;
+    try write(s,doorbell((*s).limits.doorbell_stride,(*q).qid,false),plan.sq_tail);try fence(s,3);
+    var cq=core.ACQ;if (*q).qid==1 {cq=core.IOCQ;}let at=(cq+plan.cq_slot*16) as usize;
+    loop {
+        try healthy(s);
+        var cqe:[16]u8=[0;16];let observed=volatile_load((raw+at+14) as *const u16) as u64;
+        cqe[14]=(observed&255) as u8;cqe[15]=(observed>>8) as u8;
+        if (observed&1)==(*q).phase {
+            try fence(s,2);i=0;while i<16 {cqe[i]=volatile_load((raw+at+i) as *const u8);i+=1;}
+            if read_unaligned((&cqe[14]) as *const u16) as u64!=observed
+                || volatile_load((raw+at+14) as *const u16) as u64!=observed {return error.BadCompletion;}
+        }
+        (*s).last_cqe=cqe;
+        var result=core.Completion {cid:0,generation:0,result:0,bytes:0,cq_head:0,phase:0};
+        if try core.poll(q,(*q).epoch,plan.generation,cqe[..],try now(s),&result) {
+            try write(s,doorbell((*s).limits.doorbell_stride,(*q).qid,true),result.cq_head);try fence(s,3);try healthy(s);
+            (*s).published=0;
+            if kind==core.READ {let offset=(plan.data_physical-(*s).lease.physical) as usize;i=0;
+                while i<plan.bytes as usize {*(output+i)=volatile_load((raw+offset+i) as *const u8);i+=1;}}
+            return result.result;
+        }
+    }
+}}
+unsafe fn initialize_inner(s:*State)!void {unsafe {
+    (*s).phase=1;(*s).caps.cap=try read64(s,0);(*s).caps.version=try read(s,8);
+    try core.limits(&(*s).caps,DEPTH,&(*s).limits);
+    let last=doorbell((*s).limits.doorbell_stride,1,true);
+    if last>(*s).bar.length || 4>(*s).bar.length-last {return error.Unsupported;}
+    (*s).phase=2;var lease=blk.EMPTY_LEASE;let code=(*(*s).ops).acquire((*s).context,core.DMA_BYTES as usize,4096,&lease);(*s).lease=lease;
+    if lease.token!=0 || lease.physical!=0 || lease.pointer!=null || lease.length!=0 {(*s).info.held=1;}
+    if code!=0 {return error.IoFailure;}(*s).info.held=1;
+    if lease.token==0 || lease.pointer==null || ((lease.pointer as u64)&4095)!=0 || (lease.pointer as u64)>MAX-core.DMA_BYTES
+        || lease.physical==0 || (lease.physical&4095)!=0 || lease.physical>=0x1_0000_0000
+        || lease.length as u64!=core.DMA_BYTES || core.DMA_BYTES>0x1_0000_0000-lease.physical {return error.InvalidInput;}
+    let cc=try read(s,0x14);
+    if (cc&0xff00_0000)!=0 {return error.Unsupported;}
+    if (cc&1)!=0 {try wait_ready(s,1,true);try write(s,0x14,cc&~1);try fence(s,3);}
+    try wait_ready(s,0,false);(*s).phase=3;
+    var i:usize=0;while i<lease.length {*(lease.pointer+i)=0;i+=1;}
+    let setup=core.Setup {qid:0,depth:DEPTH,epoch:1,lease_physical:lease.physical,lease_bytes:lease.length as u64};
+    try core.queue_initialize(&(*s).admin,&(*s).caps,&setup);
+    let iosetup=core.Setup {qid:1,depth:DEPTH,epoch:1,lease_physical:lease.physical,lease_bytes:lease.length as u64};
+    try core.queue_initialize(&(*s).io,&(*s).caps,&iosetup);
+    try write(s,0x0c,0xffff_ffff);if ((try read(s,0x0c))&1)!=1 {return error.IoFailure;}
+    try write(s,0x14,CC_DISABLED);try write(s,0x24,(DEPTH-1)|((DEPTH-1)<<16));
+    try address(s,0x28,lease.physical+core.ASQ);try address(s,0x30,lease.physical+core.ACQ);
+    if (try read(s,0x14))!=CC_DISABLED || (try read(s,0x24))!=((DEPTH-1)|((DEPTH-1)<<16)) {return error.IoFailure;}
+    try fence(s,1);(*s).phase=4;
+    // Kernel independently validates CC/RDY, trusted Admin bases and every
+    // fixed Admin/IO queue/PRP/data region before allowing BME. Future Create
+    // commands use only the frozen core builders; no IOMMU isolation is claimed.
+    if (*(*s).ops).enable((*s).context)!=0 {return error.IoFailure;}(*s).enabled=1;
+    try write(s,0x14,CC_ENABLED);try fence(s,3);try wait_ready(s,1,false);(*s).phase=5;
+    (*s).phase=6;let identified=try execute(s,&(*s).admin,core.IDENTIFY_CONTROLLER,0,0,null,null);
+    try core.identify_controller(&(*s).caps,slice_from_raw_parts(lease.pointer+core.IDENTIFY_DATA as usize,4096) as []const u8,&(*s).controller);
+    (*s).phase=7;let described=try execute(s,&(*s).admin,core.IDENTIFY_NAMESPACE,0,0,null,null);
+    try core.identify_namespace(&(*s).controller,slice_from_raw_parts(lease.pointer+core.IDENTIFY_DATA as usize,4096) as []const u8,&(*s).namespace);
+    (*s).phase=8;let queues=try execute(s,&(*s).admin,core.SET_QUEUES,0,0,null,null);
+    (*s).phase=9;let cq=try execute(s,&(*s).admin,core.CREATE_CQ,0,0,null,null);
+    (*s).phase=10;let sq=try execute(s,&(*s).admin,core.CREATE_SQ,0,0,null,null);
+    (*s).info.capacity_sectors=(*s).namespace.capacity_sectors;(*s).info.max_transfer_sectors=(*s).namespace.max_sectors;
+    (*s).info.readonly=(*s).namespace.readonly;(*s).info.ready=1;(*s).phase=11;
+}return;}
+pub unsafe fn initialize(s:*State,bar:*const vp.Bar,ops:*const Ops,context:u64)!void {unsafe {
+    if s==null || bar==null || ops==null {return error.InvalidInput;}if (*s).busy!=0 {return error.Busy;}
+    if (*s).info.ready!=0 || (*s).info.held!=0 || (*s).info.faulted!=0 {return error.AlreadyInitialized;}
+    if (*bar).handle==0 || (*bar).physical==0 || ((*bar).physical&4095)!=0 || (*bar).physical>MAX-(*bar).length || (*bar).length<0x1010 {return error.InvalidInput;}
+    (*s).bar=*bar;(*s).ops=ops;(*s).context=context;(*s).busy=1;
+    let result=initialize_inner(s);match result {ok=>{(*s).busy=0;return;},err(code)=>{poison(s);return result;},}
+}}
+fn overlap(a:u64,n:u64,b:u64,m:u64)bool {return a<b+m && b<a+n;}
+unsafe fn operation(s:*State,kind:u64,lba:u64,count:usize,input:*const u8,output:*u8)!u64 {unsafe {
+    if s==null {return error.InvalidInput;}if (*s).busy!=0 {return error.Busy;}
+    if (*s).info.faulted!=0 {return error.CleanupRequired;}if (*s).info.ready!=1 {return error.NotReady;}
+    if (*s).info.completed==MAX {return error.InvalidInput;}
+    if kind!=core.FLUSH {
+        if count==0 || count as u64>(*s).info.max_transfer_sectors || lba>=(*s).info.capacity_sectors
+            || count as u64>(*s).info.capacity_sectors-lba {return error.InvalidInput;}
+        if kind==core.WRITE && (*s).info.readonly!=0 {return error.Unsupported;}
+        let bytes=count as u64*512;var pointer=input as u64;if kind==core.READ {pointer=output as u64;}
+        if pointer==0 || pointer>MAX-bytes || overlap(pointer,bytes,(*s).lease.pointer as u64,(*s).lease.length as u64)
+            || overlap(pointer,bytes,s as u64,sizeof(State) as u64) || overlap(pointer,bytes,(*s).ops as u64,sizeof(Ops) as u64) {return error.InvalidInput;}
+    }
+    (*s).busy=1;let result=execute(s,&(*s).io,kind,lba,count,input,output);
+    match result {ok(value)=>{(*s).info.completed+=1;(*s).busy=0;return value;},err(code)=>{poison(s);return result;},}
+}}
+pub unsafe fn read_sectors(s:*State,lba:u64,count:usize,out:*u8)!void {unsafe {let result=try operation(s,core.READ,lba,count,null,out);}return;}
+pub unsafe fn write_sectors(s:*State,lba:u64,count:usize,input:*const u8)!void {unsafe {let result=try operation(s,core.WRITE,lba,count,input,null);}return;}
+pub unsafe fn flush(s:*State)!void {unsafe {let result=try operation(s,core.FLUSH,0,0,null,null);}return;}
+pub unsafe fn describe(s:*const State,out:*Info)!void {unsafe {
+    if s==null || out==null {return error.InvalidInput;}if (*s).busy!=0 {return error.Busy;}*out=(*s).info;
+}return;}

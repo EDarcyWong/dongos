@@ -1,0 +1,39 @@
+// Downward stack-frame slot layout from a 16-byte aligned frame base. Slot i
+// lives at base-offsets[i]: end=align_up(cursor+size,alignment), offset=end,
+// cursor=end; the frame is align_up(cursor,16). A dry run checks everything
+// before any offset is written; planned addresses are never dereferenced.
+module bootstrap.stack_slots;
+pub const OK:u64=0;pub const INVALID:u64=1;pub const CAPACITY:u64=2;
+pub struct Slot{pub size:usize,pub alignment:usize}
+const MAX:u64=0xffff_ffff_ffff_ffff;
+fn span(p:u64,n:u64)bool{return n==0||(p!=0&&n<=MAX-p);}
+fn overlap(a:u64,n:u64,b:u64,m:u64)bool{return n!=0&&m!=0&&a<b+m&&b<a+n;}
+unsafe fn valid(slots:[]const Slot,offsets:[]usize,frame_bytes:*usize)bool{unsafe{
+ if frame_bytes==null||slots.len>MAX/sizeof(Slot)||offsets.len>MAX/8{return false;}
+ let sp=slots.ptr as u64;let op=offsets.ptr as u64;let fp=frame_bytes as u64;
+ let sn=slots.len*sizeof(Slot);let on=offsets.len*8;
+ if !span(sp,sn)||!span(op,on)||!span(fp,8)||(sn!=0&&(sp&7)!=0)||(on!=0&&(op&7)!=0)||(fp&7)!=0{return false;}
+ if overlap(op,on,sp,sn)||overlap(fp,8,sp,sn)||overlap(op,on,fp,8){return false;}
+ return true;
+}}
+fn allowed(a:usize)bool{return a==1||a==2||a==4||a==8||a==16;}
+// align_up for a power-of-two a<=16; false when the result would exceed MAX.
+unsafe fn up(x:usize,a:usize,result:*usize)bool{unsafe{
+ if x>MAX-(a-1){return false;}*result=(x+(a-1))&~(a-1);return true;
+}}
+pub unsafe fn plan(slots:[]const Slot,offsets:[]usize,frame_bytes:*usize)u64{unsafe{
+ if !valid(slots,offsets,frame_bytes){return INVALID;}
+ // Dry run: every alignment and every sum, overflow-checked, nothing written.
+ var cursor:usize=0;var i:usize=0;
+ while i<slots.len{
+  let s=slots[i];if !allowed(s.alignment)||s.size>MAX-cursor{return INVALID;}
+  var end:usize=0;if !up(cursor+s.size,s.alignment,&end){return INVALID;}cursor=end;i+=1;
+ }
+ var frame:usize=0;if !up(cursor,16,&frame){return INVALID;}
+ if offsets.len<slots.len{return CAPACITY;}
+ cursor=0;i=0;
+ while i<slots.len{
+  let s=slots[i];var end:usize=0;up(cursor+s.size,s.alignment,&end);offsets[i]=end;cursor=end;i+=1;
+ }
+ *frame_bytes=frame;return OK;
+}}

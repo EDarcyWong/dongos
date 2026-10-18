@@ -1,0 +1,222 @@
+// Real BSP syscall object dispatch. IRQs are masked by FMASK; peer identity,
+// handle tables and process frames always come from kernel-owned storage.
+module user.runtime;
+import user.abi as abi;
+import user.memory as memory;
+import ipc.handles as handles;
+import ipc.core as ipc;
+import arch.x86_64 as arch;
+
+pub const SHARED: u64 = 0x5000_0000;
+const NONE: usize = memory.LIMIT;
+pub error InvalidCall = 0x0407_0001;
+pub error InvalidPeer = 0x0407_0002;
+pub error Protocol = 0x0407_0003;
+pub error UserFailure = 0x0407_0004;
+pub struct Report {
+    pub version: u64, pub process_count: u64, pub expected: u64, pub roundtrips: u64,
+    pub syscalls: u64, pub calls: u64, pub replies: u64, pub user_errors: u64,
+    pub rejections: u64, pub handles_created: u64, pub shared_physical: u64, pub shared_value: u64,
+    pub start_tsc: u64, pub end_tsc: u64, pub elapsed_tsc: u64, pub tsc_hz: u64, pub elapsed_ns: u64,
+    pub client_bias: u64, pub server_bias: u64, pub client_root: u64, pub server_root: u64,
+    pub client_entry: u64, pub server_entry: u64, pub client_stack: u64, pub server_stack: u64,
+    pub notification_bits: u64, pub completed: u64, pub steps: u64, pub error_code: u64, pub last_syscall: u64,
+}
+const EMPTY_REPORT: Report = Report { version: 1, process_count: 0, expected: 0, roundtrips: 0,
+    syscalls: 0, calls: 0, replies: 0, user_errors: 0, rejections: 0, handles_created: 0,
+    shared_physical: 0, shared_value: 0, start_tsc: 0, end_tsc: 0, elapsed_tsc: 0, tsc_hz: 0, elapsed_ns: 0,
+    client_bias: 0, server_bias: 0, client_root: 0, server_root: 0, client_entry: 0, server_entry: 0,
+    client_stack: 0, server_stack: 0, notification_bits: 0, completed: 0, steps: 0, error_code: 0, last_syscall: 0 };
+struct State { table: handles.Table, reply_pointer: u64, receive_pointer: u64, ticket: u64, waiting: u64 }
+const EMPTY_STATE: State = State { table: handles.EMPTY_TABLE, reply_pointer: 0, receive_pointer: 0, ticket: 0, waiting: 0 };
+align(64) struct XState { bytes: [1024]u8 }
+var STATES: [memory.LIMIT]State = [EMPTY_STATE;memory.LIMIT];
+var XSTATES: [memory.LIMIT]XState = [XState { bytes: [0;1024] };memory.LIMIT];
+var KERNEL_XSTATE: XState = XState { bytes: [0;1024] };
+var ENDPOINT: ipc.Endpoint = ipc.EMPTY_ENDPOINT;
+var NOTICE: ipc.Notification = ipc.EMPTY_NOTIFICATION;
+var SHARED_OBJECT: ipc.MemoryObject = ipc.EMPTY_MEMORY;
+var INFO: Report = EMPTY_REPORT;
+var CURRENT: usize = 0;
+var BUFFER: [64]u8 = [0;64];
+
+unsafe extern "sysv64" fn sched_xstate_save(out: *u8) void;
+unsafe extern "sysv64" fn sched_xstate_restore(input: *const u8) void;
+unsafe extern "sysv64" fn user_progress(roundtrips: u64) void;
+
+unsafe fn process(id: usize) *memory.Process { unsafe { return memory.processes() + id; } }
+pub fn report_pointer() *const Report { unsafe { return &INFO; } }
+pub fn first() *abi.Frame { unsafe { return &(*process(0)).frame; } }
+
+pub unsafe fn prepare(kernel_physical: u64, client: []const u8, server: []const u8,
+    rounds: u64, tsc_hz: u64) !void {
+    unsafe {
+        if INFO.process_count != 0 || rounds == 0 || rounds > 1_000_000 || tsc_hz == 0 { return error.Protocol; }
+        try memory.initialize(kernel_physical);
+        let entropy = arch.read_tsc();
+        let first_bias = 0x1000_0000 + ((entropy & 255) << 16);
+        let second_bias = 0x3000_0000 + (((entropy >> 8) & 255) << 16);
+        let stack_a = memory.STACK_TOP - (((entropy >> 16) & 255) << 16);
+        let stack_b = memory.STACK_TOP - (((entropy >> 24) & 255) << 16);
+        try memory.load(0,client,first_bias,stack_a);
+        try memory.load(1,server,second_bias,stack_b);
+        let shared_physical = try memory.anonymous(0,SHARED);
+        try memory.share(0,1,SHARED,true);
+        try ipc.endpoint_init(&ENDPOINT,1,2);
+        try ipc.notification_init(&NOTICE);
+        try ipc.memory_init(&SHARED_OBJECT,2,SHARED,4096,handles.READ | handles.WRITE);
+        sched_xstate_save(&KERNEL_XSTATE.bytes[0]);
+        var i: usize = 0;
+        while i < 2 {
+            try handles.init(&STATES[i].table);
+            var rights = handles.WAIT | handles.REPLY;
+            if i == 0 { rights = handles.CALL | handles.TRANSFER; }
+            let endpoint = try handles.install(&STATES[i].table,handles.ENDPOINT,1,rights);
+            let shared = try handles.install(&STATES[i].table,handles.SHARED,2,handles.READ | handles.WRITE | handles.MAP);
+            let notification = try handles.install(&STATES[i].table,handles.NOTIFICATION,3,handles.WAIT | handles.SIGNAL);
+            (*process(i)).frame.rdx = endpoint;
+            (*process(i)).frame.rsi = rounds;
+            (*process(i)).frame.r8 = shared;
+            (*process(i)).frame.r9 = notification;
+            memory.runtime_copy_bytes(&XSTATES[i].bytes[0],&KERNEL_XSTATE.bytes[0],1024);
+            i += 1;
+        }
+        INFO.process_count = 2; INFO.expected = rounds; INFO.handles_created = 6;
+        INFO.shared_physical = shared_physical; INFO.tsc_hz = tsc_hz;
+        INFO.client_bias = first_bias; INFO.server_bias = second_bias;
+        INFO.client_root = (*process(0)).root; INFO.server_root = (*process(1)).root;
+        INFO.client_entry = (*process(0)).frame.rip; INFO.server_entry = (*process(1)).frame.rip;
+        INFO.client_stack = stack_a; INFO.server_stack = stack_b; INFO.steps = 7;
+        INFO.start_tsc = arch.read_tsc();
+    }
+    return;
+}
+
+unsafe fn authority(handle: u64, kind: u64, rights: u64) !u64 {
+    unsafe {
+        var found = handles.EMPTY_VIEW;
+        try handles.lookup(&STATES[CURRENT].table,handle,kind,rights,&found);
+        return found.object;
+    }
+}
+
+unsafe fn accept(owner: usize) !void {
+    unsafe {
+        var message = ipc.EMPTY_MESSAGE;
+        var token: u64 = 0;
+        try ipc.accept(&ENDPOINT,(owner + 1) as u64,&message,&token);
+        try memory.copy_out(owner,STATES[owner].receive_pointer,message.bytes[..]);
+        STATES[owner].waiting = 0;
+        (*process(owner)).frame.rax = 0;
+        (*process(owner)).frame.rdx = token;
+    }
+    return;
+}
+
+unsafe fn perform(frame: *abi.Frame) !usize {
+    unsafe {
+        let code = (*frame).rax;
+        INFO.last_syscall = code;
+        if code == 1 {
+            if (*frame).rdi != 0x33 { return error.Protocol; }
+            (*frame).rax = (CURRENT + 1) as u64;
+            return CURRENT;
+        }
+        if code == 0x10 {
+            try handles.close(&STATES[CURRENT].table,(*frame).rdi);
+            (*frame).rax = 0; return CURRENT;
+        }
+        if code == 0x11 {
+            (*frame).rax = try handles.duplicate(&STATES[CURRENT].table,&STATES[CURRENT].table,(*frame).rdi,(*frame).rsi);
+            INFO.handles_created += 1; return CURRENT;
+        }
+        if code == 0x22 {
+            if (try authority((*frame).rdi,handles.ENDPOINT,handles.CALL)) != 1 { return error.InvalidPeer; }
+            try memory.check_range(CURRENT,(*frame).rdx,64,true);
+            try memory.copy_in(CURRENT,(*frame).rsi,BUFFER[..]);
+            let token = try ipc.call(&ENDPOINT,(CURRENT + 1) as u64,BUFFER[..]);
+            STATES[CURRENT].ticket = token; STATES[CURRENT].reply_pointer = (*frame).rdx;
+            STATES[CURRENT].waiting = 1; INFO.calls += 1;
+            let owner = (ENDPOINT.owner - 1) as usize;
+            if STATES[owner].waiting == 2 { try accept(owner); }
+            return owner;
+        }
+        if code == 0x23 {
+            if (try authority((*frame).rdi,handles.ENDPOINT,handles.WAIT)) != 1 { return error.InvalidPeer; }
+            if CURRENT + 1 != ENDPOINT.owner { return error.InvalidPeer; }
+            try memory.check_range(CURRENT,(*frame).rsi,64,true);
+            STATES[CURRENT].receive_pointer = (*frame).rsi;
+            if ENDPOINT.state == ipc.PENDING { try accept(CURRENT); return CURRENT; }
+            STATES[CURRENT].waiting = 2; (*frame).rax = 0;
+            return 0;
+        }
+        if code == 0x24 || code == 0x26 {
+            if (try authority((*frame).rdi,handles.ENDPOINT,handles.REPLY)) != 1 { return error.InvalidPeer; }
+            if code == 0x26 { try memory.check_range(CURRENT,(*frame).r10,64,true); }
+            try memory.copy_in(CURRENT,(*frame).rdx,BUFFER[..]);
+            let caller = (ENDPOINT.caller - 1) as usize;
+            if caller >= INFO.process_count as usize { return error.InvalidPeer; }
+            try ipc.reply(&ENDPOINT,(CURRENT + 1) as u64,(*frame).rsi,BUFFER[..]);
+            var response = ipc.EMPTY_MESSAGE;
+            try ipc.take_reply(&ENDPOINT,(caller + 1) as u64,STATES[caller].ticket,&response);
+            try memory.copy_out(caller,STATES[caller].reply_pointer,response.bytes[..]);
+            STATES[caller].waiting = 0; (*process(caller)).frame.rax = 0;
+            (*frame).rax = 0; INFO.replies += 1; INFO.roundtrips += 1;
+            if code == 0x26 { STATES[CURRENT].receive_pointer = (*frame).r10; STATES[CURRENT].waiting = 2; }
+            if INFO.roundtrips % 100000 == 0 { user_progress(INFO.roundtrips); }
+            return caller;
+        }
+        if code == 0x30 {
+            if (try authority((*frame).rdi,handles.NOTIFICATION,handles.SIGNAL)) != 3 { return error.InvalidPeer; }
+            try ipc.signal(&NOTICE,(*frame).rsi); (*frame).rax = 0; return CURRENT;
+        }
+        if code == 0x31 {
+            if (try authority((*frame).rdi,handles.NOTIFICATION,handles.WAIT)) != 3 { return error.InvalidPeer; }
+            var bits: u64 = 0;
+            try ipc.take_bits(&NOTICE,(*frame).rsi,&bits); (*frame).rax = bits; return CURRENT;
+        }
+        if code == 0x40 {
+            var region = ipc.Region { address: 0, length: 0, rights: 0 };
+            try ipc.shared_view(&STATES[CURRENT].table,(*frame).rdi,&SHARED_OBJECT,(*frame).rsi,(*frame).rdx,(*frame).r10,&region);
+            (*frame).rax = region.address; return CURRENT;
+        }
+        if code == 0xff {
+            if CURRENT != 0 || (*frame).rdi != INFO.expected || (*frame).rsi != 0x33
+                || INFO.roundtrips != INFO.expected || INFO.calls != INFO.expected || INFO.replies != INFO.expected
+                || ENDPOINT.state != ipc.IDLE { return error.Protocol; }
+            try memory.copy_in(0,SHARED,BUFFER[..8]);
+            INFO.shared_value = read_unaligned((&BUFFER[0]) as *const u64);
+            if INFO.shared_value != INFO.expected { return error.Protocol; }
+            INFO.end_tsc = arch.read_tsc(); INFO.elapsed_tsc = INFO.end_tsc - INFO.start_tsc;
+            INFO.elapsed_ns = (INFO.elapsed_tsc / INFO.tsc_hz) * 1_000_000_000
+                + ((INFO.elapsed_tsc % INFO.tsc_hz) * 1_000_000_000) / INFO.tsc_hz;
+            INFO.notification_bits = NOTICE.bits; INFO.completed = 1; INFO.steps |= 24;
+            return NONE;
+        }
+        if code == 0xfe { INFO.user_errors = (*frame).rdi; return error.UserFailure; }
+    }
+    return error.InvalidCall;
+}
+
+export("dong_user_dispatch") fn dispatch(frame: *abi.Frame) *abi.Frame {
+    unsafe {
+        sched_xstate_save(&XSTATES[CURRENT].bytes[0]);
+        (*process(CURRENT)).frame = *frame;
+        INFO.syscalls += 1;
+        let saved = &(*process(CURRENT)).frame;
+        let action = perform(saved);
+        var next = CURRENT;
+        match action {
+            ok(id) => { next = id; },
+            err(code) => {
+                if INFO.last_syscall == 0xfe || INFO.last_syscall == 0xff { INFO.error_code = code; next = NONE; }
+                else { (*saved).rax = code; INFO.rejections += 1; }
+            },
+        }
+        if next == NONE { sched_xstate_restore(&KERNEL_XSTATE.bytes[0]); return null; }
+        if next >= INFO.process_count as usize { INFO.error_code = 0x0407_0002; sched_xstate_restore(&KERNEL_XSTATE.bytes[0]); return null; }
+        CURRENT = next;
+        sched_xstate_restore(&XSTATES[next].bytes[0]);
+        return &(*process(next)).frame;
+    }
+}

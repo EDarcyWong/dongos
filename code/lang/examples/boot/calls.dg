@@ -1,0 +1,4 @@
+module boot.calls;
+
+pub extern "sysv64" ("kernel_sysv_mix") fn sysv_mix(a:u64,b:u64,c:u64,d:u64,e:u64,f:u64,g:u64,h:u64) u64;
+pub extern "win64" ("kernel_win_mix") fn win_mix(a:u64,b:u64,c:u64,d:u64,e:u64,f:u64,g:u64,h:u64) u64;

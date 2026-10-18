@@ -1,0 +1,9 @@
+module elf_exec_probe;
+import exec.elf as elf;
+export("elf_plan_size") fn size() usize { return sizeof(elf.Plan); }
+export("elf_exec_validate") fn validate(raw: *const u8, length: usize, bias: u64, out: *elf.Plan) u64 {
+    unsafe { match elf.validate(slice_from_raw_parts(raw,length),bias,out) { ok => { return 0; }, err(code) => { return code; }, } }
+}
+export("elf_exec_relocation") fn relocation(raw: *const u8, length: usize, plan: *const elf.Plan, index: u64, out: *elf.Reloc) u64 {
+    unsafe { match elf.relocation(slice_from_raw_parts(raw,length),plan,index,out) { ok => { return 0; }, err(code) => { return code; }, } }
+}

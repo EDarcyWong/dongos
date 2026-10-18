@@ -1,0 +1,28 @@
+module tablet_probe;
+import drivers.virtio_tablet as tablet;
+import drivers.virtio_pci as vp;
+import drivers.virtio_blk as dma;
+import input.events as ev;
+export("tablet_sizes") fn sizes(out:*u64)void {
+    unsafe { out[0]=sizeof(tablet.State) as u64;out[1]=alignof(tablet.State) as u64;
+        out[2]=sizeof(vp.Transport) as u64;out[3]=sizeof(dma.Ops) as u64;out[4]=sizeof(ev.Queue) as u64; }
+    return;
+}
+export("tablet_empty") fn empty(s:*tablet.State,q:*ev.Queue)void {
+    unsafe { *s=tablet.EMPTY_STATE;*q=ev.EMPTY_QUEUE; }return;
+}
+export("tablet_initialize") fn initialize(s:*tablet.State,t:*const vp.Transport,ops:*const dma.Ops,width:i64,height:i64)u64 {
+    unsafe { match tablet.initialize(s,t,ops,width,height) { ok=>{return 0;},err(code)=>{return code;}, } }
+}
+export("tablet_poll") fn poll(s:*tablet.State,q:*ev.Queue)u64 {
+    unsafe { match tablet.poll(s,q) { ok=>{return 0;},err(code)=>{return code;}, } }
+}
+export("tablet_pop") fn pop(q:*ev.Queue,out:*ev.Event,present:*u64)u64 {
+    unsafe { match ev.pop(q,out) { ok(found)=>{*present=found as u64;return 0;},err(code)=>{return code;}, } }
+}
+export("tablet_info") fn info(s:*const tablet.State,out:*u64)void {
+    unsafe { out[0]=(*s).ready;out[1]=(*s).fault;out[2]=(*s).used;out[3]=(*s).available;
+        out[4]=(*s).notify;out[5]=(*s).completed;out[6]=(*s).lease.token;
+        out[7]=(*s).lease.physical;out[8]=(*s).lease.pointer as u64;out[9]=(*s).lease.length as u64; }
+    return;
+}

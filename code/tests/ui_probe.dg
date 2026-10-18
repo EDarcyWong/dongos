@@ -1,0 +1,27 @@
+module ui_probe;
+import desktop.theme as theme;
+import desktop.widgets as ui;
+import desktop.render as render;
+import gfx.geometry as geo;
+import gfx.raster as raster;
+import gfx.atlas as atlas;
+import input.events as ev;
+export("ui_sizes") fn sizes(out: *u64) void { unsafe { out[0] = sizeof(theme.Theme) as u64; out[1] = sizeof(ui.Text) as u64; out[2] = sizeof(ui.Control) as u64; out[3] = sizeof(ui.Model) as u64; } return; }
+export("ui_default") fn defaults(t: *theme.Theme) void { unsafe { *t = theme.DEFAULT; } return; }
+export("ui_theme") fn parse(p: *const u8, n: usize, out: *theme.Theme) u64 { unsafe { match theme.parse(slice_from_raw_parts(p,n),out) { ok => { return 0; }, err(c) => { return c; }, } } }
+export("ui_sample") fn sample(a: *const theme.Animation, now: u64, out: *i64) u64 { unsafe { match theme.sample(a,now) { ok(v) => { *out = v; return 0; }, err(c) => { return c; }, } } }
+export("ui_text_init") fn text_init(t: *ui.Text, p: *u8, n: usize) u64 { unsafe { match ui.init_text(t,p,n) { ok => { return 0; }, err(c) => { return c; }, } } }
+export("ui_insert") fn insert(t: *ui.Text, p: *const u8, n: usize) u64 { unsafe { match ui.insert(t,slice_from_raw_parts(p,n)) { ok => { return 0; }, err(c) => { return c; }, } } }
+export("ui_scalar") fn scalar(t: *ui.Text, cp: u32) u64 { unsafe { match ui.scalar(t,cp) { ok => { return 0; }, err(c) => { return c; }, } } }
+export("ui_caret") fn caret(t: *ui.Text, at: usize, extend: bool) u64 { unsafe { match ui.caret(t,at,extend) { ok => { return 0; }, err(c) => { return c; }, } } }
+export("ui_edit") fn edit(t: *ui.Text, e: *const ev.Event, multiline: bool, out: *u64) u64 { unsafe { match ui.edit(t,e,multiline) { ok(v) => { *out = v as u64; return 0; }, err(c) => { return c; }, } } }
+export("ui_init") fn init(m: *ui.Model, w: usize, h: usize, duration: u64) u64 { unsafe { match ui.init(m,w,h,duration) { ok => { return 0; }, err(c) => { return c; }, } } }
+export("ui_add") fn add(m: *ui.Model, c: *const ui.Control) u64 { unsafe { match ui.add(m,c) { ok => { return 0; }, err(v) => { return v; }, } } }
+export("ui_input") fn input(m: *ui.Model, e: *const ev.Event, x: i64, y: i64, now: u64, a: *ui.Action) u64 { unsafe { match ui.input(m,e,x,y,now,a) { ok => { return 0; }, err(c) => { return c; }, } } }
+export("ui_tick") fn tick(m: *ui.Model, now: u64) u64 { unsafe { match ui.tick(m,now) { ok => { return 0; }, err(c) => { return c; }, } } }
+export("ui_flags") fn flags(m: *ui.Model, id: u64, value: u64) u64 { unsafe { match ui.flags(m,id,value) { ok => { return 0; }, err(c) => { return c; }, } } }
+export("ui_damage") fn damage(m: *ui.Model, d: *geo.Damage) u64 { unsafe { match ui.take_damage(m,d) { ok => { return 0; }, err(c) => { return c; }, } } }
+export("ui_round") fn rounded(s: *raster.Surface, r: *const geo.Rect, clip: *const geo.Rect, radius: i64, color: u32) u64 { unsafe { match render.rounded(s,r,clip,radius,color) { ok => { return 0; }, err(c) => { return c; }, } } }
+export("ui_open_font") fn open_font(p: *const u8, n: usize, a: *atlas.Atlas) u64 { unsafe { match atlas.open(slice_from_raw_parts(p,n),a) { ok => { return 0; }, err(c) => { return c; }, } } }
+export("ui_draw_text") fn draw_text(s: *raster.Surface, a: *const atlas.Atlas, p: *const u8, n: usize, x: i64, y: i64, color: u32, clip: *const geo.Rect) u64 { unsafe { match render.text(s,a,slice_from_raw_parts(p,n),x,y,color,clip) { ok => { return 0; }, err(c) => { return c; }, } } }
+export("ui_render") fn draw(s: *raster.Surface, a: *const atlas.Atlas, m: *const ui.Model, t: *const theme.Theme, d: *const geo.Damage, now: u64) u64 { unsafe { match render.model(s,a,m,t,d,now) { ok => { return 0; }, err(c) => { return c; }, } } }

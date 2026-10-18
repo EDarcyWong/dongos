@@ -1,0 +1,138 @@
+// VirtIO 1.2 input/evdev semantics, independently of transport/DMA.
+module input.virtio_input;
+import input.events as ev;
+
+pub struct Range { pub minimum: i64, pub maximum: i64, pub extent: i64 }
+pub const EMPTY_RANGE: Range = Range { minimum: 0, maximum: 1, extent: 1 };
+pub struct State {
+    pub keys: ev.Keys, pub shadow: ev.Keys, pub pending: [32]ev.Event,
+    pub count: usize, pub budget: usize,
+    pub rel_x: i64, pub rel_y: i64, pub wheel_x: i64, pub wheel_y: i64,
+    pub abs_x: i64, pub abs_y: i64, pub x_range: Range, pub y_range: Range,
+    pub flags: u64, pub seen: u64, pub absolute: u64, pub blocked: u64,
+}
+pub const EMPTY_STATE: State = State { keys: ev.EMPTY_KEYS, shadow: ev.EMPTY_KEYS,
+    pending: [ev.EMPTY_EVENT; 32], count: 0, budget: 0, rel_x: 0, rel_y: 0, wheel_x: 0, wheel_y: 0,
+    abs_x: 0, abs_y: 0, x_range: EMPTY_RANGE, y_range: EMPTY_RANGE, flags: 0, seen: 0, absolute: 0, blocked: 0 };
+pub fn valid_range(minimum: i64, maximum: i64, extent: i64) bool {
+    return minimum >= -2147483648 && maximum <= 2147483647 && minimum < maximum && extent >= 1 && extent <= 8192;
+}
+pub unsafe fn configure_absolute(state: *State, xmin: i64, xmax: i64, ymin: i64, ymax: i64,
+                                   width: i64, height: i64) !void {
+    if !valid_range(xmin,xmax,width) || !valid_range(ymin,ymax,height) { return error.ev.InvalidRange; }
+    unsafe {
+        if state == null || (*state).budget != 0 || (*state).count != 0 || (*state).blocked != 0 { return error.ev.InvalidState; }
+        (*state).x_range = Range { minimum: xmin, maximum: xmax, extent: width };
+        (*state).y_range = Range { minimum: ymin, maximum: ymax, extent: height };
+        (*state).abs_x = xmin; (*state).abs_y = ymin; (*state).seen = 0; (*state).absolute = 1;
+    }
+    return;
+}
+unsafe fn calibrated(raw: i64, range: *const Range) i64 {
+    unsafe {
+    var value = raw;
+    if value < (*range).minimum { value = (*range).minimum; }
+    if value > (*range).maximum { value = (*range).maximum; }
+    return (value - (*range).minimum) * ((*range).extent - 1) / ((*range).maximum - (*range).minimum);
+    }
+}
+unsafe fn validate(state: *const State, q: *const ev.Queue) !void {
+    unsafe {
+        try ev.validate(q);
+        if state == null || (*state).count > 32 || (*state).budget > 256 || (*state).flags > 7
+            || (*state).seen > 3 || (*state).absolute > 1 || (*state).blocked > 1 { return error.ev.InvalidState; }
+        if (*state).absolute != 0 && (!valid_range((*state).x_range.minimum,(*state).x_range.maximum,(*state).x_range.extent)
+            || !valid_range((*state).y_range.minimum,(*state).y_range.maximum,(*state).y_range.extent)) { return error.ev.InvalidState; }
+    }
+    return;
+}
+unsafe fn clear_frame(state: *State) void {
+    unsafe {
+        (*state).shadow = (*state).keys; (*state).pending = [ev.EMPTY_EVENT; 32];
+        (*state).count = 0; (*state).budget = 0; (*state).flags = 0;
+        (*state).rel_x = 0; (*state).rel_y = 0; (*state).wheel_x = 0; (*state).wheel_y = 0;
+    }
+    return;
+}
+unsafe fn lost(state: *State, q: *ev.Queue, reason: u64) void {
+    unsafe {
+        (*state).keys = ev.EMPTY_KEYS; clear_frame(state); (*state).seen = 0; (*state).blocked = 1;
+        ev.loss(q,reason);
+    }
+    return;
+}
+// Caller has reset/quiesced the transport and reconciled device state. A
+// SYN_REPORT alone cannot recover dropped held keys, so feed stays blocked.
+pub unsafe fn restart(state: *State, q: *ev.Queue) !void {
+    unsafe {
+        try validate(state,q); (*state).keys = ev.EMPTY_KEYS; clear_frame(state);
+        (*state).seen = 0; (*state).blocked = 0; ev.loss(q,ev.DEVICE_RESET);
+    }
+    return;
+}
+unsafe fn report(state: *State, q: *ev.Queue) void {
+    unsafe {
+        var needed = (*state).count;
+        if ((*state).flags & 1) != 0 { needed += 1; }
+        if ((*state).flags & 2) != 0 { needed += 1; }
+        if ((*state).flags & 4) != 0 && (*state).seen == 3 { needed += 1; }
+        if needed > 64 - (*q).count { lost(state,q,ev.QUEUE_FULL); return; }
+        // A pointer update is committed before buttons from the same SYN
+        // frame, so a click hits the frame's new position.
+        if ((*state).flags & 1) != 0 {
+            ev.append(q,ev.RELATIVE,0,(*state).rel_x,(*state).rel_y);
+        }
+        if ((*state).flags & 4) != 0 && (*state).seen == 3 {
+            ev.append(q,ev.ABSOLUTE,0,calibrated((*state).abs_x,&(*state).x_range),calibrated((*state).abs_y,&(*state).y_range));
+        }
+        if ((*state).flags & 2) != 0 {
+            ev.append(q,ev.SCROLL,0,(*state).wheel_x,(*state).wheel_y);
+        }
+        var i: usize = 0;
+        while i < (*state).count {
+            let event = (*state).pending[i]; ev.append(q,event.kind,event.code,event.a,event.b); i += 1;
+        }
+        (*state).keys = (*state).shadow; clear_frame(state);
+    }
+    return;
+}
+pub unsafe fn feed(state: *State, q: *ev.Queue, kind: u16, code: u16, value: i32) !void {
+    unsafe {
+        try validate(state,q);
+        if (*state).blocked != 0 { return; }
+        if kind == 0 {
+            if code == 3 { lost(state,q,ev.SYN_DROPPED); }
+            else { if code == 0 { report(state,q); } }
+            return;
+        }
+        if (*state).budget == 256 { lost(state,q,ev.FRAME_LIMIT); return; }
+        (*state).budget += 1;
+        if kind == 1 {
+            if code == 0 || code >= 768 { return; }
+            if value < 0 || value > 2 { lost(state,q,ev.BAD_SEQUENCE); return; }
+            if (*state).count == 32 { lost(state,q,ev.FRAME_LIMIT); return; }
+            var event = ev.EMPTY_EVENT;
+            let changed = try ev.key(&(*state).shadow,code as u64,value as i64,&event);
+            if changed { (*state).pending[(*state).count] = event; (*state).count += 1; }
+        } else { if kind == 2 {
+            if code == 0 { (*state).rel_x += value as i64; (*state).flags |= 1; }
+            if code == 1 { (*state).rel_y += value as i64; (*state).flags |= 1; }
+            if code == 6 { (*state).wheel_x += value as i64; (*state).flags |= 2; }
+            if code == 8 { (*state).wheel_y += value as i64; (*state).flags |= 2; }
+        } else { if kind == 3 && (*state).absolute != 0 {
+            if code == 0 { (*state).abs_x = value as i64; (*state).seen |= 1; (*state).flags |= 4; }
+            if code == 1 { (*state).abs_y = value as i64; (*state).seen |= 2; (*state).flags |= 4; }
+        } } }
+    }
+    return;
+}
+pub unsafe fn feed_bytes(state: *State, q: *ev.Queue, bytes: []const u8) !void {
+    if bytes.len != 8 || bytes.ptr == null { return error.ev.InvalidInput; }
+    unsafe {
+        let kind = read_unaligned(bytes.ptr as *const u16);
+        let code = read_unaligned((bytes.ptr + 2) as *const u16);
+        let value = read_unaligned((bytes.ptr + 4) as *const i32);
+        try feed(state,q,kind,code,value);
+    }
+    return;
+}

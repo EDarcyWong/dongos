@@ -1,0 +1,72 @@
+// Real kernel adapter. Optional diagnostics cannot change process authority.
+module boot.trace_runtime;
+import boot.trace as trace;
+import boot.trace_handoff as handoff;
+import boot.abi as abi;
+import boot.service_resources as resources;
+import boot.service_memory as memory;
+import irq.platform as platform;
+align(4096) struct Storage{words:[512]u64}
+var STORAGE:Storage=Storage{words:[0;512]};
+pub var ACTIVE:bool=false;
+pub var LAST_ERROR:u64=0;
+pub var ENTRY_SAMPLE:trace.Stamp=trace.Stamp{tsc:0,cpu:0,flags:0};
+pub var RATIO_RAW:[3]u64=[0;3];
+var ATTEMPTED:bool=false;
+var NOW:trace.Stamp=trace.Stamp{tsc:0,cpu:0,flags:0};
+unsafe extern "sysv64" fn boot_trace_sample(out:*trace.Stamp)void;
+unsafe extern "sysv64" fn boot_trace_entry_pointer()*const trace.Stamp;
+unsafe extern "sysv64" fn boot_trace_cpuid15(out:*u64)void;
+pub fn pointer()*trace.Trace{unsafe{return (&STORAGE.words[0]) as *trace.Trace;}}
+unsafe fn failed(code:u64)void{unsafe{LAST_ERROR=code;if ACTIVE{trace.invalidate(pointer(),code);}}return;}
+export("dong_boot_trace_capture") fn capture(info:abi.BootInfoPtr,info_physical:u64,physical:u64,tag:u64)u64{unsafe{
+ if ATTEMPTED{return 0x0611_0001;}ATTEMPTED=true;
+ if tag!=trace.MAGIC||info==null||(*info).size!=160||(*info).version!=1{LAST_ERROR=0x0611_0001;return LAST_ERROR;}
+ ENTRY_SAMPLE=*boot_trace_entry_pointer();
+ let plan=memory.plan_pointer();
+ var forbidden:[10]resources.Span=[resources.EMPTY_SPAN;10];
+ forbidden[0]=resources.Span{physical:info_physical,length:160};
+ forbidden[1]=resources.Span{physical:(*info).memory_map as u64,length:(*info).memory_map_size as u64};
+ forbidden[2]=resources.Span{physical:(*info).kernel_physical as u64,length:0x20_0000};
+ forbidden[3]=resources.Span{physical:(*info).stack_physical as u64,length:(*info).stack_size as u64};
+ forbidden[4]=resources.Span{physical:abi.bootstrap_root(info),length:8*4096};
+ forbidden[5]=resources.Span{physical:(*info).framebuffer_base as u64,length:(*info).framebuffer_size as u64};
+ forbidden[6]=resources.Span{physical:(*info).rsdp as u64,length:4096};
+ var count:usize=7;if (*plan).handoff.length!=0{
+  forbidden[7]=(*plan).handoff;forbidden[8]=(*plan).bundle;forbidden[9]=(*plan).arena;count=10;
+ }
+ let adopted=handoff.adopt(slice_from_raw_parts((*info).memory_map,(*info).memory_map_size),(*info).descriptor_size,
+  physical,tag,&ENTRY_SAMPLE,forbidden[0..count],pointer());
+ match adopted{ok=>{ACTIVE=true;LAST_ERROR=0;return 0;},err(e)=>{LAST_ERROR=e;return e;},}
+}}
+pub unsafe fn event(kind:u64,configuration:u64,generation:u64,detail:u64)void{unsafe{
+ if !ACTIVE||(*pointer()).header.state==trace.SEALED||(*pointer()).header.state==trace.FAILED{return;}
+ boot_trace_sample(&NOW);let e=trace.Event{kind:kind,subject:configuration,generation:generation,detail:detail};
+ match trace.record(pointer(),&e,NOW.tsc,NOW.cpu){ok=>{},err(e)=>{LAST_ERROR=e;},}
+}return;}
+export("dong_boot_trace_prepared") fn prepared()u64{unsafe{
+ if !ACTIVE{return LAST_ERROR;}var report=platform.EMPTY_REPORT;
+ let described=platform.describe(&report);match described{ok=>{},err(e)=>{failed(e);return e;},}
+ boot_trace_sample(&NOW);var c=trace.ClockInfo{source:report.reference_source,hz:report.tsc_hz,
+  lower:report.tsc_hz,upper:report.tsc_hz,samples:0,flags:NOW.flags};
+ if report.reference_source==1{boot_trace_cpuid15(&RATIO_RAW[0]);c.flags|=trace.RATIO;}
+ else{
+  if !platform.CALIBRATION_READY{failed(0x0610_0003);return LAST_ERROR;}
+  c.lower=platform.CALIBRATION_RESULT.tsc_lower_hz;c.upper=platform.CALIBRATION_RESULT.tsc_upper_hz;
+  c.samples=platform.CALIBRATION_RESULT.consistent;c.flags|=trace.BRACKETED;
+ }
+ let bound=trace.bind_clock(pointer(),&c,NOW.tsc,NOW.cpu);match bound{ok=>{},err(e)=>{LAST_ERROR=e;return e;},}
+ event(trace.KERNEL_PREPARED,0,0,0);return LAST_ERROR;
+}}
+export("dong_boot_trace_online") fn online(mask:u64)void{unsafe{event(trace.SMP_ONLINE,0,0,mask);}return;}
+pub unsafe fn configure(count:u64,clients:u64)void{unsafe{
+ if !ACTIVE{return;}match trace.configure(pointer(),count,clients){ok=>{},err(e)=>{failed(e);},}
+}return;}
+// Called only with trusted current Catalog identity, never a user-supplied TSC.
+pub unsafe fn mark(configuration:u64,generation:u64,kind:u64)u64{unsafe{
+ if !ACTIVE{return 0x0610_0001;}var mapped:u64=0;
+ if kind==1{mapped=trace.SHELL_INTERACTIVE;}if kind==2{mapped=trace.DESKTOP_PRESENTED;}
+ if kind==3{mapped=trace.CLIENTS_PRESENTED;}if mapped==0{return 0x0610_0007;}
+ boot_trace_sample(&NOW);match trace.mark(pointer(),configuration,generation,mapped,NOW.tsc,NOW.cpu){
+  ok=>{return 0;},err(e)=>{return e;},}
+}}

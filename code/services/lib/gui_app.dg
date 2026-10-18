@@ -1,0 +1,186 @@
+module lib.gui_app;
+import lib.sys as sys;
+import lib.files as files;
+import lib.app_process as process;
+import lib.app_files as storage;
+import lib.window as window;
+import lib.window_abi as abi;
+import lib.widget as widget;
+import lib.widget_state as state;
+import gfx.atlas as atlas;
+import shell.parser as parser;
+import desktop.preferences as preferences;
+import desktop.theme as theme;
+pub var MODEL:state.State=state.EMPTY;
+pub var CLIENT:storage.Client=storage.EMPTY;
+pub var WINDOW:window.Session=window.EMPTY;
+pub var PROCESSES:process.State=process.EMPTY;
+var FONT:atlas.Atlas=atlas.Atlas{bytes:"",count:0,pixel_size:0,records:0,bitmap:0,bitmap_size:0,ascent:0,descent:0};
+var EVENT:window.Event=window.EMPTY_EVENT;
+var BOOT:*const sys.Boot=null;
+var PARSED:parser.Parsed=parser.EMPTY;
+var PARSE_WORK:parser.Parsed=parser.EMPTY;
+var PREF_DATA:[2][129]u8=[[0;129];2];
+var PREF_RECORD:preferences.Record=preferences.EMPTY_RECORD;
+var PREF_THEME:theme.Theme=theme.DEFAULT;
+const PREF_LIGHT:theme.Theme=theme.Theme{background:0xffe7edf6,surface:0xfff9fbff,text:0xff172c48,muted:0xff465a75,
+    accent:0xff1f65b8,border:0xffb7c8dd,shadow:0x40000000,selection:0xffb2d2f4,danger:0xffae2b36,
+    radius:7,shadow_size:8,scale_q8:256,duration_ms:140};
+const BAD:u64=0x0745_0001;
+fn equal(a:[]const u8,b:[]const u8)bool{if a.len!=b.len{return false;}var i:usize=0;while i<a.len{if a[i]!=b[i]{return false;}i+=1;}return true;}
+unsafe fn input(value:[]const u8)void{unsafe{MODEL.input_length=value.len;var i:usize=0;while i<value.len{MODEL.input[i]=value[i];i+=1;}}return;}
+unsafe fn append(value:[]const u8)u64{unsafe{
+    if value.len>65536-MODEL.text_length{return 0x0743_0002;}var i:usize=0;while i<value.len{MODEL.text[MODEL.text_length+i]=value[i];i+=1;}MODEL.text_length+=value.len;MODEL.cursor=MODEL.text_length;return 0;
+}}
+unsafe fn current_name()[]const u8{unsafe{if MODEL.input_length!=0{return MODEL.input[0..MODEL.input_length];}return MODEL.target.bytes[0..MODEL.target.length];}}
+unsafe fn refresh(base:u64)u64{unsafe{return storage.list(&CLIENT,&MODEL,base);}}
+unsafe fn open_selected()u64{unsafe{
+    if MODEL.selected>=MODEL.count{return BAD;}let item=&MODEL.entries[MODEL.selected];if ((*item).attributes&0x100)!=0{return 0x0504_0003;}
+    var status:u64=0;if ((*item).attributes&16)!=0{status=storage.directory(&CLIENT,&MODEL,(*item).name[0..(*item).length]);if status==0{input(MODEL.cwd.bytes[0..MODEL.cwd.length]);status=refresh(0);MODEL.focus=2;MODEL.scroll=0;}}
+    else{status=storage.load(&CLIENT,&MODEL,(*item).name[0..(*item).length]);if status==0{MODEL.focus=3;MODEL.scroll=0;}}return status;
+}}
+unsafe fn process_output()void{unsafe{
+    MODEL.text_length=PROCESSES.length;MODEL.cursor=PROCESSES.length;MODEL.scroll=0;var i:usize=0;while i<PROCESSES.length{MODEL.text[i]=PROCESSES.output[i];i+=1;}
+}return;}
+unsafe fn process_tick()bool{unsafe{
+    if MODEL.role!=state.TERMINAL||PROCESSES.waiting==0{return false;}var changed:bool=false;let status=process.poll(&PROCESSES,&changed);
+    if status!=0{MODEL.status=status;return true;}if changed{process_output();MODEL.status=0;}return changed;
+}}
+unsafe fn file_action(name:[]const u8,operation:u64)u64{unsafe{
+    let status=storage.namespace(&CLIENT,&MODEL,name,operation);if status!=0{return status;}return refresh(0);
+}}
+unsafe fn files_command()u64{unsafe{
+    let line=MODEL.input[0..MODEL.input_length];
+    if equal(line,"sync"){return storage.namespace_sync(&CLIENT,&MODEL);}
+    if (line.len>6&&equal(line[0..6],"touch "))||(line.len>6&&equal(line[0..6],"mkdir "))||(line.len>3&&equal(line[0..3],"rm ")){
+        match parser.parse(line,&PARSED,&PARSE_WORK){ok=>{},err(e)=>{return e;},}if PARSED.count!=2{return BAD;}
+        let verb=PARSED.bytes[PARSED.verb_start..PARSED.verb_start+PARSED.verb_length];let name=PARSED.bytes[PARSED.path_start..PARSED.path_start+PARSED.path_length];
+        var op:u64=1;if equal(verb,"mkdir"){op=2;}else if equal(verb,"rm"){op=3;}return file_action(name,op);
+    }
+    let status=storage.directory(&CLIENT,&MODEL,line);if status!=0{return status;}input(MODEL.cwd.bytes[0..MODEL.cwd.length]);MODEL.focus=2;return refresh(0);
+}}
+unsafe fn terminal()u64{unsafe{
+    match parser.parse(MODEL.input[0..MODEL.input_length],&PARSED,&PARSE_WORK){ok=>{},err(e)=>{return e;},}
+    let verb=PARSED.bytes[PARSED.verb_start..PARSED.verb_start+PARSED.verb_length];let name=PARSED.bytes[PARSED.path_start..PARSED.path_start+PARSED.path_length];
+    if PARSED.count==0{return 0;}var status:u64=0;
+    if equal(verb,"help"){MODEL.text_length=0;return append("ls [path], cd PATH, pwd, cat PATH; ps, run NAME [u64], wait [TOKEN], kill TOKEN\n");}
+    if equal(verb,"ps")||equal(verb,"run")||equal(verb,"wait")||equal(verb,"kill"){let body=PARSED.bytes[PARSED.body_start..PARSED.body_start+PARSED.body_length];let result=process.command(&PROCESSES,verb,name,body,PARSED.count);if result==0{process_output();}return result;}
+    if equal(verb,"pwd"){MODEL.text_length=0;status=append(MODEL.cwd.bytes[0..MODEL.cwd.length]);if status==0{status=append("\n");}return status;}
+    if equal(verb,"cd"){
+        if PARSED.count>2{return BAD;}var target:[]const u8=name;if PARSED.count==1{target="/";}return storage.directory(&CLIENT,&MODEL,target);
+    }
+    if equal(verb,"cat"){if PARSED.count!=2{return BAD;}return storage.load(&CLIENT,&MODEL,name);}
+    if equal(verb,"ls"){
+        if PARSED.count>2{return BAD;}if PARSED.count==2{status=storage.directory(&CLIENT,&MODEL,name);if status!=0{return status;}}
+        status=refresh(0);if status!=0{return status;}MODEL.text_length=0;var i:usize=0;
+        while i<MODEL.count{status=append(MODEL.entries[i].name[0..MODEL.entries[i].length]);if status!=0{return status;}if (MODEL.entries[i].attributes&16)!=0{status=append("/");if status!=0{return status;}}status=append("\n");if status!=0{return status;}i+=1;}return 0;
+    }return BAD;
+}}
+unsafe fn read_preference(slot:usize,out:*usize)u64{unsafe{
+    var name:[]const u8="/DESK0.CFG";if slot==1{name="/DESK1.CFG";}var token:u64=0;
+    var status=files.open(&CLIENT.fs,CLIENT.fs.root,name,files.READ,&token);if status==0x0504_0006{*out=0;return 0;}if status!=0{return status;}
+    status=files.read(&CLIENT.fs,token,0,129);let count=CLIENT.fs.response.words[1];
+    if status==0{if count>129{status=BAD;}else{var i:usize=0;while i<count as usize{PREF_DATA[slot][i]=*((CLIENT.channel+4096) as *const u8+i);i+=1;}}}
+    let closed=files.close(&CLIENT.fs,token);if status!=0{return status;}if closed!=0{return closed;}*out=count as usize;return 0;
+}}
+unsafe fn settings_load()u64{unsafe{
+    var first:usize=0;var second:usize=0;var status=read_preference(0,&first);if status!=0{return status;}status=read_preference(1,&second);if status!=0{return status;}
+    match preferences.select(PREF_DATA[0][0..first],PREF_DATA[1][0..second],&PREF_RECORD){
+        ok(slot)=>{MODEL.preference_sequence=PREF_RECORD.sequence;MODEL.preference_slot=slot;PREF_THEME=PREF_RECORD.theme;MODEL.scale=PREF_THEME.scale_q8;MODEL.light=PREF_THEME.background!=theme.DEFAULT.background;MODEL.saved=true;return 0;},
+        err(e)=>{if e==0x0724_0005{return 0;}return e;},
+    }
+}}
+unsafe fn settings_save()u64{unsafe{
+    var sequence:u64=0;match preferences.next_sequence(MODEL.preference_sequence){ok(n)=>{sequence=n;},err(e)=>{return e;},}
+    PREF_THEME=theme.DEFAULT;if MODEL.light{PREF_THEME=PREF_LIGHT;}PREF_THEME.scale_q8=MODEL.scale;
+    match preferences.encode(&PREF_THEME,sequence,MODEL.text[0..128]){ok=>{},err(e)=>{return e;},}MODEL.text_length=128;
+    var name:[]const u8="/DESK0.CFG";let slot=1-MODEL.preference_slot;if slot==1{name="/DESK1.CFG";}
+    var status=storage.save(&CLIENT,&MODEL,name);if status!=0{return status;}
+    MODEL.dirty=true;MODEL.saved=false;
+    var length:usize=0;status=read_preference(slot as usize,&length);if status!=0{return status;}
+    if length!=128{return BAD;}match preferences.decode(PREF_DATA[slot as usize][0..128],&PREF_RECORD){ok=>{},err(e)=>{return e;},}
+    if PREF_RECORD.sequence!=sequence{return BAD;}MODEL.preference_sequence=sequence;MODEL.preference_slot=slot;
+    status=window.apply_settings(&WINDOW,MODEL.light,MODEL.scale);if status!=0{return status;}MODEL.dirty=false;MODEL.saved=true;return 0;
+}}
+unsafe fn key(event:*const window.Event,out_exit:*bool)u64{unsafe{
+    let cp=(*event).a;let code=(*event).b;let control=((*event).c&1)!=0;
+    if control&&(cp==113||cp==81){if MODEL.dirty&&!MODEL.discard_pending{MODEL.discard_pending=true;return 0x0743_0003;}*out_exit=true;return 0;}MODEL.discard_pending=false;
+    if MODEL.role==state.SETTINGS{
+        if control&&(cp==115||cp==83){return settings_save();}
+        if cp==116||cp==84{MODEL.light=!MODEL.light;MODEL.dirty=true;MODEL.saved=false;return 0;}
+        if cp==43||cp==61{if MODEL.scale<512{MODEL.scale+=64;}MODEL.dirty=true;MODEL.saved=false;return 0;}
+        if cp==45{if MODEL.scale>256{MODEL.scale-=64;}MODEL.dirty=true;MODEL.saved=false;return 0;}return 0;
+    }
+    if control&&(cp==117||cp==85)&&MODEL.focus==0{MODEL.input_length=0;return 0;}
+    if MODEL.role==state.EDITOR{
+        if control&&(cp==115||cp==83){return storage.save(&CLIENT,&MODEL,current_name());}
+        if control&&(cp==111||cp==79){let status=storage.load(&CLIENT,&MODEL,current_name());if status==0{MODEL.focus=1;MODEL.scroll=0;}return status;}
+        if control&&(cp==110||cp==78){if MODEL.dirty{return 0x0743_0003;}MODEL.text_length=0;MODEL.cursor=0;MODEL.target.length=1;MODEL.target.bytes[0]=47;MODEL.input_length=0;MODEL.focus=0;MODEL.saved=false;return 0;}
+        if code==9{if MODEL.focus==0{MODEL.focus=1;}else{MODEL.focus=0;}return 0;}
+        if MODEL.focus==1{
+            if code==8{state.backspace(&MODEL,true);return 0;}if code==256{state.move(&MODEL,false);return 0;}if code==257{state.move(&MODEL,true);return 0;}
+            var value=cp;if code==13{value=10;}match state.insert(&MODEL,value,true){ok=>{return 0;},err(e)=>{return e;},}
+        }
+    }
+    if MODEL.role==state.FILES{
+        if control&&(cp==115||cp==83){return storage.namespace_sync(&CLIENT,&MODEL);}
+        if control&&(cp==110||cp==78){return file_action(MODEL.input[0..MODEL.input_length],1);}
+        if control&&(cp==109||cp==77){return file_action(MODEL.input[0..MODEL.input_length],2);}
+        if control&&(cp==100||cp==68){if MODEL.focus==2&&MODEL.selected<MODEL.count{return file_action(MODEL.entries[MODEL.selected].name[0..MODEL.entries[MODEL.selected].length],3);}return file_action(MODEL.input[0..MODEL.input_length],3);}
+        if code==27{MODEL.focus=2;return 0;}if code==9{if MODEL.focus==0{MODEL.focus=2;}else{MODEL.focus=0;}return 0;}
+        if code==0x120{return refresh(0);}if code==260{if MODEL.base>=64{return refresh(MODEL.base-64);}return 0;}
+        if code==261{if MODEL.base<4032{return refresh(MODEL.base+64);}return 0;}
+        if MODEL.focus==2{
+            if code==258{if MODEL.selected>0{MODEL.selected-=1;}if MODEL.selected<MODEL.scroll{MODEL.scroll=MODEL.selected;}return 0;}
+            if code==259{if MODEL.selected+1<MODEL.count{MODEL.selected+=1;}if MODEL.selected>MODEL.scroll+12{MODEL.scroll=MODEL.selected-12;}return 0;}
+            if code==13{return open_selected();}return 0;
+        }
+    }
+    if code==8{state.backspace(&MODEL,false);return 0;}
+    if code==13{
+        if MODEL.role==state.TERMINAL{let status=terminal();MODEL.input_length=0;return status;}
+        if MODEL.role==state.FILES{return files_command();}
+        if MODEL.role==state.EDITOR{let status=storage.load(&CLIENT,&MODEL,current_name());if status==0{MODEL.focus=1;}return status;}
+    }
+    if cp>=32{match state.insert(&MODEL,cp,false){ok=>{return 0;},err(e)=>{return e;},}}return 0;
+}}
+unsafe fn pointer(event:*const window.Event)u64{unsafe{
+    MODEL.discard_pending=false;
+    let x=(*event).a&0xffff_ffff;let y=(*event).a>>32;let down=((*event).b&1)!=0&&(MODEL.buttons&1)==0;MODEL.buttons=(*event).b;
+    if MODEL.role==state.FILES&&down{
+        if y<76{MODEL.focus=0;return 0;}if y<88{return 0;}let line=(FONT.ascent+FONT.descent+4) as u64;
+        let row=((y-88)/line) as usize+MODEL.scroll;if row<MODEL.count{MODEL.selected=row;MODEL.focus=2;}
+    }
+    if MODEL.role==state.EDITOR&&down{if y<76{MODEL.focus=0;}else{MODEL.focus=1;}}
+    if MODEL.role==state.SETTINGS&&down{if y<88{MODEL.light=!MODEL.light;}else{if x<WINDOW.width/2{if MODEL.scale>256{MODEL.scale-=64;}}else{if MODEL.scale<512{MODEL.scale+=64;}}}MODEL.dirty=true;MODEL.saved=false;}
+    let wheel=(*event).c as i64;if wheel>0&&MODEL.scroll>0{MODEL.scroll-=1;}if wheel<0&&MODEL.scroll<65536{MODEL.scroll+=1;}return 0;
+}}
+pub unsafe fn run(role:u64)u64{unsafe{
+    BOOT=sys.boot();if BOOT==null||(*BOOT).version!=1||(*BOOT).channel_bytes!=65536||(*BOOT).console==0{return BAD;}
+    match state.initialize(&MODEL,role){ok=>{},err(e)=>{return e;},}
+    let rights:u64=395;
+    var status=storage.initialize(&CLIENT,(*BOOT).filesystem,(*BOOT).channel_address,rights);if status!=0{return status;}
+    status=window.initialize(&WINDOW,(*BOOT).console,640,480);if status!=0{return status;}
+    status=window.font(&WINDOW,&FONT);if status!=0{return status;}
+    if role==state.EDITOR{input("/README.TXT");status=storage.load(&CLIENT,&MODEL,current_name());MODEL.focus=1;}
+    if role==state.FILES{input("/");MODEL.focus=2;status=refresh(0);}
+    if role==state.TERMINAL{status=process.initialize(&PROCESSES,(*BOOT).configuration,(*BOOT).reserved1);if status!=0{return status;}status=append("Independent terminal: help for commands\n");}
+    if role==state.SETTINGS{status=settings_load();}MODEL.status=status;
+    status=sys.ready_boot(BOOT);if status!=0{return status;}let logged=sys.log("DONGOS_GUI_APP_READY\r\n");if logged!=0{return logged;}
+    var quitting:bool=false;
+    loop{
+        let process_changed=process_tick();status=widget.paint(&WINDOW,&MODEL,&FONT);if status!=0{break;}status=window.commit(&WINDOW);if status!=0{break;}
+        var pending=window.poll(&WINDOW,&EVENT);
+        while pending==window.NO_EVENT{if process_tick(){EVENT=window.EMPTY_EVENT;pending=0;break;}let yielded=sys.yield_now();if yielded!=0{status=yielded;break;}pending=window.poll(&WINDOW,&EVENT);}
+        if status!=0{break;}if pending!=0{status=pending;break;}
+        var handled:u64=0;
+        if EVENT.kind==abi.EXIT{if MODEL.dirty{handled=0x0743_0003;}else{quitting=true;}}
+        else if EVENT.kind==abi.KEY{handled=key(&EVENT,&quitting);}
+        else if EVENT.kind==abi.POINTER{handled=pointer(&EVENT);}
+        else if EVENT.kind==abi.THEME{if EVENT.a>1||!((EVENT.b==256)||(EVENT.b==320)||(EVENT.b==384)||(EVENT.b==448)||(EVENT.b==512))||EVENT.c==0||EVENT.d!=0{handled=BAD;}else{MODEL.light=EVENT.a==1;MODEL.scale=EVENT.b;}}
+        else if EVENT.kind==abi.CONFIGURE{handled=window.configure(&WINDOW,&EVENT);if handled==0{handled=window.font(&WINDOW,&FONT);}}
+        MODEL.status=handled;if quitting{break;}
+    }
+    let file_closed=files.close(&CLIENT.fs,CLIENT.fs.root);let window_closed=window.close(&WINDOW);
+    if status!=0{return status;}if file_closed!=0{return file_closed;}return window_closed;
+}}

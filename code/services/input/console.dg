@@ -1,0 +1,77 @@
+// One producer (input service), one consumer (kernel serial-console syscall).
+// SC u64 publication is stronger than the required acquire/release ordering.
+module input.console;
+import input.events as ev;
+pub const ADDRESS:u64=0x5410_0000;
+pub const CAPACITY:u64=256;
+pub error Invalid=0x0735_0001;
+pub error Exhausted=0x0735_0002;
+pub const PASS:u64=0;
+pub const CONSUMED:u64=1;
+pub const MODE_ON:u64=2;
+pub const MODE_OFF:u64=3;
+pub struct Queue {pub head:u64,pub tail:u64,pub dropped:u64,pub bytes:[256]u8}
+pub const EMPTY_QUEUE:Queue=Queue {head:0,tail:0,dropped:0,bytes:[0;256]};
+pub struct State {pub enabled:u64}
+pub const EMPTY_STATE:State=State {enabled:0};
+const MAX:u64=0xffff_ffff_ffff_ffff;
+unsafe fn aligned(q:*const Queue)!void {unsafe {
+    if q==null||((q as u64)&7)!=0 {return error.Invalid;}
+}return;}
+pub unsafe fn validate(q:*const Queue)!void {unsafe {
+    try aligned(q);let head=atomic_load(&(*q).head);let tail=atomic_load(&(*q).tail);
+    if tail<head||tail-head>CAPACITY {return error.Invalid;}
+}return;}
+// Initialize before either side is published ready, never over a live queue.
+pub unsafe fn initialize(q:*Queue)!void {unsafe {try aligned(q);*q=EMPTY_QUEUE;}return;}
+pub unsafe fn push(q:*Queue,byte:u8)!bool {unsafe {
+    try aligned(q);let tail=atomic_load(&(*q).tail);let head=atomic_load(&(*q).head);
+    if tail<head||tail-head>CAPACITY {return error.Invalid;}
+    if tail-head==CAPACITY {let dropped=atomic_load(&(*q).dropped);if dropped!=MAX {atomic_store(&(*q).dropped,dropped+1);}return false;}
+    if tail==MAX {return error.Exhausted;}
+    (*q).bytes[(tail%CAPACITY) as usize]=byte;atomic_store(&(*q).tail,tail+1);return true;
+}}
+pub unsafe fn pop(q:*Queue,out:*u8)!bool {unsafe {
+    try aligned(q);if out==null {return error.Invalid;}
+    let head=atomic_load(&(*q).head);let tail=atomic_load(&(*q).tail);
+    if tail<head||tail-head>CAPACITY {return error.Invalid;}
+    if tail==head {return false;}
+    let byte=(*q).bytes[(head%CAPACITY) as usize];*out=byte;atomic_store(&(*q).head,head+1);return true;
+}}
+// Linux evdev key codes are emitted by the Set2 parser. Unsupported layouts
+// remain explicit; ASCII is never inferred from scan-code byte positions.
+pub fn ascii(code:u64,modifiers:u64)u8 {
+    let shift=(modifiers&(ev.SHIFT_L|ev.SHIFT_R))!=0;let caps=(modifiers&ev.CAPS)!=0;
+    if (modifiers&(ev.ALT_L|ev.ALT_R|ev.META_L|ev.META_R))!=0 {return 0;}
+    var letter:u8=0;
+    if code>=16&&code<=25 {let row="qwertyuiop";unsafe {letter=row[(code-16) as usize];}}
+    else if code>=30&&code<=38 {let row="asdfghjkl";unsafe {letter=row[(code-30) as usize];}}
+    else if code>=44&&code<=50 {let row="zxcvbnm";unsafe {letter=row[(code-44) as usize];}}
+    if letter!=0 {
+        if (modifiers&(ev.CTRL_L|ev.CTRL_R))!=0 {return letter-96;}
+        if shift!=caps {return letter-32;}return letter;
+    }
+    if (modifiers&(ev.CTRL_L|ev.CTRL_R|ev.ALT_L|ev.ALT_R|ev.META_L|ev.META_R))!=0 {return 0;}
+    if code>=2&&code<=11 {let normal="1234567890";let shifted="!@#$%^&*()";unsafe {if shift {return shifted[(code-2) as usize];}return normal[(code-2) as usize];}}
+    if code==12 {if shift {return 95;}return 45;}if code==13 {if shift {return 43;}return 61;}
+    if code==26 {if shift {return 123;}return 91;}if code==27 {if shift {return 125;}return 93;}
+    if code==39 {if shift {return 58;}return 59;}if code==40 {if shift {return 34;}return 39;}
+    if code==41 {if shift {return 126;}return 96;}if code==43 {if shift {return 124;}return 92;}
+    if code==51 {if shift {return 60;}return 44;}if code==52 {if shift {return 62;}return 46;}
+    if code==53||code==98 {if shift&&code==53 {return 63;}return 47;}
+    if code==14 {return 8;}if code==28||code==96 {return 13;}if code==15 {return 9;}if code==57 {return 32;}
+    return 0;
+}
+pub unsafe fn key(state:*State,q:*Queue,event:*const ev.Event)!u64 {unsafe {
+    if state==null||event==null||(*state).enabled>1 {return error.Invalid;}
+    try validate(q);let e=*event;
+    if e.kind!=ev.KEY||e.code>=272 {return PASS;}
+    if e.a<0||e.a>2||e.b<0 {return error.Invalid;}
+    if e.code==88 {
+        if e.a==1 {(*state).enabled^=1;if (*state).enabled==1 {return MODE_ON;}return MODE_OFF;}
+        return CONSUMED;
+    }
+    if (*state).enabled==0 {return PASS;}
+    if e.a!=0 {let byte=ascii(e.code,e.b as u64);if byte!=0 {let inserted=try push(q,byte);}}
+    return CONSUMED;
+}}

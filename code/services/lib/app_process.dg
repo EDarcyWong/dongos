@@ -1,0 +1,84 @@
+// GUI terminal process control. Poll never blocks the event/render loop.
+module lib.app_process;
+import lib.process as process;
+import lib.process_abi as abi;
+pub const BAD:u64=0x0748_0001;
+pub struct State {pub manager:u64,pub count:u64,pub last:u64,pub configuration:u64,pub generation:u64,
+ pub cursor:u64,pub waiting:u64,pub length:usize,pub output:[8192]u8,
+ pub config:abi.Config,pub snapshot:abi.Snapshot,pub event:abi.Event}
+pub const EMPTY:State=State{manager:0,count:0,last:0,configuration:0,generation:0,cursor:0,waiting:0,length:0,
+ output:[0;8192],config:abi.EMPTY_CONFIG,snapshot:abi.EMPTY_SNAPSHOT,event:abi.EMPTY_EVENT};
+fn equal(a:[]const u8,b:[]const u8)bool{if a.len!=b.len{return false;}var i:usize=0;while i<a.len{if a[i]!=b[i]{return false;}i+=1;}return true;}
+pub unsafe fn initialize(s:*State,manager:u64,count:u64)u64{unsafe{
+ if s==null||manager==0||count==0||count>32{return BAD;}*s=EMPTY;(*s).manager=manager;(*s).count=count;return 0;
+}}
+unsafe fn append(s:*State,text:[]const u8)u64{unsafe{
+ if text.len>8192-(*s).length{return BAD;}var i:usize=0;while i<text.len{(*s).output[(*s).length+i]=text[i];i+=1;}(*s).length+=text.len;return 0;
+}}
+unsafe fn number(s:*State,value:u64)u64{unsafe{
+ var raw:[20]u8=[0;20];var at:usize=20;var n=value;loop{at-=1;raw[at]=(48+n%10) as u8;n/=10;if n==0{break;}}return append(s,raw[at..20]);
+}}
+unsafe fn decimal(text:[]const u8,out:*u64)bool{unsafe{
+ if text.len==0{return false;}var value:u64=0;var i:usize=0;while i<text.len{let ch=text[i];if ch<48||ch>57{return false;}
+ let digit=(ch-48) as u64;if value>(0xffff_ffff_ffff_ffff-digit)/10{return false;}value=value*10+digit;i+=1;}*out=value;return true;
+}}
+unsafe fn config(s:*State,index:u64)u64{unsafe{
+ let status=process.configuration_state((*s).manager,index,&(*s).config,&(*s).snapshot);if status!=0{return status;}
+ if (*s).config.version!=1||(*s).config.id!=index||(*s).config.name_length==0||(*s).config.name_length>32
+  ||(*s).snapshot.version!=1||(*s).snapshot.configuration!=index||(*s).snapshot.state>5{return BAD;}return 0;
+}}
+unsafe fn line(s:*State,label:[]const u8,token:u64,generation:u64,state:u64,status:u64)u64{unsafe{
+ var failure=append(s,label);if failure!=0{return failure;}failure=append(s," token=");if failure!=0{return failure;}
+ failure=number(s,token);if failure!=0{return failure;}failure=append(s," generation=");if failure!=0{return failure;}
+ failure=number(s,generation);if failure!=0{return failure;}failure=append(s," state=");if failure!=0{return failure;}
+ failure=number(s,state);if failure!=0{return failure;}failure=append(s," status=");if failure!=0{return failure;}
+ failure=number(s,status);if failure!=0{return failure;}return append(s,"\n");
+}}
+pub unsafe fn poll(s:*State,changed:*bool)u64{unsafe{
+ if s==null||changed==null||(*s).manager==0{return BAD;}*changed=false;if (*s).waiting==0{return 0;}
+ var n:usize=0;while n<32{
+  let status=process.wait((*s).manager,(*s).cursor,&(*s).event,abi.NONBLOCK,0);
+  if status==0x0511_0005{return 0;}if status!=0{(*s).waiting=0;return status;}
+  let e=&(*s).event;if (*e).version!=1||(*e).sequence<=(*s).cursor||(*e).configuration>=(*s).count||(*e).state>5{(*s).waiting=0;return BAD;}
+  (*s).cursor=(*e).sequence;if (*e).process==(*s).waiting&&(*e).state>=abi.EXITED{
+   (*s).length=0;let result=line(s,"WAIT OK",(*s).waiting,(*e).generation,(*e).state,(*e).status);(*s).waiting=0;*changed=true;return result;
+  }n+=1;
+ }return 0;
+}}
+pub unsafe fn command(s:*State,verb:[]const u8,name:[]const u8,body:[]const u8,count:u64)u64{unsafe{
+ if s==null||(*s).manager==0{return BAD;}(*s).length=0;
+ if equal(verb,"ps"){
+  if count!=1{return BAD;}var i:u64=0;while i<(*s).count{let status=config(s,i);if status!=0{return status;}
+   var failure=number(s,i);if failure!=0{return failure;}failure=append(s," ");if failure!=0{return failure;}
+   failure=append(s,(*s).config.name[0..(*s).config.name_length as usize]);if failure!=0{return failure;}
+   failure=line(s,"",(*s).snapshot.process,(*s).snapshot.generation,(*s).snapshot.state,(*s).snapshot.status);if failure!=0{return failure;}i+=1;
+  }return 0;
+ }
+ if equal(verb,"run"){
+  if count<2||count>3{return BAD;}var argument:u64=0;if count==3&&!decimal(body,&argument){return BAD;}
+  var i:u64=0;while i<(*s).count{let status=config(s,i);if status!=0{return status;}
+   if equal(name,(*s).config.name[0..(*s).config.name_length as usize]){
+    if ((*s).config.flags&abi.ORDINARY)==0||i==12{return 0x0401_0003;}
+    let spawned=process.spawn((*s).manager,i,(*s).snapshot.generation,argument,&(*s).snapshot);if spawned!=0{return spawned;}
+    if (*s).snapshot.version!=1||(*s).snapshot.configuration!=i||(*s).snapshot.process==0{return BAD;}
+    (*s).last=(*s).snapshot.process;(*s).configuration=i;(*s).generation=(*s).snapshot.generation;
+    return line(s,"RUN OK",(*s).last,(*s).generation,(*s).snapshot.state,(*s).snapshot.status);
+   }i+=1;
+  }return 0x0504_0006;
+ }
+ if equal(verb,"kill"){
+  var token:u64=0;if count!=2||!decimal(name,&token)||token==0{return BAD;}
+  let killed=process.kill((*s).manager,token,0);if killed!=0{return killed;}return line(s,"KILL OK",token,0,abi.KILLED,0);
+ }
+ if equal(verb,"wait"){
+  var token=(*s).last;if count>2||(count==2&&!decimal(name,&token))||token==0{return BAD;}
+  var found:bool=false;var i:u64=0;while i<(*s).count{let status=config(s,i);if status!=0{return status;}
+   if (*s).snapshot.process==token||(token==(*s).last&&i==(*s).configuration&&(*s).snapshot.generation==(*s).generation){
+    if ((*s).config.flags&abi.ORDINARY)==0{return 0x0401_0003;}found=true;
+    if (*s).snapshot.state>=abi.EXITED{return line(s,"WAIT OK",token,(*s).snapshot.generation,(*s).snapshot.state,(*s).snapshot.status);}break;
+   }i+=1;
+  }
+  (*s).waiting=token;var changed:bool=false;let status=poll(s,&changed);if status!=0{return status;}if changed{return 0;}
+  if !found{(*s).waiting=0;return 0x0511_0003;}return line(s,"WAITING",token,0,0,0);
+ }return BAD;
+}}

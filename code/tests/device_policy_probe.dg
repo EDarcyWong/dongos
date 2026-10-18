@@ -1,0 +1,14 @@
+module device_policy_probe;
+import boot.device_policy as policy;
+import firmware.acpi as acpi;
+import boot.memory_resources as resources;
+
+export("device_plan") fn make(inventory: *const acpi.Inventory, raw: *const u8, bytes: usize,
+    stride: usize, kept: *const resources.Resource, count: usize, out: *policy.Plan) u64 {
+    unsafe {
+        let data = slice_from_raw_parts(raw,bytes);
+        let records = slice_from_raw_parts(kept,count);
+        match policy.plan(inventory,data,stride,records,out) { ok => { return 0; }, err(code) => { return code; }, }
+    }
+}
+export("device_plan_size") fn bytes() usize { return sizeof(policy.Plan); }

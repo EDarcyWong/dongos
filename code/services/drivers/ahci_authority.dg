@@ -1,0 +1,42 @@
+// Kernel-owned register snapshots only. This policy never reads MMIO, grants
+// memory, starts DMA, frees a lease, or trusts a user's completion claim.
+module drivers.ahci_authority;
+pub error Denied=0x050a_0004;
+pub struct Header {
+    pub cap:u64,pub ghc:u64,pub implemented:u64,pub selected:u64,
+    pub bar_bytes:u64,pub lease_physical:u64,pub lease_bytes:u64,pub pci_command:u64,
+    pub version:u64,pub cap2:u64,pub bohc:u64,
+}
+pub struct Port {
+    pub cmd:u64,pub ci:u64,pub sact:u64,pub interrupts:u64,
+    pub clb:u64,pub fb:u64,pub ssts:u64,pub signature:u64,
+}
+pub const EMPTY_PORT:Port=Port {cmd:0,ci:0,sact:0,interrupts:0,clb:0,fb:0,ssts:0,signature:0};
+pub unsafe fn permit(header:*const Header,ports:[]const Port)!u16 {
+    unsafe {
+        if header==null || ports.ptr==null {return error.Denied;}
+        let h=*header;let count=(h.cap&31)+1;
+        if h.cap>0xffff_ffff || h.ghc>0xffff_ffff || h.implemented>0xffff_ffff
+            || h.version<0x10000 || h.version>0x1ffff || h.cap2>0xffff_ffff || h.bohc>0xffff_ffff
+            || ports.len!=count as usize || h.selected>=count || (h.implemented&(1<<h.selected))==0
+            || (h.implemented>>count)!=0 || (h.ghc&0x8000_0003)!=0x8000_0000
+            || h.bar_bytes<0x100+count*0x80 || h.pci_command>65535 || (h.pci_command&7)!=2
+            || h.lease_physical==0 || (h.lease_physical&4095)!=0 || h.lease_physical>=0x1_0000_0000
+            || h.lease_bytes!=131072 || h.lease_bytes>0x1_0000_0000-h.lease_physical {return error.Denied;}
+        if h.version>=0x10200 && (h.cap2&1)!=0 && (h.bohc&0x13)!=2 {return error.Denied;}
+        var i:usize=0;
+        while i<count as usize {
+            if (h.implemented&(1<<(i as u64)))!=0 {
+                let p=ports[i];
+                if p.cmd>0xffff_ffff || p.ci!=0 || p.sact!=0 || p.interrupts!=0
+                    || (p.cmd&0xc011)!=0 {return error.Denied;}
+                if i as u64==h.selected {
+                    if p.clb!=h.lease_physical || p.fb!=h.lease_physical+0x400
+                        || p.ssts>0xffff_ffff || (p.ssts&0xf0f)!=0x103 || p.signature!=0x101
+                        || (p.cmd&0x0102_0000)!=0 {return error.Denied;}
+                }
+            }i+=1;
+        }
+        return ((h.pci_command|0x406)&~1) as u16;
+    }
+}

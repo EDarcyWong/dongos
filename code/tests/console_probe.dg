@@ -1,0 +1,8 @@
+module console_probe;
+import input.console as console;
+import input.events as ev;
+export("con_init") fn init(q:*console.Queue)u64 {unsafe {match console.initialize(q) {ok=>{return 0;},err(e)=>{return e;},}}}
+export("con_push") fn push(q:*console.Queue,b:u8,out:*u64)u64 {unsafe {match console.push(q,b) {ok(v)=>{*out=v as u64;return 0;},err(e)=>{return e;},}}}
+export("con_pop") fn pop(q:*console.Queue,out:*u8,present:*u64)u64 {unsafe {match console.pop(q,out) {ok(v)=>{*present=v as u64;return 0;},err(e)=>{return e;},}}}
+export("con_ascii") fn ascii(c:u64,m:u64)u8 {return console.ascii(c,m);}
+export("con_key") fn key(s:*console.State,q:*console.Queue,e:*const ev.Event,out:*u64)u64 {unsafe {match console.key(s,q,e) {ok(v)=>{*out=v;return 0;},err(e)=>{return e;},}}}

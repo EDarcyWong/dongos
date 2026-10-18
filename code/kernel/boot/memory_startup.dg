@@ -1,0 +1,478 @@
+// BSP tree preparation under P1 and raw audits before/after activation.
+// This module never loads CR3, enables NX, or frees boot resources. Failure
+// is fail-stop; caller must not retry after partial setup.
+module boot.memory_startup;
+import boot.memory_policy as policy;
+
+import boot.abi as abi;
+import boot.memory_resources as resources;
+import boot.arena_fit as arena_fit;
+import boot.ist_layout as ist;
+import boot.runtime_view as runtime;
+import boot.startup_errors as errors;
+import cpu.capabilities as cpu;
+import mm.memory_map as mmap;
+import mm.phys_buddy as buddy;
+import mm.paging as paging;
+
+const PAGE: u64 = 4096;
+const LIMIT: u64 = 0x1_0000_0000;
+const KERNEL: u64 = 0xffff_ffff_8000_0000;
+const HHDM: u64 = 0xffff_8000_0000_0000;
+const STACK: u64 = 0xffff_9000_0000_1000;
+const ARENA_PAGES: usize = 1024;
+const ARENA_BYTES: u64 = 0x40_0000;
+const POOL_ORDER: usize = policy.POOL_ORDER;
+const POOL_PAGES: usize = policy.POOL_PAGES;
+const STACK_ORDER: usize = 4;
+const STACK_PAGES: usize = 16;
+const CAPACITY: usize = 32;
+
+pub struct Report {
+    pub physical_bits: u64, pub nx: u64,
+    pub resource_count: u64, pub arena_base: u64, pub arena_pages: u64,
+    pub usable_pages: u64, pub free_pages: u64,
+    pub pool_physical: u64, pub pool_pages: u64,
+    pub root_physical: u64, pub table_count: u64, pub mapped_pages: u64,
+    pub pat_value: u64, pub stack_physical: u64, pub stack_pages: u64,
+    pub stack_bottom: u64, pub stack_top: u64, pub bridge_value: u64,
+    pub runtime_view: u64, pub runtime_boot_info: u64, pub runtime_raw_map: u64,
+    pub runtime_rsdp: u64, pub runtime_framebuffer: u64, pub runtime_pool: u64,
+    pub ist_guard_pages: u64,
+}
+
+const EMPTY_SPAN: resources.Span = resources.Span { start: 0, end: 0 };
+const EMPTY_LAYOUT: resources.Layout = resources.Layout {
+    text: EMPTY_SPAN, rodata: EMPTY_SPAN, data: EMPTY_SPAN, bss: EMPTY_SPAN,
+    gdt: EMPTY_SPAN, tss: EMPTY_SPAN, idt: EMPTY_SPAN, df: EMPTY_SPAN,
+    nmi: EMPTY_SPAN, exception_stack: EMPTY_SPAN, workspace: EMPTY_SPAN, rsdp_size: 0,
+};
+
+struct Workspace {
+    attempted: bool,
+    allocator: buddy.Allocator,
+    page_meta: [ARENA_PAGES]buddy.PageMeta,
+    scratch: [ARENA_PAGES]u8,
+    ranges: [ARENA_PAGES]mmap.PageRange,
+    reservations: [CAPACITY]mmap.ReservedRange,
+    manifest: [CAPACITY]resources.Resource,
+    space: paging.Space,
+    table_meta: [POOL_PAGES]u8,
+    capabilities: cpu.Capabilities,
+    layout: resources.Layout,
+    runtime: runtime.View,
+    expected_pages: usize,
+    ready: bool,
+}
+
+var WORK: Workspace = Workspace {
+    attempted: false, allocator: buddy.EMPTY_ALLOCATOR,
+    page_meta: [buddy.EMPTY_META; ARENA_PAGES], scratch: [0; ARENA_PAGES],
+    ranges: [mmap.PageRange { start_page: 0, page_count: 0 }; ARENA_PAGES],
+    reservations: [mmap.ReservedRange { base: 0, length: 0 }; CAPACITY],
+    manifest: [resources.Resource { kind: 0, base: 0, length: 0 }; CAPACITY],
+    space: paging.EMPTY_SPACE, table_meta: [0; POOL_PAGES],
+    capabilities: cpu.EMPTY_CAPABILITIES,
+    layout: EMPTY_LAYOUT, runtime: runtime.EMPTY_VIEW, expected_pages: 0, ready: false,
+};
+
+fn low_range(base: u64, length: u64) bool {
+    return base != 0 && base < LIMIT && length != 0 && length <= LIMIT - base;
+}
+
+fn load64(raw: []const u8, offset: usize) u64 {
+    unsafe { return read_unaligned((raw.ptr + offset) as *const u64); }
+}
+
+fn load32(raw: []const u8, offset: usize) u32 {
+    unsafe { return read_unaligned((raw.ptr + offset) as *const u32); }
+}
+
+fn total(ranges: []const mmap.PageRange) usize {
+    var sum: usize = 0;
+    for range in ranges { sum += range.page_count; }
+    return sum;
+}
+
+// The map has already been validated by resources.collect. Search complete,
+// naturally aligned 4MiB arenas within Conventional, non-runtime descriptors.
+// The eventual PA->pointer conversion is justified only by P1's identity map.
+unsafe fn choose_arena(raw: []const u8, stride: usize, version: u64,
+                       reserved: []const mmap.ReservedRange, out_base: *u64) !usize {
+    var offset: usize = 0;
+    while offset < raw.len {
+        if load32(raw, offset) == 7 && (load64(raw, offset + 32) & 0x8000_0000_0000_0000) == 0 {
+            let start = load64(raw, offset + 8);
+            let pages = load64(raw, offset + 24);
+            let end = start + pages * PAGE;
+            if start < LIMIT && end > ARENA_BYTES {
+                var first: u64 = start;
+                if first < ARENA_BYTES { first = ARENA_BYTES; }
+                first = (first + ARENA_BYTES - 1) & ~(ARENA_BYTES - 1);
+                var last = end;
+                if last > LIMIT { last = LIMIT; }
+                while first < last && ARENA_BYTES <= last - first {
+                    unsafe {
+                        let used = try mmap.normalize(raw, stride, version, first, ARENA_PAGES,
+                            reserved, WORK.scratch[..], WORK.ranges[..]);
+                        let ranges: []const mmap.PageRange = WORK.ranges[..used];
+                        if arena_fit.fits(ranges) { *out_base = first; return used; }
+                    }
+                    first += ARENA_BYTES;
+                }
+            }
+        }
+        offset += stride;
+    }
+    return error.errors.NoArena;
+}
+
+// Independent raw entry walk, in addition to the public paging.query API.
+// This tree was allocated from RAM <4GiB and is never active/imported.
+unsafe fn verify_leaf(root: u64, pool: u64, virtual: u64, physical: u64, flags: u64) !void {
+    var current = root;
+    var level: usize = 0;
+    while level < 4 {
+        if current < pool || current - pool >= (POOL_PAGES as u64) * PAGE || (current & 4095) != 0 {
+            return error.errors.InvalidOfflineMapping;
+        }
+        let slot: usize = ((virtual >> (39 - 9 * level)) & 511) as usize;
+        var entry: u64;
+        unsafe { entry = *(((HHDM + current) as *const u64) + slot); }
+        if level < 3 {
+            if (entry & ~0x000f_ffff_ffff_f000) != 7 { return error.errors.InvalidOfflineMapping; }
+            current = entry & 0x000f_ffff_ffff_f000;
+        } else {
+            var expected = physical | 1;
+            if (flags & 1) != 0 { expected |= 2; }
+            if (flags & 2) != 0 { expected |= 4; }
+            if (flags & paging.UNCACHED) != 0 { expected |= 0x18; }
+            if (flags & 4) == 0 { expected |= 0x8000_0000_0000_0000; }
+            if entry != expected { return error.errors.InvalidOfflineMapping; }
+        }
+        level += 1;
+    }
+    return;
+}
+
+unsafe fn map_pages(virtual: u64, physical: u64, bytes: u64, flags: u64,
+                    pool: u64, mapped: *usize) !void {
+    var offset: u64 = 0;
+    while offset < bytes {
+        unsafe {
+            try paging.map(&WORK.space, virtual + offset, physical + offset, flags);
+            var found: paging.Mapping = paging.Mapping { physical: 0, flags: 0 };
+            try paging.query(&WORK.space, virtual + offset + 31, &found);
+            if found.physical != physical + offset + 31 || found.flags != flags {
+                return error.errors.InvalidOfflineMapping;
+            }
+            try verify_leaf(pool, pool, virtual + offset, physical + offset, flags);
+            *mapped += 1;
+        }
+        offset += PAGE;
+    }
+    return;
+}
+
+unsafe fn map_kernel(start: u64, end: u64, kernel_physical: u64, flags: u64,
+                     pool: u64, mapped: *usize) !void {
+    unsafe { return map_pages(start, kernel_physical + (start - KERNEL),
+        end - start, flags, pool, mapped); }
+}
+
+unsafe fn map_bss(layout: *const resources.Layout, physical: u64, pool: u64, mapped: *usize) !void {
+    unsafe {
+        var address = (*layout).bss.start;
+        while address < (*layout).bss.end {
+            if !ist.is_guard(address, layout) {
+                try map_kernel(address,address + PAGE,physical,paging.WRITE,pool,mapped);
+            }
+            address += PAGE;
+        }
+    }
+    return;
+}
+
+// Round only validated, nonzero low physical ranges. No high/low aliases of
+// kernel image are added: that avoids writable aliases of executable text.
+unsafe fn map_hhdm(base: u64, bytes: u64, flags: u64, pool: u64, mapped: *usize) !void {
+    let start = base & ~4095;
+    let end = (base + bytes + PAGE - 1) & ~4095;
+    // Never bypass a kernel guard or create a writable text alias via HHDM.
+    unsafe {
+        let image_start = WORK.manifest[8].base;
+        let image_end = WORK.manifest[11].base + WORK.manifest[11].length;
+        if start < image_end && image_start < end { return error.errors.InvalidOfflineMapping; }
+    }
+    var address = start;
+    while address < end {
+        var found: paging.Mapping = paging.Mapping { physical: 0, flags: 0 };
+        unsafe {
+            match paging.query(&WORK.space, HHDM + address, &found) {
+                ok => {
+                    if found.physical != address || found.flags != flags {
+                        return error.errors.InvalidOfflineMapping;
+                    }
+                },
+                err(code) => {
+                    if code != 0x0203_0002 { return error.errors.InvalidOfflineMapping; }
+                    try map_pages(HHDM + address, address, PAGE, flags, pool, mapped);
+                },
+            }
+        }
+        address += PAGE;
+    }
+    return;
+}
+
+pub unsafe fn prepare(info: abi.BootInfoPtr, info_physical: u64,
+                       symbols: *const resources.Layout, report: *Report, pat: u64) !void {
+    if WORK.attempted { return error.errors.AlreadyStarted; }
+    WORK.attempted = true;
+    unsafe {
+        try cpu.detect(&WORK.capabilities);
+        if !WORK.capabilities.nx { return error.errors.NxRequired; }
+        // Caller reads IA32_PAT only after CPUID.PAT. Never rewrite firmware's
+        // memory types: our leaves require WB slot 0 and UC slot 3 (PCD|PWT).
+        if (pat & 255) != 6 || ((pat >> 24) & 255) != 0 { return error.errors.UnsupportedCache; }
+        if !low_range((*info).memory_map as u64, (*info).memory_map_size as u64)
+            || (*info).memory_map_size > 65536 || !low_range((*info).rsdp as u64, 36) {
+            return error.errors.InvalidHandoff;
+        }
+        let raw: []const u8 = slice_from_raw_parts((HHDM + ((*info).memory_map as u64)) as *const u8, (*info).memory_map_size);
+        var layout = *symbols;
+        layout.workspace = resources.Span { start: &WORK as u64, end: (&WORK as u64) + (sizeof(Workspace) as u64) };
+        layout.rsdp_size = read_unaligned((HHDM + ((*info).rsdp as u64) + 20) as *const u32) as usize;
+        let count = try resources.collect(info, info_physical, raw, &layout, WORK.manifest[..]);
+        if !ist.valid(&layout) { return error.errors.InvalidOfflineMapping; }
+        WORK.layout = layout;
+        // Do not create a UC alias of any WB kernel/handoff resource. Compare
+        // page envelopes since distinct byte ranges can still share a PTE.
+        let fb_first = ((*info).framebuffer_base as u64) & ~4095;
+        let fb_end = (((*info).framebuffer_base as u64) + ((*info).framebuffer_size as u64) + PAGE - 1) & ~4095;
+        var resource_index: usize = 0;
+        while resource_index < count {
+            if resource_index != 6 {
+                let item = WORK.manifest[resource_index];
+                let first = item.base & ~4095;
+                let end = (item.base + item.length + PAGE - 1) & ~4095;
+                if fb_first < end && first < fb_end { return error.errors.InvalidHandoff; }
+            }
+            resource_index += 1;
+        }
+        var i: usize = 0;
+        while i < count {
+            WORK.reservations[i] = mmap.ReservedRange { base: WORK.manifest[i].base, length: WORK.manifest[i].length };
+            i += 1;
+        }
+        var arena: u64 = 0;
+        let ranges = try choose_arena(raw, (*info).descriptor_size, (*info).descriptor_version,
+            WORK.reservations[..count], &arena);
+        let usable = total(WORK.ranges[..ranges]);
+        try buddy.init(&WORK.allocator, arena, ARENA_PAGES, WORK.page_meta[..]);
+        i = 0;
+        while i < ranges {
+            try buddy.add_usable(&WORK.allocator, WORK.ranges[i].start_page, WORK.ranges[i].page_count);
+            i += 1;
+        }
+        if (try buddy.free_pages(&WORK.allocator)) != usable { return error.errors.OwnershipMismatch; }
+        let pool = try buddy.alloc(&WORK.allocator, POOL_ORDER);
+        let stack = try buddy.alloc(&WORK.allocator, STACK_ORDER);
+        if !low_range(pool, (POOL_PAGES as u64) * PAGE) { return error.errors.InvalidHandoff; }
+        if !low_range(stack, (STACK_PAGES as u64) * PAGE) { return error.errors.InvalidHandoff; }
+        WORK.manifest[count] = resources.Resource { kind: 19, base: pool, length: (POOL_PAGES as u64) * PAGE };
+        WORK.reservations[count] = mmap.ReservedRange { base: pool, length: (POOL_PAGES as u64) * PAGE };
+        WORK.manifest[count + 1] = resources.Resource { kind: 20, base: stack, length: (STACK_PAGES as u64) * PAGE };
+        WORK.reservations[count + 1] = mmap.ReservedRange { base: stack, length: (STACK_PAGES as u64) * PAGE };
+        let new_ranges = try mmap.normalize(raw, (*info).descriptor_size, (*info).descriptor_version,
+            arena, ARENA_PAGES, WORK.reservations[..count + 2], WORK.scratch[..], WORK.ranges[..]);
+        let free_count = try buddy.free_pages(&WORK.allocator);
+        if total(WORK.ranges[..new_ranges]) != free_count || free_count + POOL_PAGES + STACK_PAGES != usable {
+            return error.errors.OwnershipMismatch;
+        }
+        let tables: []paging.Table = slice_from_raw_parts((HHDM + pool) as *paging.Table, POOL_PAGES);
+        try paging.init(&WORK.space, tables, pool, WORK.table_meta[..], WORK.capabilities.physical_bits, true);
+        var mapped: usize = 0;
+        let kernel_physical = (*info).kernel_physical as u64;
+        try map_kernel(layout.text.start, layout.text.end, kernel_physical, paging.EXECUTE, pool, &mapped);
+        try map_kernel(layout.rodata.start, layout.rodata.end, kernel_physical, 0, pool, &mapped);
+        try map_kernel(layout.data.start, layout.data.end, kernel_physical, paging.WRITE, pool, &mapped);
+        try map_bss(&layout, kernel_physical, pool, &mapped);
+        // Every runtime alias uses one cache policy. The old root remains
+        // active; none of these new MMIO mappings are dereferenced yet.
+        try map_hhdm(info_physical, abi.ABI_BYTES as u64, paging.WRITE, pool, &mapped);
+        try map_hhdm((*info).memory_map as u64, (*info).memory_map_size as u64, paging.WRITE, pool, &mapped);
+        try map_pages(STACK, stack, (STACK_PAGES as u64) * PAGE, paging.WRITE, pool, &mapped);
+        try map_hhdm(stack, (STACK_PAGES as u64) * PAGE, paging.WRITE, pool, &mapped);
+        try map_hhdm(abi.bootstrap_root(info), PAGE, paging.WRITE, pool, &mapped);
+        try map_hhdm(pool, (POOL_PAGES as u64) * PAGE, paging.WRITE, pool, &mapped);
+        try map_hhdm((*info).rsdp as u64, layout.rsdp_size as u64, 0, pool, &mapped);
+        try map_hhdm((*info).framebuffer_base as u64, (*info).framebuffer_size as u64,
+            paging.WRITE | paging.UNCACHED, pool, &mapped);
+        try runtime.make(info, info_physical, layout.rsdp_size as u64, pool, stack, &WORK.runtime);
+        var absent: paging.Mapping = paging.Mapping { physical: 0, flags: 0 };
+        let holes: [10]u64 = [0, layout.bss.end, STACK - PAGE, STACK + (STACK_PAGES as u64) * PAGE,
+            layout.df.start - PAGE, layout.df.end, layout.nmi.start - PAGE, layout.nmi.end,
+            layout.exception_stack.start - PAGE, layout.exception_stack.end];
+        for hole in holes {
+            match paging.query(&WORK.space, hole, &absent) {
+                ok => { return error.errors.InvalidOfflineMapping; },
+                err(code) => { if code != 0x0203_0002 { return error.errors.InvalidOfflineMapping; } },
+            }
+        }
+        if (try buddy.free_pages(&WORK.allocator)) != free_count { return error.errors.OwnershipMismatch; }
+        let root = try paging.root_physical(&WORK.space);
+        let used = try paging.used_tables(&WORK.space);
+        if root != pool { return error.errors.InvalidOfflineMapping; }
+        *report = Report {
+            physical_bits: WORK.capabilities.physical_bits as u64, nx: 1,
+            resource_count: (count + 2) as u64, arena_base: arena, arena_pages: ARENA_PAGES as u64,
+            usable_pages: usable as u64, free_pages: free_count as u64,
+            pool_physical: pool, pool_pages: POOL_PAGES as u64,
+            root_physical: root, table_count: used as u64, mapped_pages: mapped as u64,
+            pat_value: pat, stack_physical: stack, stack_pages: STACK_PAGES as u64,
+            stack_bottom: STACK, stack_top: STACK + (STACK_PAGES as u64) * PAGE, bridge_value: 0,
+            runtime_view: &WORK.runtime as u64, runtime_boot_info: WORK.runtime.boot_info,
+            runtime_raw_map: WORK.runtime.raw_map, runtime_rsdp: WORK.runtime.rsdp,
+            runtime_framebuffer: WORK.runtime.display.framebuffer_base, runtime_pool: WORK.runtime.pool,
+            ist_guard_pages: 6,
+        };
+        WORK.expected_pages = mapped;
+        WORK.ready = true;
+        try validate_runtime();
+    }
+    return;
+}
+
+// Valid only after prepare succeeds; caller borrows this immutable manifest
+// while the BSP retains the private workspace and offline page-table pool.
+pub fn manifest_pointer() *const resources.Resource {
+    unsafe { return &WORK.manifest[0]; }
+}
+
+pub fn runtime_pointer() *const runtime.View { unsafe { return &WORK.runtime; } }
+
+// Exclusive BSP borrow after activation. The live adapter owns every change
+// while bound; offline mutation APIs must not be used on this Space again.
+// Full startup allow-list audits are valid only after its temporary window is
+// empty and all deferred table retirements have completed.
+pub fn space_pointer() *paging.Space {
+    unsafe { if !WORK.ready { return null; } return &WORK.space; }
+}
+
+// Exclusive BSP borrow for the runtime owner layer. Existing pool/stack
+// allocations remain held; only newly allocated blocks may be returned.
+// No interrupt/exception code or other allocator client may race this borrow.
+pub fn allocator_pointer() *buddy.Allocator {
+    unsafe { if !WORK.ready { return null; } return &WORK.allocator; }
+}
+
+fn in_pages(address: u64, base: u64, bytes: u64) bool {
+    return address >= (base & ~4095) && address < ((base + bytes + PAGE - 1) & ~4095);
+}
+
+fn leaf_entry(physical: u64, flags: u64) u64 {
+    var entry = physical | 1;
+    if (flags & paging.WRITE) != 0 { entry |= 2; }
+    if (flags & paging.EXECUTE) == 0 { entry |= 0x8000_0000_0000_0000; }
+    if (flags & paging.UNCACHED) != 0 { entry |= 0x18; }
+    return entry;
+}
+
+// Independent allow-list for EVERY leaf, including absence of identity and
+// writable kernel aliases. The audit never follows Space's private metadata.
+unsafe fn allowed_leaf(virtual: u64, raw_entry: u64, active: bool) bool {
+    unsafe {
+        var entry = raw_entry;
+        if active { entry &= ~0x60; }
+        let layout = &WORK.layout;
+        let view = &WORK.runtime;
+        if virtual >= (*layout).text.start && virtual < (*layout).bss.end {
+            if ist.is_guard(virtual, layout) { return false; }
+            var flags: u64 = paging.WRITE;
+            if virtual < (*layout).text.end { flags = paging.EXECUTE; }
+            else if virtual < (*layout).rodata.end { flags = 0; }
+            return entry == leaf_entry(WORK.manifest[8].base + (virtual - KERNEL),flags);
+        }
+        if in_pages(virtual,(*view).stack_bottom,65536) {
+            return entry == leaf_entry(((*view).stack_probe_bottom - HHDM) + (virtual - (*view).stack_bottom),paging.WRITE);
+        }
+        var flags: u64 = paging.WRITE;
+        var found: bool = in_pages(virtual,(*view).boot_info,160)
+            || in_pages(virtual,(*view).raw_map,(*view).raw_size)
+            || in_pages(virtual,(*view).pool,(POOL_PAGES as u64) * PAGE)
+            || in_pages(virtual,(*view).stack_probe_bottom,65536);
+        // Only the actual old root page is mapped, not its whole retained
+        // allocation envelope. Record its PA from the immutable BootInfo.
+        let info = (*view).boot_info as abi.BootInfoPtr;
+        if virtual == HHDM + abi.bootstrap_root(info) { found = true; }
+        if in_pages(virtual,(*view).rsdp,(*view).rsdp_size) { found = true; flags = 0; }
+        if in_pages(virtual,(*view).display.framebuffer_base,(*view).display.framebuffer_size) {
+            found = true; flags = paging.WRITE | paging.UNCACHED;
+        }
+        if !found || virtual < HHDM || virtual - HHDM >= LIMIT { return false; }
+        return entry == leaf_entry(virtual - HHDM,flags);
+    }
+}
+
+unsafe fn audit_table(physical: u64, level: usize, prefix: u64,
+                      seen: *u8, leaves: *usize, tables: *usize, active: bool) !void {
+    unsafe {
+        let pool = WORK.runtime.pool_physical;
+        if physical < pool || physical - pool >= (POOL_PAGES as u64) * PAGE || (physical & 4095) != 0 {
+            return error.errors.InvalidOfflineMapping;
+        }
+        let index = ((physical - pool) / PAGE) as usize;
+        if *(seen + index) != 0 { return error.errors.InvalidOfflineMapping; }
+        *(seen + index) = 1;
+        *tables += 1;
+        let source = (HHDM + physical) as *const u64;
+        var slot: usize = 0;
+        while slot < 512 {
+            let entry = *(source + slot);
+            if entry != 0 {
+                let virtual = prefix | ((slot as u64) << (39 - 9 * level));
+                if level < 3 {
+                    var allowed: u64 = 0x000f_ffff_ffff_f000;
+                    if active { allowed |= 0x20; }
+                    if (entry & ~allowed) != 7 { return error.errors.InvalidOfflineMapping; }
+                    try audit_table(entry & 0x000f_ffff_ffff_f000,level + 1,virtual,seen,leaves,tables,active);
+                } else {
+                    var canonical = virtual;
+                    if (virtual & 0x8000_0000_0000) != 0 { canonical |= 0xffff_0000_0000_0000; }
+                    if !allowed_leaf(canonical,entry,active) { return error.errors.InvalidOfflineMapping; }
+                    *leaves += 1;
+                }
+            }
+            slot += 1;
+        }
+    }
+    return;
+}
+
+unsafe fn validate_tree(root: u64, active: bool) !void {
+    unsafe {
+        if !WORK.ready || root != WORK.runtime.root_physical || !ist.valid(&WORK.layout) {
+            return error.errors.InvalidOfflineMapping;
+        }
+        var seen: [POOL_PAGES]u8 = [0;POOL_PAGES];
+        var leaves: usize = 0;
+        var tables: usize = 0;
+        try audit_table(root,0,0,&seen[0],&leaves,&tables,active);
+        if leaves != WORK.expected_pages || tables != (try paging.used_tables(&WORK.space)) {
+            return error.errors.InvalidOfflineMapping;
+        }
+    }
+    return;
+}
+
+// Inactive trees must remain byte-for-byte pristine, including A/D bits.
+pub unsafe fn validate_runtime() !void {
+    unsafe { return validate_tree(WORK.runtime.root_physical,false); }
+}
+
+// Hardware may add A to links and A/D to leaves after MOV CR3. Every other
+// permission/cache/address bit and the complete allow-list remain exact.
+pub unsafe fn validate_active(root: u64) !void {
+    unsafe { return validate_tree(root,true); }
+}

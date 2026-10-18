@@ -1,0 +1,37 @@
+module hardening_probe;
+import cpu.hardening as hardening;
+import boot.preflight as preflight;
+
+export("hardening_supported") fn supported(maximum: u64, ebx: u64, ecx: u64) u64 {
+    return hardening.supported(maximum, ebx, ecx);
+}
+export("hardening_detect") fn detect(out: *hardening.Features) void {
+    unsafe { hardening.detect(out); }
+}
+export("hardening_plan") fn plan(features: *const hardening.Features,
+                                 before: *const preflight.State, out: *hardening.Plan) u64 {
+    unsafe { match hardening.plan(features, before, out) {
+        ok => { return 0; }, err(code) => { return code; },
+    } }
+}
+export("hardening_verify") fn verify(features: *const hardening.Features,
+                                     before: *const preflight.State, after: *const preflight.State,
+                                     planned: *const hardening.Plan, report: *const hardening.Report) u64 {
+    unsafe { match hardening.verify(features, before, after, planned, report) {
+        ok => { return 0; }, err(code) => { return code; },
+    } }
+}
+export("hardening_reset") fn reset(features: *hardening.Features, planned: *hardening.Plan,
+                                   report: *hardening.Report) void {
+    unsafe {
+        *features = hardening.EMPTY_FEATURES;
+        *planned = hardening.EMPTY_PLAN;
+        *report = hardening.EMPTY_REPORT;
+    }
+}
+export("hardening_constant") fn constant(index: u64) u64 {
+    if index == 0 { return hardening.SMEP; }
+    if index == 1 { return hardening.SMAP; }
+    if index == 2 { return hardening.UMIP; }
+    return hardening.MASK;
+}

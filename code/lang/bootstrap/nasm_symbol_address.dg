@@ -1,0 +1,43 @@
+// One NASM line loading the RIP-relative address of an internal symbol:
+// "lea <dest64>, [rel <symbol>]\n", where <symbol> is exactly the integrated
+// CR3 nasm_symbol encoding of the module and item names (each 1..64 raw
+// bytes), produced in a 266-byte local scratch. No hashing, truncation,
+// absolute constants or symbol contents. out is written once, after every
+// check has passed.
+module bootstrap.nasm_symbol_address;
+import bootstrap.nasm_symbol as sym;
+pub const OK:u64=0;pub const INVALID:u64=1;pub const CAPACITY:u64=2;
+pub const NAME_LIMIT:usize=64;
+const MAX:u64=0xffff_ffff_ffff_ffff;
+// 10 + 2*(64+64) bytes: the longest CR3 symbol for two 64-byte names.
+const SCRATCH:usize=266;
+fn span(p:u64,n:u64)bool{return n==0||(p!=0&&n<=MAX-p);}
+fn overlap(a:u64,n:u64,b:u64,m:u64)bool{return n!=0&&m!=0&&a<b+m&&b<a+n;}
+fn copy(out:[]u8,at:usize,text:[]const u8)usize{
+ var i:usize=0;while i<text.len{out[at+i]=text[i];i+=1;}return at+text.len;
+}
+fn register(r:u64)[]const u8{
+ if r==0{return "rax";}if r==1{return "rcx";}if r==2{return "rdx";}if r==3{return "rbx";}
+ if r==4{return "rsp";}if r==5{return "rbp";}if r==6{return "rsi";}if r==7{return "rdi";}
+ if r==8{return "r8";}if r==9{return "r9";}if r==10{return "r10";}if r==11{return "r11";}
+ if r==12{return "r12";}if r==13{return "r13";}if r==14{return "r14";}return "r15";
+}
+pub unsafe fn emit(destination:u64,module_name:[]const u8,item_name:[]const u8,out:[]u8,written:*usize)u64{unsafe{
+ let wp=written as u64;let mp=module_name.ptr as u64;let ip=item_name.ptr as u64;let op=out.ptr as u64;
+ let mn=module_name.len;let inn=item_name.len;let on=out.len;
+ if written==null||(wp&7)!=0||!span(wp,8){return INVALID;}
+ if !span(mp,mn)||!span(ip,inn)||!span(op,on){return INVALID;}
+ // out and written are each disjoint from both whole inputs and from each other; inputs may overlap.
+ if overlap(wp,8,op,on)||overlap(wp,8,mp,mn)||overlap(wp,8,ip,inn)||overlap(op,on,mp,mn)||overlap(op,on,ip,inn){return INVALID;}
+ if destination>15||mn==0||mn>NAME_LIMIT||inn==0||inn>NAME_LIMIT{return INVALID;}
+ var scratch:[266]u8=[0;266];var length:usize=0;
+ let status=sym.encode(module_name,item_name,slice_from_raw_parts(&scratch[0],SCRATCH),&length);
+ if status!=sym.OK{return INVALID;}
+ // "lea " + reg (<=3) + ", [rel " + symbol (<=266) + "]\n": at most 282 bytes.
+ var line:[288]u8=[0;288];let buffer=slice_from_raw_parts(&line[0],288);
+ var at=copy(buffer,0,"lea ");at=copy(buffer,at,register(destination));at=copy(buffer,at,", [rel ");
+ at=copy(buffer,at,slice_from_raw_parts(&scratch[0],length));at=copy(buffer,at,"]\n");
+ if at>on{return CAPACITY;}
+ var i:usize=0;while i<at{out[i]=buffer[i];i+=1;}
+ *written=at;return OK;
+}}

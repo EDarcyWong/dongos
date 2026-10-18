@@ -1,0 +1,20 @@
+var TEST_UNSHARE_KERNEL:[64]paging.Table=[paging.Table{entries:[0;512]};64];
+var TEST_DROPPED:paging.Retired=paging.EMPTY_RETIRED;
+export("unshare_kernel_setup") fn test_setup(alias:u64,count:usize,ro:bool)u64{unsafe{
+    WORK.ready=false;WORK.space=paging.EMPTY_SPACE;TEST_DROPPED=paging.EMPTY_RETIRED;
+    let init=paging.init(&WORK.space,TEST_UNSHARE_KERNEL[..],0x80_0000,WORK.table_meta[..],48,true);match init{ok=>{},err(e)=>{return e;},}
+    var i:usize=0;while i<count{var flags=paging.WRITE;if ro||i==0{flags=0;}
+        let mapped=paging.map_live(&WORK.space,alias+i as u64*4096,0x20_0000+i as u64*4096,flags);match mapped{ok=>{},err(e)=>{return e;},}i+=1;
+    }WORK.ready=true;
+}return 0;}
+export("unshare_kernel_flags") fn test_flags(alias:u64)u64{unsafe{
+    var m=paging.Mapping{physical:0,flags:0};match paging.query(&WORK.space,alias,&m){ok=>{return m.flags;},err(e)=>{return e;},}
+}}
+export("unshare_drop_alias") fn test_drop(alias:u64)u64{unsafe{
+    let removed=paging.unmap_live(&WORK.space,alias,&TEST_DROPPED);match removed{ok=>{},err(e)=>{return e;},}
+}return 0;}
+
+export("unshare_alias_collision") fn test_collision(index:u64)u64{unsafe{
+ let mapped=paging.map_live(&WORK.space,0xffff_d000_0000_0000+index*4096,0xb0_0000,paging.WRITE);
+ match mapped{ok=>{},err(e)=>{return e;},}
+}return 0;}

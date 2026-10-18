@@ -1,0 +1,43 @@
+// Apply rel32 displacements (target-(at+4), little-endian i32) inside one code
+// buffer. Descriptors, every patch and every pair of 4-byte fields are checked
+// before the first byte is written, so a failure leaves code and applied unchanged.
+module bootstrap.rel32_patch;
+pub const OK:u64=0;pub const INVALID:u64=1;pub const CAPACITY:u64=2;
+pub struct Patch{pub at:usize,pub target:usize}
+const MAX:u64=0xffff_ffff_ffff_ffff;
+const NONE:u64=0xffff_ffff_ffff_ffff;
+fn span(p:u64,n:u64)bool{return n==0||(p!=0&&n<=MAX-p);}
+fn overlap(a:u64,n:u64,b:u64,m:u64)bool{return n!=0&&m!=0&&a<b+m&&b<a+n;}
+unsafe fn valid(code:[]u8,patches:[]const Patch,applied:*usize)bool{unsafe{
+ if applied==null||patches.len>MAX/sizeof(Patch){return false;}
+ let cp=code.ptr as u64;let pp=patches.ptr as u64;let ap=applied as u64;
+ let cn=code.len;let pn=patches.len*sizeof(Patch);
+ if !span(cp,cn)||!span(pp,pn)||!span(ap,8){return false;}
+ if (pn!=0&&(pp&7)!=0)||(ap&7)!=0{return false;}
+ // patches is the only read-only input; code and applied are both written.
+ if overlap(cp,cn,pp,pn)||overlap(cp,cn,ap,8)||overlap(ap,8,pp,pn){return false;}
+ return true;
+}}
+// Two's-complement bits of target-(at+4) in the low 32 bits, or NONE outside i32.
+// Callers guarantee at+4 does not wrap.
+fn rel(at:usize,target:usize)u64{
+ let end=at+4;
+ if target>=end{let fwd=target-end;if fwd>0x7fff_ffff{return NONE;}return fwd;}
+ let back=end-target;if back>0x8000_0000{return NONE;}return 0x1_0000_0000-back;
+}
+// One patch alone: code[at..at+4) in bounds, target a label in 0..=cl, displacement fits i32.
+fn fits(cl:usize,at:usize,target:usize)bool{return cl>=4&&at<=cl-4&&target<=cl&&rel(at,target)!=NONE;}
+fn put(code:[]u8,at:usize,bits:u64)void{
+ var k:usize=0;while k<4{code[at+k]=(bits>>(8*k)) as u8;k+=1;}
+}
+pub unsafe fn apply(code:[]u8,patches:[]const Patch,applied:*usize)u64{unsafe{
+ if !valid(code,patches,applied){return INVALID;}
+ let n=patches.len;let cl=code.len;
+ var i:usize=0;
+ while i<n{if !fits(cl,patches[i].at,patches[i].target){return INVALID;}i+=1;}
+ // Every pair, regardless of input order; at<=cl-4 above, so at+4 cannot wrap.
+ i=0;
+ while i<n{var j=i+1;while j<n{let a=patches[i].at;let b=patches[j].at;if a<b+4&&b<a+4{return INVALID;}j+=1;}i+=1;}
+ i=0;while i<n{put(code,patches[i].at,rel(patches[i].at,patches[i].target));i+=1;}
+ *applied=n;return OK;
+}}

@@ -1,0 +1,131 @@
+// mm.fixed_cache — single-buffer fixed-size object cache. The caller provides
+// mapped virtual memory and external per-slot metadata; the library manages slot
+// alloc/free. No construction/destruction, no auto growth from the buddy.
+
+module mm.fixed_cache;
+
+import mm.errors as mmerr;
+
+const LIST_END: usize = 0xffff_ffff_ffff_ffff;
+const USIZE_MAX: usize = 0xffff_ffff_ffff_ffff;
+
+pub struct SlotMeta {
+    state: u8,    // 0 = Free, 1 = Allocated
+    next: usize,  // free-list link for Free slots
+}
+
+pub struct Cache {
+    initialized: u8,
+    buffer: *u8,
+    metadata: *SlotMeta,
+    object_size: usize,
+    stride: usize,
+    capacity: usize,
+    free_head: usize,
+    free_total: usize,
+}
+
+pub const EMPTY_SLOT: SlotMeta = SlotMeta { state: 0, next: LIST_END };
+pub const EMPTY_CACHE: Cache = Cache {
+    initialized: 0,
+    buffer: null,
+    metadata: null,
+    object_size: 0,
+    stride: 0,
+    capacity: 0,
+    free_head: LIST_END,
+    free_total: 0,
+};
+
+fn is_initialized(cache: *const Cache) bool {
+    unsafe { return (*cache).initialized != 0; }
+}
+
+fn meta_ptr(cache: *Cache, slot: usize) *SlotMeta {
+    unsafe { return (*cache).metadata + slot; }
+}
+
+pub unsafe fn init(cache: *Cache, buffer: []u8, object_size: usize, alignment: usize, metadata: []SlotMeta) !void {
+    unsafe {
+        if (*cache).initialized != 0 { return error.mmerr.AlreadyInitialized; }
+    }
+    if object_size == 0 || object_size > 4096 { return error.mmerr.InvalidArgument; }
+    if alignment == 0 || alignment > 4096 { return error.mmerr.InvalidArgument; }
+    if (alignment & (alignment - 1)) != 0 { return error.mmerr.InvalidArgument; }
+    if buffer.len == 0 { return error.mmerr.InvalidArgument; }
+    unsafe {
+        if buffer.ptr == null { return error.mmerr.InvalidArgument; }
+        let addr: usize = buffer.ptr as usize;
+        if addr > USIZE_MAX - buffer.len { return error.mmerr.InvalidArgument; }
+        if (addr % alignment) != 0 { return error.mmerr.InvalidArgument; }
+    }
+    let mask: usize = alignment - 1;
+    let stride: usize = (object_size + mask) & ~mask;
+    let capacity: usize = buffer.len / stride;
+    if capacity == 0 { return error.mmerr.InvalidArgument; }
+    if metadata.len < capacity { return error.mmerr.MetadataTooSmall; }
+    unsafe {
+        (*cache).initialized = 1;
+        (*cache).buffer = buffer.ptr;
+        (*cache).metadata = metadata.ptr;
+        (*cache).object_size = object_size;
+        (*cache).stride = stride;
+        (*cache).capacity = capacity;
+        (*cache).free_head = 0;
+        (*cache).free_total = capacity;
+        var i: usize = 0;
+        while i < capacity {
+            let m = meta_ptr(cache, i);
+            (*m).state = 0;
+            if i + 1 < capacity {
+                (*m).next = i + 1;
+            } else {
+                (*m).next = LIST_END;
+            }
+            i += 1;
+        }
+    }
+    return;
+}
+
+pub unsafe fn alloc(cache: *Cache) !*u8 {
+    if !is_initialized(cache) { return error.mmerr.NotInitialized; }
+    unsafe {
+        let head: usize = (*cache).free_head;
+        if head == LIST_END { return error.mmerr.OutOfMemory; }
+        let m = meta_ptr(cache, head);
+        (*cache).free_head = (*m).next;
+        (*m).state = 1;
+        (*m).next = LIST_END;
+        (*cache).free_total -= 1;
+        return (*cache).buffer + (head * (*cache).stride);
+    }
+}
+
+pub unsafe fn free(cache: *Cache, object: *u8) !void {
+    if !is_initialized(cache) { return error.mmerr.NotInitialized; }
+    unsafe {
+        if object == null { return error.mmerr.InvalidFree; }
+        let bu: usize = (*cache).buffer as usize;
+        let ou: usize = object as usize;
+        if ou < bu { return error.mmerr.InvalidFree; }
+        let stride: usize = (*cache).stride;
+        let capacity: usize = (*cache).capacity;
+        let offset: usize = ou - bu;
+        if (offset % stride) != 0 { return error.mmerr.InvalidFree; }
+        let slot: usize = offset / stride;
+        if slot >= capacity { return error.mmerr.InvalidFree; }
+        let m = meta_ptr(cache, slot);
+        if (*m).state != 1 { return error.mmerr.InvalidFree; }
+        (*m).state = 0;
+        (*m).next = (*cache).free_head;
+        (*cache).free_head = slot;
+        (*cache).free_total += 1;
+    }
+    return;
+}
+
+pub unsafe fn free_count(cache: *const Cache) !usize {
+    if !is_initialized(cache) { return error.mmerr.NotInitialized; }
+    unsafe { return (*cache).free_total; }
+}

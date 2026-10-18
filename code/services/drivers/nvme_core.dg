@@ -1,0 +1,193 @@
+// Pure prototype: no MMIO, DMA dereference, allocation, doorbells or release.
+// Stable disjoint borrows; Queue is opaque, single caller, one pending command.
+module drivers.nvme_core;
+pub error Invalid=0x0520_0001;
+pub error Unsupported=0x0520_0002;
+pub error Busy=0x0520_0003;
+pub error Exhausted=0x0520_0004;
+pub error Stale=0x0520_0005;
+pub error ClockReversed=0x0520_0006;
+pub error Timeout=0x0520_0007;
+pub error BadCompletion=0x0520_0008;
+pub error Faulted=0x0520_0009;
+pub const IDENTIFY_CONTROLLER:u64=1;
+pub const IDENTIFY_NAMESPACE:u64=2;
+pub const READ:u64=3;
+pub const WRITE:u64=4;
+pub const FLUSH:u64=5;
+pub const CREATE_CQ:u64=6;
+pub const CREATE_SQ:u64=7;
+pub const SET_QUEUES:u64=8;
+pub const DMA_BYTES:u64=131072;
+pub const ASQ:u64=0;
+pub const ACQ:u64=0x1000;
+pub const IOSQ:u64=0x2000;
+pub const IOCQ:u64=0x3000;
+pub const PRP_LIST:u64=0x4000;
+pub const IDENTIFY_DATA:u64=0x5000;
+pub const IO_DATA:u64=0x6000;
+const MAX:u64=0xffff_ffff_ffff_ffff;
+pub struct Caps {pub cap:u64,pub version:u64,pub physical_bits:u64}
+pub struct Limits {pub ready_timeout_ms:u64,pub doorbell_stride:u64,pub max_queue_entries:u64}
+pub struct Controller {pub ready:u64,pub version:u64,pub max_sectors:u64,pub volatile_cache:u64}
+pub const EMPTY_CONTROLLER:Controller=Controller {ready:0,version:0,max_sectors:0,volatile_cache:0};
+pub struct Namespace {pub ready:u64,pub capacity_sectors:u64,pub max_sectors:u64,pub readonly:u64}
+pub const EMPTY_NAMESPACE:Namespace=Namespace {ready:0,capacity_sectors:0,max_sectors:0,readonly:0};
+pub struct Setup {pub qid:u64,pub depth:u64,pub epoch:u64,pub lease_physical:u64,pub lease_bytes:u64}
+pub struct Request {pub kind:u64,pub lba:u64,pub sectors:u64,pub data_offset:u64}
+pub struct Plan {
+    pub command:[64]u8,pub prps:[16]u64,pub bytes:u64,pub data_physical:u64,
+    pub list_entries:u64,pub sq_slot:u64,pub sq_tail:u64,pub cq_slot:u64,pub cid:u64,pub generation:u64,
+}
+pub const EMPTY_PLAN:Plan=Plan {command:[0;64],prps:[0;16],bytes:0,data_physical:0,list_entries:0,sq_slot:0,sq_tail:0,cq_slot:0,cid:0,generation:0};
+pub struct Queue {
+    pub ready:u64,pub held:u64,pub fault:u64,pub epoch:u64,pub qid:u64,pub depth:u64,
+    pub lease_physical:u64,pub lease_bytes:u64,pub sq_tail:u64,pub cq_head:u64,pub phase:u64,
+    pub next_cid:u64,pub generation:u64,pub pending:u64,pub pending_cid:u64,pub pending_kind:u64,
+    pub pending_bytes:u64,pub pending_generation:u64,pub started_ms:u64,pub last_ms:u64,pub timeout_ms:u64,
+}
+pub const EMPTY_QUEUE:Queue=Queue {ready:0,held:0,fault:0,epoch:0,qid:0,depth:0,lease_physical:0,lease_bytes:0,
+    sq_tail:0,cq_head:0,phase:1,next_cid:0,generation:0,pending:0,pending_cid:0,pending_kind:0,
+    pending_bytes:0,pending_generation:0,started_ms:0,last_ms:0,timeout_ms:0};
+pub struct Completion {pub cid:u64,pub generation:u64,pub result:u64,pub bytes:u64,pub cq_head:u64,pub phase:u64}
+
+unsafe fn u16_at(p:*const u8,offset:usize)u64 {unsafe {return read_unaligned((p+offset) as *const u16) as u64;}}
+unsafe fn u32_at(p:*const u8,offset:usize)u64 {unsafe {return read_unaligned((p+offset) as *const u32) as u64;}}
+unsafe fn u64_at(p:*const u8,offset:usize)u64 {unsafe {return read_unaligned((p+offset) as *const u64);}}
+unsafe fn put16(p:*u8,offset:usize,value:u64)void {unsafe {write_unaligned((p+offset) as *u16,value as u16);}return;}
+unsafe fn put32(p:*u8,offset:usize,value:u64)void {unsafe {write_unaligned((p+offset) as *u32,value as u32);}return;}
+unsafe fn put64(p:*u8,offset:usize,value:u64)void {unsafe {write_unaligned((p+offset) as *u64,value);}return;}
+fn known_version(version:u64)bool {return (version>>16)==1 && (version&255)==0 && ((version>>8)&255)<=4;}
+unsafe fn caps_valid(c:*const Caps)!void {unsafe {
+    if c==null || (*c).physical_bits<36 || (*c).physical_bits>52 {return error.Invalid;}
+    // CRTO/CRIME and 2.x controller ready semantics are deliberately not guessed.
+    let cap=(*c).cap;let css=(cap>>37)&255;
+    if !known_version((*c).version) || ((cap>>48)&15)!=0 || (css&1)==0 || (css&0xbe)!=0
+        || ((cap>>24)&255)==0 || (cap&0x1800_0000_0000_0000)!=0 || (cap&0xc000_0000_00f8_0000)!=0 {return error.Unsupported;}
+}return;}
+pub unsafe fn limits(caps:*const Caps,depth:u64,out:*Limits)!void {unsafe {
+    try caps_valid(caps);if out==null || depth<2 || depth>64 {return error.Invalid;}
+    let count=((*caps).cap&65535)+1;if depth>count {return error.Unsupported;}
+    *out=Limits {ready_timeout_ms:(((*caps).cap>>24)&255)*500,doorbell_stride:1<<(2+(((*caps).cap>>32)&15)),max_queue_entries:count};
+}return;}
+pub unsafe fn identify_controller(caps:*const Caps,bytes:[]const u8,out:*Controller)!void {unsafe {
+    try caps_valid(caps);if out==null || bytes.ptr==null || bytes.len!=4096 {return error.Invalid;}
+    let raw=bytes.ptr;let sq=raw[512] as u64;let cq=raw[513] as u64;let version=u32_at(raw,80);
+    // NN bounds valid NSIDs; it is not the number of active namespaces.
+    let maximum_nsid=u32_at(raw,516);
+    if (sq&15)!=6 || (sq>>4)<6 || (cq&15)!=4 || (cq>>4)<4 || maximum_nsid==0 || maximum_nsid==0xffff_ffff
+        || (raw[525]&0xf8)!=0 || ((raw[525]>>1)&3)==1
+        || ((*caps).version>=0x10400 && raw[111]!=1) || ((*caps).version<0x10400 && raw[111]>1)
+        || ((*caps).version>=0x10200 && version!=(*caps).version) || ((*caps).version<0x10200 && version!=0 && version!=(*caps).version) {return error.Unsupported;}
+    let mdts=raw[77] as u64;var maximum:u64=128;if mdts!=0 && mdts<4 {maximum=8*(1<<mdts);}
+    *out=Controller {ready:1,version:(*caps).version,max_sectors:maximum,volatile_cache:(raw[525]&1) as u64};
+}return;}
+pub unsafe fn identify_namespace(controller:*const Controller,bytes:[]const u8,out:*Namespace)!void {unsafe {
+    if controller==null || (*controller).ready!=1 || (*controller).max_sectors==0 || (*controller).max_sectors>128
+        || bytes.ptr==null || bytes.len!=4096 || out==null {return error.Invalid;}
+    let raw=bytes.ptr;let size=u64_at(raw,0);let capacity=u64_at(raw,8);let used=u64_at(raw,16);
+    let formats=raw[25] as u64;let format=raw[26] as u64;
+    // DAE is capability only; OPTPERF[5:4] contains optional alignment/granularity
+    // recommendations (NVM Command Set1.3 Fig123/124). Neither changes the
+    // ordinary Read/Write format. Thin provisioning and other modes stay closed.
+    if size==0 || capacity!=size || used>capacity || (raw[24]&0xcb)!=0 || formats>15 || (format&0xf0)!=0 || format>formats
+        || raw[29]!=0 || raw[30]!=0 || (raw[99]&0xfe)!=0 {return error.Unsupported;}
+    let entry=u32_at(raw,128+(format as usize)*4);
+    if (entry&65535)!=0 || ((entry>>16)&255)!=9 || (entry&0xfc00_0000)!=0 {return error.Unsupported;}
+    *out=Namespace {ready:1,capacity_sectors:size,max_sectors:(*controller).max_sectors,readonly:(raw[99]&1) as u64};
+}return;}
+
+pub unsafe fn queue_initialize(queue:*Queue,caps:*const Caps,setup:*const Setup)!void {unsafe {
+    if queue==null || setup==null || (*queue).ready!=0 {return error.Invalid;}
+    var bound=Limits {ready_timeout_ms:0,doorbell_stride:0,max_queue_entries:0};try limits(caps,(*setup).depth,&bound);
+    let physical=(*setup).lease_physical;let ceiling:u64=1<<(*caps).physical_bits;
+    if (*setup).qid>1 || (*setup).epoch==0 || (*setup).lease_bytes!=DMA_BYTES || physical==0 || (physical&4095)!=0
+        || physical>=ceiling || DMA_BYTES>ceiling-physical {return error.Invalid;}
+    *queue=EMPTY_QUEUE;(*queue).ready=1;(*queue).held=1;(*queue).epoch=(*setup).epoch;(*queue).qid=(*setup).qid;(*queue).depth=(*setup).depth;
+    (*queue).lease_physical=physical;(*queue).lease_bytes=DMA_BYTES;
+}return;}
+unsafe fn valid_queue(queue:*const Queue)!void {unsafe {
+    if queue==null || (*queue).ready!=1 || (*queue).held!=1 || (*queue).depth<2 || (*queue).depth>64 || (*queue).qid>1 {return error.Invalid;}
+    if (*queue).fault!=0 {return error.Faulted;}
+}return;}
+
+// Encoder has no side effects. queue_init owns physical bounds; a live Queue
+// may never be caller-edited. All command and unused PRP bytes are deterministic.
+pub unsafe fn encode(queue:*const Queue,namespace:*const Namespace,request:*const Request,cid:u64,out:*Plan)!void {unsafe {
+    try valid_queue(queue);if namespace==null || request==null || out==null || cid==0 || cid>=65535 {return error.Invalid;}
+    let r=*request;let admin=(*queue).qid==0;
+    if r.kind<1 || r.kind>8 || (admin && (r.kind==READ || r.kind==WRITE || r.kind==FLUSH))
+        || (!admin && r.kind!=READ && r.kind!=WRITE && r.kind!=FLUSH) {return error.Unsupported;}
+    var plan=EMPTY_PLAN;let p=&plan.command[0];var opcode:u64=0;let base=(*queue).lease_physical;
+    if r.kind==IDENTIFY_CONTROLLER || r.kind==IDENTIFY_NAMESPACE {
+        if r.lba!=0 || r.sectors!=0 || r.data_offset!=0 {return error.Invalid;}
+        opcode=6;if r.kind==IDENTIFY_NAMESPACE {put32(p,4,1);}else {put32(p,40,1);}
+        plan.bytes=4096;plan.data_physical=base+IDENTIFY_DATA;put64(p,24,plan.data_physical);
+    }else {if r.kind==CREATE_CQ || r.kind==CREATE_SQ || r.kind==SET_QUEUES {
+        if r.lba!=0 || r.sectors!=0 || r.data_offset!=0 {return error.Invalid;}
+        if r.kind==SET_QUEUES {opcode=9;put32(p,40,7);}
+        else {
+            opcode=5;var address=base+IOCQ;var flags:u64=1;
+            if r.kind==CREATE_SQ {opcode=1;address=base+IOSQ;flags=0x10001;}
+            plan.data_physical=address;put64(p,24,address);put32(p,40,(((*queue).depth-1)<<16)|1);put32(p,44,flags);
+        }
+    }else {
+        if (*namespace).ready!=1 || (*namespace).capacity_sectors==0 || (*namespace).max_sectors==0
+            || (*namespace).max_sectors>128 || (*namespace).readonly>1 {return error.Invalid;}
+        put32(p,4,1);
+        if r.kind==FLUSH {
+            if r.lba!=0 || r.sectors!=0 || r.data_offset!=0 {return error.Invalid;}
+        }else {
+            if r.sectors==0 || r.sectors>(*namespace).max_sectors || r.lba>=(*namespace).capacity_sectors
+                || r.sectors>(*namespace).capacity_sectors-r.lba || r.data_offset>4092 || (r.data_offset&3)!=0 {return error.Invalid;}
+            if r.kind==WRITE && (*namespace).readonly!=0 {return error.Unsupported;}
+            opcode=2;if r.kind==WRITE {opcode=1;}
+            plan.bytes=r.sectors*512;plan.data_physical=base+IO_DATA+r.data_offset;put64(p,24,plan.data_physical);
+            let pages=(r.data_offset+plan.bytes+4095)/4096;
+            if pages==2 {put64(p,32,base+IO_DATA+4096);}
+            if pages>2 {
+                put64(p,32,base+PRP_LIST);plan.list_entries=pages-1;var i:u64=0;
+                while i<plan.list_entries {plan.prps[i as usize]=base+IO_DATA+(i+1)*4096;i+=1;}
+            }
+            put32(p,40,r.lba&0xffff_ffff);put32(p,44,r.lba>>32);put32(p,48,r.sectors-1);
+        }
+    }}
+    plan.command[0]=opcode as u8;put16(p,2,cid);plan.cid=cid;plan.sq_slot=(*queue).sq_tail;
+    plan.sq_tail=((*queue).sq_tail+1)%(*queue).depth;plan.cq_slot=(*queue).cq_head;*out=plan;
+}return;}
+
+pub unsafe fn submit(queue:*Queue,namespace:*const Namespace,request:*const Request,now:u64,timeout_ms:u64,out:*Plan)!void {unsafe {
+    try valid_queue(queue);if (*queue).pending!=0 {return error.Busy;}
+    if out==null || now<(*queue).last_ms || timeout_ms==0 || timeout_ms>127500 {return error.Invalid;}
+    if (*queue).next_cid>=65534 || (*queue).generation==MAX {return error.Exhausted;}
+    var plan=EMPTY_PLAN;try encode(queue,namespace,request,(*queue).next_cid+1,&plan);plan.generation=(*queue).generation+1;
+    (*queue).next_cid=plan.cid;(*queue).generation=plan.generation;(*queue).sq_tail=plan.sq_tail;
+    (*queue).pending=1;(*queue).pending_cid=plan.cid;(*queue).pending_kind=(*request).kind;(*queue).pending_bytes=plan.bytes;
+    (*queue).pending_generation=plan.generation;(*queue).started_ms=now;(*queue).last_ms=now;(*queue).timeout_ms=timeout_ms;*out=plan;
+}return;}
+
+// CQE is a stable acquire snapshot of the next CQ slot. The executor must read
+// phase with DMA ordering, never feed a torn CQE. Epoch/generation is a software
+// ticket only; real CQEs have no generation. CID never wraps in this lifetime.
+pub unsafe fn poll(queue:*Queue,epoch:u64,generation:u64,cqe:[]const u8,now:u64,out:*Completion)!bool {unsafe {
+    try valid_queue(queue);
+    if (*queue).pending!=1 || epoch!=(*queue).epoch || generation!=(*queue).pending_generation {return error.Stale;}
+    if cqe.ptr==null || cqe.len!=16 || out==null {return error.Invalid;}
+    if now<(*queue).last_ms {(*queue).fault=0x0520_0006;return error.ClockReversed;}
+    if now-(*queue).started_ms>=(*queue).timeout_ms {(*queue).fault=0x0520_0007;return error.Timeout;}
+    let raw=cqe.ptr;let status=u16_at(raw,14);
+    if (status&1)!=(*queue).phase {(*queue).last_ms=now;return false;}
+    let cid=u16_at(raw,12);let sqid=u16_at(raw,10);let head=u16_at(raw,8);let result=u32_at(raw,0);
+    if (status>>1)!=0 || cid!=(*queue).pending_cid || sqid!=(*queue).qid || head!=(*queue).sq_tail
+        || u32_at(raw,4)!=0 || ((*queue).pending_kind!=SET_QUEUES && result!=0) {
+        (*queue).fault=0x0520_0008;return error.BadCompletion;
+    }
+    let next=((*queue).cq_head+1)%(*queue).depth;var phase=(*queue).phase;if next==0 {phase^=1;}
+    let receipt=Completion {cid:cid,generation:generation,result:result,bytes:(*queue).pending_bytes,cq_head:next,phase:phase};
+    (*queue).cq_head=next;(*queue).phase=phase;(*queue).last_ms=now;(*queue).pending=0;(*queue).pending_cid=0;
+    (*queue).pending_kind=0;(*queue).pending_bytes=0;(*queue).pending_generation=0;(*queue).started_ms=0;(*queue).timeout_ms=0;
+    *out=receipt;return true;
+}}
+pub unsafe fn poison(queue:*Queue,reason:u64)!void {unsafe {
+    try valid_queue(queue);if reason==0 {return error.Invalid;}(*queue).fault=reason;
+}return;}

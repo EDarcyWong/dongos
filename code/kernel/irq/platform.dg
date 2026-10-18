@@ -1,0 +1,495 @@
+// BSP xAPIC controller and bounded reference-clock calibration. No IRQ entry,
+// allocator, page-table edits or SIMD. All mapped views are permanent UC.
+module irq.platform;
+import firmware.acpi as acpi;
+import boot.device_policy as devices;
+import arch.x86_64 as arch;
+import irq.clock_calibration as clocks;
+
+pub type Views = devices.Views;
+pub const TIMER_VECTOR: u64 = 0x40;
+pub const SPURIOUS_VECTOR: u64 = 0xff;
+pub error InvalidControls = 0x0305_0001;
+pub error Unsupported = 0x0305_0002;
+pub error InvalidTopology = 0x0305_0003;
+pub error InvalidClock = 0x0305_0004;
+pub error ClockTimeout = 0x0305_0005;
+pub error NotReady = 0x0305_0006;
+pub error AlreadyInitialized = 0x0305_0007;
+pub error InvalidArgument = 0x0305_0008;
+pub error Busy = 0x0305_0009;
+pub error HardwareReadback = 0x0305_000a;
+pub struct Report {
+    pub lapic_pa: u64, pub lapic_va: u64, pub lapic_id: u64, pub lapic_version: u64,
+    pub ioapic_count: u64, pub redirection_count: u64, pub pic_master: u64, pub pic_slave: u64,
+    pub reference_source: u64, pub tsc_hz: u64, pub lapic_hz: u64, pub timer_mode: u64,
+    pub interval_ns: u64, pub last_tsc: u64, pub last_deadline: u64, pub arm_count: u64,
+    pub stop_count: u64, pub spurious_vector: u64, pub timer_vector: u64, pub cr4: u64,
+    pub rflags: u64, pub ref_period_fs: u64, pub ref_delta: u64, pub steps: u64,
+}
+pub const EMPTY_REPORT: Report = Report {
+    lapic_pa: 0, lapic_va: 0, lapic_id: 0, lapic_version: 0, ioapic_count: 0, redirection_count: 0,
+    pic_master: 0, pic_slave: 0, reference_source: 0, tsc_hz: 0, lapic_hz: 0, timer_mode: 0,
+    interval_ns: 0, last_tsc: 0, last_deadline: 0, arm_count: 0, stop_count: 0,
+    spurious_vector: 0, timer_vector: 0, cr4: 0, rflags: 0, ref_period_fs: 0, ref_delta: 0, steps: 0,
+};
+// Failure-only observation ABI, version 1: exactly 56 u64 words (448 bytes).
+// Valid bits: 1=MSR, 2=LAPIC identity, 4=CPU records, 8=IOAPIC identity.
+// Stage: 1=APIC_BASE, 2=enabled BSP ID, 3=IOAPIC identity/version, 4=GSI.
+// An unobserved device is never probed to complete this report. No pointer or
+// string is retained. Report's existing 192-byte public ABI is unchanged.
+pub struct DiagnosticCpu { pub apic_id:u64,pub flags:u64 }
+pub struct Diagnostic {
+    pub version:u64,pub stage:u64,pub error_code:u64,pub valid:u64,
+    pub apic_base:u64,pub madt_lapic:u64,pub lapic_id_raw:u64,pub lapic_version:u64,
+    pub cpu_count:u64,pub cpu_match:u64,pub ioapic_count:u64,pub io_index:u64,
+    pub madt_io_id:u64,pub madt_io_address:u64,pub gsi_base:u64,
+    pub io_id_raw:u64,pub io_version:u64,pub pins:u64,
+    pub gsi_kind:u64,pub prior_base:u64,pub prior_pins:u64,
+    pub cpuid1_ecx:u64,pub cpuid1_edx:u64,pub reserved:u64,
+    pub cpus:[16]DiagnosticCpu,
+}
+const EMPTY_DIAGNOSTIC_CPU:DiagnosticCpu=DiagnosticCpu { apic_id:0,flags:0 };
+var DIAGNOSTIC:Diagnostic=Diagnostic {
+    version:0,stage:0,error_code:0,valid:0,apic_base:0,madt_lapic:0,
+    lapic_id_raw:0,lapic_version:0,cpu_count:0,cpu_match:0,ioapic_count:0,io_index:0,
+    madt_io_id:0,madt_io_address:0,gsi_base:0,io_id_raw:0,io_version:0,pins:0,
+    gsi_kind:0,prior_base:0,prior_pins:0,cpuid1_ecx:0,cpuid1_edx:0,reserved:0,
+    cpus:[EMPTY_DIAGNOSTIC_CPU;16],
+};
+// Total read-only accessor works before READY. Word order is fixed by the
+// homogeneous-u64 Diagnostic layout; it never calls hardware accessors.
+export("platform_diagnostic_word") fn diagnostic_word(index:u64)u64 {
+    if index>=56 { return 0; }
+    unsafe {
+        let words=(&DIAGNOSTIC as *const Diagnostic) as *const u64;
+        return *(words+index as usize);
+    }
+}
+
+unsafe extern "sysv64" ("irq_hw_read32") fn read32(address: u64) u32;
+unsafe extern "sysv64" ("irq_hw_read64") fn read64(address: u64) u64;
+unsafe extern "sysv64" ("irq_hw_write32") fn write32(address: u64, value: u32) void;
+unsafe extern "sysv64" ("irq_hw_in32") fn in32(port: u16) u32;
+unsafe extern "sysv64" ("irq_hw_flags") fn flags() u64;
+unsafe extern "sysv64" ("irq_hw_cr4") fn cr4() u64;
+unsafe extern "sysv64" ("irq_hw_set_lapic") fn set_lapic(base: u64) void;
+
+var ATTEMPTED: bool = false;
+var READY: bool = false;
+var BUSY: bool = false;
+var INFO: Report = EMPTY_REPORT;
+var VIEW: Views = devices.EMPTY_VIEWS;
+var TOPOLOGY: *const acpi.Inventory = null;
+var PINS: [8]u64 = [0;8];
+var REFERENCE: u64 = 0;
+var REF_ADDRESS: u64 = 0;
+var REF_MASK: u64 = 0;
+pub var CALIBRATION_REFERENCE:clocks.Reference=clocks.Reference { mask:0,period_fs:0,hz:0 };
+pub var CALIBRATION_SAMPLES:[7]clocks.Sample=[clocks.EMPTY_SAMPLE;7];
+pub var CALIBRATION_RESULT:clocks.Result=clocks.EMPTY_RESULT;
+pub var CALIBRATION_COUNT:u64=0;
+pub var CALIBRATION_READY:bool=false;
+const MAX: u64 = 0xffff_ffff_ffff_ffff;
+const MASK: u32 = 0x1_0000;
+
+unsafe fn controlled() !void {
+    unsafe { if (flags() & 0x60600) != 0 { return error.InvalidControls; } }
+    return;
+}
+unsafe fn lapic_read(offset: u64) u32 { unsafe { return read32(VIEW.lapic + offset); } }
+unsafe fn lapic_write(offset: u64, value: u32) void { unsafe { write32(VIEW.lapic + offset,value); } return; }
+unsafe fn io_read(index: usize, register: u32) u32 {
+    unsafe { write32(VIEW.ioapics[index],register); return read32(VIEW.ioapics[index] + 16); }
+}
+unsafe fn io_write(index: usize, register: u32, value: u32) void {
+    unsafe { write32(VIEW.ioapics[index],register); write32(VIEW.ioapics[index] + 16,value); }
+    return;
+}
+unsafe fn ordered_tsc() u64 {
+    unsafe { arch.lfence(); let value = arch.read_tsc(); arch.lfence(); return value; }
+}
+fn elapsed(now: u64, start: u64, mask: u64) u64 {
+    if now >= start { return now - start; }
+    return (mask - start) + now + 1;
+}
+unsafe fn reference_read() u64 {
+    unsafe {
+        if REFERENCE == 2 {
+            if REF_MASK == MAX { return read64(REF_ADDRESS + 0xf0); }
+            return (read32(REF_ADDRESS + 0xf0) as u64) & REF_MASK;
+        }
+        if REFERENCE == 3 { return (in32(REF_ADDRESS as u16) as u64) & REF_MASK; }
+        return (read32(REF_ADDRESS) as u64) & REF_MASK;
+    }
+}
+unsafe fn select_reference(inventory: *const acpi.Inventory) !void {
+    unsafe {
+        if VIEW.hpet != 0 {
+            let cap = read64(VIEW.hpet);
+            let period = cap >> 32;
+            if period >= 1000 && period <= 100_000_000 && (cap & 255) != 0 && cap != MAX {
+                REFERENCE = 2; REF_ADDRESS = VIEW.hpet;
+                REF_MASK = 0xffff_ffff;
+                if (cap & 0x2000) != 0 { REF_MASK = MAX; }
+                INFO.ref_period_fs = period;
+                let config = read32(VIEW.hpet + 0x10);
+                write32(VIEW.hpet + 0x10,(config | 1) & ~2);
+                if (read32(VIEW.hpet + 0x10) & 3) != 1 { return error.HardwareReadback; }
+                return;
+            }
+        }
+        let pm = (*inventory).pm_timer_gas;
+        REF_MASK = 0xff_ffff;
+        if (*inventory).pm_timer_32bit != 0 { REF_MASK = 0xffff_ffff; }
+        if pm.address != 0 && pm.bit_width == 32 && pm.bit_offset == 0 {
+            if pm.address_space == 1 && pm.address <= 0xfffc { REFERENCE = 3; REF_ADDRESS = pm.address; return; }
+            if pm.address_space == 0 && VIEW.pm_timer != 0 && (VIEW.pm_timer & 3) == 0 {
+                REFERENCE = 4; REF_ADDRESS = VIEW.pm_timer; return;
+            }
+        }
+        if (*inventory).pm_timer_block != 0 && (*inventory).pm_timer_block <= 0xfffc && (*inventory).pm_timer_length == 4 {
+            REFERENCE = 3; REF_ADDRESS = (*inventory).pm_timer_block; return;
+        }
+    }
+    return error.InvalidClock;
+}
+unsafe fn calibrate(inventory: *const acpi.Inventory) !void {
+    unsafe {
+        try select_reference(inventory);
+        var target:u64=35796;
+        CALIBRATION_REFERENCE=clocks.Reference { mask:REF_MASK,period_fs:0,hz:3579545 };
+        if REFERENCE==2 {
+            target=10_000_000_000_000/INFO.ref_period_fs;
+            CALIBRATION_REFERENCE=clocks.Reference { mask:REF_MASK,period_fs:INFO.ref_period_fs,hz:0 };
+        }
+        if target==0 || target>REF_MASK/4 { return error.InvalidClock; }
+        CALIBRATION_READY=false;CALIBRATION_COUNT=0;CALIBRATION_RESULT=clocks.EMPTY_RESULT;
+        var i:usize=0;while i<7 {
+            lapic_write(0x320,MASK|(TIMER_VECTOR as u32));lapic_write(0x3e0,3);
+            lapic_write(0x380,0xffff_ffff);
+            var sample=clocks.EMPTY_SAMPLE;
+            // Both hardware counters are sampled inside each reference-clock
+            // bracket. Endpoint delays can be bounded and rejected afterward.
+            sample.r0_before=reference_read();sample.c0=lapic_read(0x390) as u64;
+            sample.t0=ordered_tsc();sample.r0_after=reference_read();
+            var current=sample.r0_after;var loops:usize=0;
+            while loops<2_000_000 {
+                current=reference_read();if elapsed(current,sample.r0_after,REF_MASK)>=target { break; }loops+=1;
+            }
+            sample.r1_before=current;sample.c1=lapic_read(0x390) as u64;
+            sample.t1=ordered_tsc();sample.r1_after=reference_read();lapic_write(0x380,0);
+            if elapsed(current,sample.r0_after,REF_MASK)<target { return error.ClockTimeout; }
+            CALIBRATION_SAMPLES[i]=sample;CALIBRATION_COUNT+=1;i+=1;
+        }
+        match clocks.select(&CALIBRATION_REFERENCE,CALIBRATION_SAMPLES[..],&CALIBRATION_RESULT) {
+            ok=>{},err(code)=>{return error.InvalidClock;},
+        }
+        if INFO.tsc_hz==0 { INFO.tsc_hz=CALIBRATION_RESULT.tsc_hz;INFO.reference_source=REFERENCE; }
+        INFO.lapic_hz=CALIBRATION_RESULT.lapic_hz;INFO.ref_delta=CALIBRATION_RESULT.reference_delta;
+        CALIBRATION_READY=true;
+    }return;
+}
+
+pub unsafe fn initialize(inventory: *const acpi.Inventory, views: *const Views, out: *Report) !void {
+    unsafe {
+        if BUSY { return error.Busy; }
+        if ATTEMPTED { return error.AlreadyInitialized; }
+        try controlled();
+        if (*inventory).ioapic_count == 0 || (*inventory).ioapic_count > 8 || (*views).lapic != devices.BASE {
+            return error.InvalidArgument;
+        }
+        DIAGNOSTIC.version=1; DIAGNOSTIC.stage=0; DIAGNOSTIC.error_code=0;
+        DIAGNOSTIC.valid=0; DIAGNOSTIC.madt_lapic=(*inventory).lapic_address;
+        DIAGNOSTIC.cpu_count=(*inventory).cpu_count;
+        DIAGNOSTIC.ioapic_count=(*inventory).ioapic_count;
+        var cpuid = arch.CpuId { eax: 0, ebx: 0, ecx: 0, edx: 0 };
+        arch.cpuid(0,0,&cpuid); let maximum = cpuid.eax;
+        if maximum < 1 { return error.Unsupported; }
+        arch.cpuid(1,0,&cpuid);
+        if (cpuid.edx & 0x230) != 0x230 { return error.Unsupported; }
+        DIAGNOSTIC.cpuid1_ecx=cpuid.ecx as u64; DIAGNOSTIC.cpuid1_edx=cpuid.edx as u64;
+        let deadline = (cpuid.ecx & 0x100_0000) != 0;
+        let apic_base = arch.read_msr(0x1b);
+        DIAGNOSTIC.apic_base=apic_base; DIAGNOSTIC.valid|=1;
+        if (apic_base & 0xd00) != 0x900 || (apic_base & ~4095) != (*inventory).lapic_address {
+            DIAGNOSTIC.stage=1; DIAGNOSTIC.error_code=0x0305_0003;
+            return error.InvalidTopology;
+        }
+        var index: usize = 0;
+        while index < 8 {
+            var expected: u64 = 0;
+            if index < (*inventory).ioapic_count as usize { expected = devices.BASE + ((index as u64) + 1) * 4096; }
+            if (*views).ioapics[index] != expected { return error.InvalidArgument; }
+            index += 1;
+        }
+        if (*inventory).hpet != 0 && (*views).hpet != devices.BASE + 9 * 4096 + ((*inventory).hpet_gas.address & 4095) {
+            return error.InvalidArgument;
+        }
+        ATTEMPTED = true; BUSY = true; VIEW = *views; TOPOLOGY = inventory;
+        INFO = EMPTY_REPORT;
+        INFO.lapic_pa = (*inventory).lapic_address; INFO.lapic_va = VIEW.lapic;
+        let lapic_id_raw=lapic_read(0x20);
+        INFO.lapic_id = (lapic_id_raw >> 24) as u64;
+        INFO.lapic_version = lapic_read(0x30) as u64;
+        DIAGNOSTIC.lapic_id_raw=lapic_id_raw as u64;
+        DIAGNOSTIC.lapic_version=INFO.lapic_version; DIAGNOSTIC.valid|=2;
+        let max_lvt = (INFO.lapic_version >> 16) & 255;
+        if (INFO.lapic_version & 255) < 0x10 || max_lvt < 3 || max_lvt > 6 { return error.Unsupported; }
+        var found = false; index = 0;
+        while index < (*inventory).cpu_count as usize {
+            if index<16 {
+                DIAGNOSTIC.cpus[index].apic_id=(*inventory).cpus[index].apic_id;
+                DIAGNOSTIC.cpus[index].flags=(*inventory).cpus[index].flags;
+            }
+            if (*inventory).cpus[index].apic_id == INFO.lapic_id && ((*inventory).cpus[index].flags & 1) != 0 { found = true; }
+            index += 1;
+        }
+        DIAGNOSTIC.valid|=4; DIAGNOSTIC.cpu_match=found as u64;
+        if !found { DIAGNOSTIC.stage=2; DIAGNOSTIC.error_code=0x0305_0003; return error.InvalidTopology; }
+        INFO.ioapic_count = (*inventory).ioapic_count;
+        INFO.timer_mode = 2; if deadline { INFO.timer_mode = 1; }
+        INFO.timer_vector = TIMER_VECTOR; INFO.spurious_vector = SPURIOUS_VECTOR;
+        INFO.interval_ns = 1_000_000; INFO.cr4 = cr4(); INFO.rflags = flags(); INFO.steps = 1;
+        if maximum >= 0x15 {
+            arch.cpuid(0x15,0,&cpuid);
+            if cpuid.eax != 0 && cpuid.ebx != 0 && cpuid.ecx != 0 {
+                let rate = ((cpuid.ecx as u64) * (cpuid.ebx as u64)) / (cpuid.eax as u64);
+                if rate >= 1_000_000 && rate <= 16_000_000_000 { INFO.tsc_hz = rate; INFO.reference_source = 1; }
+            }
+        }
+        // All fixed inventory constraints are checked before any IOAPIC data
+        // write. Views were authorized from this same immutable inventory.
+        index=0;
+        while index<INFO.ioapic_count as usize {
+            let item=(*inventory).ioapics[index];
+            DIAGNOSTIC.io_index=index as u64;DIAGNOSTIC.madt_io_id=item.id;
+            DIAGNOSTIC.madt_io_address=item.address;DIAGNOSTIC.gsi_base=item.gsi_base;
+            if item.id>15 || item.address==0 || item.address>=0x1_0000_0000
+                || (item.address&4095)!=0 || item.address==(*inventory).lapic_address {
+                DIAGNOSTIC.stage=3;DIAGNOSTIC.error_code=0x0305_0003;
+                return error.InvalidTopology;
+            }
+            var prior:usize=0;
+            while prior<index {
+                if (*inventory).ioapics[prior].address==item.address || (*inventory).ioapics[prior].id==item.id {
+                    DIAGNOSTIC.stage=3;DIAGNOSTIC.error_code=0x0305_0003;
+                    return error.InvalidTopology;
+                }prior+=1;
+            }index+=1;
+        }
+        var raw_ids:[8]u32=[0;8];var planned_ids:[8]u32=[0;8];var versions:[8]u32=[0;8];
+        index = 0;
+        while index < INFO.ioapic_count as usize {
+            let io_id_raw=io_read(index,0);
+            let version = io_read(index,1) as u64;
+            let pins = ((version >> 16) & 255) + 1;
+            DIAGNOSTIC.io_index=index as u64;
+            DIAGNOSTIC.madt_io_id=(*inventory).ioapics[index].id;
+            DIAGNOSTIC.madt_io_address=(*inventory).ioapics[index].address;
+            DIAGNOSTIC.gsi_base=(*inventory).ioapics[index].gsi_base;
+            DIAGNOSTIC.io_id_raw=io_id_raw as u64;
+            DIAGNOSTIC.io_version=version; DIAGNOSTIC.pins=pins; DIAGNOSTIC.valid|=8;
+            if pins > 120 || (version & 255) == 0 || (version & 255) == 255 {
+                DIAGNOSTIC.stage=3; DIAGNOSTIC.error_code=0x0305_0003;
+                return error.InvalidTopology;
+            }
+            let base = (*inventory).ioapics[index].gsi_base;
+            if base > 0x1_0000_0000 - pins {
+                DIAGNOSTIC.stage=4; DIAGNOSTIC.error_code=0x0305_0003; DIAGNOSTIC.gsi_kind=1;
+                return error.InvalidTopology;
+            }
+            var j: usize = 0;
+            while j < index {
+                let old = (*inventory).ioapics[j].gsi_base;
+                if base < old + PINS[j] && old < base + pins {
+                    DIAGNOSTIC.stage=4; DIAGNOSTIC.error_code=0x0305_0003; DIAGNOSTIC.gsi_kind=2;
+                    DIAGNOSTIC.prior_base=old; DIAGNOSTIC.prior_pins=PINS[j];
+                    return error.InvalidTopology;
+                }
+                j += 1;
+            }
+            // Intel 82093AA 290566-001 pp8-9: ID is R/W bits27:24; all
+            // remaining bits are reserved. MADT ID comes from ACPI 5.2.12.3.
+            raw_ids[index]=io_id_raw;versions[index]=version as u32;
+            planned_ids[index]=(io_id_raw&0xf0ff_ffff)|(((*inventory).ioapics[index].id as u32)<<24);
+            PINS[index] = pins; INFO.redirection_count += pins; index += 1;
+        }
+        arch.out8(0x21,255); arch.out8(0xa1,255);
+        INFO.pic_master = arch.in8(0x21) as u64; INFO.pic_slave = arch.in8(0xa1) as u64;
+        if INFO.pic_master != 255 || INFO.pic_slave != 255 { return error.HardwareReadback; }
+        INFO.steps |= 2;
+        index = 0;
+        while index < INFO.ioapic_count as usize {
+            var pin: usize = 0;
+            while pin < PINS[index] as usize {
+                let reg = (0x10 + pin * 2) as u32;
+                io_write(index,reg,io_read(index,reg) | MASK);
+                if (io_read(index,reg) & MASK) == 0 { return error.HardwareReadback; }
+                pin += 1;
+            }
+            index += 1;
+        }
+        INFO.steps |= 4;
+        // IF=0 does not stop IOAPIC message transmission. Reconcile identity
+        // only after every controller's pins are masked and read back, and
+        // before LAPIC configuration. A failed readback leaves pins masked.
+        index=0;
+        while index<INFO.ioapic_count as usize {
+            if planned_ids[index]!=raw_ids[index] {
+                io_write(index,0,planned_ids[index]);
+                let verified=io_read(index,0);
+                if verified!=planned_ids[index] {
+                    DIAGNOSTIC.io_index=index as u64;
+                    DIAGNOSTIC.madt_io_id=(*inventory).ioapics[index].id;
+                    DIAGNOSTIC.madt_io_address=(*inventory).ioapics[index].address;
+                    DIAGNOSTIC.gsi_base=(*inventory).ioapics[index].gsi_base;
+                    DIAGNOSTIC.io_id_raw=verified as u64;DIAGNOSTIC.io_version=versions[index] as u64;
+                    DIAGNOSTIC.pins=PINS[index];DIAGNOSTIC.stage=3;DIAGNOSTIC.error_code=0x0305_0003;
+                    return error.InvalidTopology;
+                }
+            }index+=1;
+        }
+        lapic_write(0x320,MASK | (TIMER_VECTOR as u32)); lapic_write(0x350,MASK | 255); lapic_write(0x360,MASK | 255); lapic_write(0x370,MASK | 255);
+        if max_lvt >= 4 { lapic_write(0x340,MASK | 255); }
+        if max_lvt >= 5 { lapic_write(0x330,MASK | 255); }
+        if max_lvt >= 6 { lapic_write(0x2f0,MASK | 255); }
+        lapic_write(0x80,0); lapic_write(0x3e0,3); lapic_write(0x380,0);
+        lapic_write(0xf0,(lapic_read(0xf0) & ~0x11ff) | 0x1ff);
+        if (lapic_read(0xf0) & 0x11ff) != 0x1ff || lapic_read(0x80) != 0 { return error.HardwareReadback; }
+        INFO.steps |= 8;
+        if INFO.tsc_hz == 0 || INFO.timer_mode == 2 { try calibrate(inventory); }
+        INFO.steps |= 16;
+        if INFO.timer_mode == 1 { lapic_write(0x320,MASK | 0x4_0000 | (TIMER_VECTOR as u32)); arch.mfence(); arch.write_msr(0x6e0,0); }
+        set_lapic(VIEW.lapic); READY = true; BUSY = false;
+        *out = INFO;
+    }
+    return;
+}
+
+pub unsafe fn arm(delta_ns: u64) !void {
+    unsafe {
+        try controlled();
+        if !READY { return error.NotReady; } if BUSY { return error.Busy; }
+        if delta_ns == 0 || delta_ns > 1_000_000_000 || INFO.arm_count == MAX { return error.InvalidArgument; }
+        let now = ordered_tsc();
+        if delta_ns > MAX / INFO.tsc_hz { return error.InvalidArgument; }
+        let cycles = (INFO.tsc_hz * delta_ns + 999_999_999) / 1_000_000_000;
+        if cycles == 0 || now > MAX - cycles { return error.InvalidArgument; }
+        if INFO.timer_mode == 1 {
+            lapic_write(0x320,0x4_0000 | (TIMER_VECTOR as u32));
+            arch.mfence(); arch.write_msr(0x6e0,now + cycles);
+        } else {
+            if delta_ns > (MAX - 999_999_999) / INFO.lapic_hz { return error.InvalidArgument; }
+            let count = (INFO.lapic_hz * delta_ns + 999_999_999) / 1_000_000_000;
+            if count == 0 || count > 0xffff_ffff { return error.InvalidArgument; }
+            lapic_write(0x320,TIMER_VECTOR as u32); lapic_write(0x380,count as u32);
+        }
+        INFO.interval_ns = delta_ns; INFO.last_tsc = now; INFO.last_deadline = now + cycles;
+        INFO.arm_count += 1; INFO.steps |= 32;
+    }
+    return;
+}
+pub unsafe fn stop() !void {
+    unsafe {
+        try controlled(); if !READY { return error.NotReady; }
+        if INFO.stop_count == MAX { return error.InvalidArgument; }
+        lapic_write(0x320,(lapic_read(0x320) | MASK));
+        if INFO.timer_mode == 1 { arch.mfence(); arch.write_msr(0x6e0,0); }
+        lapic_write(0x380,0); INFO.stop_count += 1; INFO.steps |= 64;
+    }
+    return;
+}
+pub unsafe fn describe(out: *Report) !void {
+    unsafe { if !READY { return error.NotReady; } *out = INFO; }
+    return;
+}
+// ISA device routes use fixed BSP vectors; users never supply an APIC
+// destination, trigger mode or raw IOAPIC register. The inventory is retained
+// from the same validated MADT used during controller initialization.
+pub struct IsaRoute {
+    pub version:u64,pub irq:u64,pub gsi:u64,pub ioapic:u64,pub pin:u64,
+    pub vector:u64,pub polarity:u64,pub trigger:u64,pub destination:u64,pub masked:u64,
+}
+pub const EMPTY_ISA_ROUTE:IsaRoute=IsaRoute {version:0,irq:0,gsi:0,ioapic:0,pin:0,
+    vector:0,polarity:0,trigger:0,destination:0,masked:1};
+var ISA_ROUTES:[16]IsaRoute=[EMPTY_ISA_ROUTE;16];
+const ROUTE_LOW_MASK:u32=0x1_afff;
+const ROUTE_HIGH_MASK:u32=0xff00_0000;
+unsafe fn route_ready(source:u64)!void {unsafe {
+    try controlled();if !READY||TOPOLOGY==null {return error.NotReady;}
+    if source!=1&&source!=12 {return error.InvalidArgument;}
+    if (*TOPOLOGY).iso_count>16||(*TOPOLOGY).nmi_count>16||INFO.lapic_id>255 {return error.InvalidTopology;}
+}return;}
+pub unsafe fn describe_isa(source:u64,out:*IsaRoute)!void {unsafe {
+    try route_ready(source);if out==null {return error.InvalidArgument;}
+    if ISA_ROUTES[source as usize].version!=1 {return error.NotReady;}
+    *out=ISA_ROUTES[source as usize];
+}return;}
+pub unsafe fn mask_isa(source:u64,masked:bool)!void {unsafe {
+    try route_ready(source);let route=ISA_ROUTES[source as usize];if route.version!=1 {return error.NotReady;}
+    let controller=route.ioapic as usize;let register=(0x10+route.pin*2) as u32;
+    let high=io_read(controller,register+1);
+    if (high&ROUTE_HIGH_MASK)!=((route.destination as u32)<<24) {
+        io_write(controller,register,io_read(controller,register)|MASK);return error.HardwareReadback;
+    }
+    var low=(route.vector as u32)|((route.polarity as u32)<<13)|((route.trigger as u32)<<15);
+    if masked {low|=MASK;}
+    io_write(controller,register,low);
+    let verified=io_read(controller,register);
+    if (verified&ROUTE_LOW_MASK)!=(low&ROUTE_LOW_MASK) {
+        io_write(controller,register,low|MASK);return error.HardwareReadback;
+    }
+    ISA_ROUTES[source as usize].masked=masked as u64;
+}return;}
+pub unsafe fn route_isa(source:u64,masked:bool,out:*IsaRoute)!void {unsafe {
+    try route_ready(source);if out==null {return error.InvalidArgument;}
+    if ISA_ROUTES[source as usize].version==1 {
+        try mask_isa(source,masked);*out=ISA_ROUTES[source as usize];return;
+    }
+    var gsi=source;var polarity:u64=0;var trigger:u64=0;var matched=false;var i:usize=0;
+    while i<(*TOPOLOGY).iso_count as usize {
+        let override=(*TOPOLOGY).isos[i];
+        if override.bus!=0||override.source>15||(override.flags&~15)!=0||(override.flags&3)==2||((override.flags>>2)&3)==2 {return error.InvalidTopology;}
+        if override.source==source {
+            if matched {return error.InvalidTopology;}matched=true;gsi=override.gsi;
+            if (override.flags&3)==3 {polarity=1;}
+            if ((override.flags>>2)&3)==3 {trigger=1;}
+        }i+=1;
+    }
+    i=0;while i<(*TOPOLOGY).nmi_count as usize {
+        if (*TOPOLOGY).nmis[i].kind==3&&(*TOPOLOGY).nmis[i].gsi==gsi {return error.InvalidTopology;}i+=1;
+    }
+    i=0;while i<16 {if ISA_ROUTES[i].version==1&&ISA_ROUTES[i].gsi==gsi {return error.Busy;}i+=1;}
+    var controller:usize=8;var pin:u64=0;i=0;
+    while i<INFO.ioapic_count as usize {let base=(*TOPOLOGY).ioapics[i].gsi_base;
+        if gsi>=base&&gsi-base<PINS[i] {if controller!=8 {return error.InvalidTopology;}controller=i;pin=gsi-base;}i+=1;
+    }
+    if controller==8 {return error.InvalidTopology;}
+    let register=(0x10+pin*2) as u32;
+    // Mask/read back before changing destination or vector. Preserve RO
+    // delivery-status/remote-IRR bits only when checking subsequent reads.
+    io_write(controller,register,io_read(controller,register)|MASK);
+    if (io_read(controller,register)&MASK)==0 {return error.HardwareReadback;}
+    let high=(INFO.lapic_id as u32)<<24;
+    io_write(controller,register+1,high);
+    if (io_read(controller,register+1)&ROUTE_HIGH_MASK)!=high {return error.HardwareReadback;}
+    let vector=0x50+source;let low=(vector as u32)|((polarity as u32)<<13)|((trigger as u32)<<15)|MASK;
+    io_write(controller,register,low);
+    if (io_read(controller,register)&ROUTE_LOW_MASK)!=(low&ROUTE_LOW_MASK) {return error.HardwareReadback;}
+    ISA_ROUTES[source as usize]=IsaRoute {version:1,irq:source,gsi:gsi,ioapic:controller as u64,pin:pin,
+        vector:vector,polarity:polarity,trigger:trigger,destination:INFO.lapic_id,masked:1};
+    if !masked {try mask_isa(source,false);}
+    *out=ISA_ROUTES[source as usize];
+}return;}
+// ISR always calls EOI after masking/signalling, including rejected/stale
+// device notifications. It must not wait for a CPL3 acknowledgement to EOI.
+pub unsafe fn device_eoi()!void {unsafe {
+    try controlled();if !READY {return error.NotReady;}lapic_write(0xb0,0);
+}return;}
+export("platform_timer_rearm") fn rearm_export() u64 {
+    unsafe { match arm(INFO.interval_ns) { ok => { return 0; }, err(code) => { return code; }, } }
+}
+export("platform_timer_stop") fn stop_export() u64 {
+    unsafe { match stop() { ok => { return 0; }, err(code) => { return code; }, } }
+}
