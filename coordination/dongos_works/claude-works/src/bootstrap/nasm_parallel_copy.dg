@@ -1,0 +1,46 @@
+// Emit a parallel copy between 8 fixed value slots as sequential 64-bit MOVs.
+// Slots 0..7 are [rax,rcx,rdx,rsi,rdi,r8,r9,r10]; the temporary slot 8 is R11.
+// The order comes from the integrated C9 parallel_moves.schedule (not
+// re-implemented) and every line from the integrated CR14 nasm_integer_cast
+// (width 64). All dependency calls and the total length finish in local
+// scratch before out is written once.
+module bootstrap.nasm_parallel_copy;
+import bootstrap.parallel_moves as pm;
+import bootstrap.nasm_integer_cast as cast;
+pub const OK:u64=0;pub const INVALID:u64=1;pub const CAPACITY:u64=2;
+pub const SLOTS:usize=8;
+const MAX:u64=0xffff_ffff_ffff_ffff;
+// C9 guarantees used <= 2*moves.len <= 16 steps; a 64-bit MOV line is at most
+// "mov r10, r11\n" = 13 bytes, so 16*13 = 208 <= 256. (With at most 8 moves the
+// real maximum is 8 moves + 4 cycle breaks = 12 steps = 156 bytes.)
+const STEPS:usize=16;const TEXT:usize=256;const LINE:usize=16;
+fn span(p:u64,n:u64)bool{return n==0||(p!=0&&n<=MAX-p);}
+fn overlap(a:u64,n:u64,b:u64,m:u64)bool{return n!=0&&m!=0&&a<b+m&&b<a+n;}
+// Slot -> global register number (rax=0 ... r11=11).
+fn register(slot:usize)u64{
+ if slot==0{return 0;}if slot==1{return 1;}if slot==2{return 2;}if slot==3{return 6;}
+ if slot==4{return 7;}if slot==5{return 8;}if slot==6{return 9;}if slot==7{return 10;}return 11;
+}
+pub unsafe fn emit(moves:[]const pm.Move,out:[]u8,written:*usize)u64{unsafe{
+ let wp=written as u64;let mp=moves.ptr as u64;let op=out.ptr as u64;
+ if written==null||(wp&7)!=0||!span(wp,8){return INVALID;}
+ if moves.len>MAX/sizeof(pm.Move){return INVALID;}
+ let mn=moves.len*sizeof(pm.Move);
+ if !span(mp,mn)||(mn!=0&&(mp&7)!=0)||!span(op,out.len){return INVALID;}
+ if overlap(wp,8,op,out.len)||overlap(mp,mn,op,out.len)||overlap(mp,mn,wp,8){return INVALID;}
+ if moves.len>SLOTS{return INVALID;}
+ // C9 validates slots (< 8, so the temporary R11 can never appear) and duplicate destinations.
+ var steps:[16]pm.Move=[pm.Move{dst:0,src:0};16];var work:[8]u8=[0;8];var used:usize=0;
+ let s=pm.schedule(moves,SLOTS,slice_from_raw_parts(&steps[0],STEPS),slice_from_raw_parts(&work[0],SLOTS),&used);
+ if s!=pm.OK||used>STEPS{return INVALID;}
+ var text:[256]u8=[0;256];var at:usize=0;var k:usize=0;
+ while k<used{
+  var line:[16]u8=[0;16];var n:usize=0;
+  let c=cast.emit(register(steps[k].dst),register(steps[k].src),64,false,slice_from_raw_parts(&line[0],LINE),&n);
+  if c!=cast.OK||n>TEXT-at{return INVALID;}
+  var i:usize=0;while i<n{text[at+i]=line[i];i+=1;}at+=n;k+=1;
+ }
+ if at>out.len{return CAPACITY;}
+ var i:usize=0;while i<at{out[i]=text[i];i+=1;}
+ *written=at;return OK;
+}}

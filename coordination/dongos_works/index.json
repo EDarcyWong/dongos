@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-10-18T15:18:16+00:00",
+  "generated_at": "2026-10-18T16:06:35+00:00",
   "tasks": [
     {
       "id": "claude:C1",
@@ -1004,8 +1004,8 @@
       "owner": "claude",
       "title": "NASM缩放索引地址操作数",
       "description": "module bootstrap.nasm_indexed_operand。\npub unsafe fn encode(base:u64,index:u64,scale:u64,displacement:i64,out:[]u8,written:*usize)u64。\nbase为0..15；index为0..15但禁止4/RSP（12/R12合法）；scale仅1/2/4/8；位移仅i32范围；其它INVALID且优先CAPACITY。严格输出ASCII操作数，无LF/NUL：\"[<base64> + <index64>*<scale十进制>]\"，disp正则在右括号前加\" + <正数>\"，负则加\" - <绝对值>\"，disp0省略位移项。scale=1也保留*1；base==index合法；无无基址、RIP、符号、segment或addr32形式。不修改CR8现有base+disp操作数或CR15 LEA接口，这是新增的数组索引寻址原语。\nscale与位移数字复用已集成CR4 decimal_integer到局部scratch；全部预检/总长和容量通过后才写用户out。MAX_LINE采用明确足够的固定局部界限或checked求长，不依赖宿主格式化。\n有限旋转文本/ELF64+COFF组装覆盖16个base、每个合法index（必须有R12且RSP作index独立INVALID）、4种scale及位移0/正负/i32两端，不做全笛卡尔积。原生只用安全寄存器，在真实Dong输出操作数前加独立LEA执行（不解引用结果），每模式至多24个向量；独立任意精度期望(base+index*scale+disp)模2^64，含base==index及溢出环绕，捕获非目的输入寄存器和flags保持。RSP/RBP参与的地址只组装。\n真实坏Dong把scale4错误写成2等，使用scale4且index非0输入，必须正常原生执行后由LEA结果拒绝；不能停在文本差异。另容量失败提前写负控。\n\n## 共用固定契约与归属\n\n这是L3真实后端所需的独立Dong文本发射组件，不能代替完整代码生成/语言溢出检查/自举。源码必须Dong，不导出C符号，不用Python/C宿主实现代替生产逻辑；无分配、全局可变状态或OS调用。仅修改本人本任务4个授权文件，依赖只读，绝不改code/lang、活动编译器、内核、协调器、CR11或Codex语义主线。\n\n寄存器编号0..15固定rax,rcx,rdx,rbx,rsp,rbp,rsi,rdi,r8,r9,r10,r11,r12,r13,r14,r15；其它编号INVALID。32位名eax,ecx,edx,ebx,esp,ebp,esi,edi,r8d..r15d；16位ax,cx,dx,bx,sp,bp,si,di,r8w..r15w；低8位al,cl,dl,bl,spl,bpl,sil,dil,r8b..r15b，不支持ah等高8位。严格ASCII和单字节LF，除任务另定的块标签外，不含section/global/注释/额外空行/NUL；本任务规定几行就精确几行，成功尾部不变。\n\nunsafe调用方保证对象真实可访问。仍必须在任何读写前检查written非空、8对齐、完整8字节端点不溢出；out完整描述符端点/非空非NULL；written完整8字节与完整声明out不重叠（包括输出未使用尾部）。空out可NULL。OK=0、INVALID=1、CAPACITY=2，所有参数/枚举/位移/描述符INVALID优先CAPACITY；失败out和written全文不变。先验证/计算，在局部暂存调用只读组件，最后一次写用户out；不得通过只看已用前缀逃过完整别名。长度加法不溢出。\n\n测试要让每个目标预检独立可达：其它字段合法，真实guard/快照初始化后再取。written端点溢出使用8对齐UINT64_MAX-7和合法空out，正确INVALID，漏检坏实现返回CAPACITY，不能非法解引用；NULL/奇地址、out端点、对齐前缀/尾部别名、参数INVALID且out容量0亦独立覆盖。失败全文/双端guard、成功精确文本/计数/剩余尾部立即检查。C观察器对齐存储明确声明，不能用另一个非法字段掩盖目标。\n\n测试实际编译、链接、原生执行Dong debug/release，NASM ELF64/COFF都组装。只暂存本组件和声明的已集成依赖，含坏源码时不引入整个lang根遮蔽临时模块。独立Python/C期望；有限固定边界优先、无需随机堆矩阵。文本/组装覆盖全部16个寄存器（可旋转配对，不要求全笛卡尔积）；受控原生仅用安全调用者保存寄存器的少量组合（每模式不超过24个主要向量），保留宿主ABI/栈，rsp/rbp写目标只组装。COFF组装不等于Win64 ABI可调用，原生C桥显式SysV。\n\n至少两类真实坏Dong成功编译/链接/原生执行，再由指定数值/原子性断言拒绝；同一夹具先跑好实现。至少一类是原生实际结果错误，另一类容量失败提前写输出/计数，以全文/guard立即拒绝；若任务另定两类语义负控，则另保留一次原子性验证。构建失败、崩溃、超时、文本不同或无关预检错误不得冒充指定原生负控。坏源码执行的目标输入必须合法且不导致非法内存/栈访问。\n\n先通过自己的worker MCP get_task/read_document读取最新rev、完整契约、依赖和归属，claim后执行。只运行本任务声明的定向测试，产物放本人works/build/编号/<唯一目录>/；无OS/VM/全回归/性能基准/定时器/关机/提交/推送，不启动模型CLI。客户端手动执行；完成后落盘原编号交付并通过MCP submit，不能自行accept/integrate。交付列真实命令、tests/skip、模式/对象格式、生产/测试SHA256、产物目录、每种负控实际观察/拒绝原因和未运行/剩余限制。依赖或归属问题先报告，不擅自扩大范围。",
-      "status": "submitted",
-      "rev": 3,
+      "status": "integrated",
+      "rev": 6,
       "write_paths": [
         "claude-works/src/bootstrap/nasm_indexed_operand.dg",
         "claude-works/src/bootstrap/nasm_indexed_operand.md",
@@ -1022,16 +1022,41 @@
       "auto_verify": false,
       "complexity": "standard",
       "created_at": "2026-10-18T15:11:21+00:00",
-      "updated_at": "2026-10-18T15:16:02+00:00",
+      "updated_at": "2026-10-18T15:26:16+00:00",
       "historical": false,
       "document": "claude-works/tasks/C30-board.md",
       "delivery": "claude-works/deliveries/C30.md",
       "candidate": null,
-      "verification": null,
-      "review_note": "",
+      "verification": {
+        "passed": true,
+        "checks": [
+          {
+            "spec": "discover:claude-works/tests:test_nasm_indexed_operand.py",
+            "passed": true,
+            "tests": 4,
+            "skips": 0,
+            "returncode": 0,
+            "cancelled": false,
+            "timed_out": false,
+            "elapsed_seconds": 6.078
+          }
+        ],
+        "source_stable": true,
+        "fingerprint": {
+          "claude-works/src/bootstrap/nasm_indexed_operand.dg": "52dd694c4bef859fc482b10c0fa7ebdf3332f03d623015fd81d07ae4fd144bc2",
+          "claude-works/src/bootstrap/nasm_indexed_operand.md": "764ddf11684ac44a23d7f3b4a4c5fb30de48b37c124f5667a2c1d1db910b2869",
+          "claude-works/tests/test_nasm_indexed_operand.py": "59ab7b50337d59fbba2e8d8d6baf5e88622c493fde48e59d5ad6b92f71137d5a",
+          "claude-works/deliveries/C30.md": "c28ac58a0ceb6b9b2f2d21afeafdbcab957bd1af785b66fc8bce165ac16af7f0"
+        },
+        "summary": "定向复验通过，等待源码/契约审查",
+        "finished_at": "2026-10-18T15:23:30+00:00",
+        "job": "2715d68c37b346b0aa19c674065a4b38"
+      },
+      "review_note": "独立审查生产Dong、完整C30任务契约及全部Python/C/NASM观察器；正式job 2715d68c37b346b0aa19c674065a4b38 实际4项通过0skip、source_stable=true。局部48字节可容纳最长26字节操作数；16 base/15 index含R12与RSP非法、scale与i32两端、完整out/written端点及尾部别名、INVALID优先CAPACITY正确。真实Dong缩放4改2正常LEA后数值拒绝、提前写原子性有效。审查子任务另独立4项通过并确认目标端点/完整别名坏Dong可被原生预检拒绝；未改生产。验收仅独立组件，完整L3仍未完成。",
       "legacy_hash": "b3dba935a5e0f2dc058aa3660993c2ae93ab387b9a21907c8e6d9b4b6709c6d6",
       "claimed_by": "claude-mcp-c338b58c099f4f05",
-      "claimed_at": "2026-10-18T15:13:27+00:00"
+      "claimed_at": "2026-10-18T15:13:27+00:00",
+      "integration_note": "已完成真实文件集成：验收字节复制.dg/.md到code/lang/bootstrap，同名永久test_bootstrap_nasm_*.py仅适配主线/产物路径。实际从code运行两模块8项定向测试，通过0skip、0error，13.907秒，生产/测试/关联lang/dongc与decimal_integer前后SHA256稳定；ELF64/COFF组装、debug/release原生语义/guard/坏Dong断言保留。逐文件映射、完整log/result在coordination/dongos_works/.local/reviews/C30-C32-review/。C31因197>192缺陷单独退回R1，未集成；完整L3后端/CLI及自举未完成。"
     },
     {
       "id": "claude:C31",
@@ -1039,8 +1064,8 @@
       "owner": "claude",
       "title": "固定寄存器除法异常门禁分支",
       "description": "module bootstrap.nasm_division_guard。\npub unsafe fn emit(signed:bool,zero_target:u64,overflow_target:u64,success_target:u64,out:[]u8,written:*usize)u64。\n运行时输入与CR19一致：RDI被除数、RSI除数；只允许RAX/flags作scratch，RDI/RSI及其它寄存器保留。此任务生成除法前的CFG门禁，不执行除法、panic、不实现错误码策略，不修改Cursor CR19的已过门禁除余内核。依赖仅CR4，不导入尚在验收中的CR19实现。\n三target均必须小于u64::MAX（即使unsigned时overflow_target未使用也验证）；允许目标相同，由上游定义相应块。标签严格__dong_b+CR4无符号十进制，无前导零；只发射以下分支文本，所有\\n为真实LF，没有标签定义/section/global/额外空行。\nunsigned严格3行：\"test rsi, rsi\\njz __dong_b<zero>\\njmp __dong_b<success>\\n\"。\nsigned严格8行：\"test rsi, rsi\\njz __dong_b<zero>\\ncmp rsi, -1\\njne __dong_b<success>\\nmov rax, 0x8000000000000000\\ncmp rdi, rax\\nje __dong_b<overflow>\\njmp __dong_b<success>\\n\"。\n这些分支保证zero→除零块，signed MIN/-1→溢出块，其它→成功块；signed比较MIN必须用完整64位常量，不能用x86不支持的cmp r64,imm64替代。不承担余数特别规则/完整语言lowering，调用方在success块接CR19并定义各目标。\n独立Python判定分支分类；少量正常/零除数/MIN/-1/MIN/1/MAX/-1/unsigned MAX及高位位模式，三target0/高位/MAX-1、NONE非法（含容量0）及完整描述符/别名预检。双模式实际Dong发射后，独立NASM为三个目标定义不同返回marker，只观察路由与受控输入寄存器保留，不执行IDIV/DIV，因此异常输入也不会产生硬件异常。本项固定寄存器，不要求16寄存器矩阵，主要向量至多24。\n至少一份真实坏Dong颠倒MIN检测等，在上述marker夹具正常返回错误块标记并由分类拒绝；另容量失败提前写负控。不得用执行非法除法的崩溃冒充语义拒绝，生产算法与负控仍由本人Dong实现。\n\n## 共用固定契约与归属\n\n这是L3真实后端所需的独立Dong文本发射组件，不能代替完整代码生成/语言溢出检查/自举。源码必须Dong，不导出C符号，不用Python/C宿主实现代替生产逻辑；无分配、全局可变状态或OS调用。仅修改本人本任务4个授权文件，依赖只读，绝不改code/lang、活动编译器、内核、协调器、CR11或Codex语义主线。\n\n寄存器编号0..15固定rax,rcx,rdx,rbx,rsp,rbp,rsi,rdi,r8,r9,r10,r11,r12,r13,r14,r15；其它编号INVALID。32位名eax,ecx,edx,ebx,esp,ebp,esi,edi,r8d..r15d；16位ax,cx,dx,bx,sp,bp,si,di,r8w..r15w；低8位al,cl,dl,bl,spl,bpl,sil,dil,r8b..r15b，不支持ah等高8位。严格ASCII和单字节LF，除任务另定的块标签外，不含section/global/注释/额外空行/NUL；本任务规定几行就精确几行，成功尾部不变。\n\nunsafe调用方保证对象真实可访问。仍必须在任何读写前检查written非空、8对齐、完整8字节端点不溢出；out完整描述符端点/非空非NULL；written完整8字节与完整声明out不重叠（包括输出未使用尾部）。空out可NULL。OK=0、INVALID=1、CAPACITY=2，所有参数/枚举/位移/描述符INVALID优先CAPACITY；失败out和written全文不变。先验证/计算，在局部暂存调用只读组件，最后一次写用户out；不得通过只看已用前缀逃过完整别名。长度加法不溢出。\n\n测试要让每个目标预检独立可达：其它字段合法，真实guard/快照初始化后再取。written端点溢出使用8对齐UINT64_MAX-7和合法空out，正确INVALID，漏检坏实现返回CAPACITY，不能非法解引用；NULL/奇地址、out端点、对齐前缀/尾部别名、参数INVALID且out容量0亦独立覆盖。失败全文/双端guard、成功精确文本/计数/剩余尾部立即检查。C观察器对齐存储明确声明，不能用另一个非法字段掩盖目标。\n\n测试实际编译、链接、原生执行Dong debug/release，NASM ELF64/COFF都组装。只暂存本组件和声明的已集成依赖，含坏源码时不引入整个lang根遮蔽临时模块。独立Python/C期望；有限固定边界优先、无需随机堆矩阵。文本/组装覆盖全部16个寄存器（可旋转配对，不要求全笛卡尔积）；受控原生仅用安全调用者保存寄存器的少量组合（每模式不超过24个主要向量），保留宿主ABI/栈，rsp/rbp写目标只组装。COFF组装不等于Win64 ABI可调用，原生C桥显式SysV。\n\n至少两类真实坏Dong成功编译/链接/原生执行，再由指定数值/原子性断言拒绝；同一夹具先跑好实现。至少一类是原生实际结果错误，另一类容量失败提前写输出/计数，以全文/guard立即拒绝；若任务另定两类语义负控，则另保留一次原子性验证。构建失败、崩溃、超时、文本不同或无关预检错误不得冒充指定原生负控。坏源码执行的目标输入必须合法且不导致非法内存/栈访问。\n\n先通过自己的worker MCP get_task/read_document读取最新rev、完整契约、依赖和归属，claim后执行。只运行本任务声明的定向测试，产物放本人works/build/编号/<唯一目录>/；无OS/VM/全回归/性能基准/定时器/关机/提交/推送，不启动模型CLI。客户端手动执行；完成后落盘原编号交付并通过MCP submit，不能自行accept/integrate。交付列真实命令、tests/skip、模式/对象格式、生产/测试SHA256、产物目录、每种负控实际观察/拒绝原因和未运行/剩余限制。依赖或归属问题先报告，不擅自扩大范围。",
-      "status": "submitted",
-      "rev": 3,
+      "status": "integrated",
+      "rev": 10,
       "write_paths": [
         "claude-works/src/bootstrap/nasm_division_guard.dg",
         "claude-works/src/bootstrap/nasm_division_guard.md",
@@ -1057,16 +1082,41 @@
       "auto_verify": false,
       "complexity": "standard",
       "created_at": "2026-10-18T15:11:21+00:00",
-      "updated_at": "2026-10-18T15:18:15+00:00",
+      "updated_at": "2026-10-18T15:33:12+00:00",
       "historical": false,
       "document": "claude-works/tasks/C31-board.md",
       "delivery": "claude-works/deliveries/C31.md",
       "candidate": null,
-      "verification": null,
-      "review_note": "",
+      "verification": {
+        "passed": true,
+        "checks": [
+          {
+            "spec": "discover:claude-works/tests:test_nasm_division_guard.py",
+            "passed": true,
+            "tests": 5,
+            "skips": 0,
+            "returncode": 0,
+            "cancelled": false,
+            "timed_out": false,
+            "elapsed_seconds": 10.391
+          }
+        ],
+        "source_stable": true,
+        "fingerprint": {
+          "claude-works/src/bootstrap/nasm_division_guard.dg": "39d39492c42f584da0eaa7122d1618acebc3c4ceadaf0f3ad9c818fa5d7f7b3d",
+          "claude-works/src/bootstrap/nasm_division_guard.md": "ec31eb376b1ded4124d3a2da08b0f9cf6578ed7645b2431d482c9662167d5c25",
+          "claude-works/tests/test_nasm_division_guard.py": "e1033d7e5583ac4f00bf85888db470e66fd1a3395c5c28bec391c26d15d38ef2",
+          "claude-works/deliveries/C31.md": "4f350152b175936d4e112f65425c15d406420071a46ebce9569969370e0f563a"
+        },
+        "summary": "定向复验通过，等待源码/契约审查",
+        "finished_at": "2026-10-18T15:30:57+00:00",
+        "job": "6afdba1c152e4b83b665145186d31f13"
+      },
+      "review_note": "R1独立复验闭合。正式job 6afdba1c152e4b83b665145186d31f13实际5项通过0skip、source_stable=true；生产局部224>=signed最大197/unsigned79，正确逐行长度推导，未缩窄接口或改变预检。独立再跑5项0skip、8.779s，合法三20位目标（相同/互异）×cap197/206/196/0×debug/release共16次二进制重放全部exit0、stderr空：足够容量OK written197精确文本，少1/0 CAPACITY且完整guard/原子性不变。旧192坏体panic仅作历史缺陷回归敏感性，不替代原正常执行错误路由与提前写负控；两者保留有效。说明/测试/交付/hash均审查稳定，R1闭合。见reviews/2026-10-18-C31-independent.md追加段。",
       "legacy_hash": "82a24cb0d8b723023c253b09c2cc09d0dd2c2740a87be89586f672ade239994f",
       "claimed_by": "claude-mcp-c338b58c099f4f05",
-      "claimed_at": "2026-10-18T15:16:02+00:00"
+      "claimed_at": "2026-10-18T15:27:11+00:00",
+      "integration_note": "R1实物已按验收hash复制nasm_division_guard.dg/.md到code/lang/bootstrap，新增永久test_bootstrap_nasm_division_guard.py仅适配主线与唯一产物路径。实际从code运行主线5项全部通过0skip/0错误，7.140秒；源/说明/永久测试/decimal_integer及编译器输入SHA256前后稳定。保留debug/release、ELF64/COFF、24路由向量、长标签精确/容量边界和原语义/原子性坏Dong。映射、正式回执、完整mainline.log/mainline-result.json及16次独立重放复制证据在coordination/dongos_works/.local/reviews/C31-R1-review/。原197>192缺陷闭合；本批C30/C31/C32均真实集成，合计主线13个不同组件测试0skip通过，完整L3/CLI/自举仍未完成。"
     },
     {
       "id": "claude:C32",
@@ -1074,8 +1124,8 @@
       "owner": "claude",
       "title": "固定寄存器字节复制与清零发射",
       "description": "module bootstrap.nasm_memory_intrinsic。\npub const COPY:u64=0;pub const ZERO:u64=1;\npub unsafe fn emit(operation:u64,out:[]u8,written:*usize)u64。\noperation仅0/1，其它INVALID且优先CAPACITY。COPY严格一行\"rep movsb\\n\"；ZERO严格两行\"xor eax, eax\\nrep stosb\\n\"。固定运行时输入RDI=目的指针、RCX=字节数，COPY另RSI=源指针；调用方保证DF=0、真实区间可访问，COPY源目的不重叠（不是memmove），对象边界/生命周期及语言检查由上游负责。\n执行后COPY将RCX归0、RDI/RSI各前移原count，RAX与其余寄存器和flags保持；ZERO将RCX归0、RDI前移count，RAX=0，RSI与其余寄存器保持，算术flags按xor允许改变，DF仍须0。count=0不访问源目的内存，COPY时指针保持、ZERO仍先清RAX。此为内存内建后端发射，不重写已验收D1标准库，也不修改当前活动编译器内建lowering。\n本项固定寄存器，无16寄存器矩阵。有限实际原生向量含count0/1/7/8/15/16/31/64/65的选定组合，≤24/模式；输入/输出前后guard及完整非目标字节核对，COPY源完整快照且实际只读保护成功，ZERO目的预填非零；捕获RCX/RSI/RDI/RAX及其它受控寄存器，对count0以NULL源/目的执行（不额外解引用）并检查无访问。独立字节数组期望。SysV桩建立DF=0并保留宿主callee-saved，返回时满足宿主ABI；ELF64/COFF均组装。\n真实坏Dong将COPY发成rep stosb，先给AL独立非匹配哨兵，目标区大小充足，必须正常执行后由复制字节不符拒绝；保留真实好体先在同一夹具通过。另文本out容量不足提前写的原子性负控；错误实现不能访问真实宿主栈、制造越界/只读写崩溃或用无关预检失败代替语义拒绝。\n\n## 共用固定契约与归属\n\n这是L3真实后端所需的独立Dong文本发射组件，不能代替完整代码生成/语言溢出检查/自举。源码必须Dong，不导出C符号，不用Python/C宿主实现代替生产逻辑；无分配、全局可变状态或OS调用。仅修改本人本任务4个授权文件，依赖只读，绝不改code/lang、活动编译器、内核、协调器、CR11或Codex语义主线。\n\n寄存器编号0..15固定rax,rcx,rdx,rbx,rsp,rbp,rsi,rdi,r8,r9,r10,r11,r12,r13,r14,r15；其它编号INVALID。32位名eax,ecx,edx,ebx,esp,ebp,esi,edi,r8d..r15d；16位ax,cx,dx,bx,sp,bp,si,di,r8w..r15w；低8位al,cl,dl,bl,spl,bpl,sil,dil,r8b..r15b，不支持ah等高8位。严格ASCII和单字节LF，除任务另定的块标签外，不含section/global/注释/额外空行/NUL；本任务规定几行就精确几行，成功尾部不变。\n\nunsafe调用方保证对象真实可访问。仍必须在任何读写前检查written非空、8对齐、完整8字节端点不溢出；out完整描述符端点/非空非NULL；written完整8字节与完整声明out不重叠（包括输出未使用尾部）。空out可NULL。OK=0、INVALID=1、CAPACITY=2，所有参数/枚举/位移/描述符INVALID优先CAPACITY；失败out和written全文不变。先验证/计算，在局部暂存调用只读组件，最后一次写用户out；不得通过只看已用前缀逃过完整别名。长度加法不溢出。\n\n测试要让每个目标预检独立可达：其它字段合法，真实guard/快照初始化后再取。written端点溢出使用8对齐UINT64_MAX-7和合法空out，正确INVALID，漏检坏实现返回CAPACITY，不能非法解引用；NULL/奇地址、out端点、对齐前缀/尾部别名、参数INVALID且out容量0亦独立覆盖。失败全文/双端guard、成功精确文本/计数/剩余尾部立即检查。C观察器对齐存储明确声明，不能用另一个非法字段掩盖目标。\n\n测试实际编译、链接、原生执行Dong debug/release，NASM ELF64/COFF都组装。只暂存本组件和声明的已集成依赖，含坏源码时不引入整个lang根遮蔽临时模块。独立Python/C期望；有限固定边界优先、无需随机堆矩阵。文本/组装覆盖全部16个寄存器（可旋转配对，不要求全笛卡尔积）；受控原生仅用安全调用者保存寄存器的少量组合（每模式不超过24个主要向量），保留宿主ABI/栈，rsp/rbp写目标只组装。COFF组装不等于Win64 ABI可调用，原生C桥显式SysV。\n\n至少两类真实坏Dong成功编译/链接/原生执行，再由指定数值/原子性断言拒绝；同一夹具先跑好实现。至少一类是原生实际结果错误，另一类容量失败提前写输出/计数，以全文/guard立即拒绝；若任务另定两类语义负控，则另保留一次原子性验证。构建失败、崩溃、超时、文本不同或无关预检错误不得冒充指定原生负控。坏源码执行的目标输入必须合法且不导致非法内存/栈访问。\n\n先通过自己的worker MCP get_task/read_document读取最新rev、完整契约、依赖和归属，claim后执行。只运行本任务声明的定向测试，产物放本人works/build/编号/<唯一目录>/；无OS/VM/全回归/性能基准/定时器/关机/提交/推送，不启动模型CLI。客户端手动执行；完成后落盘原编号交付并通过MCP submit，不能自行accept/integrate。交付列真实命令、tests/skip、模式/对象格式、生产/测试SHA256、产物目录、每种负控实际观察/拒绝原因和未运行/剩余限制。依赖或归属问题先报告，不擅自扩大范围。",
-      "status": "in_progress",
-      "rev": 2,
+      "status": "integrated",
+      "rev": 6,
       "write_paths": [
         "claude-works/src/bootstrap/nasm_memory_intrinsic.dg",
         "claude-works/src/bootstrap/nasm_memory_intrinsic.md",
@@ -1090,16 +1140,260 @@
       "auto_verify": false,
       "complexity": "standard",
       "created_at": "2026-10-18T15:11:21+00:00",
-      "updated_at": "2026-10-18T15:18:16+00:00",
+      "updated_at": "2026-10-18T15:26:16+00:00",
       "historical": false,
       "document": "claude-works/tasks/C32-board.md",
       "delivery": "claude-works/deliveries/C32.md",
       "candidate": null,
-      "verification": null,
-      "review_note": "",
+      "verification": {
+        "passed": true,
+        "checks": [
+          {
+            "spec": "discover:claude-works/tests:test_nasm_memory_intrinsic.py",
+            "passed": true,
+            "tests": 4,
+            "skips": 0,
+            "returncode": 0,
+            "cancelled": false,
+            "timed_out": false,
+            "elapsed_seconds": 7.407
+          }
+        ],
+        "source_stable": true,
+        "fingerprint": {
+          "claude-works/src/bootstrap/nasm_memory_intrinsic.dg": "d4c68b1faa86c10951e4b923d72e8d68e00250282009f5ad7df4e5d6f165a05f",
+          "claude-works/src/bootstrap/nasm_memory_intrinsic.md": "da15b4a1374d0d72ae2a4e31181b01d593538117f7792aa574b6113720cf83c2",
+          "claude-works/tests/test_nasm_memory_intrinsic.py": "4251ad8dbea0286e9696df0d6aa363c1c0533aaff53e01e1e8350e4290e58e14",
+          "claude-works/deliveries/C32.md": "fc0b8c24055dc222203e06a68295b76bbd40e89803b9585ab1996b8d977df1c3"
+        },
+        "summary": "定向复验通过，等待源码/契约审查",
+        "finished_at": "2026-10-18T15:23:54+00:00",
+        "job": "f0007b21fd7f4e5cae4f7472eaa2e976"
+      },
+      "review_note": "独立审查生产Dong、完整C32任务契约和全部原生测试/坏Dong路径；正式job f0007b21fd7f4e5cae4f7472eaa2e976 实际4项通过0skip、source_stable=true。COPY/ZERO精确文本，全部预检在写用户out/written前完成；局部32足够，完整声明out尾部别名与8字节written端点独立可达。debug/release各18向量原生核对count0的NULL指针、count1..65、只读源保护实际成功、目的全文/guard、寄存器和flags；COPY改STOSB正常执行后按字节拒绝、提前写按原子性拒绝。ELF64/COFF组装通过。未发现阻塞缺陷；仅组件验收，DF/区间/不重叠由上游保证。",
       "legacy_hash": "060ee92ce606963303a28abae8a44a08e4c7c9c3820cf1aa339d50370be5b204",
       "claimed_by": "claude-mcp-c338b58c099f4f05",
-      "claimed_at": "2026-10-18T15:18:16+00:00"
+      "claimed_at": "2026-10-18T15:18:16+00:00",
+      "integration_note": "已完成真实文件集成：验收字节复制.dg/.md到code/lang/bootstrap，同名永久test_bootstrap_nasm_*.py仅适配主线/产物路径。实际从code运行两模块8项定向测试，通过0skip、0error，13.907秒，生产/测试/关联lang/dongc与decimal_integer前后SHA256稳定；ELF64/COFF组装、debug/release原生语义/guard/坏Dong断言保留。逐文件映射、完整log/result在coordination/dongos_works/.local/reviews/C30-C32-review/。C31因197>192缺陷单独退回R1，未集成；完整L3后端/CLI及自举未完成。"
+    },
+    {
+      "id": "claude:C33",
+      "number": "C33",
+      "owner": "claude",
+      "title": "复用消环规划的8槽GPR并行复制发射",
+      "description": "\nmodule bootstrap.nasm_parallel_copy。\npub unsafe fn emit(moves:[]const parallel_moves.Move,out:[]u8,written:*usize)u64。\n固定8个值槽依序[rax,rcx,rdx,rsi,rdi,r8,r9,r10]，Move.dst/src是槽号0..7而非全局寄存器编号。temp槽8固定R11，R11不能出现在输入；RSP/RBP/callee-saved不在映射。本项按固定8槽覆盖，替代共用16寄存器矩阵要求。最多8个输入，重复dst非法（含重复自复制），重复src合法，self按C9消除；空输入/全self OK written0不写out。除有dst值槽及scratchR11外全部GPR和flags保持，R11最终值不规定。\n真实复用已集成C9 schedule(moves,8,local_moves16,local_work8,&used)，不得重写消环算法；按其确定顺序逐步调用已集成CR14 nasm_integer_cast.emit(destreg,srcreg,64,false,local,&n)，精确拼接MOV行，无内部标签/额外文本。仅暂存这两依赖。最多8非self+4非平凡环=12步；每MOV行最长13字节，192字节充分（或按C9通式16步*13用256局部），必须在说明写出真实长度证明，不能盲沿magic number。局部所有依赖调用及总长检查完成后最后一次发布用户out。\nmoves完整16字节元素描述符：8对齐、len乘法/端点不溢出、非空非NULL；输入完整区间不能与完整out/written重叠，输入只读；written完整8字节/对齐/端点和out规则同共约。moves.len>8、越界槽、重复dst INVALID先于容量。所有失败输入/out/written全文不变。\n原生有限<=12主要向量/模式：空、无环链、交换、3环、两独立环、fanout、全self、覆盖8槽。捕获全部8个真实初始值，用独立Python旧值快照并行赋值核对完整8槽，种子彼此不同且高32位非零；观察flags、callee-saved和栈。捕获前不得用RAX/RDX/R11作观察临时值遮蔽结果（可用保存好的callee-saved指针且先恢复宿主ABI）。\n真实坏Dong把temp映射R10等合法寄存器而非R11，选含该槽且交换/环的向量，须成功编译/链接/正常执行后由完整槽值拒绝；不能只对文本。另容量提前写原子性负控。原生输入只读保护实际成功、全输入快照、最多8Moves和非法9/槽8/重复dst、完整前缀/尾部别名、端点各独立可达，debug/release与ELF64/COFF。先完成已领取/返修C31 R1，再领取新项。\n\n## 共用固定契约与归属\n\n这是L3真实后端所需的独立Dong文本发射组件，不能代替完整代码生成/语言溢出检查/自举。源码必须Dong，不导出C符号，不用Python/C宿主实现代替生产逻辑；无分配、全局可变状态或OS调用。仅修改本人本任务4个授权文件，依赖只读，绝不改code/lang、活动编译器、内核、协调器、CR11或Codex语义主线。\n\n寄存器编号0..15固定rax,rcx,rdx,rbx,rsp,rbp,rsi,rdi,r8,r9,r10,r11,r12,r13,r14,r15；其它编号INVALID。32位名eax,ecx,edx,ebx,esp,ebp,esi,edi,r8d..r15d；16位ax,cx,dx,bx,sp,bp,si,di,r8w..r15w；低8位al,cl,dl,bl,spl,bpl,sil,dil,r8b..r15b，不支持ah等高8位。严格ASCII和单字节LF，除任务另定的块标签外，不含section/global/注释/额外空行/NUL；本任务规定几行就精确几行，成功尾部不变。\n\nunsafe调用方保证对象真实可访问。仍必须在任何读写前检查written非空、8对齐、完整8字节端点不溢出；out完整描述符端点/非空非NULL；written完整8字节与完整声明out不重叠（包括输出未使用尾部）。空out可NULL。OK=0、INVALID=1、CAPACITY=2，所有参数/枚举/位移/描述符INVALID优先CAPACITY；失败out和written全文不变。先验证/计算，在局部暂存调用只读组件，最后一次写用户out；不得通过只看已用前缀逃过完整别名。长度加法不溢出。\n\n测试要让每个目标预检独立可达：其它字段合法，真实guard/快照初始化后再取。written端点溢出使用8对齐UINT64_MAX-7和合法空out，正确INVALID，漏检坏实现返回CAPACITY，不能非法解引用；NULL/奇地址、out端点、对齐前缀/尾部别名、参数INVALID且out容量0亦独立覆盖。失败全文/双端guard、成功精确文本/计数/剩余尾部立即检查。C观察器对齐存储明确声明，不能用另一个非法字段掩盖目标。\n\n测试实际编译、链接、原生执行Dong debug/release，NASM ELF64/COFF都组装。只暂存本组件和声明的已集成依赖，含坏源码时不引入整个lang根遮蔽临时模块。独立Python/C期望；有限固定边界优先、无需随机堆矩阵。文本/组装覆盖全部16个寄存器（可旋转配对，不要求全笛卡尔积）；受控原生仅用安全调用者保存寄存器的少量组合（每模式不超过24个主要向量），保留宿主ABI/栈，rsp/rbp写目标只组装。COFF组装不等于Win64 ABI可调用，原生C桥显式SysV。\n\n至少两类真实坏Dong成功编译/链接/原生执行，再由指定数值/原子性断言拒绝；同一夹具先跑好实现。至少一类是原生实际结果错误，另一类容量失败提前写输出/计数，以全文/guard立即拒绝；若任务另定两类语义负控，则另保留一次原子性验证。构建失败、崩溃、超时、文本不同或无关预检错误不得冒充指定原生负控。坏源码执行的目标输入必须合法且不导致非法内存/栈访问。\n\n先通过自己的worker MCP get_task/read_document读取最新rev、完整契约、依赖和归属，claim后执行。只运行本任务声明的定向测试，产物放本人works/build/编号/<唯一目录>/；无OS/VM/全回归/性能基准/定时器/关机/提交/推送，不启动模型CLI。客户端手动执行；完成后落盘原编号交付并通过MCP submit，不能自行accept/integrate。交付列真实命令、tests/skip、模式/对象格式、生产/测试SHA256、产物目录、每种负控实际观察/拒绝原因和未运行/剩余限制。依赖或归属问题先报告，不擅自扩大范围。",
+      "status": "rework",
+      "rev": 5,
+      "write_paths": [
+        "claude-works/src/bootstrap/nasm_parallel_copy.dg",
+        "claude-works/src/bootstrap/nasm_parallel_copy.md",
+        "claude-works/tests/test_nasm_parallel_copy.py",
+        "claude-works/deliveries/C33.md"
+      ],
+      "depends_on": [
+        "claude:C9",
+        "cursor:CR14"
+      ],
+      "checks": [
+        "discover:claude-works/tests:test_nasm_parallel_copy.py"
+      ],
+      "auto_dispatch": false,
+      "auto_verify": false,
+      "complexity": "standard",
+      "created_at": "2026-10-18T15:29:24+00:00",
+      "updated_at": "2026-10-18T15:55:11+00:00",
+      "historical": false,
+      "document": "claude-works/tasks/C33-board.md",
+      "delivery": "claude-works/deliveries/C33.md",
+      "candidate": null,
+      "verification": null,
+      "review_note": "R1有限返修测试，生产暂未发现功能缺陷。正式及独立4项0skip通过，但HARNESS.invalid case10/11声明8Moves尾部别名，仅m0/m1合法，m2..7为0xA5非法槽；prefix-only真实坏Dong把input别名只看前32字节，在debug/release仍通过原全部14预检，独立用8合法Moves时正式体正确INVALID/全文不变、坏体分别OK改输入或CAPACITY，均正常安全原生执行证明目标检查漏检。另当前9Moves重复dst+cap0由len>8遮蔽，需补2Moves重复dst+cap0独立夹具。证据reviews/2026-10-18-C33-independent.md，临时产物C:/Users/cdh/AppData/Local/Temp/dongos-C33-independent-so8c8aaz。仅原4文件修正快照前初始化全部8合法Move、使written与out输入尾部别名独立可达，补上述重复优先CAPACITY用例并让prefix-only坏体准确拒绝；保留原8槽数值/环、flags/栈/只读输入、真实语义/提前写负控。无需改算法/接口，不抢其它文件，更新说明交付MCP重提后独立复验。未验收未集成。",
+      "legacy_hash": "e8cfa1dbe679bdea03fe3095d885b23897c1df893137c3932ea4d113dcced86b",
+      "claimed_by": "claude-mcp-c338b58c099f4f05",
+      "claimed_at": "2026-10-18T15:37:42+00:00"
+    },
+    {
+      "id": "claude:C34",
+      "number": "C34",
+      "owner": "claude",
+      "title": "从固定帧槽建立SysV整数调用实参",
+      "description": "\nmodule bootstrap.nasm_sysv_call_args。\npub struct Result{pub written:usize,pub stack_bytes:usize} //16字节8对齐\npub unsafe fn setup(kinds:[]const u8,source_offsets:[]const usize,out:[]u8,result:*Result)u64。\npub unsafe fn cleanup(stack_bytes:usize,out:[]u8,written:*usize)u64。\nkinds同C8：0单字标量、1两个INTEGER字聚合，其它INVALID；最多16参数且展开总字数<=16。source_offsets.len必须等于展开字数，每项8..4096且8倍数，可重复，指已规范化64位值在[rbp-offset]。不支持寄存器源/立即数/窄扩展/sret/SSE/varargs/Win64。不发射call或callee符号、不依赖C33。运行时上游保证rbp稳定且全部源8字节槽含于[rsp_before,rbp)已分配帧（允许槽首地址等于rsp_before），建立前rsp%16=0；新出栈参数区在rsp_before以下，与源槽分离。文本生成期间不访问这些运行时地址。\nsetup在局部Location[16]和Result实际调用已集成C8 plan，不重写ABI规划；out顺序严格：stack_bytes>0先\"sub rsp, <bytes>\\n\"；按展开字原顺序输出所有STACK项，每项\"mov rax, qword <source>\\nmov qword <dest>, rax\\n\"；再按展开字原顺序输出REGISTER项，每项\"mov <argreg>, qword <source>\\n\"。source必须复用CR8.encode(5,-offset)，dest复用CR8.encode(4,location.index)，argreg按C8 index0..5映射rdi,rsi,rdx,rcx,r8,r9。两个数字/sub字节复用CR4。先所有栈后寄存器避免scratch覆盖已装实参；只尾部padding，不输出padding写入。若无STACK项RAX保持；有STACK项允许RAX变；仅实参目的寄存器、RSP/flags按指令改变，其它GPR保持。空输入OK result两字段0，不写out。本项固定集合替代共用16寄存器矩阵。\ncleanup仅接受0..128且16倍数，其它INVALID先于容量；0时OK written0无文本；正值精确\"add rsp, <bytes>\\n\"（CR4十进制），仅RSP/flags改变。上游只传同次setup返回stack_bytes，不恢复实参/RAX或擦除栈数据。\nsetup使用完整16字节result（此点覆盖共约written8，仅cleanup用written8）：非NULL/8对齐/完整端点；kinds字节描述符、offsets usize数组8对齐及乘法/端点、完整out全部有效；输入彼此可重叠（均只读），但任何完整输入区间与out/result不重叠，out/result互不重叠。INVALID数据全部先于CAPACITY，失败out和完整result不变且输入不变。成功尾部不变。最多16字，每字两行保守55字节、sub至多13字节总<=893，2048局部充分；必须准确论证边界，不允许局部越界后panic。局部依赖/完整算长通过再发布。\n原生<=12主要向量/模式：空/1/6/7/8/16标量，5标量+1双字+1标量（聚合整体落栈且末标量R9），6标量+双字，重复offset；含offset8/4096与16words最大文本。安全SysV NASM callee入口捕获6参数GPR、实际栈参数和rsp%16，cleanup后核对精确rsp恢复、源槽/周边guard/padding/callee-saved保持；不要用C自行重排调用参数。独立Python ABI oracle核对每字/rounded stack_bytes，不以C8输出当唯一期望。marker或观察器不能覆盖尚未捕获参数。\n真实坏Dong将第一个栈槽0改8，用7标量（已分配16字节出栈区含padding）或更大安全区域确保正常原生执行，由callee入口第一栈参数错误拒绝，不能破坏ret/宿主帧或将崩溃当成功；另setup与cleanup容量提前写原子性负控。声明kinds与offsets输入实际只读保护成功；完整Result尾部别名/端点、offset描述符/非法值、words越界、容量精确/少1/0/成功尾部、空输入均独立覆盖，debug/release与ELF64/COFF。先完成已领取/返修C31 R1，再领取新项。\n\n## 共用固定契约与归属\n\n这是L3真实后端所需的独立Dong文本发射组件，不能代替完整代码生成/语言溢出检查/自举。源码必须Dong，不导出C符号，不用Python/C宿主实现代替生产逻辑；无分配、全局可变状态或OS调用。仅修改本人本任务4个授权文件，依赖只读，绝不改code/lang、活动编译器、内核、协调器、CR11或Codex语义主线。\n\n寄存器编号0..15固定rax,rcx,rdx,rbx,rsp,rbp,rsi,rdi,r8,r9,r10,r11,r12,r13,r14,r15；其它编号INVALID。32位名eax,ecx,edx,ebx,esp,ebp,esi,edi,r8d..r15d；16位ax,cx,dx,bx,sp,bp,si,di,r8w..r15w；低8位al,cl,dl,bl,spl,bpl,sil,dil,r8b..r15b，不支持ah等高8位。严格ASCII和单字节LF，除任务另定的块标签外，不含section/global/注释/额外空行/NUL；本任务规定几行就精确几行，成功尾部不变。\n\nunsafe调用方保证对象真实可访问。仍必须在任何读写前检查written非空、8对齐、完整8字节端点不溢出；out完整描述符端点/非空非NULL；written完整8字节与完整声明out不重叠（包括输出未使用尾部）。空out可NULL。OK=0、INVALID=1、CAPACITY=2，所有参数/枚举/位移/描述符INVALID优先CAPACITY；失败out和written全文不变。先验证/计算，在局部暂存调用只读组件，最后一次写用户out；不得通过只看已用前缀逃过完整别名。长度加法不溢出。\n\n测试要让每个目标预检独立可达：其它字段合法，真实guard/快照初始化后再取。written端点溢出使用8对齐UINT64_MAX-7和合法空out，正确INVALID，漏检坏实现返回CAPACITY，不能非法解引用；NULL/奇地址、out端点、对齐前缀/尾部别名、参数INVALID且out容量0亦独立覆盖。失败全文/双端guard、成功精确文本/计数/剩余尾部立即检查。C观察器对齐存储明确声明，不能用另一个非法字段掩盖目标。\n\n测试实际编译、链接、原生执行Dong debug/release，NASM ELF64/COFF都组装。只暂存本组件和声明的已集成依赖，含坏源码时不引入整个lang根遮蔽临时模块。独立Python/C期望；有限固定边界优先、无需随机堆矩阵。文本/组装覆盖全部16个寄存器（可旋转配对，不要求全笛卡尔积）；受控原生仅用安全调用者保存寄存器的少量组合（每模式不超过24个主要向量），保留宿主ABI/栈，rsp/rbp写目标只组装。COFF组装不等于Win64 ABI可调用，原生C桥显式SysV。\n\n至少两类真实坏Dong成功编译/链接/原生执行，再由指定数值/原子性断言拒绝；同一夹具先跑好实现。至少一类是原生实际结果错误，另一类容量失败提前写输出/计数，以全文/guard立即拒绝；若任务另定两类语义负控，则另保留一次原子性验证。构建失败、崩溃、超时、文本不同或无关预检错误不得冒充指定原生负控。坏源码执行的目标输入必须合法且不导致非法内存/栈访问。\n\n先通过自己的worker MCP get_task/read_document读取最新rev、完整契约、依赖和归属，claim后执行。只运行本任务声明的定向测试，产物放本人works/build/编号/<唯一目录>/；无OS/VM/全回归/性能基准/定时器/关机/提交/推送，不启动模型CLI。客户端手动执行；完成后落盘原编号交付并通过MCP submit，不能自行accept/integrate。交付列真实命令、tests/skip、模式/对象格式、生产/测试SHA256、产物目录、每种负控实际观察/拒绝原因和未运行/剩余限制。依赖或归属问题先报告，不擅自扩大范围。",
+      "status": "rework",
+      "rev": 5,
+      "write_paths": [
+        "claude-works/src/bootstrap/nasm_sysv_call_args.dg",
+        "claude-works/src/bootstrap/nasm_sysv_call_args.md",
+        "claude-works/tests/test_nasm_sysv_call_args.py",
+        "claude-works/deliveries/C34.md"
+      ],
+      "depends_on": [
+        "claude:C8",
+        "cursor:CR4",
+        "cursor:CR8"
+      ],
+      "checks": [
+        "discover:claude-works/tests:test_nasm_sysv_call_args.py"
+      ],
+      "auto_dispatch": false,
+      "auto_verify": false,
+      "complexity": "standard",
+      "created_at": "2026-10-18T15:29:24+00:00",
+      "updated_at": "2026-10-18T15:54:46+00:00",
+      "historical": false,
+      "document": "claude-works/tasks/C34-board.md",
+      "delivery": "claude-works/deliveries/C34.md",
+      "candidate": null,
+      "verification": null,
+      "review_note": "R1有限返修测试，生产未见功能缺陷。正式4项0skip通过但HARNESS.invalid case11 kinds16/offsets2且仅前2kind初始化、case13/15 kinds2/offsets16，目标别名被非法kind/字数不匹配掩盖。独立三选择性坏Dong（删kinds-Result、offsets-Result/out仅检查前16字节）两模式共6次原28预检全部正常通过；临时修正三例为16合法scalar+16合法offset并快照后，正式体两模式通过，坏体各被case11/13/15准确拒绝（正常exit93，CAPACITY2应为INVALID1）。证据 reviews/2026-10-18-C34-independent.md及.local/reviews/C33-C34-CR20-CR23-review/C34-alias-mutants.json、claude-works/build/C34/run-96c523642393/。仅原4文件修正这3个预检使其它字段全合法、完整别名独立可达，并保留/增加三选择性坏体准确原生拒绝证据；保留所有其它预检、Result第二字、12 ABI向量和原语义/提前写负控。未验收未集成，生产接口/算法不需重写；更新说明交付后MCP重提。",
+      "legacy_hash": "409d0b7667f7a09975144846c59ae14baf3688bdbdef06a544e63d54d7d89865",
+      "claimed_by": "claude-mcp-c338b58c099f4f05",
+      "claimed_at": "2026-10-18T15:41:11+00:00"
+    },
+    {
+      "id": "claude:C35",
+      "number": "C35",
+      "owner": "claude",
+      "title": "复用有序 case 规划的 i64 switch 分发链",
+      "description": "真实用途：已有 C11 只排序常量分支并查重，没有实际将运行时 selector 路由到块；本项生成可执行的有界线性分发，处理完整 i64 常量而非不可编码的 cmp r64,imm64。\n\n模块 `bootstrap.nasm_switch_dispatch`；依赖 `[claude:C11, cursor:CR9, cursor:CR4]`（均 integrated）。\n\n```text\nimport bootstrap.switch_cases as cases;\npub unsafe fn emit(input:[]const cases.Case, default_target:u64,\n out:[]u8, written:*usize)u64\n```\n\n`Case` 直接使用 C11 的 `{value:i64,label:usize}`（16 字节、8 对齐），不另改成 u64。`input.len<=16`；任一 label 或 default_target 等于 u64::MAX 为 INVALID，包含未匹配分支，允许目标重复；重复 value 无论标签是否相同都 INVALID。原 selector 在 RDI，其位模式按 i64 匹配；scratch 仅 RAX/flags，其它全部寄存器保持。空输入也必须验证 default，随后只跳 default。\n\n在局部 `Case[16]` 输出和 `Case[16]` work 中实际调用 C11 `order`；固定充足本地容量，故依赖查重在任何用户 CAPACITY 之前完成。按**signed i64 升序**输出每个 case 的三行：\n\n```text\nmov rax, <有符号规范十进制value>\ncmp rdi, rax\nje __dong_b<label>\n```\n\n第一行必须复用 CR9 `emit(0, value as u64, 64, true, local, &n)`，保证 MIN/负数/高位位模式均完整装入。最后严格 `jmp __dong_b<default>\\n`。label 数字经 CR4 无符号十进制，无前导零，不输出块定义。无除法、panic、跳表、fallthrough 或策略优化。\n\n每 case 最长 `30 + 13 + 32 = 75` 字节，末尾 jmp 最长 33；总长最多 `16*75+33=1233`。固定文本缓冲可用 **1280**，CR9 单行临时可用 40。须在注释和文档给出此界限，并测试合法长数字组合而非只测小数。\n\n验收：独立 Python `sorted`/字典匹配计算顺序及路由；无序 MIN/MAX、-1/0/1、非相邻重复、同目标不同值、空/default、16 case（含长标签）及 17 case INVALID。每模式至多 24 个主要原生 selector：16 个分别命中 + 少量不命中，NASM 用不同块 marker 正常返回，检查 RDI 及其它受控寄存器保持。全长/少 1/0/多余容量与原子性，ELF64/COFF 均组装。真实坏 Dong 将 `je` 改 `jne`，合法 selector 正常进入错误 marker，由路由拒绝；仅把排序变 unsigned 的文本差异不算语义负控。另容量失败提前写。\n\n\n## 共用固定契约与执行归属\n\n本任务是L3 Dong自举后端的独立生产组件；仅四个声明文件，Dong实现，不导出C符号（临时测试wrapper可导出），无分配、全局可变状态、OS调用。不可改code/lang、活动编译器、内核、协调器、其它负责人、在途任务或已集成依赖；既有队列/返修优先。依赖只读，只用已integrated模块；不得以宿主Python/C算法替代Dong生产逻辑。\n\n统一OK=0、INVALID=1、CAPACITY=2；接口另有Result时按任务正文完整尺寸。written非NULL、8对齐、完整8字节端点不回绕；out完整声明区间端点不回绕，非空非NULL，空可NULL。written与完整out不重叠（包括成功未使用尾部）。有输入切片/结构/嵌套名字时，必须在任何读写前验证完整描述符、元素乘法、端点、所需对齐、非空非NULL和完整对象别名；输入彼此如正文无禁止可互叠，只读输入与完整out/结果不得重叠。所有数据/枚举/标签/尺寸INVALID优先CAPACITY。失败out、计数或完整Result、输入全文不变；成功只写精确前缀/结果，尾部保持。先全预检及正确求长，在充分且有证明上界的局部区调用只读依赖，再最后发布用户out；不允许内部scratch越界或对合法容量不足输入panic。\n\n文本严格ASCII，换行真实单LF，无NUL/注释/额外空行/隐式section/global/ret（任务另定声明除外）。涉及__dong_b<N>标签时N=0..MAX-1，MAX为NONE非法；数字复用已声明decimal_integer，不另写格式化。寄存器编号若有0..15参数，固定rax,rcx,rdx,rbx,rsp,rbp,rsi,rdi,r8..r15；固定寄存器任务按正文集合测试，不强凑16矩阵。\n\n测试只跑本任务checks：实际编译/链接/原生执行Dong debug与release，NASM ELF64/COFF都组装；原生C桥显式SysV，保护宿主栈/被调用者保存寄存器。COFF组装不冒充Win64调用ABI。只暂存本模块及已声明只读依赖的传递闭包，不引入整个lang根遮蔽坏源码。独立Python/C oracle，不用生产规划器输出当唯一期望。有限固定边界，每模式不超过24个主要原生向量（并发操作另按正文有限检查）；不做全笛卡尔积或性能基准。源码、说明、测试、只读依赖前后SHA256稳定，0skip才可验收。\n\n每个描述符/端点/别名预检要独立可达，其它字段合法。written端点溢出用8对齐UINT64_MAX-7且合法空out，漏检坏体应安全返回CAPACITY而非非法解引用。初始化guard后再取快照，立刻观察失败全文/计数/guard、成功精确文本/长度/未用尾部；输入真实只读保护须检查系统调用成功，不能只声称只读。\n\n至少保留两类真实坏Dong：一种完成构建、链接、正常原生执行后，由指定数值/内存/分支/链接后地址断言拒绝；一种容量不足提前写out或结果，由完整原子性断言拒绝。同夹具先跑好体。构建失败、崩溃、超时、文本不同、无关预检错误不能冒充指定语义负控；源码中缺锁/不同内存序等结构检查单列，不能假装单次正常运行证明并发语义。坏体所有内存访问在预留安全可访问区内，不破坏真实宿主栈/ret、不依靠越界或硬件异常拒绝。\n\n本人客户端先worker MCP get_task/read_document读取最新rev和完整契约/归属，claim成功才执行；先完成已有领取/返修。产物在本人works/build/<编号>/<唯一目录>/，完成原编号交付写真实命令、tests/skips、模式/对象格式、全部输入SHA256、每种坏体实际观察/拒绝依据、未跑与剩余限制，再MCP submit。不得自行accept/integrate、提交/推送、运行OS/VM/全回归、启动模型CLI/定时器/关机，不用管理工具自动启动Cursor。任务发布不代表实现或通过，最后由Codex独立复验再验收集成。\n",
+      "status": "rework",
+      "rev": 5,
+      "write_paths": [
+        "claude-works/src/bootstrap/nasm_switch_dispatch.dg",
+        "claude-works/src/bootstrap/nasm_switch_dispatch.md",
+        "claude-works/tests/test_nasm_switch_dispatch.py",
+        "claude-works/deliveries/C35.md"
+      ],
+      "depends_on": [
+        "claude:C11",
+        "cursor:CR9",
+        "cursor:CR4"
+      ],
+      "checks": [
+        "discover:claude-works/tests:test_nasm_switch_dispatch.py"
+      ],
+      "auto_dispatch": false,
+      "auto_verify": false,
+      "complexity": "standard",
+      "created_at": "2026-10-18T15:48:15+00:00",
+      "updated_at": "2026-10-18T15:59:09+00:00",
+      "historical": false,
+      "document": "claude-works/tasks/C35-board.md",
+      "delivery": "claude-works/deliveries/C35.md",
+      "candidate": null,
+      "verification": null,
+      "review_note": "R1仅修输入尾部别名预检夹具，生产未发现缺陷。正式/独立4项0skip，C11/CR9/CR4复用、16case最长1233<1280、24selector和原正常路由/早写负控正确。HARNESS仅初始化input c0/c1，case10/11却声明16Case，其余0xa5重复value被C11判重复INVALID，掩盖完整input尾部与written/out别名。真实prefix-only坏Dong把input别名只检查前32字节，debug/release仍通过原全部15预检；独立16合法distinctCase时，正式体两尾部INVALID全文不变，坏体分别OK改输入/CAPACITY，正常安全原生证实漏检。产物C:/Users/cdh/AppData/Local/Temp/dongos-C35-independent-2mcr4915、claude-works/build/C35/run-0617cdee28cc，审查reviews/2026-10-18-C35-independent.md。仅原4文件在快照前初始化全部16合法且value不同Case，保留prefix-only真实坏体两模式准确拒绝证据；保留全部原用例/原生GPR/最长/两类负控，不改生产算法或接口；更新交付MCP重提。未验收未集成。",
+      "legacy_hash": "b5b199e9c68c383f85030b6eba22858302ff5e86248163d969c1a5ce0e63187d",
+      "claimed_by": "claude-mcp-c338b58c099f4f05",
+      "claimed_at": "2026-10-18T15:48:56+00:00"
+    },
+    {
+      "id": "claude:C36",
+      "number": "C36",
+      "owner": "claude",
+      "title": "复用 scope 规划的零参数清理调用序列",
+      "description": "真实用途：已有 C12 只返回清理 ID 顺序；真实 return/defer lowering 必须按该顺序调用，并保护先求值的返回值。本项明确限于零参数、正常返回的 SysV 清理函数，不引入捕获、some/ok/err 或完整 defer 语义。\n\n模块 `bootstrap.nasm_scope_cleanup`；依赖 `[claude:C12, cursor:CR4]`（均 integrated）。\n\n```text\nimport bootstrap.cleanup_plan as clean;\npub unsafe fn emit(scopes:[]const clean.Scope, cleanup_ids:[]const usize,\n from_scope:usize, target_scope:usize, out:[]u8, written:*usize)u64\n```\n\n直接复用 C12 `Scope{parent,first,count}`（24 字节、8 对齐）和 ROOT_PARENT=u64::MAX。`scopes.len` 必须 1..8；`cleanup_ids.len<=16`；所有 scope 的 count 之和不得超过 16（防止合法重叠范围把总调用数扩成 128）；每个 cleanup ID 均小于 u64::MAX，**包括没有被当前退出路径使用的项**。其它 tree/parent/range/target 规则原样用 C12：全图验证、拒绝不可达父环、target 为自身/祖先或 ROOT_PARENT、target 不清理。\n\n局部 `usize[16]` 实际调用 C12 plan 得到清理顺序，所有 INVALID 及计划验证在用户容量之前完成。ID 对应固定符号 `__dong_cleanup<CR4无符号十进制>`，允许重复 ID，重复注册必须重复调用。此名称空间区别于 `__dong_b`；callee 定义/链接由上游完成。\n\n入口约定 `rsp%16=0`、DF=0；callee 为零参数 void、正常 return、遵守 SysV callee-saved 及 DF=0 的函数。禁止传入 noreturn 或改变约定的函数。本组件文本不验证运行时函数地址。非空计划严格输出：\n\n```text\nsub rsp, 16\nmov qword [rsp], rax\nmov qword [rsp + 8], rdx\ncall __dong_cleanup<ID0>\n... 后续 call，每行一个，按 C12 顺序 ...\nmov rax, qword [rsp]\nmov rdx, qword [rsp + 8]\nadd rsp, 16\n```\n\n无省略号字面文本。空计划严格空文本，written=0，out 不变。非空后 RAX/RDX 位模式和 RSP 精确恢复；其余 caller-saved/flags 可变，callee-saved 按 SysV 保持。保存只用调用栈，不用全局状态；允许重入。每次 call 之前 rsp%16=0，callee 入口为 8。\n\n每条 call 最长 `5 + 14 + 20 + 1 = 40` 字节；前后六条固定行长度为 `12+21+25+21+25+12=116`，最多 16 calls，总长上界 **756**，可用固定 **1024** 字节局部文本。不得套用“64 字节双名字”的其它符号上界；本项只用固定前缀和 ID。\n\n验收：独立 Python 祖先/逆注册模型生成预期 ID 日志；NASM 零参 helper 按 ID 向测试日志追加、明确覆盖 RAX/RDX 及其它 caller-saved、记录入口对齐，正常 ret。保护高位非零的 RAX/RDX，检查完整日志、返回双字、callee-saved、RSP恢复、guard；覆盖自身退出空、含根退出、break/continue 式祖先边界、多个层级、重复 ID、count 总和 16 和 17、非法未使用 ID/不可达父环。长 ID 16 calls 精确文本及容量边界。坏 Dong 把 C12 结果逆序后发射（选至少两个不同 ID），正常返回但日志顺序错；另删掉返回值恢复可作为第二语义负控，容量提前写必须单独保留。\n\n\n## 共用固定契约与执行归属\n\n本任务是L3 Dong自举后端的独立生产组件；仅四个声明文件，Dong实现，不导出C符号（临时测试wrapper可导出），无分配、全局可变状态、OS调用。不可改code/lang、活动编译器、内核、协调器、其它负责人、在途任务或已集成依赖；既有队列/返修优先。依赖只读，只用已integrated模块；不得以宿主Python/C算法替代Dong生产逻辑。\n\n统一OK=0、INVALID=1、CAPACITY=2；接口另有Result时按任务正文完整尺寸。written非NULL、8对齐、完整8字节端点不回绕；out完整声明区间端点不回绕，非空非NULL，空可NULL。written与完整out不重叠（包括成功未使用尾部）。有输入切片/结构/嵌套名字时，必须在任何读写前验证完整描述符、元素乘法、端点、所需对齐、非空非NULL和完整对象别名；输入彼此如正文无禁止可互叠，只读输入与完整out/结果不得重叠。所有数据/枚举/标签/尺寸INVALID优先CAPACITY。失败out、计数或完整Result、输入全文不变；成功只写精确前缀/结果，尾部保持。先全预检及正确求长，在充分且有证明上界的局部区调用只读依赖，再最后发布用户out；不允许内部scratch越界或对合法容量不足输入panic。\n\n文本严格ASCII，换行真实单LF，无NUL/注释/额外空行/隐式section/global/ret（任务另定声明除外）。涉及__dong_b<N>标签时N=0..MAX-1，MAX为NONE非法；数字复用已声明decimal_integer，不另写格式化。寄存器编号若有0..15参数，固定rax,rcx,rdx,rbx,rsp,rbp,rsi,rdi,r8..r15；固定寄存器任务按正文集合测试，不强凑16矩阵。\n\n测试只跑本任务checks：实际编译/链接/原生执行Dong debug与release，NASM ELF64/COFF都组装；原生C桥显式SysV，保护宿主栈/被调用者保存寄存器。COFF组装不冒充Win64调用ABI。只暂存本模块及已声明只读依赖的传递闭包，不引入整个lang根遮蔽坏源码。独立Python/C oracle，不用生产规划器输出当唯一期望。有限固定边界，每模式不超过24个主要原生向量（并发操作另按正文有限检查）；不做全笛卡尔积或性能基准。源码、说明、测试、只读依赖前后SHA256稳定，0skip才可验收。\n\n每个描述符/端点/别名预检要独立可达，其它字段合法。written端点溢出用8对齐UINT64_MAX-7且合法空out，漏检坏体应安全返回CAPACITY而非非法解引用。初始化guard后再取快照，立刻观察失败全文/计数/guard、成功精确文本/长度/未用尾部；输入真实只读保护须检查系统调用成功，不能只声称只读。\n\n至少保留两类真实坏Dong：一种完成构建、链接、正常原生执行后，由指定数值/内存/分支/链接后地址断言拒绝；一种容量不足提前写out或结果，由完整原子性断言拒绝。同夹具先跑好体。构建失败、崩溃、超时、文本不同、无关预检错误不能冒充指定语义负控；源码中缺锁/不同内存序等结构检查单列，不能假装单次正常运行证明并发语义。坏体所有内存访问在预留安全可访问区内，不破坏真实宿主栈/ret、不依靠越界或硬件异常拒绝。\n\n本人客户端先worker MCP get_task/read_document读取最新rev和完整契约/归属，claim成功才执行；先完成已有领取/返修。产物在本人works/build/<编号>/<唯一目录>/，完成原编号交付写真实命令、tests/skips、模式/对象格式、全部输入SHA256、每种坏体实际观察/拒绝依据、未跑与剩余限制，再MCP submit。不得自行accept/integrate、提交/推送、运行OS/VM/全回归、启动模型CLI/定时器/关机，不用管理工具自动启动Cursor。任务发布不代表实现或通过，最后由Codex独立复验再验收集成。\n",
+      "status": "rework",
+      "rev": 5,
+      "write_paths": [
+        "claude-works/src/bootstrap/nasm_scope_cleanup.dg",
+        "claude-works/src/bootstrap/nasm_scope_cleanup.md",
+        "claude-works/tests/test_nasm_scope_cleanup.py",
+        "claude-works/deliveries/C36.md"
+      ],
+      "depends_on": [
+        "claude:C12",
+        "cursor:CR4"
+      ],
+      "checks": [
+        "discover:claude-works/tests:test_nasm_scope_cleanup.py"
+      ],
+      "auto_dispatch": false,
+      "auto_verify": false,
+      "complexity": "standard",
+      "created_at": "2026-10-18T15:48:15+00:00",
+      "updated_at": "2026-10-18T16:00:35+00:00",
+      "historical": false,
+      "document": "claude-works/tasks/C36-board.md",
+      "delivery": "claude-works/deliveries/C36.md",
+      "candidate": null,
+      "verification": null,
+      "review_note": "R1有限返修测试case14，生产功能未见缺陷。正式4项0skip通过、来源稳定，C12/CR4真实复用、保护RAX/RDX、日志/栈对齐/16call长度及原语义/原子性坏Dong有效。但HARNESS.invalid只初始化sc0/sc1，case14声明8Scope，其余count=0xa5超总16上限，掩盖完整scopes尾部与written别名。选择性坏Dong仅将overlap(sp,sn,wp,8)改为overlap(sp,48,wp,8)，两模式均正常通过原全部21预检；独立副本只初始化全8合法Scope后，正式体仍通过21、坏体准确case14 status0退出93，无崩溃。case16/18未用ID填充0xa5仍小于MAX是合法值，不要求无依据重写。证据reviews/build/C36-independent/result.json、audit_tail_alias.py及reviews/2026-10-18-C36-independent.md。仅原4文件快照前初始化case14的全8合法Scope，保留原树/target/range及其余数据合法，补prefix48选择性坏Dong两模式准确拒绝；保留所有其它21预检、完整原生清理日志/寄存器/栈与原负控，更新交付MCP重提。无需改生产算法/接口，不扩大矩阵。未验收未集成。",
+      "legacy_hash": "4ed21d12253ce1050022fc9dabdfec62e058ccb70ec3fb26f6b55941d97e7a8d",
+      "claimed_by": "claude-mcp-c338b58c099f4f05",
+      "claimed_at": "2026-10-18T15:52:32+00:00"
+    },
+    {
+      "id": "claude:C37",
+      "number": "C37",
+      "owner": "claude",
+      "title": "复用 SysV 位置规划的函数入口参数捕获",
+      "description": "真实用途：C34 建立调用者 outgoing 参数；本项是被调用者入口把 incoming 参数完整捕获到局部 frame，不能用 C34 代替。后续表达式会覆盖参数寄存器，因此入口 capture 是独立后端缺口。\n\n模块 `bootstrap.nasm_sysv_incoming_args`；依赖 `[claude:C8, cursor:CR8, cursor:CR4]`（均 integrated）。CR11 仅作为 fixture/上游帧约定，不需导入其实现或改文件。\n\n```text\npub unsafe fn emit(kinds:[]const u8, destination_offsets:[]const usize,\n frame_bytes:usize, out:[]u8, written:*usize)u64\n```\n\nkinds 按 C8：0 为单字、1 为特殊两 INTEGER 字；最多 16 参数且展开总字数<=16，其它 kind INVALID。destination_offsets 长度恰为展开字数，每项 8..frame_bytes 且 8 的倍数，**不得重复**；同字宽/对齐下不重复即不重叠。frame_bytes=0..4080 且 16 倍数。所有输入和完整 out/written 的区间按共用规则验证。\n\n运行时限定上游使用等价于 `CR11.prologue(frame_bytes, saved_mask=0)` 的帧：函数 SysV entry rsp%16=8，已执行 `push rbp; mov rbp,rsp; [sub rsp,frame_bytes]`，RBP保持基准，局部槽 `[rbp-offset, rbp-offset+8)` 完全在已分配帧内。**不支持非零 saved_mask 帧**，否则 rbp 以下保存寄存器会与目标槽冲突。incoming 首栈字位于 `[rbp+16]`；源栈参数与负偏移目标帧分离。输入机器字已由调用者规范化，本项不做窄值扩展、sret、SSE/Win64/varargs。\n\n在局部 `C8.Location[16]` 实际调用 plan。固定顺序：先按展开字原顺序发射全部 REGISTER 位置 `mov qword <CR8.encode(5,-destination_offset)>, <rdi/rsi/rdx/rcx/r8/r9>\\n`；再按展开字原顺序发射每个 STACK 位置两行：\n\n```text\nmov rax, qword <CR8.encode(5,16+stack_index)>\nmov qword <CR8.encode(5,-destination_offset)>, rax\n```\n\nCR8 的空格格式原样保留，只有本项增加 qword 和 LF。无 STACK 则 RAX 保持；有 STACK 可改 RAX；六个参数寄存器、RBP/RSP、其它全部 GPR 和 flags 保持。仅目标 frame 字被写，邻接内存不变。空参数时 frame_bytes 合法即成功 written=0。\n\n有界证明：offset<=4080，source displacement<=136（按最多16栈字的保守界限），每字所需最多两行 55 字节，整段<=880；固定文本 **1024** 充分，CR8 单操作数暂存 24 字节充分。所有非法 kind/展开上限/目标槽/重复槽/帧尺寸在 CAPACITY 前检查。\n\n验收：独立 Python C8 子集 oracle，独立手写 NASM caller 设置实际六寄存器与 `[rsp+offset]` 栈参数，调用含真实 prologue+实际 Dong capture 的函数。不可用生产 C8 输出同时当唯一 oracle。测试 0/1/6/7/8/16 标量、5标量+双字+标量（双字整体上栈且最后单字用R9）、6标量+双字、重复 source 位模式、非顺序目的槽、4080底槽。callee 在捕获后读取所有局部槽回报，核对实际值、未目标帧/双端guard、参数寄存器/flags/callee-saved、栈平衡。观察器状态指针放独立已保存寄存器或专有安全槽，不能占参数槽/覆盖捕获结果。坏 Dong 把 incoming `16+stack_index` 改 `24+stack_index`，在预留足够安全栈参数/guard 的7或8标量 fixture 中正常读取错误字并被数值拒绝；不允许访问越界或覆盖返回地址。另容量提前写。\n\n\n## 共用固定契约与执行归属\n\n本任务是L3 Dong自举后端的独立生产组件；仅四个声明文件，Dong实现，不导出C符号（临时测试wrapper可导出），无分配、全局可变状态、OS调用。不可改code/lang、活动编译器、内核、协调器、其它负责人、在途任务或已集成依赖；既有队列/返修优先。依赖只读，只用已integrated模块；不得以宿主Python/C算法替代Dong生产逻辑。\n\n统一OK=0、INVALID=1、CAPACITY=2；接口另有Result时按任务正文完整尺寸。written非NULL、8对齐、完整8字节端点不回绕；out完整声明区间端点不回绕，非空非NULL，空可NULL。written与完整out不重叠（包括成功未使用尾部）。有输入切片/结构/嵌套名字时，必须在任何读写前验证完整描述符、元素乘法、端点、所需对齐、非空非NULL和完整对象别名；输入彼此如正文无禁止可互叠，只读输入与完整out/结果不得重叠。所有数据/枚举/标签/尺寸INVALID优先CAPACITY。失败out、计数或完整Result、输入全文不变；成功只写精确前缀/结果，尾部保持。先全预检及正确求长，在充分且有证明上界的局部区调用只读依赖，再最后发布用户out；不允许内部scratch越界或对合法容量不足输入panic。\n\n文本严格ASCII，换行真实单LF，无NUL/注释/额外空行/隐式section/global/ret（任务另定声明除外）。涉及__dong_b<N>标签时N=0..MAX-1，MAX为NONE非法；数字复用已声明decimal_integer，不另写格式化。寄存器编号若有0..15参数，固定rax,rcx,rdx,rbx,rsp,rbp,rsi,rdi,r8..r15；固定寄存器任务按正文集合测试，不强凑16矩阵。\n\n测试只跑本任务checks：实际编译/链接/原生执行Dong debug与release，NASM ELF64/COFF都组装；原生C桥显式SysV，保护宿主栈/被调用者保存寄存器。COFF组装不冒充Win64调用ABI。只暂存本模块及已声明只读依赖的传递闭包，不引入整个lang根遮蔽坏源码。独立Python/C oracle，不用生产规划器输出当唯一期望。有限固定边界，每模式不超过24个主要原生向量（并发操作另按正文有限检查）；不做全笛卡尔积或性能基准。源码、说明、测试、只读依赖前后SHA256稳定，0skip才可验收。\n\n每个描述符/端点/别名预检要独立可达，其它字段合法。written端点溢出用8对齐UINT64_MAX-7且合法空out，漏检坏体应安全返回CAPACITY而非非法解引用。初始化guard后再取快照，立刻观察失败全文/计数/guard、成功精确文本/长度/未用尾部；输入真实只读保护须检查系统调用成功，不能只声称只读。\n\n至少保留两类真实坏Dong：一种完成构建、链接、正常原生执行后，由指定数值/内存/分支/链接后地址断言拒绝；一种容量不足提前写out或结果，由完整原子性断言拒绝。同夹具先跑好体。构建失败、崩溃、超时、文本不同、无关预检错误不能冒充指定语义负控；源码中缺锁/不同内存序等结构检查单列，不能假装单次正常运行证明并发语义。坏体所有内存访问在预留安全可访问区内，不破坏真实宿主栈/ret、不依靠越界或硬件异常拒绝。\n\n本人客户端先worker MCP get_task/read_document读取最新rev和完整契约/归属，claim成功才执行；先完成已有领取/返修。产物在本人works/build/<编号>/<唯一目录>/，完成原编号交付写真实命令、tests/skips、模式/对象格式、全部输入SHA256、每种坏体实际观察/拒绝依据、未跑与剩余限制，再MCP submit。不得自行accept/integrate、提交/推送、运行OS/VM/全回归、启动模型CLI/定时器/关机，不用管理工具自动启动Cursor。任务发布不代表实现或通过，最后由Codex独立复验再验收集成。\n",
+      "status": "submitted",
+      "rev": 3,
+      "write_paths": [
+        "claude-works/src/bootstrap/nasm_sysv_incoming_args.dg",
+        "claude-works/src/bootstrap/nasm_sysv_incoming_args.md",
+        "claude-works/tests/test_nasm_sysv_incoming_args.py",
+        "claude-works/deliveries/C37.md"
+      ],
+      "depends_on": [
+        "claude:C8",
+        "cursor:CR8",
+        "cursor:CR4"
+      ],
+      "checks": [
+        "discover:claude-works/tests:test_nasm_sysv_incoming_args.py"
+      ],
+      "auto_dispatch": false,
+      "auto_verify": false,
+      "complexity": "standard",
+      "created_at": "2026-10-18T15:48:15+00:00",
+      "updated_at": "2026-10-18T16:00:51+00:00",
+      "historical": false,
+      "document": "claude-works/tasks/C37-board.md",
+      "delivery": "claude-works/deliveries/C37.md",
+      "candidate": null,
+      "verification": null,
+      "review_note": "",
+      "legacy_hash": "f591f3f546b92b56c733673beadf8a4d33ea029751baf98ac7c30605add9f39f",
+      "claimed_by": "claude-mcp-c338b58c099f4f05",
+      "claimed_at": "2026-10-18T15:56:25+00:00"
+    },
+    {
+      "id": "claude:C38",
+      "number": "C38",
+      "owner": "claude",
+      "title": "带完整 64 位重定位的静态符号指针声明",
+      "description": "真实用途：C29 用 RIP-relative LEA 在运行时生成地址；它不能表达全局指针/函数指针/聚合地址常量中的静态链接重定位。本项输出 dq 的符号地址+有符号 addend，满足规格 14 节不能静默截成32位的要求，不新增对象文件/链接器实现。\n\n模块 `bootstrap.nasm_symbol_pointer_data`；依赖 `[cursor:CR3, cursor:CR4]`（均 integrated）。\n\n```text\npub unsafe fn emit(storage_module:[]const u8, storage_item:[]const u8,\n target_module:[]const u8, target_item:[]const u8, addend:i64,\n out:[]u8, written:*usize)u64\n```\n\n四个名字均为 1..64 原始字节，允许 NUL/非ASCII等，分别经 CR3 编码 storage_symbol、target_symbol；不散列、不截断。storage 与 target 可以相同；输入四区间彼此可重叠，完整 out/written 与它们均不得重叠。addend 为任意 i64，不缩窄。只输出：\n\n```text\n<storage_symbol>:\ndq <target_symbol>\n```\n\naddend==0 如上；正数第二行变为 `dq <target_symbol> + <CR4无符号十进制addend>\\n`；负数为 `dq <target_symbol> - <CR4无符号十进制绝对值幅度>\\n`。负幅度必须先经 u64 wrapping_sub 安全处理 i64::MIN，不能在 debug 有符号求负。目标地址的结果位模式按 `(address(target)+addend) mod 2^64`，文本使用明确 64 位 dq。它只发射上游已经验证的符号重定位，不新增语言层地址转整数或一般编译期指针算术权限。无 section/global/extern/align；这些由上游决定，target 必须由上游定义/链接，不宣称加载器或全部镜像模型已完成。\n\nCR3 每个符号最多266字节；storage 标签行268，dq行最大292（`3+266+3+19+1`）；总长最多 **560**，固定文本 **576**，两个局部符号缓冲各266，数字临时20。必须测试四名字全64字节和 addend=MIN/MAX，而不是只测短名字。\n\n验收：独立 Python 原始bytes→hex 编码及 signed 幅度 oracle；0、±1、±8、MIN/MAX、名字边界1/64/0/65、重叠只读名字、storage==target。ELF64/COFF 均组装，使用目标对象格式的独立结构解析或 objdump 确认**64位**绝对符号重定位及 addend（ELF RELA 的显式addend、COFF 数据内隐式addend），不得仅检查汇编文本。原生本机链接将实际生成的 storage dq 放入数据节，通过 C/手写NASM观察其 uint64 位模式，与实际 target 地址加 addend 的独立 u64 模型对照；大 addend 只观察数值，不把结果当地址解引用，安全 ±8 可另外指向已分配数组邻字。外部不支持的 ELF64 执行明确未运行，仍需对象检查；COFF原生用本机工具链接。若工具链对某极端 addend 有不可支持之处，报告证据，不能静默收窄合法范围。\n\n真实坏 Dong 把非零 addend 故意发成0或反号；输出仍可组装链接，storage 原生位模式应正常读取错误地址值并拒绝。若用 `dd` 截断作负控，必须追加足够安全数据后只读8字节，不允许越界，且避免构建错误冒充成功；优先 addend 错误负控。另容量提前写/改 written 的原子性负控。不得只用文本比较充当链接语义负控。\n\n\n## 共用固定契约与执行归属\n\n本任务是L3 Dong自举后端的独立生产组件；仅四个声明文件，Dong实现，不导出C符号（临时测试wrapper可导出），无分配、全局可变状态、OS调用。不可改code/lang、活动编译器、内核、协调器、其它负责人、在途任务或已集成依赖；既有队列/返修优先。依赖只读，只用已integrated模块；不得以宿主Python/C算法替代Dong生产逻辑。\n\n统一OK=0、INVALID=1、CAPACITY=2；接口另有Result时按任务正文完整尺寸。written非NULL、8对齐、完整8字节端点不回绕；out完整声明区间端点不回绕，非空非NULL，空可NULL。written与完整out不重叠（包括成功未使用尾部）。有输入切片/结构/嵌套名字时，必须在任何读写前验证完整描述符、元素乘法、端点、所需对齐、非空非NULL和完整对象别名；输入彼此如正文无禁止可互叠，只读输入与完整out/结果不得重叠。所有数据/枚举/标签/尺寸INVALID优先CAPACITY。失败out、计数或完整Result、输入全文不变；成功只写精确前缀/结果，尾部保持。先全预检及正确求长，在充分且有证明上界的局部区调用只读依赖，再最后发布用户out；不允许内部scratch越界或对合法容量不足输入panic。\n\n文本严格ASCII，换行真实单LF，无NUL/注释/额外空行/隐式section/global/ret（任务另定声明除外）。涉及__dong_b<N>标签时N=0..MAX-1，MAX为NONE非法；数字复用已声明decimal_integer，不另写格式化。寄存器编号若有0..15参数，固定rax,rcx,rdx,rbx,rsp,rbp,rsi,rdi,r8..r15；固定寄存器任务按正文集合测试，不强凑16矩阵。\n\n测试只跑本任务checks：实际编译/链接/原生执行Dong debug与release，NASM ELF64/COFF都组装；原生C桥显式SysV，保护宿主栈/被调用者保存寄存器。COFF组装不冒充Win64调用ABI。只暂存本模块及已声明只读依赖的传递闭包，不引入整个lang根遮蔽坏源码。独立Python/C oracle，不用生产规划器输出当唯一期望。有限固定边界，每模式不超过24个主要原生向量（并发操作另按正文有限检查）；不做全笛卡尔积或性能基准。源码、说明、测试、只读依赖前后SHA256稳定，0skip才可验收。\n\n每个描述符/端点/别名预检要独立可达，其它字段合法。written端点溢出用8对齐UINT64_MAX-7且合法空out，漏检坏体应安全返回CAPACITY而非非法解引用。初始化guard后再取快照，立刻观察失败全文/计数/guard、成功精确文本/长度/未用尾部；输入真实只读保护须检查系统调用成功，不能只声称只读。\n\n至少保留两类真实坏Dong：一种完成构建、链接、正常原生执行后，由指定数值/内存/分支/链接后地址断言拒绝；一种容量不足提前写out或结果，由完整原子性断言拒绝。同夹具先跑好体。构建失败、崩溃、超时、文本不同、无关预检错误不能冒充指定语义负控；源码中缺锁/不同内存序等结构检查单列，不能假装单次正常运行证明并发语义。坏体所有内存访问在预留安全可访问区内，不破坏真实宿主栈/ret、不依靠越界或硬件异常拒绝。\n\n本人客户端先worker MCP get_task/read_document读取最新rev和完整契约/归属，claim成功才执行；先完成已有领取/返修。产物在本人works/build/<编号>/<唯一目录>/，完成原编号交付写真实命令、tests/skips、模式/对象格式、全部输入SHA256、每种坏体实际观察/拒绝依据、未跑与剩余限制，再MCP submit。不得自行accept/integrate、提交/推送、运行OS/VM/全回归、启动模型CLI/定时器/关机，不用管理工具自动启动Cursor。任务发布不代表实现或通过，最后由Codex独立复验再验收集成。\n",
+      "status": "submitted",
+      "rev": 3,
+      "write_paths": [
+        "claude-works/src/bootstrap/nasm_symbol_pointer_data.dg",
+        "claude-works/src/bootstrap/nasm_symbol_pointer_data.md",
+        "claude-works/tests/test_nasm_symbol_pointer_data.py",
+        "claude-works/deliveries/C38.md"
+      ],
+      "depends_on": [
+        "cursor:CR3",
+        "cursor:CR4"
+      ],
+      "checks": [
+        "discover:claude-works/tests:test_nasm_symbol_pointer_data.py"
+      ],
+      "auto_dispatch": false,
+      "auto_verify": false,
+      "complexity": "standard",
+      "created_at": "2026-10-18T15:48:15+00:00",
+      "updated_at": "2026-10-18T16:06:35+00:00",
+      "historical": false,
+      "document": "claude-works/tasks/C38-board.md",
+      "delivery": "claude-works/deliveries/C38.md",
+      "candidate": null,
+      "verification": null,
+      "review_note": "",
+      "legacy_hash": "51ddce97a63779bf2c8b99e76663b64f785114a2388fa06a6a051ea399d2f44f",
+      "claimed_by": "claude-mcp-c338b58c099f4f05",
+      "claimed_at": "2026-10-18T16:00:58+00:00"
     },
     {
       "id": "claude:C4",
@@ -2107,6 +2401,338 @@
       "claimed_by": "cursor-worker-1",
       "claimed_at": "2026-10-18T09:56:40+00:00",
       "integration_note": "按验收hash真实集成到主线模块/固定数据，永久测试及原生组合共24项零skip、指纹稳定。仅适配测试路径和只读依赖隔离；见reviews/2026-10-18-CR2-CR7-D14-D18-LM7-integration.md。不是完整L3自举。"
+    },
+    {
+      "id": "cursor:CR20",
+      "number": "CR20",
+      "owner": "cursor",
+      "title": "数组与切片的无符号边界门禁",
+      "description": "\nmodule bootstrap.nasm_bounds_guard。\npub unsafe fn emit(index:u64,length:u64,trap_block:u64,out:[]u8,written:*usize)u64。\nindex/length为寄存器编号0..15，允许相同。trap_block必须小于u64::MAX；标签严格__dong_b加CR4无符号十进制。精确两行：\"cmp <index64>, <length64>\\njae __dong_b<N>\\n\"。uint64(index)>=uint64(length)跳trap，其它落空；只改flags，所有数据寄存器/内存保持。高位值仍按无符号比较（index=2^63,length=MAX须合法落空），不把所有高位值当signed负值拒绝。只做usize元素索引相对元素数检查，不计算地址或检查切片/指针有效性，也不定义trap块/panic。依赖仅已集成decimal_integer，不能重写十进制。\n先局部算长/组装（证明20位最大标签缓冲足够）再发布。文本/组装有限旋转覆盖16寄存器，原生安全caller-saved，<=24主要向量/模式：len0、index0、len-1/len/len+1、2^63两侧、MAX、同寄存器。独立Python无符号oracle，安全trap/落空块返回不同marker，检查实际路径及非scratch输入寄存器保持。真实坏Dong jae改ja，index==len正常执行后因错误落空被拒绝；另容量提前写原子性负控。块号0/高位/MAX-1、NONE非法含容量0，以及完整描述符/端点/别名预检各独立可达。\n\n## 共用固定契约与归属\n\n这是L3真实后端所需的独立Dong文本发射组件，不能代替完整代码生成/语言溢出检查/自举。源码必须Dong，不导出C符号，不用Python/C宿主实现代替生产逻辑；无分配、全局可变状态或OS调用。仅修改本人本任务4个授权文件，依赖只读，绝不改code/lang、活动编译器、内核、协调器、CR11或Codex语义主线。\n\n寄存器编号0..15固定rax,rcx,rdx,rbx,rsp,rbp,rsi,rdi,r8,r9,r10,r11,r12,r13,r14,r15；其它编号INVALID。32位名eax,ecx,edx,ebx,esp,ebp,esi,edi,r8d..r15d；16位ax,cx,dx,bx,sp,bp,si,di,r8w..r15w；低8位al,cl,dl,bl,spl,bpl,sil,dil,r8b..r15b，不支持ah等高8位。严格ASCII和单字节LF，除任务另定的块标签外，不含section/global/注释/额外空行/NUL；本任务规定几行就精确几行，成功尾部不变。\n\nunsafe调用方保证对象真实可访问。仍必须在任何读写前检查written非空、8对齐、完整8字节端点不溢出；out完整描述符端点/非空非NULL；written完整8字节与完整声明out不重叠（包括输出未使用尾部）。空out可NULL。OK=0、INVALID=1、CAPACITY=2，所有参数/枚举/位移/描述符INVALID优先CAPACITY；失败out和written全文不变。先验证/计算，在局部暂存调用只读组件，最后一次写用户out；不得通过只看已用前缀逃过完整别名。长度加法不溢出。\n\n测试要让每个目标预检独立可达：其它字段合法，真实guard/快照初始化后再取。written端点溢出使用8对齐UINT64_MAX-7和合法空out，正确INVALID，漏检坏实现返回CAPACITY，不能非法解引用；NULL/奇地址、out端点、对齐前缀/尾部别名、参数INVALID且out容量0亦独立覆盖。失败全文/双端guard、成功精确文本/计数/剩余尾部立即检查。C观察器对齐存储明确声明，不能用另一个非法字段掩盖目标。\n\n测试实际编译、链接、原生执行Dong debug/release，NASM ELF64/COFF都组装。只暂存本组件和声明的已集成依赖，含坏源码时不引入整个lang根遮蔽临时模块。独立Python/C期望；有限固定边界优先、无需随机堆矩阵。文本/组装覆盖全部16个寄存器（可旋转配对，不要求全笛卡尔积）；受控原生仅用安全调用者保存寄存器的少量组合（每模式不超过24个主要向量），保留宿主ABI/栈，rsp/rbp写目标只组装。COFF组装不等于Win64 ABI可调用，原生C桥显式SysV。\n\n至少两类真实坏Dong成功编译/链接/原生执行，再由指定数值/原子性断言拒绝；同一夹具先跑好实现。至少一类是原生实际结果错误，另一类容量失败提前写输出/计数，以全文/guard立即拒绝；若任务另定两类语义负控，则另保留一次原子性验证。构建失败、崩溃、超时、文本不同或无关预检错误不得冒充指定原生负控。坏源码执行的目标输入必须合法且不导致非法内存/栈访问。\n\n先通过自己的worker MCP get_task/read_document读取最新rev、完整契约、依赖和归属，claim后执行。只运行本任务声明的定向测试，产物放本人works/build/编号/<唯一目录>/；无OS/VM/全回归/性能基准/定时器/关机/提交/推送，不启动模型CLI。客户端手动执行；完成后落盘原编号交付并通过MCP submit，不能自行accept/integrate。交付列真实命令、tests/skip、模式/对象格式、生产/测试SHA256、产物目录、每种负控实际观察/拒绝原因和未运行/剩余限制。依赖或归属问题先报告，不擅自扩大范围。",
+      "status": "rework",
+      "rev": 5,
+      "write_paths": [
+        "cursor-works/src/bootstrap/nasm_bounds_guard.dg",
+        "cursor-works/src/bootstrap/nasm_bounds_guard.md",
+        "cursor-works/tests/test_nasm_bounds_guard.py",
+        "cursor-works/deliveries/CR20.md"
+      ],
+      "depends_on": [
+        "cursor:CR4"
+      ],
+      "checks": [
+        "discover:cursor-works/tests:test_nasm_bounds_guard.py"
+      ],
+      "auto_dispatch": false,
+      "auto_verify": false,
+      "complexity": "standard",
+      "created_at": "2026-10-18T15:28:00+00:00",
+      "updated_at": "2026-10-18T15:55:47+00:00",
+      "historical": false,
+      "document": "cursor-works/tasks/CR20-board.md",
+      "delivery": "cursor-works/deliveries/CR20.md",
+      "candidate": null,
+      "verification": null,
+      "review_note": "R1有限返修原生观察器/对齐说明，生产未发现功能缺陷。正式及独立各3项0skip通过稳定，但原_probe仅返回RAX路径marker，未捕获/核对输入及其它受控寄存器保持；输入RAX还被marker遮蔽。独立debug/release真实坏Dong在CMP后插入不改flags的mov rdi,0，原_probe仍正常返回正确marker111，而独立捕获RDI由3变0，证明原生输入保持观察缺失（不是声称文本检查或整套坏体全部漏过）。原HARNESS arena使用static uint8_t无显式_Alignas，也不满足共约明确对齐。两模板最大长度实际46字节（非说明45）；覆盖同寄存器、index==len、跨2^63合法fallthrough/非法trap。 仅原4文件：为arena/typed观察区显式8/16对齐；原生marker写独立输出/单独寄存器，立即捕获全部实际输入与约定保留的受控GPR，特别别让RAX输入被marker覆盖，状态指针不能占输入或在捕获前改写；同时断言路径和输入保持。补上述真实合法clobber坏Dong成功编译/链接/正常执行后由原生寄存器断言拒绝，不用文本差异冒充；保留原数值/路径与容量提前写负控。只修测试/说明所需项，不改已正确生产算法或扩大矩阵；更新交付MCP重提。未验收未集成。见reviews/2026-10-18-CR20-CR21-independent.md（附独立实证）。",
+      "legacy_hash": "8d76386fea5d9bb648b1189269f00b8ae78d64807f03e60b3d98e13d52538551",
+      "claimed_by": "cursor-mcp-58a2b3943fa54a41",
+      "claimed_at": "2026-10-18T15:28:50+00:00"
+    },
+    {
+      "id": "cursor:CR21",
+      "number": "CR21",
+      "owner": "cursor",
+      "title": "完整64位移位计数的宽度门禁",
+      "description": "\nmodule bootstrap.nasm_shift_guard。\npub unsafe fn emit(count:u64,width:u64,trap_block:u64,out:[]u8,written:*usize)u64。\ncount为寄存器编号0..15；width仅8/16/32/64，其它INVALID且优先容量。trap_block小于MAX；标签__dong_b加CR4十进制。精确两行：\"cmp <count64>, <width十进制>\\njae __dong_b<N>\\n\"。比较完整64位usize count，count>=width跳trap，其它落空；绝不先截断为CL/32位或掩码。数据寄存器/内存全部保持，flags允许改变。此为所有模式实际移位前门禁，不输出移位或panic，不定义trap标签；上游另接已集成移位内核。两个数字均复用decimal_integer。\n证明最大标签/文本scratch足够再写out。有限16寄存器文本/ELF64+COFF组装；原生安全寄存器、<=24主要向量/模式，覆盖每width的0/width-1/width/width+1及256、2^32、MAX；宽度非法0/7/128/MAX且out0也INVALID。独立Python count<width期望，marker路径和寄存器保持。真实坏Dong jae改ja，用count==width，正常执行后路径拒绝；另至少一个错误低32位比较坏Dong用count=2^32且width64实际路径拒绝（cmp合法32位寄存器而非汇编失败）。另容量提前写原子性负控。块号0/高位/MAX-1与NONE非法及预检覆盖。\n\n## 共用固定契约与归属\n\n这是L3真实后端所需的独立Dong文本发射组件，不能代替完整代码生成/语言溢出检查/自举。源码必须Dong，不导出C符号，不用Python/C宿主实现代替生产逻辑；无分配、全局可变状态或OS调用。仅修改本人本任务4个授权文件，依赖只读，绝不改code/lang、活动编译器、内核、协调器、CR11或Codex语义主线。\n\n寄存器编号0..15固定rax,rcx,rdx,rbx,rsp,rbp,rsi,rdi,r8,r9,r10,r11,r12,r13,r14,r15；其它编号INVALID。32位名eax,ecx,edx,ebx,esp,ebp,esi,edi,r8d..r15d；16位ax,cx,dx,bx,sp,bp,si,di,r8w..r15w；低8位al,cl,dl,bl,spl,bpl,sil,dil,r8b..r15b，不支持ah等高8位。严格ASCII和单字节LF，除任务另定的块标签外，不含section/global/注释/额外空行/NUL；本任务规定几行就精确几行，成功尾部不变。\n\nunsafe调用方保证对象真实可访问。仍必须在任何读写前检查written非空、8对齐、完整8字节端点不溢出；out完整描述符端点/非空非NULL；written完整8字节与完整声明out不重叠（包括输出未使用尾部）。空out可NULL。OK=0、INVALID=1、CAPACITY=2，所有参数/枚举/位移/描述符INVALID优先CAPACITY；失败out和written全文不变。先验证/计算，在局部暂存调用只读组件，最后一次写用户out；不得通过只看已用前缀逃过完整别名。长度加法不溢出。\n\n测试要让每个目标预检独立可达：其它字段合法，真实guard/快照初始化后再取。written端点溢出使用8对齐UINT64_MAX-7和合法空out，正确INVALID，漏检坏实现返回CAPACITY，不能非法解引用；NULL/奇地址、out端点、对齐前缀/尾部别名、参数INVALID且out容量0亦独立覆盖。失败全文/双端guard、成功精确文本/计数/剩余尾部立即检查。C观察器对齐存储明确声明，不能用另一个非法字段掩盖目标。\n\n测试实际编译、链接、原生执行Dong debug/release，NASM ELF64/COFF都组装。只暂存本组件和声明的已集成依赖，含坏源码时不引入整个lang根遮蔽临时模块。独立Python/C期望；有限固定边界优先、无需随机堆矩阵。文本/组装覆盖全部16个寄存器（可旋转配对，不要求全笛卡尔积）；受控原生仅用安全调用者保存寄存器的少量组合（每模式不超过24个主要向量），保留宿主ABI/栈，rsp/rbp写目标只组装。COFF组装不等于Win64 ABI可调用，原生C桥显式SysV。\n\n至少两类真实坏Dong成功编译/链接/原生执行，再由指定数值/原子性断言拒绝；同一夹具先跑好实现。至少一类是原生实际结果错误，另一类容量失败提前写输出/计数，以全文/guard立即拒绝；若任务另定两类语义负控，则另保留一次原子性验证。构建失败、崩溃、超时、文本不同或无关预检错误不得冒充指定原生负控。坏源码执行的目标输入必须合法且不导致非法内存/栈访问。\n\n先通过自己的worker MCP get_task/read_document读取最新rev、完整契约、依赖和归属，claim后执行。只运行本任务声明的定向测试，产物放本人works/build/编号/<唯一目录>/；无OS/VM/全回归/性能基准/定时器/关机/提交/推送，不启动模型CLI。客户端手动执行；完成后落盘原编号交付并通过MCP submit，不能自行accept/integrate。交付列真实命令、tests/skip、模式/对象格式、生产/测试SHA256、产物目录、每种负控实际观察/拒绝原因和未运行/剩余限制。依赖或归属问题先报告，不擅自扩大范围。",
+      "status": "rework",
+      "rev": 5,
+      "write_paths": [
+        "cursor-works/src/bootstrap/nasm_shift_guard.dg",
+        "cursor-works/src/bootstrap/nasm_shift_guard.md",
+        "cursor-works/tests/test_nasm_shift_guard.py",
+        "cursor-works/deliveries/CR21.md"
+      ],
+      "depends_on": [
+        "cursor:CR4"
+      ],
+      "checks": [
+        "discover:cursor-works/tests:test_nasm_shift_guard.py"
+      ],
+      "auto_dispatch": false,
+      "auto_verify": false,
+      "complexity": "standard",
+      "created_at": "2026-10-18T15:28:00+00:00",
+      "updated_at": "2026-10-18T15:55:47+00:00",
+      "historical": false,
+      "document": "cursor-works/tasks/CR21-board.md",
+      "delivery": "cursor-works/deliveries/CR21.md",
+      "candidate": null,
+      "verification": null,
+      "review_note": "R1有限返修原生观察器/对齐说明，生产未发现功能缺陷。正式及独立各3项0skip通过稳定，但原_probe仅返回RAX路径marker，未捕获/核对输入及其它受控寄存器保持；输入RAX还被marker遮蔽。独立debug/release真实坏Dong在CMP后插入不改flags的mov rdi,0，原_probe仍正常返回正确marker111，而独立捕获RDI由3变0，证明原生输入保持观察缺失（不是声称文本检查或整套坏体全部漏过）。原HARNESS arena使用static uint8_t无显式_Alignas，也不满足共约明确对齐。两模板最大长度实际45字节（非说明44）；保留width8/16/32/64、count256/2^32/MAX与所有原负控。 仅原4文件：为arena/typed观察区显式8/16对齐；原生marker写独立输出/单独寄存器，立即捕获全部实际输入与约定保留的受控GPR，特别别让RAX输入被marker覆盖，状态指针不能占输入或在捕获前改写；同时断言路径和输入保持。补上述真实合法clobber坏Dong成功编译/链接/正常执行后由原生寄存器断言拒绝，不用文本差异冒充；保留原数值/路径与容量提前写负控。只修测试/说明所需项，不改已正确生产算法或扩大矩阵；更新交付MCP重提。未验收未集成。见reviews/2026-10-18-CR20-CR21-independent.md（附独立实证）。",
+      "legacy_hash": "c7bc47f8efae28ff5559680d93d99d06f6ff60e07f846cb09a2efe748beebd9e",
+      "claimed_by": "cursor-mcp-58a2b3943fa54a41",
+      "claimed_at": "2026-10-18T15:32:52+00:00"
+    },
+    {
+      "id": "cursor:CR22",
+      "number": "CR22",
+      "owner": "cursor",
+      "title": "固定寄存器64位乘法溢出门禁",
+      "description": "\nmodule bootstrap.nasm_checked_multiply。\npub unsafe fn emit(signed:bool,trap_block:u64,out:[]u8,written:*usize)u64。\n固定运行时输入RDI=a、RSI=b。signed精确3行：\"mov rax, rdi\\nimul rax, rsi\\njo __dong_b<N>\\n\"；unsigned精确3行：\"mov rax, rdi\\nmul rsi\\njc __dong_b<N>\\n\"。trap_block<MAX，标签数字仅复用CR4 decimal_integer。溢出跳trap，否则落空；两路径RAX均为积低64位。signed仅RAX/flags改变且RDX保持；unsigned另RDX=无符号积高64位。RDI/RSI及其余GPR保持。乘法CF/OF以外算术flags未定义，测试不得错误要求保持；不定义trap块/panic。这是debug64位checked路径原语，不替代wrapping/窄值/完整语言lowering。\n固定寄存器不需要16矩阵。两模式各<=24主要向量，signed与unsigned均含0/1、-1/全1、MIN/MAX、安全边界及相邻溢出。独立Python任意精度积决定合法范围和低/高积；安全marker观察两路径、所有输入寄存器及signedRDX/unsigned高积。原生桩state指针放R10或R11而非覆盖RDI输入，保持宿主ABI。真实坏Dong可把jc改jnc（不能把jc改jo冒充坏体，因为MUL的CF/OF同值），正常执行后因路径错误拒绝；signed另jo反转保持合法执行。另容量提前写原子性负控。最大20位trap标签精确容量/少1/0/多余尾部及NONE非法/描述符全部独立覆盖。\n\n## 共用固定契约与归属\n\n这是L3真实后端所需的独立Dong文本发射组件，不能代替完整代码生成/语言溢出检查/自举。源码必须Dong，不导出C符号，不用Python/C宿主实现代替生产逻辑；无分配、全局可变状态或OS调用。仅修改本人本任务4个授权文件，依赖只读，绝不改code/lang、活动编译器、内核、协调器、CR11或Codex语义主线。\n\n寄存器编号0..15固定rax,rcx,rdx,rbx,rsp,rbp,rsi,rdi,r8,r9,r10,r11,r12,r13,r14,r15；其它编号INVALID。32位名eax,ecx,edx,ebx,esp,ebp,esi,edi,r8d..r15d；16位ax,cx,dx,bx,sp,bp,si,di,r8w..r15w；低8位al,cl,dl,bl,spl,bpl,sil,dil,r8b..r15b，不支持ah等高8位。严格ASCII和单字节LF，除任务另定的块标签外，不含section/global/注释/额外空行/NUL；本任务规定几行就精确几行，成功尾部不变。\n\nunsafe调用方保证对象真实可访问。仍必须在任何读写前检查written非空、8对齐、完整8字节端点不溢出；out完整描述符端点/非空非NULL；written完整8字节与完整声明out不重叠（包括输出未使用尾部）。空out可NULL。OK=0、INVALID=1、CAPACITY=2，所有参数/枚举/位移/描述符INVALID优先CAPACITY；失败out和written全文不变。先验证/计算，在局部暂存调用只读组件，最后一次写用户out；不得通过只看已用前缀逃过完整别名。长度加法不溢出。\n\n测试要让每个目标预检独立可达：其它字段合法，真实guard/快照初始化后再取。written端点溢出使用8对齐UINT64_MAX-7和合法空out，正确INVALID，漏检坏实现返回CAPACITY，不能非法解引用；NULL/奇地址、out端点、对齐前缀/尾部别名、参数INVALID且out容量0亦独立覆盖。失败全文/双端guard、成功精确文本/计数/剩余尾部立即检查。C观察器对齐存储明确声明，不能用另一个非法字段掩盖目标。\n\n测试实际编译、链接、原生执行Dong debug/release，NASM ELF64/COFF都组装。只暂存本组件和声明的已集成依赖，含坏源码时不引入整个lang根遮蔽临时模块。独立Python/C期望；有限固定边界优先、无需随机堆矩阵。文本/组装覆盖全部16个寄存器（可旋转配对，不要求全笛卡尔积）；受控原生仅用安全调用者保存寄存器的少量组合（每模式不超过24个主要向量），保留宿主ABI/栈，rsp/rbp写目标只组装。COFF组装不等于Win64 ABI可调用，原生C桥显式SysV。\n\n至少两类真实坏Dong成功编译/链接/原生执行，再由指定数值/原子性断言拒绝；同一夹具先跑好实现。至少一类是原生实际结果错误，另一类容量失败提前写输出/计数，以全文/guard立即拒绝；若任务另定两类语义负控，则另保留一次原子性验证。构建失败、崩溃、超时、文本不同或无关预检错误不得冒充指定原生负控。坏源码执行的目标输入必须合法且不导致非法内存/栈访问。\n\n先通过自己的worker MCP get_task/read_document读取最新rev、完整契约、依赖和归属，claim后执行。只运行本任务声明的定向测试，产物放本人works/build/编号/<唯一目录>/；无OS/VM/全回归/性能基准/定时器/关机/提交/推送，不启动模型CLI。客户端手动执行；完成后落盘原编号交付并通过MCP submit，不能自行accept/integrate。交付列真实命令、tests/skip、模式/对象格式、生产/测试SHA256、产物目录、每种负控实际观察/拒绝原因和未运行/剩余限制。依赖或归属问题先报告，不擅自扩大范围。",
+      "status": "rework",
+      "rev": 5,
+      "write_paths": [
+        "cursor-works/src/bootstrap/nasm_checked_multiply.dg",
+        "cursor-works/src/bootstrap/nasm_checked_multiply.md",
+        "cursor-works/tests/test_nasm_checked_multiply.py",
+        "cursor-works/deliveries/CR22.md"
+      ],
+      "depends_on": [
+        "cursor:CR4"
+      ],
+      "checks": [
+        "discover:cursor-works/tests:test_nasm_checked_multiply.py"
+      ],
+      "auto_dispatch": false,
+      "auto_verify": false,
+      "complexity": "standard",
+      "created_at": "2026-10-18T15:28:00+00:00",
+      "updated_at": "2026-10-18T15:56:22+00:00",
+      "historical": false,
+      "document": "cursor-works/tasks/CR22-board.md",
+      "delivery": "cursor-works/deliveries/CR22.md",
+      "candidate": null,
+      "verification": null,
+      "review_note": "R1小范围测试/说明修正，生产功能审查通过。正式与独立均3项0skip、来源稳定；关键原生路径/结果/受控输入保持、MUL高积或NEG RAX/R8边界均有效。但HARNESS.invalid static uint8_t arena/saved无显式对齐，违反共约C观察存储须明确对齐，需加_Alignas(8/16)。最长signed文本实际59字节，jo __dong_b为11而非10，原注释/说明58需修，现64字节scratch仍充分，无需改算法。原语义负控当前已由独立重放确认正常exit0后错误route拒绝，但永久测试用宽assertRaises(AssertionError)可能吞构建/原生退出错误，应精确assertRaisesRegex(...,'route')等，锁定指定路径断言，保留容量提前写负控及其它全部用例。仅原4文件按需修注释/说明、arena和负控断言，实际两模式/双格式定向复跑0skip，更新交付/hash后MCP重提。不扩大GPR矩阵或生产算法；未验收未集成。审查reviews/2026-10-18-CR22-CR23-independent.md。",
+      "legacy_hash": "785a391af2ecf13119104f213efff09a38624a61886ce8afb5d0f949f035b0f3",
+      "claimed_by": "cursor-mcp-58a2b3943fa54a41",
+      "claimed_at": "2026-10-18T15:34:48+00:00"
+    },
+    {
+      "id": "cursor:CR23",
+      "number": "CR23",
+      "owner": "cursor",
+      "title": "signed i64一元负号溢出门禁",
+      "description": "\nmodule bootstrap.nasm_checked_negate。\npub unsafe fn emit(destination:u64,trap_block:u64,out:[]u8,written:*usize)u64。\ndestination寄存器编号0..15；trap_block<MAX。严格两行：\"neg <dest64>\\njo __dong_b<N>\\n\"，标签数字只读复用CR4 decimal_integer。只处理signed i64：MIN跳trap，其它落空；两路径目的寄存器均为模2^64负值。仅dest/flags改变，不改其它寄存器/内存，无scratch、标签定义或panic。不扩充unsigned/narrow，不改CR16已集成wrapping一元组件。\n16寄存器文本和ELF64/COFF组装；原生仅安全caller-saved（RSP/RBP写目标只组装），至少RAX与R8分别执行0/1/-1/MIN/MIN+1/MAX，<=24主要向量/模式。独立Python验证路径、结果与全部其它受控寄存器保持；state指针不得占被写目的寄存器。真实坏Dong jo改jno或删除门禁，MIN等合法硬件输入正常执行后按路径拒绝；另容量提前写原子性负控。trap0/高位/MAX-1、NONE非法含out0，最大标签精确容量/少1/0/多余尾部和完整描述符/端点/别名预检。\n\n## 共用固定契约与归属\n\n这是L3真实后端所需的独立Dong文本发射组件，不能代替完整代码生成/语言溢出检查/自举。源码必须Dong，不导出C符号，不用Python/C宿主实现代替生产逻辑；无分配、全局可变状态或OS调用。仅修改本人本任务4个授权文件，依赖只读，绝不改code/lang、活动编译器、内核、协调器、CR11或Codex语义主线。\n\n寄存器编号0..15固定rax,rcx,rdx,rbx,rsp,rbp,rsi,rdi,r8,r9,r10,r11,r12,r13,r14,r15；其它编号INVALID。32位名eax,ecx,edx,ebx,esp,ebp,esi,edi,r8d..r15d；16位ax,cx,dx,bx,sp,bp,si,di,r8w..r15w；低8位al,cl,dl,bl,spl,bpl,sil,dil,r8b..r15b，不支持ah等高8位。严格ASCII和单字节LF，除任务另定的块标签外，不含section/global/注释/额外空行/NUL；本任务规定几行就精确几行，成功尾部不变。\n\nunsafe调用方保证对象真实可访问。仍必须在任何读写前检查written非空、8对齐、完整8字节端点不溢出；out完整描述符端点/非空非NULL；written完整8字节与完整声明out不重叠（包括输出未使用尾部）。空out可NULL。OK=0、INVALID=1、CAPACITY=2，所有参数/枚举/位移/描述符INVALID优先CAPACITY；失败out和written全文不变。先验证/计算，在局部暂存调用只读组件，最后一次写用户out；不得通过只看已用前缀逃过完整别名。长度加法不溢出。\n\n测试要让每个目标预检独立可达：其它字段合法，真实guard/快照初始化后再取。written端点溢出使用8对齐UINT64_MAX-7和合法空out，正确INVALID，漏检坏实现返回CAPACITY，不能非法解引用；NULL/奇地址、out端点、对齐前缀/尾部别名、参数INVALID且out容量0亦独立覆盖。失败全文/双端guard、成功精确文本/计数/剩余尾部立即检查。C观察器对齐存储明确声明，不能用另一个非法字段掩盖目标。\n\n测试实际编译、链接、原生执行Dong debug/release，NASM ELF64/COFF都组装。只暂存本组件和声明的已集成依赖，含坏源码时不引入整个lang根遮蔽临时模块。独立Python/C期望；有限固定边界优先、无需随机堆矩阵。文本/组装覆盖全部16个寄存器（可旋转配对，不要求全笛卡尔积）；受控原生仅用安全调用者保存寄存器的少量组合（每模式不超过24个主要向量），保留宿主ABI/栈，rsp/rbp写目标只组装。COFF组装不等于Win64 ABI可调用，原生C桥显式SysV。\n\n至少两类真实坏Dong成功编译/链接/原生执行，再由指定数值/原子性断言拒绝；同一夹具先跑好实现。至少一类是原生实际结果错误，另一类容量失败提前写输出/计数，以全文/guard立即拒绝；若任务另定两类语义负控，则另保留一次原子性验证。构建失败、崩溃、超时、文本不同或无关预检错误不得冒充指定原生负控。坏源码执行的目标输入必须合法且不导致非法内存/栈访问。\n\n先通过自己的worker MCP get_task/read_document读取最新rev、完整契约、依赖和归属，claim后执行。只运行本任务声明的定向测试，产物放本人works/build/编号/<唯一目录>/；无OS/VM/全回归/性能基准/定时器/关机/提交/推送，不启动模型CLI。客户端手动执行；完成后落盘原编号交付并通过MCP submit，不能自行accept/integrate。交付列真实命令、tests/skip、模式/对象格式、生产/测试SHA256、产物目录、每种负控实际观察/拒绝原因和未运行/剩余限制。依赖或归属问题先报告，不擅自扩大范围。",
+      "status": "rework",
+      "rev": 5,
+      "write_paths": [
+        "cursor-works/src/bootstrap/nasm_checked_negate.dg",
+        "cursor-works/src/bootstrap/nasm_checked_negate.md",
+        "cursor-works/tests/test_nasm_checked_negate.py",
+        "cursor-works/deliveries/CR23.md"
+      ],
+      "depends_on": [
+        "cursor:CR4"
+      ],
+      "checks": [
+        "discover:cursor-works/tests:test_nasm_checked_negate.py"
+      ],
+      "auto_dispatch": false,
+      "auto_verify": false,
+      "complexity": "standard",
+      "created_at": "2026-10-18T15:28:00+00:00",
+      "updated_at": "2026-10-18T15:56:22+00:00",
+      "historical": false,
+      "document": "cursor-works/tasks/CR23-board.md",
+      "delivery": "cursor-works/deliveries/CR23.md",
+      "candidate": null,
+      "verification": null,
+      "review_note": "R1小范围测试/说明修正，生产功能审查通过。正式与独立均3项0skip、来源稳定；关键原生路径/结果/受控输入保持、MUL高积或NEG RAX/R8边界均有效。但HARNESS.invalid static uint8_t arena/saved无显式对齐，违反共约C观察存储须明确对齐，需加_Alignas(8/16)。最长文本实际40字节，jo __dong_b为11而非10，原注释/说明39需修，现48字节scratch仍充分，无需改算法。原语义负控当前已由独立重放确认正常exit0后错误route拒绝，但永久测试用宽assertRaises(AssertionError)可能吞构建/原生退出错误，应精确assertRaisesRegex(...,'route')等，锁定指定路径断言，保留容量提前写负控及其它全部用例。仅原4文件按需修注释/说明、arena和负控断言，实际两模式/双格式定向复跑0skip，更新交付/hash后MCP重提。不扩大GPR矩阵或生产算法；未验收未集成。审查reviews/2026-10-18-CR22-CR23-independent.md。",
+      "legacy_hash": "7869892406f01e58b94fc325cc96d9ca0defe40455afd27d7b5c3ab895339c46",
+      "claimed_by": "cursor-mcp-58a2b3943fa54a41",
+      "claimed_at": "2026-10-18T15:38:47+00:00"
+    },
+    {
+      "id": "cursor:CR24",
+      "number": "CR24",
+      "owner": "cursor",
+      "title": "顺序一致性32/64位原子存储发射",
+      "description": "module `bootstrap.nasm_atomic_store`；依赖`[]`（固定模板，不读其它模块）。\r\n\r\n`pub unsafe fn emit(width:u64,out:[]u8,written:*usize)u64`\r\n\r\nwidth仅32或64，其它INVALID且优先容量。固定运行时RDI=目标地址、RSI=新值，写入RSI低width位。width32严格：\r\n\r\n```text\r\nmov eax, esi\r\nxchg dword [rdi], eax\r\n```\r\n\r\nwidth64严格：\r\n\r\n```text\r\nmov rax, rsi\r\nxchg qword [rdi], rax\r\n```\r\n\r\nRAX被改为旧值（32位零扩展），这是scratch结果，语言atomic_store本身无返回值。内存XCHG隐式锁定，不增加多余LOCK前缀。RDI/RSI与其余GPR、flags均保持；只目标width字节改变。调用方保证普通可缓存内存、自然对齐、可写、真实对象生命周期和原子使用契约，本发射器不运行时校验地址，不用于MMIO。后续lowering必须将其标记为不可删除/重排的内存副作用；本任务不改IR接线，不以仅指令库宣称完整原子语义集成。\r\n\r\n原生oracle：每宽度覆盖0、全1、高位/低位互异模式、RSI高32位非0、旧新相等及不同。独立按低width掩码检查新内存、RAX旧值、相邻guard（尤其32位后4字节）、输入寄存器和flags；串行发射/原生向量每模式至多16。另从实际产出代码字节/反汇编精确确认memory-XCHG宽度与编码，不能只看某次并发最终值声称SC被证明。语义坏Dong把`mov eax,esi`/`mov rax,rsi`的源改为0常量，用非0新值正常执行后按目标内存拒绝；另容量提前写。\n\n\n## 共用固定契约与执行归属\n\n本任务是L3 Dong自举后端的独立生产组件；仅四个声明文件，Dong实现，不导出C符号（临时测试wrapper可导出），无分配、全局可变状态、OS调用。不可改code/lang、活动编译器、内核、协调器、其它负责人、在途任务或已集成依赖；既有队列/返修优先。依赖只读，只用已integrated模块；不得以宿主Python/C算法替代Dong生产逻辑。\n\n统一OK=0、INVALID=1、CAPACITY=2；接口另有Result时按任务正文完整尺寸。written非NULL、8对齐、完整8字节端点不回绕；out完整声明区间端点不回绕，非空非NULL，空可NULL。written与完整out不重叠（包括成功未使用尾部）。有输入切片/结构/嵌套名字时，必须在任何读写前验证完整描述符、元素乘法、端点、所需对齐、非空非NULL和完整对象别名；输入彼此如正文无禁止可互叠，只读输入与完整out/结果不得重叠。所有数据/枚举/标签/尺寸INVALID优先CAPACITY。失败out、计数或完整Result、输入全文不变；成功只写精确前缀/结果，尾部保持。先全预检及正确求长，在充分且有证明上界的局部区调用只读依赖，再最后发布用户out；不允许内部scratch越界或对合法容量不足输入panic。\n\n文本严格ASCII，换行真实单LF，无NUL/注释/额外空行/隐式section/global/ret（任务另定声明除外）。涉及__dong_b<N>标签时N=0..MAX-1，MAX为NONE非法；数字复用已声明decimal_integer，不另写格式化。寄存器编号若有0..15参数，固定rax,rcx,rdx,rbx,rsp,rbp,rsi,rdi,r8..r15；固定寄存器任务按正文集合测试，不强凑16矩阵。\n\n测试只跑本任务checks：实际编译/链接/原生执行Dong debug与release，NASM ELF64/COFF都组装；原生C桥显式SysV，保护宿主栈/被调用者保存寄存器。COFF组装不冒充Win64调用ABI。只暂存本模块及已声明只读依赖的传递闭包，不引入整个lang根遮蔽坏源码。独立Python/C oracle，不用生产规划器输出当唯一期望。有限固定边界，每模式不超过24个主要原生向量（并发操作另按正文有限检查）；不做全笛卡尔积或性能基准。源码、说明、测试、只读依赖前后SHA256稳定，0skip才可验收。\n\n每个描述符/端点/别名预检要独立可达，其它字段合法。written端点溢出用8对齐UINT64_MAX-7且合法空out，漏检坏体应安全返回CAPACITY而非非法解引用。初始化guard后再取快照，立刻观察失败全文/计数/guard、成功精确文本/长度/未用尾部；输入真实只读保护须检查系统调用成功，不能只声称只读。\n\n至少保留两类真实坏Dong：一种完成构建、链接、正常原生执行后，由指定数值/内存/分支/链接后地址断言拒绝；一种容量不足提前写out或结果，由完整原子性断言拒绝。同夹具先跑好体。构建失败、崩溃、超时、文本不同、无关预检错误不能冒充指定语义负控；源码中缺锁/不同内存序等结构检查单列，不能假装单次正常运行证明并发语义。坏体所有内存访问在预留安全可访问区内，不破坏真实宿主栈/ret、不依靠越界或硬件异常拒绝。\n\n本人客户端先worker MCP get_task/read_document读取最新rev和完整契约/归属，claim成功才执行；先完成已有领取/返修。产物在本人works/build/<编号>/<唯一目录>/，完成原编号交付写真实命令、tests/skips、模式/对象格式、全部输入SHA256、每种坏体实际观察/拒绝依据、未跑与剩余限制，再MCP submit。不得自行accept/integrate、提交/推送、运行OS/VM/全回归、启动模型CLI/定时器/关机，不用管理工具自动启动Cursor。任务发布不代表实现或通过，最后由Codex独立复验再验收集成。\n",
+      "status": "todo",
+      "rev": 1,
+      "write_paths": [
+        "cursor-works/src/bootstrap/nasm_atomic_store.dg",
+        "cursor-works/src/bootstrap/nasm_atomic_store.md",
+        "cursor-works/tests/test_nasm_atomic_store.py",
+        "cursor-works/deliveries/CR24.md"
+      ],
+      "depends_on": [],
+      "checks": [
+        "discover:cursor-works/tests:test_nasm_atomic_store.py"
+      ],
+      "auto_dispatch": false,
+      "auto_verify": false,
+      "complexity": "standard",
+      "created_at": "2026-10-18T15:46:00+00:00",
+      "updated_at": "2026-10-18T15:46:00+00:00",
+      "historical": false,
+      "document": "cursor-works/tasks/CR24-board.md",
+      "delivery": "cursor-works/deliveries/CR24.md",
+      "candidate": null,
+      "verification": null,
+      "review_note": "",
+      "legacy_hash": "225024d2b6d8db87458e8df9979ce75f77b22dd7c9a221eb1f1b29cb3028e32a"
+    },
+    {
+      "id": "cursor:CR25",
+      "number": "CR25",
+      "owner": "cursor",
+      "title": "强原子compare-exchange并返回旧值",
+      "description": "module `bootstrap.nasm_atomic_compare_exchange`；依赖`[]`。\r\n\r\n`pub unsafe fn emit(width:u64,out:[]u8,written:*usize)u64`\r\n\r\nwidth仅32/64。固定RDI=地址、RSI=expected、RDX=desired。width32严格：\r\n\r\n```text\r\nmov eax, esi\r\nmov r10d, edx\r\nlock cmpxchg dword [rdi], r10d\r\n```\r\n\r\nwidth64严格：\r\n\r\n```text\r\nmov rax, rsi\r\nmov r10, rdx\r\nlock cmpxchg qword [rdi], r10\r\n```\r\n\r\n只比较低width位；若旧内存==expected低位，写desired低位，否则不写；RAX始终是旧值，32位零扩展。特别32位成功时CMPXCHG不重写accumulator，故必须先用`mov eax,esi`清高32，不能用`mov rax,rsi`。强比较无伪失败；ZF=1当且仅当交换成功，其余算术flags允许被改变。只RAX/R10/flags可变；RDI/RSI/RDX、其它GPR与非目标内存保持。调用方保证自然对齐、真实可访问且可写的普通可缓存内存、正确对象生命周期及原子使用契约，不用于MMIO；此组件不做运行时地址校验。后续lowering须标记不可删除/重排的内存副作用，本任务不改IR接线，也不以指令库宣称完整原子语义集成。\r\n\r\n原生oracle：两宽度的成功/失败、旧值/expected仅高32不同、desired高32非0、0/全1/最高位、expected==desired等，独立检查旧返回、最终内存、ZF和输入保持，立即捕获RAX/R10/ZF不能被观察器覆盖。另一个有限并发测试：4个原生线程各成功CAS递增256次，所有共享对象访问在并发期间均走本snippet；记录每次成功前旧值，线程join后独立要求旧值恰为0..1023的排列且最终1024，有限重试上界/超时用于失败诊断、不当作坏实现语义拒绝。pthread或Windows CreateThread均可，保持显式SysV桥。\r\n\r\n实际代码字节/反汇编必须确认LOCK及CMPXCHG正确宽度。语义坏Dong把desired复制源改成RSI，选择expected与desired不同的成功例，正常执行但新内存错误；可另移除32位初始清高位、以成功且expected高32非0证明返回旧值漏检；另容量提前写。不以偶然出现race作为删LOCK唯一负控。\n\n\n## 共用固定契约与执行归属\n\n本任务是L3 Dong自举后端的独立生产组件；仅四个声明文件，Dong实现，不导出C符号（临时测试wrapper可导出），无分配、全局可变状态、OS调用。不可改code/lang、活动编译器、内核、协调器、其它负责人、在途任务或已集成依赖；既有队列/返修优先。依赖只读，只用已integrated模块；不得以宿主Python/C算法替代Dong生产逻辑。\n\n统一OK=0、INVALID=1、CAPACITY=2；接口另有Result时按任务正文完整尺寸。written非NULL、8对齐、完整8字节端点不回绕；out完整声明区间端点不回绕，非空非NULL，空可NULL。written与完整out不重叠（包括成功未使用尾部）。有输入切片/结构/嵌套名字时，必须在任何读写前验证完整描述符、元素乘法、端点、所需对齐、非空非NULL和完整对象别名；输入彼此如正文无禁止可互叠，只读输入与完整out/结果不得重叠。所有数据/枚举/标签/尺寸INVALID优先CAPACITY。失败out、计数或完整Result、输入全文不变；成功只写精确前缀/结果，尾部保持。先全预检及正确求长，在充分且有证明上界的局部区调用只读依赖，再最后发布用户out；不允许内部scratch越界或对合法容量不足输入panic。\n\n文本严格ASCII，换行真实单LF，无NUL/注释/额外空行/隐式section/global/ret（任务另定声明除外）。涉及__dong_b<N>标签时N=0..MAX-1，MAX为NONE非法；数字复用已声明decimal_integer，不另写格式化。寄存器编号若有0..15参数，固定rax,rcx,rdx,rbx,rsp,rbp,rsi,rdi,r8..r15；固定寄存器任务按正文集合测试，不强凑16矩阵。\n\n测试只跑本任务checks：实际编译/链接/原生执行Dong debug与release，NASM ELF64/COFF都组装；原生C桥显式SysV，保护宿主栈/被调用者保存寄存器。COFF组装不冒充Win64调用ABI。只暂存本模块及已声明只读依赖的传递闭包，不引入整个lang根遮蔽坏源码。独立Python/C oracle，不用生产规划器输出当唯一期望。有限固定边界，每模式不超过24个主要原生向量（并发操作另按正文有限检查）；不做全笛卡尔积或性能基准。源码、说明、测试、只读依赖前后SHA256稳定，0skip才可验收。\n\n每个描述符/端点/别名预检要独立可达，其它字段合法。written端点溢出用8对齐UINT64_MAX-7且合法空out，漏检坏体应安全返回CAPACITY而非非法解引用。初始化guard后再取快照，立刻观察失败全文/计数/guard、成功精确文本/长度/未用尾部；输入真实只读保护须检查系统调用成功，不能只声称只读。\n\n至少保留两类真实坏Dong：一种完成构建、链接、正常原生执行后，由指定数值/内存/分支/链接后地址断言拒绝；一种容量不足提前写out或结果，由完整原子性断言拒绝。同夹具先跑好体。构建失败、崩溃、超时、文本不同、无关预检错误不能冒充指定语义负控；源码中缺锁/不同内存序等结构检查单列，不能假装单次正常运行证明并发语义。坏体所有内存访问在预留安全可访问区内，不破坏真实宿主栈/ret、不依靠越界或硬件异常拒绝。\n\n本人客户端先worker MCP get_task/read_document读取最新rev和完整契约/归属，claim成功才执行；先完成已有领取/返修。产物在本人works/build/<编号>/<唯一目录>/，完成原编号交付写真实命令、tests/skips、模式/对象格式、全部输入SHA256、每种坏体实际观察/拒绝依据、未跑与剩余限制，再MCP submit。不得自行accept/integrate、提交/推送、运行OS/VM/全回归、启动模型CLI/定时器/关机，不用管理工具自动启动Cursor。任务发布不代表实现或通过，最后由Codex独立复验再验收集成。\n",
+      "status": "todo",
+      "rev": 1,
+      "write_paths": [
+        "cursor-works/src/bootstrap/nasm_atomic_compare_exchange.dg",
+        "cursor-works/src/bootstrap/nasm_atomic_compare_exchange.md",
+        "cursor-works/tests/test_nasm_atomic_compare_exchange.py",
+        "cursor-works/deliveries/CR25.md"
+      ],
+      "depends_on": [],
+      "checks": [
+        "discover:cursor-works/tests:test_nasm_atomic_compare_exchange.py"
+      ],
+      "auto_dispatch": false,
+      "auto_verify": false,
+      "complexity": "standard",
+      "created_at": "2026-10-18T15:46:00+00:00",
+      "updated_at": "2026-10-18T15:46:00+00:00",
+      "historical": false,
+      "document": "cursor-works/tasks/CR25-board.md",
+      "delivery": "cursor-works/deliveries/CR25.md",
+      "candidate": null,
+      "verification": null,
+      "review_note": "",
+      "legacy_hash": "0eb209562617e71b52132ed4ca039c8e99590bfc9687997f4e2dd5ead70fc260"
+    },
+    {
+      "id": "cursor:CR26",
+      "number": "CR26",
+      "owner": "cursor",
+      "title": "原子fetch-add返回旧值与模加法",
+      "description": "module `bootstrap.nasm_atomic_fetch_add`；依赖`[]`。\r\n\r\n`pub unsafe fn emit(width:u64,out:[]u8,written:*usize)u64`\r\n\r\nwidth仅32/64。RDI=地址、RSI=delta。width32严格`mov eax, esi\\nlock xadd dword [rdi], eax\\n`，width64严格`mov rax, rsi\\nlock xadd qword [rdi], rax\\n`。目标变为(old+delta) mod 2^width，RAX返回old（32位零扩展）；只RAX/flags改变，RDI/RSI和其它GPR保持；只目标width字节改变。调用方保证自然对齐、真实可访问且可写的普通可缓存内存、正确对象生命周期及原子使用契约，不用于MMIO；本片段不做运行时地址校验。后续lowering须标记不可删除/重排的内存副作用，本任务不改IR接线，不以指令库宣称完整原子语义集成。\r\n\r\n原生oracle：各宽度0、delta0、old全1+1回绕、最高位、delta低位与高位不同、32位只改4字节，独立任意精度模算与旧返回/guard/输入保持；不要以新值代替旧返回。另有限并发4线程各256次delta1，收集1024个真实返回，排序后必须恰0..1023且最终1024，guard不变；两模式均执行，所有共享对象访问在并发期间只走本snippet。字节/反汇编独立确认LOCK XADD。语义坏Dong将XADD换成XCHG（正常执行并返回old但内存不再求和），使用old=7,delta=3按最终10拒绝；另容量提前写。删LOCK只由确定性字节检查拒绝，不把并发偶发误差冒充必现负控。\n\n\n## 共用固定契约与执行归属\n\n本任务是L3 Dong自举后端的独立生产组件；仅四个声明文件，Dong实现，不导出C符号（临时测试wrapper可导出），无分配、全局可变状态、OS调用。不可改code/lang、活动编译器、内核、协调器、其它负责人、在途任务或已集成依赖；既有队列/返修优先。依赖只读，只用已integrated模块；不得以宿主Python/C算法替代Dong生产逻辑。\n\n统一OK=0、INVALID=1、CAPACITY=2；接口另有Result时按任务正文完整尺寸。written非NULL、8对齐、完整8字节端点不回绕；out完整声明区间端点不回绕，非空非NULL，空可NULL。written与完整out不重叠（包括成功未使用尾部）。有输入切片/结构/嵌套名字时，必须在任何读写前验证完整描述符、元素乘法、端点、所需对齐、非空非NULL和完整对象别名；输入彼此如正文无禁止可互叠，只读输入与完整out/结果不得重叠。所有数据/枚举/标签/尺寸INVALID优先CAPACITY。失败out、计数或完整Result、输入全文不变；成功只写精确前缀/结果，尾部保持。先全预检及正确求长，在充分且有证明上界的局部区调用只读依赖，再最后发布用户out；不允许内部scratch越界或对合法容量不足输入panic。\n\n文本严格ASCII，换行真实单LF，无NUL/注释/额外空行/隐式section/global/ret（任务另定声明除外）。涉及__dong_b<N>标签时N=0..MAX-1，MAX为NONE非法；数字复用已声明decimal_integer，不另写格式化。寄存器编号若有0..15参数，固定rax,rcx,rdx,rbx,rsp,rbp,rsi,rdi,r8..r15；固定寄存器任务按正文集合测试，不强凑16矩阵。\n\n测试只跑本任务checks：实际编译/链接/原生执行Dong debug与release，NASM ELF64/COFF都组装；原生C桥显式SysV，保护宿主栈/被调用者保存寄存器。COFF组装不冒充Win64调用ABI。只暂存本模块及已声明只读依赖的传递闭包，不引入整个lang根遮蔽坏源码。独立Python/C oracle，不用生产规划器输出当唯一期望。有限固定边界，每模式不超过24个主要原生向量（并发操作另按正文有限检查）；不做全笛卡尔积或性能基准。源码、说明、测试、只读依赖前后SHA256稳定，0skip才可验收。\n\n每个描述符/端点/别名预检要独立可达，其它字段合法。written端点溢出用8对齐UINT64_MAX-7且合法空out，漏检坏体应安全返回CAPACITY而非非法解引用。初始化guard后再取快照，立刻观察失败全文/计数/guard、成功精确文本/长度/未用尾部；输入真实只读保护须检查系统调用成功，不能只声称只读。\n\n至少保留两类真实坏Dong：一种完成构建、链接、正常原生执行后，由指定数值/内存/分支/链接后地址断言拒绝；一种容量不足提前写out或结果，由完整原子性断言拒绝。同夹具先跑好体。构建失败、崩溃、超时、文本不同、无关预检错误不能冒充指定语义负控；源码中缺锁/不同内存序等结构检查单列，不能假装单次正常运行证明并发语义。坏体所有内存访问在预留安全可访问区内，不破坏真实宿主栈/ret、不依靠越界或硬件异常拒绝。\n\n本人客户端先worker MCP get_task/read_document读取最新rev和完整契约/归属，claim成功才执行；先完成已有领取/返修。产物在本人works/build/<编号>/<唯一目录>/，完成原编号交付写真实命令、tests/skips、模式/对象格式、全部输入SHA256、每种坏体实际观察/拒绝依据、未跑与剩余限制，再MCP submit。不得自行accept/integrate、提交/推送、运行OS/VM/全回归、启动模型CLI/定时器/关机，不用管理工具自动启动Cursor。任务发布不代表实现或通过，最后由Codex独立复验再验收集成。\n",
+      "status": "todo",
+      "rev": 1,
+      "write_paths": [
+        "cursor-works/src/bootstrap/nasm_atomic_fetch_add.dg",
+        "cursor-works/src/bootstrap/nasm_atomic_fetch_add.md",
+        "cursor-works/tests/test_nasm_atomic_fetch_add.py",
+        "cursor-works/deliveries/CR26.md"
+      ],
+      "depends_on": [],
+      "checks": [
+        "discover:cursor-works/tests:test_nasm_atomic_fetch_add.py"
+      ],
+      "auto_dispatch": false,
+      "auto_verify": false,
+      "complexity": "standard",
+      "created_at": "2026-10-18T15:46:00+00:00",
+      "updated_at": "2026-10-18T15:46:00+00:00",
+      "historical": false,
+      "document": "cursor-works/tasks/CR26-board.md",
+      "delivery": "cursor-works/deliveries/CR26.md",
+      "candidate": null,
+      "verification": null,
+      "review_note": "",
+      "legacy_hash": "0306af7bcaa411dd6ac3ee0632604f0c35a7dc280eec537f0a9400fafd4f31e0"
+    },
+    {
+      "id": "cursor:CR27",
+      "number": "CR27",
+      "owner": "cursor",
+      "title": "聚合赋值的overlap-safe memmove发射",
+      "description": "module `bootstrap.nasm_memmove`；依赖`[cursor:CR4]`。\r\n\r\n`pub unsafe fn emit(forward_block:u64,end_block:u64,out:[]u8,written:*usize)u64`\r\n\r\n两块号必须不同且均非NONE；调用方为本片段保留这两个全局唯一编号，此组件在输出中定义它们，不与其它块重复。RDI=dst、RSI=src、RCX=count，DF入口0；调用方保证非零count的真实可读/可写区间、两个地址+count端点不回绕、对象生命周期；允许任意重叠，是现有C32非重叠COPY的必要补充。count0允许NULL且不访问内存、不计算倒退地址。\r\n\r\n严格文本（F/E用CR4规范十进制）：\r\n\r\n```text\r\ntest rcx, rcx\r\njz __dong_b<E>\r\ncmp rdi, rsi\r\njbe __dong_b<F>\r\nlea rsi, [rsi + rcx - 1]\r\nlea rdi, [rdi + rcx - 1]\r\nstd\r\nrep movsb\r\ncld\r\njmp __dong_b<E>\r\n__dong_b<F>:\r\nrep movsb\r\n__dong_b<E>:\r\n```\r\n\r\ncount0时RDI/RSI/RCX保持（RCX原0）；非零且dst<=src时前拷贝，RDI/RSI各前进count，RCX=0；dst>src时反拷贝，RDI/RSI各为原地址−1，RCX=0。DF所有出口0。只RDI/RSI/RCX与flags可变，RAX及其它GPR保持；整个内存结果必须等于入口源快照一次复制到目标，目标外不变。无call/libc依赖。最大块号长度20时精确最长263字节，可用512字节文本scratch；不能只给256。\r\n\r\n原生oracle：同一真实带guard缓冲区，以入口完整快照和独立Python/C memmove期望比较全缓冲区；覆盖count0/1/7/16/63、相同地址、dst=src±1/±7、两方向不重叠、count0 NULL，有限最多24个主要向量；观察方向对应指针终值、RCX0、RAX/其它寄存器和DF0。不能把反向前一字节地址拿来解引用。语义坏Dong把方向分支强制前拷贝，dst=src+1,count=8必须正常执行后出现可检测重复字节，按全内存拒绝；另容量提前写。DF负控若删除CLD，只能用能安全捕获并在返回C前立即CLD的汇编桥，不允许把宿主ABI破坏后的崩溃当有效拒绝。\n\n\n## 共用固定契约与执行归属\n\n本任务是L3 Dong自举后端的独立生产组件；仅四个声明文件，Dong实现，不导出C符号（临时测试wrapper可导出），无分配、全局可变状态、OS调用。不可改code/lang、活动编译器、内核、协调器、其它负责人、在途任务或已集成依赖；既有队列/返修优先。依赖只读，只用已integrated模块；不得以宿主Python/C算法替代Dong生产逻辑。\n\n统一OK=0、INVALID=1、CAPACITY=2；接口另有Result时按任务正文完整尺寸。written非NULL、8对齐、完整8字节端点不回绕；out完整声明区间端点不回绕，非空非NULL，空可NULL。written与完整out不重叠（包括成功未使用尾部）。有输入切片/结构/嵌套名字时，必须在任何读写前验证完整描述符、元素乘法、端点、所需对齐、非空非NULL和完整对象别名；输入彼此如正文无禁止可互叠，只读输入与完整out/结果不得重叠。所有数据/枚举/标签/尺寸INVALID优先CAPACITY。失败out、计数或完整Result、输入全文不变；成功只写精确前缀/结果，尾部保持。先全预检及正确求长，在充分且有证明上界的局部区调用只读依赖，再最后发布用户out；不允许内部scratch越界或对合法容量不足输入panic。\n\n文本严格ASCII，换行真实单LF，无NUL/注释/额外空行/隐式section/global/ret（任务另定声明除外）。涉及__dong_b<N>标签时N=0..MAX-1，MAX为NONE非法；数字复用已声明decimal_integer，不另写格式化。寄存器编号若有0..15参数，固定rax,rcx,rdx,rbx,rsp,rbp,rsi,rdi,r8..r15；固定寄存器任务按正文集合测试，不强凑16矩阵。\n\n测试只跑本任务checks：实际编译/链接/原生执行Dong debug与release，NASM ELF64/COFF都组装；原生C桥显式SysV，保护宿主栈/被调用者保存寄存器。COFF组装不冒充Win64调用ABI。只暂存本模块及已声明只读依赖的传递闭包，不引入整个lang根遮蔽坏源码。独立Python/C oracle，不用生产规划器输出当唯一期望。有限固定边界，每模式不超过24个主要原生向量（并发操作另按正文有限检查）；不做全笛卡尔积或性能基准。源码、说明、测试、只读依赖前后SHA256稳定，0skip才可验收。\n\n每个描述符/端点/别名预检要独立可达，其它字段合法。written端点溢出用8对齐UINT64_MAX-7且合法空out，漏检坏体应安全返回CAPACITY而非非法解引用。初始化guard后再取快照，立刻观察失败全文/计数/guard、成功精确文本/长度/未用尾部；输入真实只读保护须检查系统调用成功，不能只声称只读。\n\n至少保留两类真实坏Dong：一种完成构建、链接、正常原生执行后，由指定数值/内存/分支/链接后地址断言拒绝；一种容量不足提前写out或结果，由完整原子性断言拒绝。同夹具先跑好体。构建失败、崩溃、超时、文本不同、无关预检错误不能冒充指定语义负控；源码中缺锁/不同内存序等结构检查单列，不能假装单次正常运行证明并发语义。坏体所有内存访问在预留安全可访问区内，不破坏真实宿主栈/ret、不依靠越界或硬件异常拒绝。\n\n本人客户端先worker MCP get_task/read_document读取最新rev和完整契约/归属，claim成功才执行；先完成已有领取/返修。产物在本人works/build/<编号>/<唯一目录>/，完成原编号交付写真实命令、tests/skips、模式/对象格式、全部输入SHA256、每种坏体实际观察/拒绝依据、未跑与剩余限制，再MCP submit。不得自行accept/integrate、提交/推送、运行OS/VM/全回归、启动模型CLI/定时器/关机，不用管理工具自动启动Cursor。任务发布不代表实现或通过，最后由Codex独立复验再验收集成。\n",
+      "status": "todo",
+      "rev": 1,
+      "write_paths": [
+        "cursor-works/src/bootstrap/nasm_memmove.dg",
+        "cursor-works/src/bootstrap/nasm_memmove.md",
+        "cursor-works/tests/test_nasm_memmove.py",
+        "cursor-works/deliveries/CR27.md"
+      ],
+      "depends_on": [
+        "cursor:CR4"
+      ],
+      "checks": [
+        "discover:cursor-works/tests:test_nasm_memmove.py"
+      ],
+      "auto_dispatch": false,
+      "auto_verify": false,
+      "complexity": "standard",
+      "created_at": "2026-10-18T15:46:00+00:00",
+      "updated_at": "2026-10-18T15:46:00+00:00",
+      "historical": false,
+      "document": "cursor-works/tasks/CR27-board.md",
+      "delivery": "cursor-works/deliveries/CR27.md",
+      "candidate": null,
+      "verification": null,
+      "review_note": "",
+      "legacy_hash": "df665658cf1ff90e085da37db73a92f9cc1842d1d37bd81c7c1f38c1f94c1d8b"
+    },
+    {
+      "id": "cursor:CR28",
+      "number": "CR28",
+      "owner": "cursor",
+      "title": "8/16/32位debug算术结果范围门禁",
+      "description": "module `bootstrap.nasm_narrow_range_guard`；依赖`[cursor:CR4]`。\r\n\r\n`pub unsafe fn emit(width:u64,signed:bool,trap_block:u64,out:[]u8,written:*usize)u64`\r\n\r\nwidth仅8/16/32，64/0/其它INVALID。固定RAX为尚未截断/规范化的完整64位算术结果；signed解释为i64，无符号解释为u64。signed=true严格：\r\n\r\n```text\r\nmov r11, <min>\r\ncmp rax, r11\r\njl __dong_b<N>\r\nmov r11, <max>\r\ncmp rax, r11\r\njg __dong_b<N>\r\n```\r\n\r\nfalse严格：\r\n\r\n```text\r\nmov r11, <max>\r\ncmp rax, r11\r\nja __dong_b<N>\r\n```\r\n\r\nsigned范围分别[-128,127]、[-32768,32767]、[-2147483648,2147483647]；unsigned上界255/65535/4294967295。数字全部规范十进制、负号ASCII，复用CR4（min以64位二补码bits和signed=true编码）。上界u32不能作为sign-extended imm32直接CMP，统一先MOV到R11。RAX和其它GPR保持，仅R11/flags可变。trap由上游定义，debug溢出kind2；必须在CR14规范化之前接入，不补64位先前已发生的机器溢出，不用于shift/cast/显式wrapping。对规范窄值的+−*和负号，上游64位完整结果足以判断；此组件不改变release模运算契约。\r\n\r\n局部256字节足够（按20位块号计算有符号32位模板上界），要求实现说明实际求长/上界。原生oracle每width×signed至少4个边界：signed min−1/min/max/max+1，unsigned0/max/max+1/u64最大，共24主要向量；观察实际安全trap/落空、RAX原值及非R11寄存器保持。独立Python范围判定，不先截低width位。至少两种语义负控：删signed下界检查以min−1单独触发，unsigned JA→JG以u64最大被错当负数时正常执行错误落空；另容量提前写。\n\n\n## 共用固定契约与执行归属\n\n本任务是L3 Dong自举后端的独立生产组件；仅四个声明文件，Dong实现，不导出C符号（临时测试wrapper可导出），无分配、全局可变状态、OS调用。不可改code/lang、活动编译器、内核、协调器、其它负责人、在途任务或已集成依赖；既有队列/返修优先。依赖只读，只用已integrated模块；不得以宿主Python/C算法替代Dong生产逻辑。\n\n统一OK=0、INVALID=1、CAPACITY=2；接口另有Result时按任务正文完整尺寸。written非NULL、8对齐、完整8字节端点不回绕；out完整声明区间端点不回绕，非空非NULL，空可NULL。written与完整out不重叠（包括成功未使用尾部）。有输入切片/结构/嵌套名字时，必须在任何读写前验证完整描述符、元素乘法、端点、所需对齐、非空非NULL和完整对象别名；输入彼此如正文无禁止可互叠，只读输入与完整out/结果不得重叠。所有数据/枚举/标签/尺寸INVALID优先CAPACITY。失败out、计数或完整Result、输入全文不变；成功只写精确前缀/结果，尾部保持。先全预检及正确求长，在充分且有证明上界的局部区调用只读依赖，再最后发布用户out；不允许内部scratch越界或对合法容量不足输入panic。\n\n文本严格ASCII，换行真实单LF，无NUL/注释/额外空行/隐式section/global/ret（任务另定声明除外）。涉及__dong_b<N>标签时N=0..MAX-1，MAX为NONE非法；数字复用已声明decimal_integer，不另写格式化。寄存器编号若有0..15参数，固定rax,rcx,rdx,rbx,rsp,rbp,rsi,rdi,r8..r15；固定寄存器任务按正文集合测试，不强凑16矩阵。\n\n测试只跑本任务checks：实际编译/链接/原生执行Dong debug与release，NASM ELF64/COFF都组装；原生C桥显式SysV，保护宿主栈/被调用者保存寄存器。COFF组装不冒充Win64调用ABI。只暂存本模块及已声明只读依赖的传递闭包，不引入整个lang根遮蔽坏源码。独立Python/C oracle，不用生产规划器输出当唯一期望。有限固定边界，每模式不超过24个主要原生向量（并发操作另按正文有限检查）；不做全笛卡尔积或性能基准。源码、说明、测试、只读依赖前后SHA256稳定，0skip才可验收。\n\n每个描述符/端点/别名预检要独立可达，其它字段合法。written端点溢出用8对齐UINT64_MAX-7且合法空out，漏检坏体应安全返回CAPACITY而非非法解引用。初始化guard后再取快照，立刻观察失败全文/计数/guard、成功精确文本/长度/未用尾部；输入真实只读保护须检查系统调用成功，不能只声称只读。\n\n至少保留两类真实坏Dong：一种完成构建、链接、正常原生执行后，由指定数值/内存/分支/链接后地址断言拒绝；一种容量不足提前写out或结果，由完整原子性断言拒绝。同夹具先跑好体。构建失败、崩溃、超时、文本不同、无关预检错误不能冒充指定语义负控；源码中缺锁/不同内存序等结构检查单列，不能假装单次正常运行证明并发语义。坏体所有内存访问在预留安全可访问区内，不破坏真实宿主栈/ret、不依靠越界或硬件异常拒绝。\n\n本人客户端先worker MCP get_task/read_document读取最新rev和完整契约/归属，claim成功才执行；先完成已有领取/返修。产物在本人works/build/<编号>/<唯一目录>/，完成原编号交付写真实命令、tests/skips、模式/对象格式、全部输入SHA256、每种坏体实际观察/拒绝依据、未跑与剩余限制，再MCP submit。不得自行accept/integrate、提交/推送、运行OS/VM/全回归、启动模型CLI/定时器/关机，不用管理工具自动启动Cursor。任务发布不代表实现或通过，最后由Codex独立复验再验收集成。\n",
+      "status": "todo",
+      "rev": 1,
+      "write_paths": [
+        "cursor-works/src/bootstrap/nasm_narrow_range_guard.dg",
+        "cursor-works/src/bootstrap/nasm_narrow_range_guard.md",
+        "cursor-works/tests/test_nasm_narrow_range_guard.py",
+        "cursor-works/deliveries/CR28.md"
+      ],
+      "depends_on": [
+        "cursor:CR4"
+      ],
+      "checks": [
+        "discover:cursor-works/tests:test_nasm_narrow_range_guard.py"
+      ],
+      "auto_dispatch": false,
+      "auto_verify": false,
+      "complexity": "standard",
+      "created_at": "2026-10-18T15:46:00+00:00",
+      "updated_at": "2026-10-18T15:46:00+00:00",
+      "historical": false,
+      "document": "cursor-works/tasks/CR28-board.md",
+      "delivery": "cursor-works/deliveries/CR28.md",
+      "candidate": null,
+      "verification": null,
+      "review_note": "",
+      "legacy_hash": "7fbb1c4264ff8af16620a316d747f401e3f9497194af304d3afcb9e4727fea88"
+    },
+    {
+      "id": "cursor:CR29",
+      "number": "CR29",
+      "owner": "cursor",
+      "title": "允许空端点的切片lo/hi/len联合门禁",
+      "description": "module `bootstrap.nasm_slice_bounds_guard`；依赖`[cursor:CR4]`。\r\n\r\n`pub unsafe fn emit(trap_block:u64,out:[]u8,written:*usize)u64`\r\n\r\n固定RDI=lo、RSI=hi、RDX=len，全部完整64位usize无符号。只在`lo<=hi<=len`落空，其余转trap；允许lo==hi==len与全0，区别CR20的index<len。严格：\r\n\r\n```text\r\ncmp rsi, rdx\r\nja __dong_b<N>\r\ncmp rdi, rsi\r\nja __dong_b<N>\r\n```\r\n\r\n只flags改变，全部GPR保持；不计算元素地址、len差、指针乘法，也不代替存储有效性/权限验证；trap由上游定义为bounds kind1。无需依赖未集成CR20；两次unsigned比较之间不能改参与寄存器。局部128字节足够，按两次20位块号精确算长后发布。\r\n\r\n原生oracle：全0、合法非空、空首端/尾端、hi==len、hi>len但lo<=hi、lo>hi但hi<=len、双方坏、2^63两侧、u64最大等，每模式至多16主要向量。两个边界失效分别独立可达，观察safe trap/落空与所有GPR保持；独立Python用原64位整数判定。不把相同trap结果当作证明两个分支都测过。语义坏Dong1将第一JA改JAE，合法hi==len错误trap；坏Dong2移除第二JA，lo>hi但hi<=len错误落空；两者都须正常执行后被各自准确路径拒绝；另容量提前写。\n\n\n## 共用固定契约与执行归属\n\n本任务是L3 Dong自举后端的独立生产组件；仅四个声明文件，Dong实现，不导出C符号（临时测试wrapper可导出），无分配、全局可变状态、OS调用。不可改code/lang、活动编译器、内核、协调器、其它负责人、在途任务或已集成依赖；既有队列/返修优先。依赖只读，只用已integrated模块；不得以宿主Python/C算法替代Dong生产逻辑。\n\n统一OK=0、INVALID=1、CAPACITY=2；接口另有Result时按任务正文完整尺寸。written非NULL、8对齐、完整8字节端点不回绕；out完整声明区间端点不回绕，非空非NULL，空可NULL。written与完整out不重叠（包括成功未使用尾部）。有输入切片/结构/嵌套名字时，必须在任何读写前验证完整描述符、元素乘法、端点、所需对齐、非空非NULL和完整对象别名；输入彼此如正文无禁止可互叠，只读输入与完整out/结果不得重叠。所有数据/枚举/标签/尺寸INVALID优先CAPACITY。失败out、计数或完整Result、输入全文不变；成功只写精确前缀/结果，尾部保持。先全预检及正确求长，在充分且有证明上界的局部区调用只读依赖，再最后发布用户out；不允许内部scratch越界或对合法容量不足输入panic。\n\n文本严格ASCII，换行真实单LF，无NUL/注释/额外空行/隐式section/global/ret（任务另定声明除外）。涉及__dong_b<N>标签时N=0..MAX-1，MAX为NONE非法；数字复用已声明decimal_integer，不另写格式化。寄存器编号若有0..15参数，固定rax,rcx,rdx,rbx,rsp,rbp,rsi,rdi,r8..r15；固定寄存器任务按正文集合测试，不强凑16矩阵。\n\n测试只跑本任务checks：实际编译/链接/原生执行Dong debug与release，NASM ELF64/COFF都组装；原生C桥显式SysV，保护宿主栈/被调用者保存寄存器。COFF组装不冒充Win64调用ABI。只暂存本模块及已声明只读依赖的传递闭包，不引入整个lang根遮蔽坏源码。独立Python/C oracle，不用生产规划器输出当唯一期望。有限固定边界，每模式不超过24个主要原生向量（并发操作另按正文有限检查）；不做全笛卡尔积或性能基准。源码、说明、测试、只读依赖前后SHA256稳定，0skip才可验收。\n\n每个描述符/端点/别名预检要独立可达，其它字段合法。written端点溢出用8对齐UINT64_MAX-7且合法空out，漏检坏体应安全返回CAPACITY而非非法解引用。初始化guard后再取快照，立刻观察失败全文/计数/guard、成功精确文本/长度/未用尾部；输入真实只读保护须检查系统调用成功，不能只声称只读。\n\n至少保留两类真实坏Dong：一种完成构建、链接、正常原生执行后，由指定数值/内存/分支/链接后地址断言拒绝；一种容量不足提前写out或结果，由完整原子性断言拒绝。同夹具先跑好体。构建失败、崩溃、超时、文本不同、无关预检错误不能冒充指定语义负控；源码中缺锁/不同内存序等结构检查单列，不能假装单次正常运行证明并发语义。坏体所有内存访问在预留安全可访问区内，不破坏真实宿主栈/ret、不依靠越界或硬件异常拒绝。\n\n本人客户端先worker MCP get_task/read_document读取最新rev和完整契约/归属，claim成功才执行；先完成已有领取/返修。产物在本人works/build/<编号>/<唯一目录>/，完成原编号交付写真实命令、tests/skips、模式/对象格式、全部输入SHA256、每种坏体实际观察/拒绝依据、未跑与剩余限制，再MCP submit。不得自行accept/integrate、提交/推送、运行OS/VM/全回归、启动模型CLI/定时器/关机，不用管理工具自动启动Cursor。任务发布不代表实现或通过，最后由Codex独立复验再验收集成。\n",
+      "status": "todo",
+      "rev": 1,
+      "write_paths": [
+        "cursor-works/src/bootstrap/nasm_slice_bounds_guard.dg",
+        "cursor-works/src/bootstrap/nasm_slice_bounds_guard.md",
+        "cursor-works/tests/test_nasm_slice_bounds_guard.py",
+        "cursor-works/deliveries/CR29.md"
+      ],
+      "depends_on": [
+        "cursor:CR4"
+      ],
+      "checks": [
+        "discover:cursor-works/tests:test_nasm_slice_bounds_guard.py"
+      ],
+      "auto_dispatch": false,
+      "auto_verify": false,
+      "complexity": "standard",
+      "created_at": "2026-10-18T15:46:01+00:00",
+      "updated_at": "2026-10-18T15:46:01+00:00",
+      "historical": false,
+      "document": "cursor-works/tasks/CR29-board.md",
+      "delivery": "cursor-works/deliveries/CR29.md",
+      "candidate": null,
+      "verification": null,
+      "review_note": "",
+      "legacy_hash": "88bbb14a9db3e5d84eb039ca71bddc65e8a523077c9ae31e75fcd5bd9af81d8a"
     },
     {
       "id": "cursor:CR3",

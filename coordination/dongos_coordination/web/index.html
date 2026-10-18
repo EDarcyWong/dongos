@@ -5,6 +5,15 @@
 <main>
 <header><div><div class="eyebrow">LOCAL / COORDINATION</div><h1>协作控制台<span class="tag">LOCAL</span></h1><p>从任务分配到独立验收，每一步都有记录。</p></div><div class="header-actions"><a class="button" href="/api/mcp/guide" target="_blank" rel="noopener">MCP 客户端</a><a class="button" href="/api/ai/guide" target="_blank" rel="noopener">AI 接口文档</a><span id="connection" role="status">正在连接…</span><button id="sync" class="button">同步任务书</button><button id="new-task" class="button primary">＋ 分配任务</button></div></header>
 <section class="project-bar"><label>当前项目 <select id="project-select" aria-label="当前项目"></select></label><span id="project-location" class="muted"></span><button id="new-project" class="button">＋ 新增项目</button></section><div id="notice" role="alert" hidden></div>
+<section id="project-roadmap" class="roadmap-panel" aria-label="整体任务图" aria-busy="true">
+<div class="section-head"><div><div class="eyebrow">PROJECT ROADMAP</div><h2 id="roadmap-title">整体任务图</h2><p id="roadmap-meta">正在加载当前项目…</p></div><button id="roadmap-download" class="button" disabled>下载任务图</button></div>
+<p id="roadmap-summary" class="roadmap-summary"></p><p id="roadmap-focus" class="roadmap-focus"></p>
+<div class="roadmap-legend" aria-label="阶段状态说明"><span class="roadmap-status complete">✓ 已通过验收</span><span class="roadmap-status partial">◐ 部分完成</span><span class="roadmap-status pending">○ 尚未完成</span><span class="hint">阶段结论按记录日期核对；点击阶段查看完成项与剩余项。</span></div>
+<div id="roadmap-tracks" class="roadmap-tracks"></div>
+<section id="roadmap-detail" class="roadmap-detail" aria-label="阶段详情" aria-live="polite" hidden></section>
+<details id="roadmap-notes" class="roadmap-notes"></details>
+<div class="roadmap-live"><strong id="roadmap-task-summary"></strong><span class="hint">当前项目全部负责人 · 任务状态实时更新，与下方筛选无关；任务数量不代表系统完成百分比。</span></div>
+</section>
 <section class="stats" aria-label="任务概况"><article><span>任务总数</span><strong id="total">—</strong><small>统一索引</small></article><article><span>进行中</span><strong id="working">—</strong><small>包含手动领取的任务</small></article><article><span>待复验</span><strong id="submitted">—</strong><small>交付完成，等待独立检查</small></article><article><span>已验收</span><strong id="accepted">—</strong><small>独立验收与集成分别记录</small></article></section>
 <section class="section-head"><h2>执行环境</h2><button class="link" id="doctor">重新检测 CLI ↻</button></section><section id="providers" class="providers"></section>
 <section class="automation"><div><strong>自动派单与复验</strong><p>只处理单项任务中明确开启的自动操作；不会自动验收、集成或重复启动已关闭任务。</p></div><label class="switch"><input type="checkbox" id="automation"><span></span><b id="automation-label">已关闭</b></label></section>

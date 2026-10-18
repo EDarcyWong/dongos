@@ -1,5 +1,9 @@
 # L3 后端规划组件集成
 
+## 2026-10-18 C30～C32集成
+
+新增nasm_indexed_operand、nasm_memory_intrinsic、nasm_division_guard及永久测试，生产/说明按验收hash复制。C30/C32正式同8项及主线8项分别0skip通过，主线13.907秒；包括真实LEA数值、COPY/ZERO字节/只读源/0计数NULL/寄存器与guard及两类坏Dong负控。C31首交197>192长标签缺陷先退回，由原负责人R1修复为224局部区并补197/79正确上界、同/异20位目标容量与双格式组装；重提正式5项及主线5项各0skip通过，主线7.140秒，另16次独立边界重放正确。三项最终全部真实集成，主线13个不同组件测试通过、生产/测试/关联编译器指纹稳定。另经MCP新增Cursor CR20～CR23、Claude C33/C34，见[完整记录](../../coordination/dongos_works/reviews/2026-10-18-C30-C32-and-new-allocation.md)。完整Dong后端/CLI与自举未完成。
+
 ## 2026-10-18 C29与CR16～CR19集成
 
 五模块已按验收hash集成，主线16组件+2实际组合共18项0skip通过，两个完整结果分别11项/72.813秒与7项/26.843秒，来源稳定。C29本次完整正式复验，快照历史问题闭合；CR16显式RAX/R8原生向量关闭R1。扩展shift_select_call加入真实Dong RIP符号取址；新block_divide组合连接块跳转/除余，补signed MIN/MAX和unsigned边界及输入寄存器保持。C31已派给Claude补CR19上游异常门禁，内核本身不替代完整除法语义。见[本轮记录](../../coordination/dongos_works/reviews/2026-10-18-C29-CR16-CR19-integration.md)。下方C29/CR16待修为历史，完整L3仍未完成。

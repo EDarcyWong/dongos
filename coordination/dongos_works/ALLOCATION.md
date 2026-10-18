@@ -1,5 +1,11 @@
 # DongOS 客户端分工（2026-10-18）
 
+2026-10-19复验更新：C33～C36、CR20～CR23本批8项已原任务退回R1，正式28测试0skip通过但独立实证测试契约尚有缺口，未验收集成；两客户端优先补本人返修，再领取剩余新项。无需重写已正确生产算法，不增加新任务或恢复归档任务。见[逐项复验依据](reviews/2026-10-19-Claude-Cursor-submitted-review.md)。
+
+最新追加授权（2026-10-18）：用户要求多生成任务，已通过MCP再发布10项——Cursor CR24～CR29六项（原子store/CAS/fetch-add、重叠memmove、窄值范围、切片上下界），Claude C35～C38四项（switch分发、scope清理调用、incoming实参捕获、静态64位重定位）。每项四文件，依赖均已集成，彼此无依赖；原CR20～CR23、C33/C34保持原队列，先完成已领取/返修。客户端worker MCP手动执行，不启动CLI；DeepSeek/LM Studio本轮0新增。见[正式派单与完整任务链接](reviews/2026-10-18-Claude-C35-C38-Cursor-CR24-CR29-allocation.md)。
+
+最新用户授权与本轮结果（2026-10-18）：复验并继续给Claude和Cursor派单。C30/C31/C32已全部验收并真实集成，主线13项0skip、来源稳定；C31首交长标签缺陷已由Claude原任务R1修复，16次独立合法边界重放正确。通过MCP新增Cursor CR20～CR23四项（边界/移位量/乘法/负号门禁）、Claude C33/C34两项（并行复制发射/SysV实参建立），全部依赖已集成、各四文件；CR20已由Cursor领取。原C31先返修条件已完成，Claude可继续新任务；Cursor客户端手动执行，不启动CLI，DeepSeek/LM Studio本轮0新增。见[本轮完整记录](reviews/2026-10-18-C30-C32-and-new-allocation.md)。此段覆盖下方早期批次摘要。
+
 最新用户授权（2026-10-18）：复验C29/CR16～CR19同时继续向Claude派单，已发布C30～C32三项：缩放索引操作数、除法异常门禁、字节复制/清零发射。依赖已集成、各4文件、通过worker MCP手动执行，不启动CLI；原五项移交已归档不恢复。见[任务](reviews/2026-10-18-Claude-C30-C32-allocation.md)。
 
 最新用户授权（2026-10-18）：继续给Claude派单，现通过coordination MCP新增C26～C29四项；C22～C25已集成，原移交五项已归档，不恢复。四项独立、依赖已集成，客户端领取执行，不启动CLI；Cursor原队列保留，DeepSeek/LM Studio本轮不新增。见[本批记录](reviews/2026-10-18-Claude-C26-C29-allocation.md)。
@@ -18,7 +24,7 @@
 | Cursor | 承担主要新增开发；有真实独立工作时每批约 4～6 项，按依赖领取 | 用户在 Cursor 客户端手动发起，通过 MCP 领取/提交，不启动 Agent CLI |
 | DeepSeek | 少量补充，当前仅新增D20一项；先完成在途任务再加新任务 | 本人客户端通过MCP领取/交付，不复制成并行实现、不抢占 |
 | LM Studio | 同一时刻最多 1 项；固定数据、小文档、简单整理为主，通常不超过两个可写文件（含交付） | worker MCP 查看/领取/提交，无文件工具时释放并说明，不以聊天正文冒充文件 |
-| Claude | 当前可正常接单；最新C30～C32三项，按已领取优先逐项完成 | 本人客户端worker MCP领取/交付；旧移交五项已归档，不自动启动CLI |
+| Claude | 当前可正常接单；C33/C34原队列及新增C35～C38四项，按已领取优先逐项完成 | 本人客户端worker MCP领取/交付；旧移交五项已归档，不自动启动CLI |
 | Codex | 维护主线、任务契约、交付审查、独立复验及集成 | accepted 与 integrated 分开登记 |
 
 当前 DeepSeek 五项是用户上一轮要求转交后已领取的在途任务，不为满足新批次数量强行中断或重复派给 Cursor；本轮新增 DeepSeek 任务为 0。未来按小批次补充。

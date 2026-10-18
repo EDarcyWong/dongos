@@ -1,0 +1,46 @@
+// Two NASM lines for a full 64-bit shift-count width guard:
+// "cmp <count64>, <width-decimal>\njae __dong_b<trap_block>\n".
+// Count is compared as a complete usize; it is never truncated to CL/32 bits
+// or masked. Width is only 8/16/32/64. Both decimals reuse integrated CR4.
+// Built in a local buffer, copied to out after every check.
+module bootstrap.nasm_shift_guard;
+import bootstrap.decimal_integer as dec;
+pub const OK:u64=0;pub const INVALID:u64=1;pub const CAPACITY:u64=2;
+pub const NONE:u64=0xffff_ffff_ffff_ffff;
+const MAX:u64=0xffff_ffff_ffff_ffff;
+fn span(p:u64,n:u64)bool{return n==0||(p!=0&&n<=MAX-p);}
+fn overlap(a:u64,n:u64,b:u64,m:u64)bool{return n!=0&&m!=0&&a<b+m&&b<a+n;}
+fn copy(out:[]u8,at:usize,text:[]const u8)usize{
+ var i:usize=0;while i<text.len{out[at+i]=text[i];i+=1;}return at+text.len;
+}
+fn register(r:u64)[]const u8{
+ if r==0{return "rax";}if r==1{return "rcx";}if r==2{return "rdx";}if r==3{return "rbx";}
+ if r==4{return "rsp";}if r==5{return "rbp";}if r==6{return "rsi";}if r==7{return "rdi";}
+ if r==8{return "r8";}if r==9{return "r9";}if r==10{return "r10";}if r==11{return "r11";}
+ if r==12{return "r12";}if r==13{return "r13";}if r==14{return "r14";}return "r15";
+}
+fn width_ok(w:u64)bool{return w==8||w==16||w==32||w==64;}
+pub unsafe fn emit(count:u64,width:u64,trap_block:u64,out:[]u8,written:*usize)u64{unsafe{
+ let wp=written as u64;let op=out.ptr as u64;
+ if written==null||(wp&7)!=0||!span(wp,8){return INVALID;}
+ if !span(op,out.len){return INVALID;}
+ if overlap(wp,8,op,out.len){return INVALID;}
+ if count>15||!width_ok(width)||trap_block==NONE{return INVALID;}
+ // CR4 unsigned decimals into local scratch; at most 20 digits each.
+ var wdig:[24]u8=[0;24];var wcount:usize=0;
+ let ws=dec.encode(width,64,false,slice_from_raw_parts(&wdig[0],24),&wcount);
+ if ws!=dec.OK{return INVALID;}
+ var tdig:[24]u8=[0;24];var tcount:usize=0;
+ let ts=dec.encode(trap_block,64,false,slice_from_raw_parts(&tdig[0],24),&tcount);
+ if ts!=dec.OK{return INVALID;}
+ // Longest: "cmp r15, 64\n" (12) + "jae __dong_b" (11) + 20 digits + "\n" = 44.
+ var text:[64]u8=[0;64];let buffer=slice_from_raw_parts(&text[0],64);
+ var at=copy(buffer,0,"cmp ");
+ at=copy(buffer,at,register(count));buffer[at]=44;buffer[at+1]=32;
+ at=copy(buffer,at+2,slice_from_raw_parts(&wdig[0],wcount));buffer[at]=10;at+=1;
+ at=copy(buffer,at,"jae __dong_b");
+ at=copy(buffer,at,slice_from_raw_parts(&tdig[0],tcount));buffer[at]=10;at+=1;
+ if at>out.len{return CAPACITY;}
+ var i:usize=0;while i<at{out[i]=buffer[i];i+=1;}
+ *written=at;return OK;
+}}

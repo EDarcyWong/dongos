@@ -1,0 +1,84 @@
+// Capture incoming SysV INTEGER arguments into fixed frame slots [rbp-offset]
+// at function entry (after "push rbp; mov rbp, rsp; [sub rsp, frame_bytes]").
+// The locations come from the integrated C8 sysv_integer_args.plan; memory
+// operands from the integrated CR8 nasm_memory_operand.encode (which uses CR4
+// decimal_integer). Order: every REGISTER word in word order, then every
+// STACK word through RAX in word order, so the argument registers are stored
+// before RAX is used. Everything is built in local scratch; out and written
+// are written once, after every check.
+module bootstrap.nasm_sysv_incoming_args;
+import bootstrap.sysv_integer_args as abi;
+import bootstrap.nasm_memory_operand as mem;
+pub const OK:u64=0;pub const INVALID:u64=1;pub const CAPACITY:u64=2;
+pub const MAX_WORDS:usize=16;pub const MAX_FRAME:usize=4080;
+const MAX:u64=0xffff_ffff_ffff_ffff;
+const RBP:u64=5;
+// Length bound (16 words, offsets up to 4080, stack index up to 15*8=120 so the
+// source displacement is at most 16+120=136):
+//   REGISTER word: "mov qword " (10) + "[rbp - 4080]" (12) + ", " (2) + "rdi" (3) + "\n" (1) = 28
+//   STACK word: "mov rax, qword " (15) + "[rbp + 136]" (11) + "\n" (1)               = 27
+//             + "mov qword " (10) + "[rbp - 4080]" (12) + ", rax\n" (6)              = 28 -> 55
+//   total <= 16*55 = 880 <= TEXT (1024). A CR8 operand is at most 12 bytes <= OPERAND (24).
+// Every append is still bounds-checked.
+const TEXT:usize=1024;const OPERAND:usize=24;
+fn span(p:u64,n:u64)bool{return n==0||(p!=0&&n<=MAX-p);}
+fn overlap(a:u64,n:u64,b:u64,m:u64)bool{return n!=0&&m!=0&&a<b+m&&b<a+n;}
+fn argument(index:usize)[]const u8{
+ if index==0{return "rdi";}if index==1{return "rsi";}if index==2{return "rdx";}
+ if index==3{return "rcx";}if index==4{return "r8";}return "r9";
+}
+// Append text at *at within out; false (without writing) if it would not fit.
+unsafe fn put(out:[]u8,at:*usize,text:[]const u8)bool{unsafe{
+ if text.len>out.len-*at{return false;}
+ var i:usize=0;while i<text.len{out[*at+i]=text[i];i+=1;}*at+=text.len;return true;
+}}
+// CR8 operand "[rbp +/- disp]" appended at *at.
+unsafe fn operand(out:[]u8,at:*usize,displacement:i64)bool{unsafe{
+ var text:[24]u8=[0;24];var n:usize=0;
+ if mem.encode(RBP,displacement,slice_from_raw_parts(&text[0],OPERAND),&n)!=mem.OK{return false;}
+ return put(out,at,slice_from_raw_parts(&text[0],n));
+}}
+pub unsafe fn emit(kinds:[]const u8,destination_offsets:[]const usize,frame_bytes:usize,out:[]u8,written:*usize)u64{unsafe{
+ let wp=written as u64;let kp=kinds.ptr as u64;let dp=destination_offsets.ptr as u64;let op=out.ptr as u64;
+ if written==null||(wp&7)!=0||!span(wp,8){return INVALID;}
+ if destination_offsets.len>MAX/8{return INVALID;}
+ let kn=kinds.len;let dn=destination_offsets.len*8;
+ if !span(kp,kn)||!span(dp,dn)||(dn!=0&&(dp&7)!=0)||!span(op,out.len){return INVALID;}
+ // Inputs may overlap each other; out and written are disjoint from both inputs and from each other.
+ if overlap(wp,8,op,out.len)||overlap(kp,kn,op,out.len)||overlap(dp,dn,op,out.len)||overlap(kp,kn,wp,8)||overlap(dp,dn,wp,8){return INVALID;}
+ if frame_bytes>MAX_FRAME||(frame_bytes&15)!=0{return INVALID;}
+ if kinds.len>MAX_WORDS{return INVALID;}
+ var words:usize=0;var i:usize=0;
+ while i<kinds.len{let k=kinds[i];if k==0{words+=1;}else if k==1{words+=2;}else{return INVALID;}i+=1;}
+ if words>MAX_WORDS||destination_offsets.len!=words{return INVALID;}
+ // Slots are 8 bytes, 8-aligned, inside the frame, and pairwise distinct (so never overlapping).
+ i=0;
+ while i<words{
+  let o=destination_offsets[i];if o<8||o>frame_bytes||(o&7)!=0{return INVALID;}
+  var j:usize=0;while j<i{if destination_offsets[j]==o{return INVALID;}j+=1;}
+  i+=1;
+ }
+ var locations:[16]abi.Location=[abi.Location{kind:0,index:0};16];var plan=abi.Result{used:0,stack_bytes:0};
+ if abi.plan(kinds,slice_from_raw_parts(&locations[0],MAX_WORDS),&plan)!=abi.OK||plan.used!=words{return INVALID;}
+ var buffer:[1024]u8=[0;1024];let text=slice_from_raw_parts(&buffer[0],TEXT);var at:usize=0;
+ i=0;
+ while i<words{
+  if locations[i].kind==abi.REGISTER{
+   if !put(text,&at,"mov qword ")||!operand(text,&at,-(destination_offsets[i]as i64))||!put(text,&at,", ")
+    ||!put(text,&at,argument(locations[i].index))||!put(text,&at,"\n"){return INVALID;}
+  }
+  i+=1;
+ }
+ i=0;
+ while i<words{
+  if locations[i].kind==abi.STACK{
+   let source=16+locations[i].index;
+   if !put(text,&at,"mov rax, qword ")||!operand(text,&at,source as i64)||!put(text,&at,"\n")
+    ||!put(text,&at,"mov qword ")||!operand(text,&at,-(destination_offsets[i]as i64))||!put(text,&at,", rax\n"){return INVALID;}
+  }
+  i+=1;
+ }
+ if at>out.len{return CAPACITY;}
+ i=0;while i<at{out[i]=buffer[i];i+=1;}
+ *written=at;return OK;
+}}

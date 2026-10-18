@@ -40,4 +40,4 @@ jmp __dong_b<success>
 2. `INVALID`：三个目标任一为 NONE（u64 最大值）——unsigned 时 overflow_target 虽不使用也要检查；容量为 0 时也先报 INVALID。
 3. `CAPACITY`：文本长度大于 out.len。
 
-三个十进制标签先写入局部暂存区，整段在 192 字节局部缓冲区组装（signed 最长 162 字节，是固定的充分界限），全部通过后一次复制到 out 并写 `*written`。失败不改 out 和 written；成功只写精确前缀，尾部不变。无分配、无全局可变状态、无 OS 调用；模块不导出 C 符号，测试经临时 wrapper 导出 `dong_guard_emit`。
+三个十进制标签先写入局部暂存区，整段在 224 字节局部缓冲区组装。signed 长度为 `117 + digits(zero) + digits(overflow) + 2*digits(success)`（success 标签出现两次），四个 20 位标签时最长 197 字节；unsigned 最长 79 字节。224 是对所有合法输入都充分的固定界限，全部通过后一次复制到 out 并写 `*written`。失败不改 out 和 written；成功只写精确前缀，尾部不变。无分配、无全局可变状态、无 OS 调用；模块不导出 C 符号，测试经临时 wrapper 导出 `dong_guard_emit`。

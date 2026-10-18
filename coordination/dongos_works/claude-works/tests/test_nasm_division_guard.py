@@ -254,8 +254,27 @@ class NasmDivisionGuardTests(unittest.TestCase):
                 if status==OK:self.assertEqual(text,expected_text(sg,z,o,s),(mode,sg,z,o,s))
         self.records.append(dict(test='exact-text-capacity',cases=len(cases),preflights_per_native=13,modes=2,passed=True))
 
+    def longest_cases(self):
+        """R1: every target a legal 20-digit label (same and distinct). Signed text is 197 bytes, unsigned 79."""
+        cases=[]
+        for sg in (1,0):
+            for z,o,s in ((M64-1,M64-1,M64-1),(M64-1,M64-2,M64-3),(10**19,M64-1,12345678901234567890)):
+                n=len(expected_text(sg,z,o,s))
+                cases+=[(sg,z,o,s,n,OK),(sg,z,o,s,n+9,OK),(sg,z,o,s,n-1,CAPACITY),(sg,z,o,s,0,CAPACITY)]
+        return cases
+
+    def test_longest_twenty_digit_labels(self):
+        cases=self.longest_cases()
+        self.assertEqual(len(expected_text(1,M64-1,M64-1,M64-1)),197)
+        self.assertEqual(len(expected_text(0,M64-1,M64-1,M64-1)),79)
+        for mode,exe in self.executables.items():
+            texts=self.emit(exe,cases,'longest-'+mode)
+            for (sg,z,o,s,cap,status),text in zip(cases,texts):
+                if status==OK:self.assertEqual(text,expected_text(sg,z,o,s),(mode,sg,z,o,s))
+        self.records.append(dict(test='longest-twenty-digit-labels',cases=len(cases),signed_max_bytes=197,modes=2,passed=True))
+
     def test_guard_text_assembles_in_both_formats(self):
-        cases=[(sg,z,o,s,256,OK)for sg in (0,1)for z,o,s in ((0,1,2),(3,4,5),(M64-1,2**63,9))]
+        cases=[(sg,z,o,s,256,OK)for sg in (0,1)for z,o,s in ((0,1,2),(3,4,5),(M64-1,2**63,9),(M64-1,M64-1,M64-1),(M64-1,M64-2,M64-3))]
         for mode,exe in self.executables.items():
             texts=self.emit(exe,cases,'asm-'+mode)
             labels=sorted({t for _,z,o,s,_,_ in cases for t in (z,o,s)})
@@ -293,6 +312,14 @@ class NasmDivisionGuardTests(unittest.TestCase):
         for mode,exe in self.build_all('bad-early-out',source.replace(old,new,1)).items():
             with self.assertRaisesRegex(AssertionError,'guard/atomicity'):self.emit(exe,case,'bad-early-out-'+mode)
         self.records.append(dict(test='bad-early-out',compiled=True,native_executed=True,modes=2,rejected_by='guard/atomicity'))
+        # R1: the original 192-byte scratch bound must make the new longest-label check fail (it panics on legal input).
+        old='var text:[224]u8=[0;224];let buffer=slice_from_raw_parts(&text[0],224);';self.assertEqual(source.count(old),1)
+        new='var text:[192]u8=[0;192];let buffer=slice_from_raw_parts(&text[0],192);'
+        cases=self.longest_cases()
+        for mode,exe in self.executables.items():self.emit(exe,cases,'bad-192-good-'+mode)
+        for mode,exe in self.build_all('bad-192-bound',source.replace(old,new,1)).items():
+            with self.assertRaisesRegex(AssertionError,'unexpected panic'):self.emit(exe,cases,'bad-192-'+mode)
+        self.records.append(dict(test='bad-192-bound',compiled=True,native_executed=True,modes=2,rejected_by='longest-label check (native panic exit)'))
 
 
 if __name__=='__main__':unittest.main()

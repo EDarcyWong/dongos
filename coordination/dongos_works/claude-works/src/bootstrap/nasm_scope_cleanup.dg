@@ -1,0 +1,61 @@
+// Emit the zero-argument SysV cleanup calls for leaving lexical scopes.
+// The order comes from the integrated C12 cleanup_plan.plan (not
+// re-implemented); call IDs use CR4 decimal_integer. A non-empty plan saves
+// RAX/RDX (an already evaluated return value) in a 16-byte stack area, calls
+// __dong_cleanup<ID> in plan order, then restores RAX/RDX and RSP. An empty
+// plan is empty text. Everything finishes in local scratch before out and
+// written are each written once.
+module bootstrap.nasm_scope_cleanup;
+import bootstrap.cleanup_plan as clean;
+import bootstrap.decimal_integer as dec;
+pub const OK:u64=0;pub const INVALID:u64=1;pub const CAPACITY:u64=2;
+pub const MAX_SCOPES:usize=8;pub const MAX_IDS:usize=16;pub const MAX_CALLS:usize=16;
+const MAX:u64=0xffff_ffff_ffff_ffff;
+// Length bound:
+//   fixed lines "sub rsp, 16\n" (12) + "mov qword [rsp], rax\n" (21) + "mov qword [rsp + 8], rdx\n" (25)
+//             + "mov rax, qword [rsp]\n" (21) + "mov rdx, qword [rsp + 8]\n" (25) + "add rsp, 16\n" (12) = 116
+//   each call "call " (5) + "__dong_cleanup" (14) + at most 20 digits (ID <= u64::MAX-1) + "\n" (1) = 40
+//   The plan visits each scope at most once (C12 rejects every cycle), so calls <= sum of all counts <= 16.
+//   total <= 116 + 16*40 = 756 <= TEXT (1024). Every append is still bounds-checked.
+const TEXT:usize=1024;
+fn span(p:u64,n:u64)bool{return n==0||(p!=0&&n<=MAX-p);}
+fn overlap(a:u64,n:u64,b:u64,m:u64)bool{return n!=0&&m!=0&&a<b+m&&b<a+n;}
+// Append text at *at within out; false (without writing) if it would not fit.
+unsafe fn put(out:[]u8,at:*usize,text:[]const u8)bool{unsafe{
+ if text.len>out.len-*at{return false;}
+ var i:usize=0;while i<text.len{out[*at+i]=text[i];i+=1;}*at+=text.len;return true;
+}}
+unsafe fn call(out:[]u8,at:*usize,id:u64)bool{unsafe{
+ var digits:[24]u8=[0;24];var n:usize=0;
+ if dec.encode(id,64,false,slice_from_raw_parts(&digits[0],24),&n)!=dec.OK{return false;}
+ return put(out,at,"call __dong_cleanup")&&put(out,at,slice_from_raw_parts(&digits[0],n))&&put(out,at,"\n");
+}}
+pub unsafe fn emit(scopes:[]const clean.Scope,cleanup_ids:[]const usize,from_scope:usize,target_scope:usize,
+ out:[]u8,written:*usize)u64{unsafe{
+ let wp=written as u64;let sp=scopes.ptr as u64;let ip=cleanup_ids.ptr as u64;let op=out.ptr as u64;
+ if written==null||(wp&7)!=0||!span(wp,8){return INVALID;}
+ if scopes.len>MAX/sizeof(clean.Scope)||cleanup_ids.len>MAX/8{return INVALID;}
+ let sn=scopes.len*sizeof(clean.Scope);let inn=cleanup_ids.len*8;
+ if !span(sp,sn)||(sn!=0&&(sp&7)!=0)||!span(ip,inn)||(inn!=0&&(ip&7)!=0)||!span(op,out.len){return INVALID;}
+ // Inputs may overlap each other; out and written are disjoint from both inputs and from each other.
+ if overlap(wp,8,op,out.len)||overlap(sp,sn,op,out.len)||overlap(ip,inn,op,out.len)||overlap(sp,sn,wp,8)||overlap(ip,inn,wp,8){return INVALID;}
+ if scopes.len==0||scopes.len>MAX_SCOPES||cleanup_ids.len>MAX_IDS{return INVALID;}
+ // The sum of every scope's count (not only the exit path) is at most 16; compared before adding.
+ var total:usize=0;var i:usize=0;
+ while i<scopes.len{let c=scopes[i].count;if c>MAX_CALLS-total{return INVALID;}total+=c;i+=1;}
+ // Every registered ID, used on this exit path or not, must be a valid symbol number.
+ i=0;while i<cleanup_ids.len{if cleanup_ids[i] as u64==MAX{return INVALID;}i+=1;}
+ // C12 validates the whole tree, ranges, cycles and target; with 16 local slots CAPACITY cannot occur.
+ var order:[16]usize=[0;16];var used:usize=0;
+ if clean.plan(scopes,cleanup_ids,from_scope,target_scope,slice_from_raw_parts(&order[0],MAX_CALLS),&used)!=clean.OK
+  ||used>MAX_CALLS{return INVALID;}
+ var buffer:[1024]u8=[0;1024];let text=slice_from_raw_parts(&buffer[0],TEXT);var at:usize=0;
+ if used!=0{
+  if !put(text,&at,"sub rsp, 16\nmov qword [rsp], rax\nmov qword [rsp + 8], rdx\n"){return INVALID;}
+  i=0;while i<used{if !call(text,&at,order[i] as u64){return INVALID;}i+=1;}
+  if !put(text,&at,"mov rax, qword [rsp]\nmov rdx, qword [rsp + 8]\nadd rsp, 16\n"){return INVALID;}
+ }
+ if at>out.len{return CAPACITY;}
+ i=0;while i<at{out[i]=buffer[i];i+=1;}
+ *written=at;return OK;
+}}

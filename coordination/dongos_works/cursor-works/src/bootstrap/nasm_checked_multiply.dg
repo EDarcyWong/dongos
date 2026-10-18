@@ -1,0 +1,39 @@
+// Three NASM lines for a fixed-register 64-bit checked multiply:
+// signed:   "mov rax, rdi\nimul rax, rsi\njo __dong_b<N>\n"
+// unsigned: "mov rax, rdi\nmul rsi\njc __dong_b<N>\n"
+// Runtime inputs are RDI=a and RSI=b. Trap label digits reuse CR4.
+// Built in a local buffer, copied to out after every check.
+module bootstrap.nasm_checked_multiply;
+import bootstrap.decimal_integer as dec;
+pub const OK:u64=0;pub const INVALID:u64=1;pub const CAPACITY:u64=2;
+pub const NONE:u64=0xffff_ffff_ffff_ffff;
+const MAX:u64=0xffff_ffff_ffff_ffff;
+fn span(p:u64,n:u64)bool{return n==0||(p!=0&&n<=MAX-p);}
+fn overlap(a:u64,n:u64,b:u64,m:u64)bool{return n!=0&&m!=0&&a<b+m&&b<a+n;}
+fn copy(out:[]u8,at:usize,text:[]const u8)usize{
+ var i:usize=0;while i<text.len{out[at+i]=text[i];i+=1;}return at+text.len;
+}
+pub unsafe fn emit(signed:bool,trap_block:u64,out:[]u8,written:*usize)u64{unsafe{
+ let wp=written as u64;let op=out.ptr as u64;
+ if written==null||(wp&7)!=0||!span(wp,8){return INVALID;}
+ if !span(op,out.len){return INVALID;}
+ if overlap(wp,8,op,out.len){return INVALID;}
+ if trap_block==NONE{return INVALID;}
+ var digits:[24]u8=[0;24];var count:usize=0;
+ let status=dec.encode(trap_block,64,false,slice_from_raw_parts(&digits[0],24),&count);
+ if status!=dec.OK{return INVALID;}
+ // Longest signed: "mov rax, rdi\n"(13)+"imul rax, rsi\n"(14)+"jo __dong_b"(10)+20+"\n" = 58.
+ var text:[64]u8=[0;64];let buffer=slice_from_raw_parts(&text[0],64);
+ var at=copy(buffer,0,"mov rax, rdi\n");
+ if signed{
+  at=copy(buffer,at,"imul rax, rsi\n");
+  at=copy(buffer,at,"jo __dong_b");
+ }else{
+  at=copy(buffer,at,"mul rsi\n");
+  at=copy(buffer,at,"jc __dong_b");
+ }
+ at=copy(buffer,at,slice_from_raw_parts(&digits[0],count));buffer[at]=10;at+=1;
+ if at>out.len{return CAPACITY;}
+ var i:usize=0;while i<at{out[i]=buffer[i];i+=1;}
+ *written=at;return OK;
+}}

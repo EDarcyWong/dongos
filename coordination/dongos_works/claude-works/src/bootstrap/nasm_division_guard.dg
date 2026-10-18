@@ -31,8 +31,11 @@ pub unsafe fn emit(signed:bool,zero_target:u64,overflow_target:u64,success_targe
  if dec.encode(overflow_target,64,false,slice_from_raw_parts(&od[0],24),&on)!=dec.OK{return INVALID;}
  if dec.encode(success_target,64,false,slice_from_raw_parts(&sd[0],24),&sn)!=dec.OK{return INVALID;}
  let zero=slice_from_raw_parts(&zd[0],zn);let overflow=slice_from_raw_parts(&od[0],on);let success=slice_from_raw_parts(&sd[0],sn);
- // Signed text is at most 14+12+28+12+28+12+28+28 = 162 bytes (20-digit labels); 192 is a fixed sufficient bound.
- var text:[192]u8=[0;192];let buffer=slice_from_raw_parts(&text[0],192);
+ // Signed length = 117 + digits(zero) + digits(overflow) + 2*digits(success) (success appears twice):
+ // 14 "test rsi, rsi\n" + (12+d) jz + 12 "cmp rsi, -1\n" + (13+d) jne + 28 "mov rax, 0x8000000000000000\n"
+ // + 13 "cmp rdi, rax\n" + (12+d) je + (13+d) jmp. With four 20-digit labels that is 197 bytes;
+ // unsigned is at most 14+32+33 = 79. 224 is a fixed sufficient bound for every legal input.
+ var text:[224]u8=[0;224];let buffer=slice_from_raw_parts(&text[0],224);
  var at=copy(buffer,0,"test rsi, rsi\n");at=jump(buffer,at,"jz ",zero);
  if signed{
   at=copy(buffer,at,"cmp rsi, -1\n");at=jump(buffer,at,"jne ",success);

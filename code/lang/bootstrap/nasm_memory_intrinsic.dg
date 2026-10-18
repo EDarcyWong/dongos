@@ -1,0 +1,29 @@
+// Fixed-register byte copy / zero emission for memory intrinsics.
+// COPY: "rep movsb\n" (RDI=dest, RSI=src, RCX=count; non-overlapping, DF=0).
+// ZERO: "xor eax, eax\nrep stosb\n" (RDI=dest, RCX=count; RAX ends 0).
+// Upstream guarantees DF=0, valid ranges and object/lifetime rules. Built in a
+// local buffer and copied to out once, after every check has passed.
+module bootstrap.nasm_memory_intrinsic;
+pub const OK:u64=0;pub const INVALID:u64=1;pub const CAPACITY:u64=2;
+pub const COPY:u64=0;pub const ZERO:u64=1;
+const MAX:u64=0xffff_ffff_ffff_ffff;
+fn span(p:u64,n:u64)bool{return n==0||(p!=0&&n<=MAX-p);}
+fn overlap(a:u64,n:u64,b:u64,m:u64)bool{return n!=0&&m!=0&&a<b+m&&b<a+n;}
+fn copy(out:[]u8,at:usize,text:[]const u8)usize{
+ var i:usize=0;while i<text.len{out[at+i]=text[i];i+=1;}return at+text.len;
+}
+pub unsafe fn emit(operation:u64,out:[]u8,written:*usize)u64{unsafe{
+ let wp=written as u64;let op=out.ptr as u64;
+ if written==null||(wp&7)!=0||!span(wp,8){return INVALID;}
+ if !span(op,out.len){return INVALID;}
+ if overlap(wp,8,op,out.len){return INVALID;}
+ if operation>ZERO{return INVALID;}
+ // Longest text "xor eax, eax\nrep stosb\n" is 23 bytes.
+ var text:[32]u8=[0;32];let buffer=slice_from_raw_parts(&text[0],32);
+ var at:usize=0;
+ if operation==COPY{at=copy(buffer,0,"rep movsb\n");}
+ else{at=copy(buffer,0,"xor eax, eax\n");at=copy(buffer,at,"rep stosb\n");}
+ if at>out.len{return CAPACITY;}
+ var i:usize=0;while i<at{out[i]=buffer[i];i+=1;}
+ *written=at;return OK;
+}}

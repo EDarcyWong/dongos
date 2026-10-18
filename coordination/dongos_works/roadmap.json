@@ -1,0 +1,142 @@
+{
+  "version": 1,
+  "title": "DongOS 整体任务图",
+  "updated_at": "2026-10-18T23:36:46+08:00",
+  "scope": "P0–P9；P10另定范围",
+  "summary": "已形成从 UEFI 启动到用户态图形桌面、文件持久化与四核用户调度的受控闭环；完整阶段仍有扩展、回归和外部环境验收待关闭。",
+  "focus": "当前重点：L3 Dong编译器自举",
+  "tracks": [
+    {
+      "id": "system",
+      "title": "系统主线",
+      "stages": [
+        {
+          "id": "P0",
+          "title": "工具链与构建环境",
+          "status": "complete",
+          "done": ["NASM、链接器、QEMU与UEFI固件可用", "构建、调试、测试入口及本地自动启动验收通过"],
+          "remaining": [],
+          "evidence": ["code/PLAN.md:365", "code/PLAN.md:373"]
+        },
+        {
+          "id": "P1",
+          "title": "UEFI 引导器",
+          "status": "complete",
+          "done": ["载荷读取、解压、SHA-256校验与BootInfo交接通过", "正常启动、篡改/截短/缺失拒绝及退出固件重试通过"],
+          "remaining": [],
+          "evidence": ["code/PLAN.md:375", "code/PLAN.md:383"]
+        },
+        {
+          "id": "P2",
+          "title": "CPU 与内存",
+          "status": "partial",
+          "done": ["异常、分配器、活动页表及NX/WP/W^X等核心保护验收通过", "四核共享内核根TLB shootdown通过"],
+          "remaining": ["动态执行物理别名W^X与撤权同步", "2MiB/4KiB大页转换、失效与回收", "PAT写合并及缓存类型冲突验证"],
+          "evidence": ["code/PLAN.md:387", "code/PLAN.md:402", "code/PLAN.md:404", "code/PLAN.md:432"]
+        },
+        {
+          "id": "P3",
+          "title": "中断与抢占线程",
+          "status": "complete",
+          "done": ["ACPI发现、LAPIC/IOAPIC与旧PIC屏蔽通过", "受控定时回退与线程抢占、XSAVE/FXSAVE状态保存通过"],
+          "remaining": [],
+          "evidence": ["code/PLAN.md:422"]
+        },
+        {
+          "id": "P4",
+          "title": "用户态与 IPC",
+          "status": "complete",
+          "done": ["独立地址空间、ELF加载、句柄权限与百万次真实IPC通过", "BSP PCID生命周期及VMware标签保留通过", "正常内核的通用能力通知、共享对象API通过"],
+          "remaining": [],
+          "evidence": ["code/PLAN.md:429", "code/PLAN.md:437", "code/docs/process-integration.md:127"]
+        },
+        {
+          "id": "P5",
+          "title": "基础服务",
+          "status": "partial",
+          "done": ["受控设备授权、键盘、virtio-blk/AHCI/NVMe存储通过", "FAT32、shell、读写/FLUSH及同盘重启持久化通过", "驱动故障后的MSI/BME撤权与旧owner退休通过"],
+          "remaining": ["同次启动内通用设备恢复", "故障DMA安全回收、重分配与设备重授权"],
+          "evidence": ["code/PLAN.md:439", "code/docs/process-integration.md:127"]
+        },
+        {
+          "id": "P6",
+          "title": "多核与快速启动",
+          "status": "partial",
+          "done": ["四核唤醒、用户任务抢占/迁移、跨代退休与IPI唤醒通过", "启动计时日志和封存时间线独立复算通过"],
+          "remaining": ["init首次发起的跨AP依赖图与并行启动实际验收", "Linux/KVM引导器至shell不超过0.5秒的原阶段性能验收"],
+          "evidence": ["code/PLAN.md:447", "code/docs/process-integration.md:121", "code/docs/process-integration.md:131", "code/docs/language-l2-l3.md:148"]
+        },
+        {
+          "id": "P7",
+          "title": "图形桌面",
+          "status": "partial",
+          "done": ["合成器、字体、DPI、主题、动画与真实输入功能已有验收", "四个独立CPL3应用、窗口生命周期及文件/设置持久化已有验收"],
+          "remaining": ["当前R6完整GUI及输入回归", "输入候选修复推广后与新镜像来源一致的实际复验"],
+          "evidence": ["code/PLAN.md:455", "code/docs/process-integration.md:75", "code/docs/process-integration.md:133", "code/docs/language-l2-l3.md:148"]
+        },
+        {
+          "id": "P8",
+          "title": "USB 与真机",
+          "status": "partial",
+          "done": ["受控xHCI/HID/BOT、USB键鼠和USB主盘持久化通过", "GPT/ESP启动镜像、QEMU实际USB引导及受控ACPI电源通过"],
+          "remaining": ["至少一台台式机和一台笔记本实际启动验收", "物理设备、Hub与热插拔等范围另验", "当前新镜像USB集成回归待关闭"],
+          "evidence": ["code/PLAN.md:467", "code/docs/process-integration.md:95", "code/docs/process-integration.md:139"]
+        },
+        {
+          "id": "P9",
+          "title": "安全加固",
+          "status": "pending",
+          "done": [],
+          "remaining": ["自有密钥签名、OVMF与真机安全启动", "IOMMU限制驱动DMA", "CET影子栈/间接跳转检查与内核基址随机化", "系统调用/IPC模糊测试及原阶段24小时门槛"],
+          "evidence": ["code/PLAN.md:333", "code/PLAN.md:474"]
+        }
+      ]
+    },
+    {
+      "id": "language",
+      "title": "语言主线",
+      "stages": [
+        {
+          "id": "L0",
+          "title": "语言规格",
+          "status": "complete",
+          "done": ["首版语法、类型、ABI与标准库范围规格交付"],
+          "remaining": [],
+          "evidence": ["code/PLAN.md:338", "code/PLAN.md:347"]
+        },
+        {
+          "id": "L1",
+          "title": "编译器与基础库",
+          "status": "complete",
+          "done": ["Python编译器前端、语义、NASM后端及语言测试集通过", "六个标准库交付并通过本地总验收"],
+          "remaining": [],
+          "evidence": ["code/PLAN.md:347", "code/PLAN.md:358"]
+        },
+        {
+          "id": "L2",
+          "title": "优化与源码调试",
+          "status": "complete",
+          "done": ["受控SSA优化/寄存器分配及原固定五项性能集合通过", "DWARF4源码断点、单步、变量与展开经真实GDB验证"],
+          "remaining": [],
+          "evidence": ["code/PLAN.md:360", "code/PLAN.md:361", "code/docs/language-l2-l3.md:98", "code/docs/language-l2-l3.md:118"]
+        },
+        {
+          "id": "L3",
+          "title": "Dong 编译器自举",
+          "status": "partial",
+          "done": ["Dong原生词法、解析、模块/名称与运行时语义子集已接入", "多个后端规划/发射组件及真实组件组合已验收集成"],
+          "remaining": ["完整语义、方法/标签/错误与defer清理", "完整后端、目标模块I/O、诊断CLI及工具链接线", "宿主stage1/stage2产物一致性", "DongOS内编译自身、FLUSH、同盘重启与产物一致性"],
+          "evidence": ["code/PLAN.md:362", "code/docs/language-l2-l3.md:3", "code/docs/language-l2-l3.md:30", "code/docs/language-l2-l3.md:34", "code/docs/language-l2-l3.md:46", "code/docs/language-l2-l3.md:144"]
+        }
+      ]
+    }
+  ],
+  "notes": [
+    "本图是2026-10-18按源码计划与验收记录核对的人工证据快照，不自动登记accepted或integrated；任务领取和验收状态以协调器实时snapshot为准。",
+    "完成表示所列受控范围通过既定门槛；既有功能验收不替代新版镜像回归。P7既有桌面功能已验收，当前R6完整输入/GUI回归仍未关闭。",
+    "任务数量与各状态数量由页面实时读取协调器；它们不是整个操作系统的完成百分比。",
+    "P2旧清单仍保留PCID未勾选项及PCIDE关闭的历史描述；较新的P4记录已有BSP PCID生命周期与VMware标签保留验收，不能据旧勾选判断PCID整体未实现。跨核PCID保留未由R6 UART回归证明。",
+    "P0本地构建/启动通过不表示远程CI已执行；P3受控定时回退通过不表示真实TSC-deadline硬件路径已验证；L2通过限于既定优化/性能集合和宿主GDB范围。",
+    "P8真机与P6 Linux/KVM外部验收条件保留；P10网络、声音、中文输入及更多应用另定范围。"
+  ]
+}

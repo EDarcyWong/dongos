@@ -6,7 +6,7 @@ import secrets
 import threading
 from urllib.parse import unquote, urlsplit, parse_qs
 
-from . import migrate, providers, ai_api
+from . import migrate, providers, ai_api, roadmap
 from .store import Conflict, LABELS, now, resolve
 
 STATIC = Path(__file__).with_name('web')
@@ -69,7 +69,8 @@ class Console(ThreadingHTTPServer):
                     providers=runner.providers, labels=LABELS,
                     project_root=str(store.root), works_root=str(store.works_root),
                     automation=store.setting('automation'),
-                    connections=json.loads(probes.read_text(encoding='utf-8')) if probes.exists() else {})
+                    connections=json.loads(probes.read_text(encoding='utf-8')) if probes.exists() else {},
+                    **roadmap.snapshot(store))
 
     def scan(self, store=None):
         store = store or self.store
@@ -137,6 +138,20 @@ class Handler(BaseHTTPRequestHandler):
             if path == '/api/snapshot':
                 self.server.scan(self.store)
                 return self.reply(self.server.snapshot(self.store, self.runner))
+            if path == '/api/roadmap':
+                query = parse_qs(parsed.query, keep_blank_values=True)
+                if set(query) - {'format'} or len(query.get('format', ['json'])) != 1:
+                    raise ValueError('整体任务图只接受一个format参数')
+                output = query.get('format', ['json'])[0]
+                if output == 'json':
+                    return self.reply(roadmap.snapshot(self.store))
+                if output != 'markdown':
+                    raise ValueError('整体任务图format只支持json或markdown')
+                try:
+                    body = roadmap.markdown(self.store)
+                except FileNotFoundError:
+                    return self.reply({'error': '整体任务图文档尚未保存'}, 404)
+                return self.reply(body, mime='text/markdown; charset=utf-8')
             if path == '/api/export':
                 return self.reply(self.store.export())
             if path == '/api/document':

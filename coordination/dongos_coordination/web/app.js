@@ -9,6 +9,72 @@ function node(tag,cls,text){const e=document.createElement(tag);if(cls)e.classNa
 function badge(value,label){return node('span','badge '+value,label||state.labels[value]||value);}
 function time(value){return new Date(value).toLocaleString('zh-CN',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false});}
 function notice(message){$('notice').textContent=message;$('notice').hidden=!message;}
+const roadmapStatuses={complete:'✓ 已通过验收',partial:'◐ 部分完成',pending:'○ 尚未完成'};
+let roadmapSignature='',roadmapSelection='';
+function clearRoadmap(){
+  roadmapSignature='';roadmapSelection='';
+  $('roadmap-title').textContent='整体任务图';$('roadmap-meta').textContent='正在加载当前项目…';
+  for(const id of ['roadmap-summary','roadmap-focus','roadmap-task-summary'])$(id).textContent='';
+  for(const id of ['roadmap-tracks','roadmap-detail','roadmap-notes'])$(id).replaceChildren();
+  $('roadmap-detail').hidden=true;$('roadmap-download').disabled=true;
+  $('project-roadmap').setAttribute('aria-busy','true');
+}
+function selectRoadmapStage(key){
+  const map=state?.roadmap;if(!map)return;
+  const entries=map.tracks.flatMap(track=>track.stages.map(stage=>({track,stage,key:track.id+':'+stage.id})));
+  const entry=entries.find(item=>item.key===key);if(!entry)return;
+  roadmapSelection=key;
+  for(const button of $('roadmap-tracks').querySelectorAll('[data-roadmap-stage]'))button.setAttribute('aria-pressed',String(button.dataset.roadmapStage===key));
+  const {stage}=entry,detail=$('roadmap-detail');detail.replaceChildren();detail.hidden=false;
+  const heading=node('div','roadmap-detail-heading');heading.append(node('h3','',stage.id+' · '+stage.title),node('span','roadmap-status '+stage.status,roadmapStatuses[stage.status]));detail.append(heading);
+  const columns=node('div','roadmap-detail-columns');
+  for(const [title,items,empty] of [['已完成',stage.done,'尚无已验收项目'],['尚待完成',stage.remaining,'本阶段既定范围已通过验收']]){
+    const section=node('div');section.append(node('h4','',title));
+    if(items.length){const list=node('ul');for(const text of items)list.append(node('li','',text));section.append(list);}else section.append(node('p','',empty));
+    columns.append(section);
+  }
+  detail.append(columns);
+  if(stage.evidence.length){const sources=node('div','roadmap-evidence');sources.append(node('span','','核对依据：'));for(const reference of stage.evidence)sources.append(node('code','',reference));detail.append(sources);}
+}
+function renderRoadmap(){
+  const tasks=state.tasks,integrated=tasks.filter(t=>t.status==='integrated').length,accepted=tasks.filter(t=>t.status==='accepted').length;
+  $('roadmap-task-summary').textContent='实时协作任务 '+tasks.length+' 项 · 已集成 '+integrated+' · 已验收未集成 '+accepted+' · 未验收 '+(tasks.length-integrated-accepted);
+  const map=state.roadmap,signature=JSON.stringify([projectId,map,state.roadmap_error]);
+  if(signature===roadmapSignature)return;roadmapSignature=signature;
+  const tracks=$('roadmap-tracks'),notes=$('roadmap-notes');tracks.replaceChildren();notes.replaceChildren();
+  $('roadmap-detail').hidden=true;$('roadmap-detail').replaceChildren();$('roadmap-download').disabled=!map;
+  $('project-roadmap').setAttribute('aria-busy','false');
+  if(!map){
+    $('roadmap-title').textContent='整体任务图';$('roadmap-meta').textContent=state.roadmap_error?'任务图暂不可用：'+state.roadmap_error:'当前项目尚未保存整体任务图。';
+    $('roadmap-summary').textContent='';$('roadmap-focus').textContent='';roadmapSelection='';return;
+  }
+  $('roadmap-title').textContent=map.title;
+  const checked=new Date(map.updated_at);$('roadmap-meta').textContent='阶段核对于 '+(Number.isNaN(checked.getTime())?map.updated_at:checked.toLocaleString('zh-CN',{timeZone:'Asia/Shanghai',hour12:false}))+'（北京时间） · '+map.scope;
+  $('roadmap-summary').textContent=map.summary;$('roadmap-focus').textContent=map.focus;
+  for(const track of map.tracks){
+    const section=node('section','roadmap-track');section.dataset.track=track.id;section.append(node('h3','',track.title));const list=node('ol','roadmap-flow');
+    for(const stage of track.stages){
+      const item=node('li'),key=track.id+':'+stage.id,control=button('',()=>selectRoadmapStage(key));control.className='roadmap-stage '+stage.status;
+      control.dataset.roadmapStage=key;control.setAttribute('aria-pressed','false');control.setAttribute('aria-controls','roadmap-detail');
+      control.append(node('span','roadmap-stage-id',stage.id),node('strong','roadmap-stage-title',stage.title),node('span','roadmap-status '+stage.status,roadmapStatuses[stage.status]));
+      item.append(control);list.append(item);
+    }
+    section.append(list);tracks.append(section);
+  }
+  if(map.notes.length){notes.append(node('summary','','范围与证据说明'));for(const text of map.notes)notes.append(node('p','',text));}
+  const all=map.tracks.flatMap(track=>track.stages.map(stage=>({stage,key:track.id+':'+stage.id})));
+  const initial=all.find(item=>item.key===roadmapSelection)||all.find(item=>item.stage.id==='L3')||all.find(item=>item.stage.status==='partial')||all[0];
+  if(initial)selectRoadmapStage(initial.key);
+}
+async function downloadRoadmap(){
+  const requestedProject=projectId;
+  try{
+    const response=await fetch('/api/roadmap?format=markdown',{headers:{'X-Coordination-Project':requestedProject}});
+    if(!response.ok){const error=await response.json();throw new Error(error.error||'任务图下载失败');}
+    const text=await response.text(),url=URL.createObjectURL(new Blob([text],{type:'text/markdown;charset=utf-8'}));
+    const link=node('a');link.href=url;link.download=requestedProject+'-progress-map.md';link.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
+  }catch(error){notice(error.message);}
+}
 const progressStages = [
   ['todo','待领取'],['in_progress','进行中'],['submitted','待复验'],
   ['rework','返修'],['accepted','已验收'],['integrated','已集成'],['paused','暂停']
@@ -92,6 +158,7 @@ async function action(path,data){try{busy=true;notice('');const value=await api(
 function button(label,callback,disabled=false){const b=node('button','button',label);b.type='button';b.disabled=disabled;b.addEventListener('click',()=>Promise.resolve(callback()).catch(()=>{}));return b;}
 function render(){
   const tasks=state.tasks;$('total').textContent=tasks.length;$('working').textContent=tasks.filter(t=>t.status==='in_progress').length;$('submitted').textContent=tasks.filter(t=>t.status==='submitted').length;$('accepted').textContent=tasks.filter(t=>['accepted','integrated'].includes(t.status)).length;
+  renderRoadmap();
   const providers=$('providers');providers.replaceChildren();for(const key of ['codex','cursor','claude','lmstudio']){const p=state.providers[key]||{};const card=node('article','provider');card.append(node('div','provider-icon',{codex:'◈',cursor:'↗',claude:'✳',lmstudio:'◎'}[key]));const content=node('div','provider-main');content.append(node('strong','',names[key]),node('p','',p.available?(p.version+' · '+(p.authenticated===false?p.auth:state.connections?.[key]?.passed?'连接已验证':state.connections?.[key]?'连接未通过':'连接待验证')):(p.editor_installed?'编辑器已安装 · Agent CLI未找到':'未检测到可用CLI')));card.append(content,badge(p.available&&p.authenticated!==false?'available':'paused',p.available?(key==='lmstudio'?'仅简单任务':p.authenticated===false?'CLI待授权':'CLI已检测'):'待接入'));providers.append(card);}
   $('automation').checked=state.automation;$('automation-label').textContent=state.automation?'已开启':'已关闭';
   const search=$('search').value.trim().toLowerCase(),status=$('status-filter').value;
@@ -130,6 +197,7 @@ async function showLog(id){textJob=id;$('text-title').textContent='执行日志 
 $('new-task').addEventListener('click',showCreate);for(const [id,dialog]of[['close-create','create-dialog'],['close-detail','detail-dialog'],['close-text','text-dialog']])$(id).addEventListener('click',()=>$(dialog).close());$('text-dialog').addEventListener('close',()=>textJob=null);
 document.querySelectorAll('[data-owner]').forEach(b=>b.addEventListener('click',()=>{ownerFilter=b.dataset.owner;document.querySelectorAll('[data-owner]').forEach(x=>x.classList.toggle('selected',x===b));if(state)render();}));for(const id of ['search','status-filter'])$(id).addEventListener('input',()=>state&&render());
 $('progress-reset').addEventListener('click',()=>{ownerFilter='';$('search').value='';$('status-filter').value='';document.querySelectorAll('[data-owner]').forEach(b=>b.classList.toggle('selected',!b.dataset.owner));if(state)render();});
+$('roadmap-download').addEventListener('click',downloadRoadmap);
 $('sync').addEventListener('click',()=>action('/api/sync',{}).catch(()=>{}));$('doctor').addEventListener('click',async()=>{const b=$('doctor');b.disabled=true;b.textContent='正在检测…';try{await action('/api/doctor',{});}catch{}finally{b.disabled=false;b.textContent='重新检测 CLI ↻';}});
 $('automation').addEventListener('change',()=>action('/api/automation',{enabled:$('automation').checked}).catch(()=>{}));
 $('create-form').elements.owner.addEventListener('change',e=>{const f=$('create-form');f.elements.id.value=nextNumber(e.target.value);f.elements.write_paths.value=e.target.value==='lmstudio'?'lmstudio-works/src/helper.py\nlmstudio-works/deliveries/'+f.elements.id.value+'.md':e.target.value+'-works/src/**\n'+e.target.value+'-works/tests/**\n'+e.target.value+'-works/deliveries/'+f.elements.id.value+'.md';});
@@ -137,7 +205,7 @@ $('create-form').addEventListener('submit',async e=>{e.preventDefault();const f=
 async function boot(){try{const session=await api('/api/session');csrf=session.csrf;setProjects(session.projects);await refresh();setInterval(()=>{if(!busy)refresh();},2000);}catch(e){notice(e.message);}}boot();
 
 function setProjects(items,preferred){projectList=items;const existing=preferred||projectId||localStorage.getItem('coordination-project');projectId=items.some(p=>p.id===existing)?existing:(items[0]?.id||'');const select=$('project-select');select.replaceChildren();for(const p of items){const option=node('option','',p.name);option.value=p.id;select.append(option);}if(!items.length)select.append(node('option','','请新增项目'));select.value=projectId;const project=items.find(p=>p.id===projectId);$('project-location').textContent=project?project.works_root:'每个项目的任务、测试、交付和日志集中保存';$('new-task').disabled=!projectId;localStorage.setItem('coordination-project',projectId);}
-$('project-select').addEventListener('change',async e=>{if(busy){e.target.value=projectId;return;}projectId=e.target.value;state=null;clearProgress();$('task-rows').replaceChildren();$('jobs').replaceChildren();$('events').replaceChildren();$('new-task').disabled=true;ownerFilter='';$('search').value='';$('status-filter').value='';for(const dialog of document.querySelectorAll('dialog'))dialog.close();document.querySelectorAll('[data-owner]').forEach(b=>b.classList.toggle('selected',!b.dataset.owner));const activeProject=projectList.find(p=>p.id===projectId);$('project-location').textContent=activeProject?.works_root||'';localStorage.setItem('coordination-project',projectId);await refresh();});
+$('project-select').addEventListener('change',async e=>{if(busy){e.target.value=projectId;return;}projectId=e.target.value;state=null;clearProgress();clearRoadmap();$('task-rows').replaceChildren();$('jobs').replaceChildren();$('events').replaceChildren();$('new-task').disabled=true;ownerFilter='';$('search').value='';$('status-filter').value='';for(const dialog of document.querySelectorAll('dialog'))dialog.close();document.querySelectorAll('[data-owner]').forEach(b=>b.classList.toggle('selected',!b.dataset.owner));const activeProject=projectList.find(p=>p.id===projectId);$('project-location').textContent=activeProject?.works_root||'';localStorage.setItem('coordination-project',projectId);await refresh();});
 $('new-project').addEventListener('click',()=>{$('project-form').reset();$('project-error').textContent='';$('project-dialog').showModal();});
 $('close-project').addEventListener('click',()=>$('project-dialog').close());
 $('project-form').addEventListener('submit',async e=>{e.preventDefault();const f=e.currentTarget,b=f.querySelector('[type=submit]');b.disabled=true;try{const item=await api('/api/projects',{id:f.elements.id.value.trim(),name:f.elements.name.value.trim(),source_root:f.elements.source_root.value.trim()});setProjects(await api('/api/projects'),item.id);$('project-dialog').close();await refresh();}catch(error){$('project-error').textContent=error.message;}finally{b.disabled=false;}});

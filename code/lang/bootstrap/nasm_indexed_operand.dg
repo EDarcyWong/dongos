@@ -1,0 +1,54 @@
+// NASM scaled-index memory operand text (no LF/NUL):
+// "[<base64> + <index64>*<scale>]" plus " + <disp>" or " - <|disp|>" before
+// the closing bracket when disp is non-zero. index may not be RSP (R12 is
+// fine); scale is 1/2/4/8 and is always written; disp fits in i32. The scale
+// and displacement digits come from the integrated CR4 decimal encoder in
+// local scratch; out is written once, after every check has passed.
+module bootstrap.nasm_indexed_operand;
+import bootstrap.decimal_integer as dec;
+pub const OK:u64=0;pub const INVALID:u64=1;pub const CAPACITY:u64=2;
+const MAX:u64=0xffff_ffff_ffff_ffff;
+const RSP:u64=4;
+fn span(p:u64,n:u64)bool{return n==0||(p!=0&&n<=MAX-p);}
+fn overlap(a:u64,n:u64,b:u64,m:u64)bool{return n!=0&&m!=0&&a<b+m&&b<a+n;}
+fn copy(out:[]u8,at:usize,text:[]const u8)usize{
+ var i:usize=0;while i<text.len{out[at+i]=text[i];i+=1;}return at+text.len;
+}
+fn register(r:u64)[]const u8{
+ if r==0{return "rax";}if r==1{return "rcx";}if r==2{return "rdx";}if r==3{return "rbx";}
+ if r==4{return "rsp";}if r==5{return "rbp";}if r==6{return "rsi";}if r==7{return "rdi";}
+ if r==8{return "r8";}if r==9{return "r9";}if r==10{return "r10";}if r==11{return "r11";}
+ if r==12{return "r12";}if r==13{return "r13";}if r==14{return "r14";}return "r15";
+}
+pub unsafe fn encode(base:u64,index:u64,scale:u64,displacement:i64,out:[]u8,written:*usize)u64{unsafe{
+ let wp=written as u64;let op=out.ptr as u64;
+ if written==null||(wp&7)!=0||!span(wp,8){return INVALID;}
+ if !span(op,out.len){return INVALID;}
+ if overlap(wp,8,op,out.len){return INVALID;}
+ if base>15||index>15||index==RSP{return INVALID;}
+ if scale!=1&&scale!=2&&scale!=4&&scale!=8{return INVALID;}
+ if displacement< -2147483648||displacement>2147483647{return INVALID;}
+ // CR4 digits into local scratch: the scale, then |disp| (at most 10 digits).
+ let shown=scale;
+ var sdigits:[24]u8=[0;24];var scount:usize=0;
+ if dec.encode(shown,64,false,slice_from_raw_parts(&sdigits[0],24),&scount)!=dec.OK{return INVALID;}
+ var negative=displacement<0;var magnitude:u64=displacement as u64;
+ if negative{magnitude=wrapping_sub(0,displacement as u64);}
+ var ddigits:[24]u8=[0;24];var dcount:usize=0;
+ if displacement!=0{
+  if dec.encode(magnitude,64,false,slice_from_raw_parts(&ddigits[0],24),&dcount)!=dec.OK{return INVALID;}
+ }
+ // Longest text "[r15 + r15*8 - 2147483648]" is 26 bytes; the 48-byte buffer is a fixed sufficient bound.
+ var text:[48]u8=[0;48];let buffer=slice_from_raw_parts(&text[0],48);
+ var at=copy(buffer,0,"[");at=copy(buffer,at,register(base));at=copy(buffer,at," + ");
+ at=copy(buffer,at,register(index));at=copy(buffer,at,"*");
+ at=copy(buffer,at,slice_from_raw_parts(&sdigits[0],scount));
+ if displacement!=0{
+  if negative{at=copy(buffer,at," - ");}else{at=copy(buffer,at," + ");}
+  at=copy(buffer,at,slice_from_raw_parts(&ddigits[0],dcount));
+ }
+ at=copy(buffer,at,"]");
+ if at>out.len{return CAPACITY;}
+ var i:usize=0;while i<at{out[i]=buffer[i];i+=1;}
+ *written=at;return OK;
+}}
