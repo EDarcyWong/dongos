@@ -16,8 +16,14 @@ def main(argv=None):
     parser.add_argument('--home', type=Path, default=DEFAULT_HOME, help='独立协调数据/配置目录')
     parser.add_argument('--project', default='dongos', help='项目编号')
     commands = parser.add_subparsers(dest='command', required=True)
-    for command in ('init', 'sync', 'validate', 'status', 'doctor', 'export', 'stop', 'projects'):
+    for command in ('init', 'sync', 'validate', 'status', 'doctor', 'export', 'stop', 'projects', 'backup'):
         commands.add_parser(command)
+    timing = commands.add_parser('timing', help='只读查询完整任务时间线及每轮办理/返修时长')
+    timing.add_argument('task_id', help='完整任务编号，如claude:C43')
+    recovery = commands.add_parser('recover-state', help='按逐项审查证据恢复历史状态，默认仅预览')
+    recovery.add_argument('--snapshot', required=True, type=Path)
+    recovery.add_argument('--audit', required=True, type=Path)
+    recovery.add_argument('--apply', action='store_true')
     add = commands.add_parser('add-project')
     add.add_argument('id')
     add.add_argument('--name', required=True)
@@ -59,16 +65,29 @@ def main(argv=None):
         return 0
     config_file = registry.home / 'config.json'
     config = json.loads(config_file.read_text(encoding='utf-8')) if config_file.exists() else {}
+    if args.command == 'recover-state':
+        from .state_recovery import restore
+        store = registry.store(args.project, allow_state_recovery=True)
+        result = restore(store, args.project, args.snapshot, args.audit, apply=args.apply)
+        print(json.dumps(result, ensure_ascii=False, indent=2))
+        return 0
     store = registry.store(args.project) if args.command not in ('serve', 'stop') else None
-    if args.command == 'doctor':
+    if args.command == 'timing':
+        task = store.get(args.task_id)
+        result = dict(project=args.project, task_id=task['id'], rev=task['rev'],
+                      status=task['status'], timing=store.timing(task))
+    elif args.command == 'doctor':
         result = providers.discover(config.get('providers'))
         (store.local / 'cli-probe.json').write_text(json.dumps(result, ensure_ascii=False, indent=2), encoding='utf-8')
     elif args.command == 'probe':
         info = providers.discover(config.get('providers'))
         result = probe.connection(store, info[args.provider])
     elif args.command in ('init', 'sync'):
+        store.backup()
         result = migrate.synchronize(store)
         store.export()
+    elif args.command == 'backup':
+        result = dict(backup=str(store.backup()))
     elif args.command == 'validate':
         result = store.validate()
         print(json.dumps(result, ensure_ascii=False, indent=2))
@@ -91,6 +110,7 @@ def main(argv=None):
         if items:
             ident = args.project if any(p['id'] == args.project for p in items) else items[0]['id']
             store = registry.store(ident)
+            store.backup()
             migrate.synchronize(store)
             store.export()
         runner = Runner(store, cli_infos, timeout=config.get('job_timeout_seconds', 1800), parallel=config.get('parallel_jobs', 2)) if store else None

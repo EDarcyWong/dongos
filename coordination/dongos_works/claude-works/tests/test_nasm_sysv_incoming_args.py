@@ -80,10 +80,13 @@ static void ro_free(void*p,uint64_t n){
 #define FAKE(x) ((void*)(uintptr_t)(x))
 /* Each preflight keeps every other field valid (2 scalars, slots 8/16, frame 16) so only the target check can reject it. */
 static unsigned invalid(void){
- static _Alignas(16) uint8_t arena[2048],saved[2048];const unsigned total=19;
+ static _Alignas(16) uint8_t arena[2048],saved[2048];const unsigned total=19;unsigned failed=0;
  uint8_t*k=arena;uint64_t*f=(uint64_t*)(arena+64);uint8_t*o=arena+512;uint64_t*w=(uint64_t*)(arena+1600);
  for(unsigned i=0;i<total;i++){
-  memset(arena,0xa5,sizeof(arena));k[0]=0;k[1]=0;f[0]=8;f[1]=16;memcpy(saved,arena,sizeof(arena));uint64_t s=0;
+  /* all 16 kinds are scalar and all 16 offsets distinct legal slots 8..128 before the snapshot, so the
+     len=16 declared-tail alias cases 12/14/16 (frame 128) cannot be masked by a data INVALID */
+  memset(arena,0xa5,sizeof(arena));for(unsigned j=0;j<16;j++){k[j]=0;f[j]=8+8*j;}
+  memcpy(saved,arena,sizeof(arena));uint64_t s=0;
   switch(i){
    case 0:s=dong_incoming_emit(k,2,f,2,16,o,512,NULL);break;                              /* written NULL */
    case 1:s=dong_incoming_emit(k,2,f,2,16,o,512,(uint64_t*)(arena+1601));break;           /* written odd */
@@ -97,16 +100,18 @@ static unsigned invalid(void){
    case 9:s=dong_incoming_emit(k,2,f,UINT64_MAX/8+1,16,o,512,w);break;                    /* offsets multiplication overflow */
    case 10:s=dong_incoming_emit(k,2,FAKE(UINT64_MAX-15),4,16,o,512,w);break;              /* offsets end overflow */
    case 11:s=dong_incoming_emit(k,2,f,2,16,o,512,(uint64_t*)k);break;                     /* written on kinds' aligned prefix */
-   case 12:s=dong_incoming_emit(k,16,f,2,16,o,512,(uint64_t*)(k+8));break;                /* written in kinds' declared tail */
+   case 12:s=dong_incoming_emit(k,16,f,16,128,o,512,(uint64_t*)(k+8));break;              /* written in kinds' declared tail */
    case 13:s=dong_incoming_emit(k,2,f,2,16,o,512,f);break;                                /* written on offsets prefix */
-   case 14:s=dong_incoming_emit(k,2,f,16,16,o,512,f+15);break;                            /* written in offsets' declared tail */
+   case 14:s=dong_incoming_emit(k,16,f,16,128,o,512,f+15);break;                          /* written in offsets' declared tail */
    case 15:s=dong_incoming_emit(k,2,f,2,16,k,8,w);break;                                  /* out over kinds */
-   case 16:s=dong_incoming_emit(k,2,f,16,16,(uint8_t*)(f+14),16,w);break;                 /* out over offsets' declared tail */
+   case 16:s=dong_incoming_emit(k,16,f,16,128,(uint8_t*)(f+14),16,w);break;               /* out over offsets' declared tail */
    case 17:s=dong_incoming_emit(k,2,f,2,16,o,512,(uint64_t*)o);break;                     /* written on out prefix */
    default:s=dong_incoming_emit(k,2,f,2,16,o,512,(uint64_t*)(o+504));break;               /* written in out's unused tail */
   }
-  if(s!=1||memcmp(saved,arena,sizeof(arena))){fprintf(stderr,"invalid preflight %u status %u\n",i,(unsigned)s);exit(93);}
+  int same=!memcmp(saved,arena,sizeof(arena));
+  if(s!=1||!same){fprintf(stderr,"invalid preflight %u status %u unchanged %d\n",i,(unsigned)s,same);failed++;}
  }
+ if(failed)exit(93);
  return total;
 }
 int main(void){
@@ -342,7 +347,8 @@ class NasmSysvIncomingArgsTests(unittest.TestCase):
                 ([2],[8],16,64,1,INVALID),([0]*17,[8*(i+1)for i in range(17)],4080,0,0,INVALID),([1]*9,[8*(i+1)for i in range(18)],4080,64,0,INVALID),
                 ([0,0],[8],16,64,0,INVALID),([0],[8,16],16,64,1,INVALID),([0],[0],16,64,0,INVALID),([0],[4],16,0,0,INVALID),
                 ([0],[24],16,64,0,INVALID),([0,0,0],[8,16,8],16,64,1,INVALID),([0]*7,[8,16,24,32,40,48,16],64,0,0,INVALID),
-                ([0],[2**64-8],4080,64,0,INVALID)]
+                ([0],[2**64-8],4080,64,0,INVALID),
+                ([2],[8],16,0,0,INVALID),([0,0xff],[8,16],16,0,1,INVALID)]   # illegal kind with capacity 0: INVALID before CAPACITY
         for mode,exe in self.executables.items():
             results=self.run_cases(exe,cases,'text-'+mode)
             for c,text in zip(cases,results):
@@ -383,6 +389,23 @@ class NasmSysvIncomingArgsTests(unittest.TestCase):
         for mode,exe in self.build_all('bad-early-out',source.replace(old,new,1)).items():
             with self.assertRaisesRegex(AssertionError,'guard/atomicity'):self.run_cases(exe,case,'bad-early-out-'+mode)
         self.records.append(dict(test='bad-early-out',compiled=True,native_executed=True,modes=2,rejected_by='guard/atomicity'))
+
+    def test_selective_tail_alias_checks_are_each_reachable(self):
+        """Preflight sensitivity: three real Dong sources each truncate one input/written/out alias check to a prefix."""
+        source=SOURCE.read_text(encoding='utf-8')
+        for mode,exe in self.executables.items():self.run_cases(exe,[],'alias-good-'+mode)   # same harness passes all 19
+        for name,old,new,target in [
+            ('bad-kinds-written-prefix','overlap(kp,kn,wp,8)','overlap(kp,2,wp,8)',12),
+            ('bad-offsets-written-prefix','overlap(dp,dn,wp,8)','overlap(dp,16,wp,8)',14),
+            ('bad-offsets-out-prefix','overlap(dp,dn,op,out.len)','overlap(dp,16,op,out.len)',16)]:
+            self.assertEqual(source.count(old),1,name)
+            for mode,exe in self.build_all(name,source.replace(old,new,1)).items():
+                run=subprocess.run([str(exe)],input=struct.pack('<Q',0),capture_output=True,timeout=60)
+                err=run.stderr.decode('ascii','replace');(self.work/(name+'-'+mode+'.stderr')).write_text(err,encoding='ascii')
+                self.assertEqual(run.returncode,93,(name,mode,err))                          # normal exit from the preflight check
+                failed=[int(line.split()[2])for line in err.splitlines()if line.startswith('invalid preflight ')]
+                self.assertEqual(failed,[target],(name,mode,err))                            # exactly the target alias case
+            self.records.append(dict(test=name,compiled=True,native_executed=True,modes=2,rejected_by='preflight %d'%target))
 
 
 if __name__=='__main__':unittest.main()

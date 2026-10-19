@@ -81,12 +81,15 @@ static void ro_free(void*p,uint64_t n){
 #endif
 }
 #define FAKE(x) ((void*)(uintptr_t)(x))
-/* Each preflight keeps every other field valid (2 scalar kinds, offsets 8/16) so only the target check can reject it. */
+/* Each preflight keeps every other field valid so only the target check can reject it. Before the snapshot all
+   16 kinds are scalar and all 16 offsets are legal (8..128), so the len=16 alias cases 11/13/15 have word count
+   equal to offset count and cannot be masked by a data INVALID. Every failing preflight is reported, then exit 93. */
 static unsigned invalid(void){
- static _Alignas(16) uint8_t arena[2048],saved[2048];const unsigned total=28;
+ static _Alignas(16) uint8_t arena[2048],saved[2048];const unsigned total=28;unsigned failed=0;
  uint8_t*k=arena;uint64_t*f=(uint64_t*)(arena+64);uint8_t*o=arena+512;Result*r=(Result*)(arena+1536);uint64_t*w=(uint64_t*)(arena+1600);
  for(unsigned i=0;i<total;i++){
-  memset(arena,0xa5,sizeof(arena));k[0]=0;k[1]=0;f[0]=8;f[1]=16;memcpy(saved,arena,sizeof(arena));uint64_t s=0;
+  memset(arena,0xa5,sizeof(arena));for(unsigned j=0;j<16;j++){k[j]=0;f[j]=8+8*j;}
+  memcpy(saved,arena,sizeof(arena));uint64_t s=0;
   switch(i){
    case 0:s=dong_args_setup(k,2,f,2,o,512,NULL);break;                                   /* result NULL */
    case 1:s=dong_args_setup(k,2,f,2,o,512,(Result*)(arena+1540));break;                  /* result misaligned */
@@ -99,11 +102,11 @@ static unsigned invalid(void){
    case 8:s=dong_args_setup(k,2,FAKE(UINT64_MAX-15),4,o,512,r);break;                    /* offsets end overflow */
    case 9:s=dong_args_setup(k,2,f,2,NULL,512,r);break;                                   /* NULL non-empty out */
    case 10:s=dong_args_setup(k,2,f,2,FAKE(UINT64_MAX-15),32,r);break;                    /* out end overflow */
-   case 11:s=dong_args_setup(k,16,f,2,o,512,(Result*)k);break;                           /* result on kinds aligned prefix */
+   case 11:s=dong_args_setup(k,16,f,16,o,512,(Result*)k);break;                          /* result on kinds aligned prefix */
    case 12:s=dong_args_setup(k,2,f,2,o,512,(Result*)f);break;                            /* result on offsets prefix */
-   case 13:s=dong_args_setup(k,2,f,16,o,512,(Result*)(f+14));break;                      /* result in offsets' declared tail */
+   case 13:s=dong_args_setup(k,16,f,16,o,512,(Result*)(f+14));break;                     /* result in offsets' declared tail */
    case 14:s=dong_args_setup(k,2,f,2,k,8,r);break;                                       /* out over kinds */
-   case 15:s=dong_args_setup(k,2,f,16,(uint8_t*)(f+15),16,r);break;                      /* out over offsets tail */
+   case 15:s=dong_args_setup(k,16,f,16,(uint8_t*)(f+15),16,r);break;                     /* out over offsets tail */
    case 16:s=dong_args_setup(k,2,f,2,o,512,(Result*)(o+496));break;                      /* result in out's unused tail */
    case 17:s=dong_args_setup(k,2,f,2,o,512,(Result*)o);break;                            /* result on out prefix */
    case 26:s=dong_args_setup(k,2,f,2,o,512,(Result*)(arena+56));break;                   /* only result's second word on offsets[0] */
@@ -117,8 +120,10 @@ static unsigned invalid(void){
    case 24:s=dong_args_cleanup(144,o,64,w);break;                                        /* above 128 */
    default:s=dong_args_cleanup(UINT64_MAX,o,64,w);break;
   }
-  if(s!=1||memcmp(saved,arena,sizeof(arena))){fprintf(stderr,"invalid preflight %u status %u\n",i,(unsigned)s);exit(93);}
+  int same=!memcmp(saved,arena,sizeof(arena));
+  if(s!=1||!same){fprintf(stderr,"invalid preflight %u status %u unchanged %d\n",i,(unsigned)s,same);failed++;}
  }
+ if(failed)exit(93);
  return total;
 }
 int main(void){
@@ -411,6 +416,23 @@ class NasmSysvCallArgsTests(unittest.TestCase):
             for mode,exe in self.build_all(name,source.replace(old,new,1)).items():
                 with self.assertRaisesRegex(AssertionError,'guard/atomicity'):self.run_cases(exe,case,name+'-'+mode)
             self.records.append(dict(test=name,compiled=True,native_executed=True,modes=2,rejected_by='guard/atomicity'))
+
+    def test_selective_alias_checks_are_each_reachable(self):
+        """Preflight sensitivity: three real Dong sources each drop or truncate one input/Result/out alias check."""
+        source=SOURCE.read_text(encoding='utf-8')
+        for mode,exe in self.executables.items():self.run_cases(exe,[],'alias-good-'+mode)   # same harness passes all 28
+        for name,old,new,target in [
+            ('bad-no-kinds-result','||overlap(kp,kn,rp,rn)','',11),
+            ('bad-offsets-result-prefix','overlap(sp,sn,rp,rn)','overlap(sp,16,rp,rn)',13),
+            ('bad-offsets-out-prefix','overlap(sp,sn,op,on)','overlap(sp,16,op,on)',15)]:
+            self.assertEqual(source.count(old),1,name)
+            for mode,exe in self.build_all(name,source.replace(old,new,1)).items():
+                run=subprocess.run([str(exe)],input=struct.pack('<Q',0),capture_output=True,timeout=60)
+                err=run.stderr.decode('ascii','replace');(self.work/(name+'-'+mode+'.stderr')).write_text(err,encoding='ascii')
+                self.assertEqual(run.returncode,93,(name,mode,err))                          # normal exit from the preflight check
+                failed=[int(line.split()[2])for line in err.splitlines()if line.startswith('invalid preflight ')]
+                self.assertEqual(failed,[target],(name,mode,err))                            # exactly the target alias case
+            self.records.append(dict(test=name,compiled=True,native_executed=True,modes=2,rejected_by='preflight %d'%target))
 
 
 if __name__=='__main__':unittest.main()

@@ -1,0 +1,109 @@
+{
+  "reviewed": {
+    "id": "cursor:CR25",
+    "number": "CR25",
+    "owner": "cursor",
+    "title": "强原子compare-exchange并返回旧值",
+    "description": "module `bootstrap.nasm_atomic_compare_exchange`；依赖`[]`。\r\n\r\n`pub unsafe fn emit(width:u64,out:[]u8,written:*usize)u64`\r\n\r\nwidth仅32/64。固定RDI=地址、RSI=expected、RDX=desired。width32严格：\r\n\r\n```text\r\nmov eax, esi\r\nmov r10d, edx\r\nlock cmpxchg dword [rdi], r10d\r\n```\r\n\r\nwidth64严格：\r\n\r\n```text\r\nmov rax, rsi\r\nmov r10, rdx\r\nlock cmpxchg qword [rdi], r10\r\n```\r\n\r\n只比较低width位；若旧内存==expected低位，写desired低位，否则不写；RAX始终是旧值，32位零扩展。特别32位成功时CMPXCHG不重写accumulator，故必须先用`mov eax,esi`清高32，不能用`mov rax,rsi`。强比较无伪失败；ZF=1当且仅当交换成功，其余算术flags允许被改变。只RAX/R10/flags可变；RDI/RSI/RDX、其它GPR与非目标内存保持。调用方保证自然对齐、真实可访问且可写的普通可缓存内存、正确对象生命周期及原子使用契约，不用于MMIO；此组件不做运行时地址校验。后续lowering须标记不可删除/重排的内存副作用，本任务不改IR接线，也不以指令库宣称完整原子语义集成。\r\n\r\n原生oracle：两宽度的成功/失败、旧值/expected仅高32不同、desired高32非0、0/全1/最高位、expected==desired等，独立检查旧返回、最终内存、ZF和输入保持，立即捕获RAX/R10/ZF不能被观察器覆盖。另一个有限并发测试：4个原生线程各成功CAS递增256次，所有共享对象访问在并发期间均走本snippet；记录每次成功前旧值，线程join后独立要求旧值恰为0..1023的排列且最终1024，有限重试上界/超时用于失败诊断、不当作坏实现语义拒绝。pthread或Windows CreateThread均可，保持显式SysV桥。\r\n\r\n实际代码字节/反汇编必须确认LOCK及CMPXCHG正确宽度。语义坏Dong把desired复制源改成RSI，选择expected与desired不同的成功例，正常执行但新内存错误；可另移除32位初始清高位、以成功且expected高32非0证明返回旧值漏检；另容量提前写。不以偶然出现race作为删LOCK唯一负控。\n\n\n## 共用固定契约与执行归属\n\n本任务是L3 Dong自举后端的独立生产组件；仅四个声明文件，Dong实现，不导出C符号（临时测试wrapper可导出），无分配、全局可变状态、OS调用。不可改code/lang、活动编译器、内核、协调器、其它负责人、在途任务或已集成依赖；既有队列/返修优先。依赖只读，只用已integrated模块；不得以宿主Python/C算法替代Dong生产逻辑。\n\n统一OK=0、INVALID=1、CAPACITY=2；接口另有Result时按任务正文完整尺寸。written非NULL、8对齐、完整8字节端点不回绕；out完整声明区间端点不回绕，非空非NULL，空可NULL。written与完整out不重叠（包括成功未使用尾部）。有输入切片/结构/嵌套名字时，必须在任何读写前验证完整描述符、元素乘法、端点、所需对齐、非空非NULL和完整对象别名；输入彼此如正文无禁止可互叠，只读输入与完整out/结果不得重叠。所有数据/枚举/标签/尺寸INVALID优先CAPACITY。失败out、计数或完整Result、输入全文不变；成功只写精确前缀/结果，尾部保持。先全预检及正确求长，在充分且有证明上界的局部区调用只读依赖，再最后发布用户out；不允许内部scratch越界或对合法容量不足输入panic。\n\n文本严格ASCII，换行真实单LF，无NUL/注释/额外空行/隐式section/global/ret（任务另定声明除外）。涉及__dong_b<N>标签时N=0..MAX-1，MAX为NONE非法；数字复用已声明decimal_integer，不另写格式化。寄存器编号若有0..15参数，固定rax,rcx,rdx,rbx,rsp,rbp,rsi,rdi,r8..r15；固定寄存器任务按正文集合测试，不强凑16矩阵。\n\n测试只跑本任务checks：实际编译/链接/原生执行Dong debug与release，NASM ELF64/COFF都组装；原生C桥显式SysV，保护宿主栈/被调用者保存寄存器。COFF组装不冒充Win64调用ABI。只暂存本模块及已声明只读依赖的传递闭包，不引入整个lang根遮蔽坏源码。独立Python/C oracle，不用生产规划器输出当唯一期望。有限固定边界，每模式不超过24个主要原生向量（并发操作另按正文有限检查）；不做全笛卡尔积或性能基准。源码、说明、测试、只读依赖前后SHA256稳定，0skip才可验收。\n\n每个描述符/端点/别名预检要独立可达，其它字段合法。written端点溢出用8对齐UINT64_MAX-7且合法空out，漏检坏体应安全返回CAPACITY而非非法解引用。初始化guard后再取快照，立刻观察失败全文/计数/guard、成功精确文本/长度/未用尾部；输入真实只读保护须检查系统调用成功，不能只声称只读。\n\n至少保留两类真实坏Dong：一种完成构建、链接、正常原生执行后，由指定数值/内存/分支/链接后地址断言拒绝；一种容量不足提前写out或结果，由完整原子性断言拒绝。同夹具先跑好体。构建失败、崩溃、超时、文本不同、无关预检错误不能冒充指定语义负控；源码中缺锁/不同内存序等结构检查单列，不能假装单次正常运行证明并发语义。坏体所有内存访问在预留安全可访问区内，不破坏真实宿主栈/ret、不依靠越界或硬件异常拒绝。\n\n本人客户端先worker MCP get_task/read_document读取最新rev和完整契约/归属，claim成功才执行；先完成已有领取/返修。产物在本人works/build/<编号>/<唯一目录>/，完成原编号交付写真实命令、tests/skips、模式/对象格式、全部输入SHA256、每种坏体实际观察/拒绝依据、未跑与剩余限制，再MCP submit。不得自行accept/integrate、提交/推送、运行OS/VM/全回归、启动模型CLI/定时器/关机，不用管理工具自动启动Cursor。任务发布不代表实现或通过，最后由Codex独立复验再验收集成。\n",
+    "status": "submitted",
+    "rev": 5,
+    "write_paths": [
+      "cursor-works/src/bootstrap/nasm_atomic_compare_exchange.dg",
+      "cursor-works/src/bootstrap/nasm_atomic_compare_exchange.md",
+      "cursor-works/tests/test_nasm_atomic_compare_exchange.py",
+      "cursor-works/deliveries/CR25.md"
+    ],
+    "depends_on": [],
+    "checks": [
+      "discover:cursor-works/tests:test_nasm_atomic_compare_exchange.py"
+    ],
+    "auto_dispatch": false,
+    "auto_verify": false,
+    "complexity": "standard",
+    "created_at": "2026-10-18T15:46:00+00:00",
+    "updated_at": "2026-10-19T06:26:12+00:00",
+    "historical": false,
+    "document": "cursor-works/tasks/CR25-board.md",
+    "delivery": "cursor-works/deliveries/CR25.md",
+    "candidate": null,
+    "verification": {
+      "passed": true,
+      "checks": [
+        {
+          "spec": "discover:cursor-works/tests:test_nasm_atomic_compare_exchange.py",
+          "passed": true,
+          "tests": 3,
+          "skips": 0,
+          "returncode": 0,
+          "cancelled": false,
+          "timed_out": false,
+          "elapsed_seconds": 37.043
+        }
+      ],
+      "source_stable": true,
+      "fingerprint": {
+        "cursor-works/src/bootstrap/nasm_atomic_compare_exchange.dg": "576c5d30bf99fd5b4c7e9d587edd79ef03f6e5fc57461fdff05aa74b32e56765",
+        "cursor-works/src/bootstrap/nasm_atomic_compare_exchange.md": "b669b05cfed38bc4d5c3f76925589b6aba245488be7b1de9654838fd68c1d0b3",
+        "cursor-works/tests/test_nasm_atomic_compare_exchange.py": "56685a45a66a4fb201ffb02ac533e2868d037de7937904482c37538a95d05554",
+        "cursor-works/deliveries/CR25.md": "c2d157c9e84f6bd134f2d11909e2da4f284a78fa209af7ea384ff17c66459d4d"
+      },
+      "summary": "定向复验通过，等待源码/契约审查",
+      "finished_at": "2026-10-19T06:26:12+00:00",
+      "job": "08289553b43c42d0bb7c9f6a557455c9"
+    },
+    "review_note": "",
+    "legacy_hash": "0eb209562617e71b52132ed4ca039c8e99590bfc9687997f4e2dd5ead70fc260",
+    "state_recovery": {
+      "at": "2026-10-19T04:43:01+00:00",
+      "snapshot_rev": 1,
+      "snapshot_sha256": "f3ab929e33419f40dfc417217d588acf8b1b26cbac50724a51942a11e438c171",
+      "audit_sha256": "3ea0db756d56092976092ed0d1216118e145a8e34aa02c5060cb913d088d553e",
+      "note": "恢复已有验收/集成/返修事实；原复验为历史记录，未声称本次重跑；不恢复丢失作业或启动模型。"
+    },
+    "claimed_by": "cursor-mcp-05de65f92bc04a7c",
+    "claimed_at": "2026-10-19T06:08:11+00:00"
+  },
+  "result": {
+    "project": "dongos",
+    "task": {
+      "id": "cursor:CR25",
+      "number": "CR25",
+      "owner": "cursor",
+      "title": "强原子compare-exchange并返回旧值",
+      "description": "module `bootstrap.nasm_atomic_compare_exchange`；依赖`[]`。\r\n\r\n`pub unsafe fn emit(width:u64,out:[]u8,written:*usize)u64`\r\n\r\nwidth仅32/64。固定RDI=地址、RSI=expected、RDX=desired。width32严格：\r\n\r\n```text\r\nmov eax, esi\r\nmov r10d, edx\r\nlock cmpxchg dword [rdi], r10d\r\n```\r\n\r\nwidth64严格：\r\n\r\n```text\r\nmov rax, rsi\r\nmov r10, rdx\r\nlock cmpxchg qword [rdi], r10\r\n```\r\n\r\n只比较低width位；若旧内存==expected低位，写desired低位，否则不写；RAX始终是旧值，32位零扩展。特别32位成功时CMPXCHG不重写accumulator，故必须先用`mov eax,esi`清高32，不能用`mov rax,rsi`。强比较无伪失败；ZF=1当且仅当交换成功，其余算术flags允许被改变。只RAX/R10/flags可变；RDI/RSI/RDX、其它GPR与非目标内存保持。调用方保证自然对齐、真实可访问且可写的普通可缓存内存、正确对象生命周期及原子使用契约，不用于MMIO；此组件不做运行时地址校验。后续lowering须标记不可删除/重排的内存副作用，本任务不改IR接线，也不以指令库宣称完整原子语义集成。\r\n\r\n原生oracle：两宽度的成功/失败、旧值/expected仅高32不同、desired高32非0、0/全1/最高位、expected==desired等，独立检查旧返回、最终内存、ZF和输入保持，立即捕获RAX/R10/ZF不能被观察器覆盖。另一个有限并发测试：4个原生线程各成功CAS递增256次，所有共享对象访问在并发期间均走本snippet；记录每次成功前旧值，线程join后独立要求旧值恰为0..1023的排列且最终1024，有限重试上界/超时用于失败诊断、不当作坏实现语义拒绝。pthread或Windows CreateThread均可，保持显式SysV桥。\r\n\r\n实际代码字节/反汇编必须确认LOCK及CMPXCHG正确宽度。语义坏Dong把desired复制源改成RSI，选择expected与desired不同的成功例，正常执行但新内存错误；可另移除32位初始清高位、以成功且expected高32非0证明返回旧值漏检；另容量提前写。不以偶然出现race作为删LOCK唯一负控。\n\n\n## 共用固定契约与执行归属\n\n本任务是L3 Dong自举后端的独立生产组件；仅四个声明文件，Dong实现，不导出C符号（临时测试wrapper可导出），无分配、全局可变状态、OS调用。不可改code/lang、活动编译器、内核、协调器、其它负责人、在途任务或已集成依赖；既有队列/返修优先。依赖只读，只用已integrated模块；不得以宿主Python/C算法替代Dong生产逻辑。\n\n统一OK=0、INVALID=1、CAPACITY=2；接口另有Result时按任务正文完整尺寸。written非NULL、8对齐、完整8字节端点不回绕；out完整声明区间端点不回绕，非空非NULL，空可NULL。written与完整out不重叠（包括成功未使用尾部）。有输入切片/结构/嵌套名字时，必须在任何读写前验证完整描述符、元素乘法、端点、所需对齐、非空非NULL和完整对象别名；输入彼此如正文无禁止可互叠，只读输入与完整out/结果不得重叠。所有数据/枚举/标签/尺寸INVALID优先CAPACITY。失败out、计数或完整Result、输入全文不变；成功只写精确前缀/结果，尾部保持。先全预检及正确求长，在充分且有证明上界的局部区调用只读依赖，再最后发布用户out；不允许内部scratch越界或对合法容量不足输入panic。\n\n文本严格ASCII，换行真实单LF，无NUL/注释/额外空行/隐式section/global/ret（任务另定声明除外）。涉及__dong_b<N>标签时N=0..MAX-1，MAX为NONE非法；数字复用已声明decimal_integer，不另写格式化。寄存器编号若有0..15参数，固定rax,rcx,rdx,rbx,rsp,rbp,rsi,rdi,r8..r15；固定寄存器任务按正文集合测试，不强凑16矩阵。\n\n测试只跑本任务checks：实际编译/链接/原生执行Dong debug与release，NASM ELF64/COFF都组装；原生C桥显式SysV，保护宿主栈/被调用者保存寄存器。COFF组装不冒充Win64调用ABI。只暂存本模块及已声明只读依赖的传递闭包，不引入整个lang根遮蔽坏源码。独立Python/C oracle，不用生产规划器输出当唯一期望。有限固定边界，每模式不超过24个主要原生向量（并发操作另按正文有限检查）；不做全笛卡尔积或性能基准。源码、说明、测试、只读依赖前后SHA256稳定，0skip才可验收。\n\n每个描述符/端点/别名预检要独立可达，其它字段合法。written端点溢出用8对齐UINT64_MAX-7且合法空out，漏检坏体应安全返回CAPACITY而非非法解引用。初始化guard后再取快照，立刻观察失败全文/计数/guard、成功精确文本/长度/未用尾部；输入真实只读保护须检查系统调用成功，不能只声称只读。\n\n至少保留两类真实坏Dong：一种完成构建、链接、正常原生执行后，由指定数值/内存/分支/链接后地址断言拒绝；一种容量不足提前写out或结果，由完整原子性断言拒绝。同夹具先跑好体。构建失败、崩溃、超时、文本不同、无关预检错误不能冒充指定语义负控；源码中缺锁/不同内存序等结构检查单列，不能假装单次正常运行证明并发语义。坏体所有内存访问在预留安全可访问区内，不破坏真实宿主栈/ret、不依靠越界或硬件异常拒绝。\n\n本人客户端先worker MCP get_task/read_document读取最新rev和完整契约/归属，claim成功才执行；先完成已有领取/返修。产物在本人works/build/<编号>/<唯一目录>/，完成原编号交付写真实命令、tests/skips、模式/对象格式、全部输入SHA256、每种坏体实际观察/拒绝依据、未跑与剩余限制，再MCP submit。不得自行accept/integrate、提交/推送、运行OS/VM/全回归、启动模型CLI/定时器/关机，不用管理工具自动启动Cursor。任务发布不代表实现或通过，最后由Codex独立复验再验收集成。\n",
+      "status": "rework",
+      "rev": 6,
+      "write_paths": [
+        "cursor-works/src/bootstrap/nasm_atomic_compare_exchange.dg",
+        "cursor-works/src/bootstrap/nasm_atomic_compare_exchange.md",
+        "cursor-works/tests/test_nasm_atomic_compare_exchange.py",
+        "cursor-works/deliveries/CR25.md"
+      ],
+      "depends_on": [],
+      "checks": [
+        "discover:cursor-works/tests:test_nasm_atomic_compare_exchange.py"
+      ],
+      "auto_dispatch": false,
+      "auto_verify": false,
+      "complexity": "standard",
+      "created_at": "2026-10-18T15:46:00+00:00",
+      "updated_at": "2026-10-19T06:28:15+00:00",
+      "historical": false,
+      "document": "cursor-works/tasks/CR25-board.md",
+      "delivery": "cursor-works/deliveries/CR25.md",
+      "candidate": null,
+      "verification": null,
+      "review_note": "R1：正式3项0skip通过但源码审查发现并发text=expected(width)未使用实际Dong产出；工作线程两次C读取shared_cell及CAS桩额外普通读违反并发所有目标访问须走片段；改为CAS返回RAX驱动重试并记录成功实际RAX。目标与元数据分离，完整双端guard及RDI等于原目标地址；16+16共32应减为两宽合计<=24并断言；负控好坏双方实际Dong且相同输入。保留4x256/排列/最终1024/超时、LOCK精确编码、ZF/零扩展和原子性。仅原四文件返修测试说明交付，不重写算法。详见reviews/2026-10-19-CR25-independent.md。",
+      "legacy_hash": "0eb209562617e71b52132ed4ca039c8e99590bfc9687997f4e2dd5ead70fc260",
+      "state_recovery": {
+        "at": "2026-10-19T04:43:01+00:00",
+        "snapshot_rev": 1,
+        "snapshot_sha256": "f3ab929e33419f40dfc417217d588acf8b1b26cbac50724a51942a11e438c171",
+        "audit_sha256": "3ea0db756d56092976092ed0d1216118e145a8e34aa02c5060cb913d088d553e",
+        "note": "恢复已有验收/集成/返修事实；原复验为历史记录，未声称本次重跑；不恢复丢失作业或启动模型。"
+      },
+      "claimed_by": "cursor-mcp-05de65f92bc04a7c",
+      "claimed_at": "2026-10-19T06:08:11+00:00"
+    }
+  }
+}

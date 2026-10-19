@@ -17,7 +17,7 @@ class ShellCommandTests(unittest.TestCase):
     def test_actual_commands_minimum_file_rights_close_and_terminal_process_snapshots(self):
         directory=ROOT/'build/test/shell-commands'/('run-'+uuid.uuid4().hex[:12]);directory.mkdir(parents=True)
         paths=[ROOT/p for p in ('services/shell/main.dg','services/shell/parser.dg','services/lib/files.dg',
-            'services/lib/process.dg','services/lib/process_abi.dg','services/lib/sys.dg','services/lib/abi.dg',
+            'services/lib/process.dg','services/lib/process_abi.dg','services/lib/sys.dg','services/lib/abi.dg','services/lib/boot_trace.dg',
             'services/fs/protocol.dg','services/fs/handles.dg','services/fs/path.dg',
             'tests/shell_commands_probe.dg.in','tests/shell_commands_probe.c','tests/test_shell_commands.py')]
         before={str(p.relative_to(ROOT)):hashlib.sha256(p.read_bytes()).hexdigest() for p in paths}
@@ -49,7 +49,9 @@ class ShellCommandTests(unittest.TestCase):
             bound=stack_bound(compiled.assembly);self.assertLessEqual(bound,8192)
             asm=out/'probe.asm';asm.write_text(compiled.assembly);nasm,cc=tool('nasm','NASM'),tool('gcc','CC');self.assertTrue(nasm and cc)
             for fmt in ('elf64','win64'):command([nasm,'-f',fmt,*nasm_flags(nasm),'-o',out/(fmt+'.o'),asm],out,'assemble-'+fmt)
-            executable=out/('probe.exe' if os.name=='nt' else 'probe');flags=['-mno-sse'] if os.name=='nt' else ['-no-pie','-D_GNU_SOURCE']
+            # Explicit SysV attributes on the bridge are sufficient. Disabling
+            # SSE breaks current MinGW windows.h intrinsics before our code runs.
+            executable=out/('probe.exe' if os.name=='nt' else 'probe');flags=[] if os.name=='nt' else ['-no-pie','-D_GNU_SOURCE']
             command([cc,'-std=c11','-O2','-Wall','-Wextra','-Werror','-D__USE_MINGW_ANSI_STDIO=1',*flags,
                 ROOT/'tests/shell_commands_probe.c',out/('win64.o' if os.name=='nt' else 'elf64.o'),'-o',executable],out,'link')
             result=command([executable],out,'native',success=False)

@@ -1,0 +1,42 @@
+{
+  "task": "claude:C47",
+  "verification": {
+    "passed": true,
+    "checks": [
+      {
+        "spec": "discover:claude-works/tests:test_nasm_guarded_integer_divide.py",
+        "passed": true,
+        "tests": 3,
+        "skips": 0,
+        "returncode": 0,
+        "cancelled": false,
+        "timed_out": false,
+        "elapsed_seconds": 70.228
+      }
+    ],
+    "source_stable": true,
+    "fingerprint": {
+      "claude-works/src/bootstrap/nasm_guarded_integer_divide.dg": "9c277fadcb1014d3500e2ef5ce48e851e8e71191ee02f6f52a3d27a7bb242902",
+      "claude-works/src/bootstrap/nasm_guarded_integer_divide.md": "85ddfac82579481e383cc742cdbb1108e863ee80d96af5161d381dc855952ff4",
+      "claude-works/tests/test_nasm_guarded_integer_divide.py": "e24d0ec0132e69373aff0f4b0feda300b344c95091d21390343466a3184f9faa",
+      "claude-works/deliveries/C47.md": "916beef4437313e5f94911a1622c4ed644b78013cdac67be49c2b4005978406e"
+    },
+    "summary": "定向复验通过，等待源码/契约审查",
+    "finished_at": "2026-10-19T08:41:16+00:00",
+    "job": "67c308d0f7b0489cba5c37f9fe369c52"
+  },
+  "mainline_tests": 3,
+  "mainline_skips": 0,
+  "elapsed": 72.72202990000005,
+  "fingerprints": {
+    "D:\\projects\\projects3\\2026\\dongos\\code\\lang\\bootstrap\\nasm_guarded_integer_divide.dg": "9c277fadcb1014d3500e2ef5ce48e851e8e71191ee02f6f52a3d27a7bb242902",
+    "D:\\projects\\projects3\\2026\\dongos\\code\\lang\\bootstrap\\nasm_guarded_integer_divide.md": "85ddfac82579481e383cc742cdbb1108e863ee80d96af5161d381dc855952ff4",
+    "D:\\projects\\projects3\\2026\\dongos\\code\\lang\\tests\\test_bootstrap_nasm_guarded_integer_divide.py": "d94a6f3c9c2f2547286ace5321f946616ab040667bffbe94e0cccbb7149fa7b9",
+    "D:\\projects\\projects3\\2026\\dongos\\code\\lang\\bootstrap\\nasm_division_guard.dg": "d4d05d5835b40586cde2c1a7f69b4e81f89ac3428314495b19ba21b95d52889d",
+    "D:\\projects\\projects3\\2026\\dongos\\code\\lang\\bootstrap\\nasm_block_emit.dg": "261cb03c7f7d34b395e1154351aad4844ab7d0096122790d39959fe275b447a6",
+    "D:\\projects\\projects3\\2026\\dongos\\code\\lang\\bootstrap\\nasm_integer_divide.dg": "8c880df7ffbc73bd3bdcdd3e7db5ffe8b27d5a26e44fedcd4636fabdda594e6d",
+    "D:\\projects\\projects3\\2026\\dongos\\code\\lang\\bootstrap\\decimal_integer.dg": "58a4e4d746393d0e5944656aeb4c6f2aff96acca047afd455c60a47464ce0b76"
+  },
+  "review": "已实际审查完整任务书/交付、生产与说明、全部永久测试及依赖。真实C31 guard→CR18 success标签→CR19除法顺序、标签互异、scratch224/32/64上界及一次发布正确。24原生向量检查商余/安全异常路由、15个GPR及rsp保持，实际坏Dong余数取反/安全异常路由互换/坏rbx及容量提前written均有同输入正式好侧和正常返回后的数值/路由/原子性拒绝。主线实际复制.dg/.md及仅路径适配的永久测试；主线3项零skip72.722秒，生产字节与正式输入相同，源码/依赖/主线文件SHA前后稳定。未运行OS/VM，不宣称完整L3。",
+  "status": "integrated"
+}

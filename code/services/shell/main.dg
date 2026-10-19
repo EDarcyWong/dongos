@@ -28,7 +28,7 @@ var LAST_PROCESS:u64=0;
 var LAST_CONFIGURATION:u64=0;
 var LAST_GENERATION:u64=0;
 var PROCESS_CURSOR:u64=0;
-var EXEC_BYTES:[262144]u8=[0;262144];
+var EXEC_BYTES:[process_abi.MAX_EXEC_IMAGE]u8=[0;process_abi.MAX_EXEC_IMAGE];
 var HEX:[18]u8=[0;18];
 var DECIMAL:[20]u8=[0;20];
 fn equal(a:[]const u8,b:[]const u8)bool{if a.len!=b.len{return false;}var i:usize=0;while i<a.len{if a[i]!=b[i]{return false;}i+=1;}return true;}
@@ -158,7 +158,7 @@ unsafe fn execute_file(name:[]const u8,argument:u64)u64{unsafe{
     let invalid=raw_path(name);if invalid!=0{return invalid;}var token:u64=0;
     var status=files.open(&FILES,FILES.root,RAW_PATH[0..RAW_LENGTH],files.STAT|files.READ,&token);
     if status!=0{return status;}status=files.stat(&FILES,token);var length:u64=0;
-    if status==0{length=FILES.response.words[2];if length>262144{status=0x0511_0001;}}
+    if status==0{length=FILES.response.words[2];if length>process_abi.MAX_EXEC_IMAGE as u64{status=0x0511_0001;}}
     var offset:u64=0;while status==0&&offset<length{
         var count=length-offset;if count>61440{count=61440;}
         status=files.read(&FILES,token,offset,count);if status!=0{break;}

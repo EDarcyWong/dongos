@@ -26,7 +26,7 @@ DEPENDENCIES=[ROOT/'lang/bootstrap'/n for n in ('nasm_symbol.dg','decimal_intege
 OK,INVALID,CAPACITY=0,1,2
 U64=2**64-1
 MIN,MAX=-2**63,2**63-1
-PREFLIGHTS=23
+PREFLIGHTS=31
 NEIGHBOUR_BEFORE,NEIGHBOUR_AFTER=0x0bef0bef0bef0bef,0x0af70af70af70af7
 WRAPPER='''module probe.pointer_export;
 import bootstrap.nasm_symbol_pointer_data as p;
@@ -77,9 +77,10 @@ static void ro_free(void*p,uint64_t n){
 #define FAKE(x) ((const uint8_t*)(uintptr_t)(x))
 /* Each preflight keeps every other field valid (names "a","b","c","d", addend -8) so only the target check can reject it. */
 static unsigned invalid(void){
- static _Alignas(16) uint8_t arena[4096],saved[4096];const unsigned total=23;
+ static _Alignas(16) uint8_t arena[4096],saved[4096];const unsigned total=31;unsigned failed=0;
  for(unsigned i=0;i<total;i++){
-  memset(arena,0xa5,sizeof(arena));for(unsigned j=0;j<4;j++)arena[64*j]=(uint8_t)('a'+j);memcpy(saved,arena,sizeof(arena));
+  /* each name is a legal 64-byte run of one letter; cases 0..22 use only its first byte, cases 23..30 use all 64 */
+  memset(arena,0xa5,sizeof(arena));for(unsigned j=0;j<4;j++)memset(arena+64*j,'a'+j,64);memcpy(saved,arena,sizeof(arena));
   const uint8_t*p[4]={arena,arena+64,arena+128,arena+192};uint64_t l[4]={1,1,1,1};
   uint8_t*o=arena+1024;uint64_t ol=1024;uint64_t*w=(uint64_t*)(arena+3584);
   if(i==0)w=NULL;                                                   /* written NULL */
@@ -92,10 +93,14 @@ static unsigned invalid(void){
   else if(i<17)w=(uint64_t*)(uintptr_t)p[i-13];                     /* written on each name */
   else if(i<21){o=arena+64*(i-17);ol=8;}                            /* out over each name */
   else if(i==21)w=(uint64_t*)o;                                     /* written on out prefix */
-  else w=(uint64_t*)(o+1016);                                       /* written in out's unused tail */
+  else if(i==22)w=(uint64_t*)(o+1016);                              /* written in out's unused tail */
+  else if(i<27){for(unsigned j=0;j<4;j++)l[j]=64;w=(uint64_t*)(uintptr_t)(p[i-23]+8);}  /* written in each 64-byte name's tail */
+  else{for(unsigned j=0;j<4;j++)l[j]=64;o=(uint8_t*)(uintptr_t)(p[i-27]+8);ol=8;}        /* out over each 64-byte name's tail */
   uint64_t s=dong_pointer_emit(p[0],l[0],p[1],l[1],p[2],l[2],p[3],l[3],-8,o,ol,w);
-  if(s!=1||memcmp(saved,arena,sizeof(arena))){fprintf(stderr,"invalid preflight %u status %u\n",i,(unsigned)s);exit(93);}
+  int same=!memcmp(saved,arena,sizeof(arena));
+  if(s!=1||!same){fprintf(stderr,"invalid preflight %u status %u unchanged %d\n",i,(unsigned)s,same);failed++;}
  }
+ if(failed)exit(93);
  return total;
 }
 int main(void){
@@ -358,6 +363,26 @@ class NasmSymbolPointerDataTests(unittest.TestCase):
         for mode,exe in self.build_all('bad-early-written',source.replace(old,new,1)).items():
             with self.assertRaisesRegex(AssertionError,'guard/atomicity'):self.run_cases(exe,case,'bad-early-written-'+mode)
         self.records.append(dict(test='bad-early-written',compiled=True,native_executed=True,modes=2,rejected_by='guard/atomicity'))
+
+    def test_name_tail_alias_checks_are_reachable(self):
+        """Preflight sensitivity: real Dong sources that check names against written/out by their first byte only."""
+        source=SOURCE.read_text(encoding='utf-8')
+        checks=['overlap(wp,8,%sp,%sn)'%(c,c)for c in 'abcd']+['overlap(op,on,%sp,%sn)'%(c,c)for c in 'abcd']
+        for c in checks:self.assertEqual(source.count(c),1,c)
+        first=lambda text,c:text.replace(c,c[:-3]+'1)',1)                                 # name length -> 1 byte
+        everything=source
+        for c in checks:everything=first(everything,c)
+        for mode,exe in self.executables.items():self.run_cases(exe,[],'tail-good-'+mode)    # same harness passes all 31
+        for name,text,target in [('bad-all-names-first-byte',everything,list(range(23,31))),
+                                 ('bad-target-item-written-first-byte',first(source,checks[3]),[26]),
+                                 ('bad-target-item-out-first-byte',first(source,checks[7]),[30])]:
+            for mode,exe in self.build_all(name,text).items():
+                run=subprocess.run([str(exe)],input=struct.pack('<Q',0),capture_output=True,timeout=60)
+                err=run.stderr.decode('ascii','replace');(self.work/(name+'-'+mode+'.stderr')).write_text(err,encoding='ascii')
+                self.assertEqual(run.returncode,93,(name,mode,err))                          # normal exit from the preflight check
+                failed=[int(line.split()[2])for line in err.splitlines()if line.startswith('invalid preflight ')]
+                self.assertEqual(failed,target,(name,mode,err))                              # exactly the name-tail cases
+            self.records.append(dict(test=name,compiled=True,native_executed=True,modes=2,rejected_by='preflight %s'%target))
 
 
 if __name__=='__main__':unittest.main()

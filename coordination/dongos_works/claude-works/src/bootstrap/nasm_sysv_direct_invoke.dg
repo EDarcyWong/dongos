@@ -1,0 +1,59 @@
+// One SysV INTEGER direct call site: the integrated C34 argument setup, the
+// integrated C25 direct call, the C34 cleanup of the same setup's
+// stack_bytes, then the integrated C40 capture of RAX/RDX into fixed frame
+// slots, in exactly that order. Every component is called for real into a
+// bounded local scratch; out and written are written once, after every check.
+// The final "add rsp, N" changes flags: flags are not preserved across a call.
+module bootstrap.nasm_sysv_direct_invoke;
+import bootstrap.nasm_sysv_call_args as args;
+import bootstrap.nasm_direct_call as dc;
+import bootstrap.nasm_sysv_capture_return as cap;
+pub const OK:u64=0;pub const INVALID:u64=1;pub const CAPACITY:u64=2;
+pub const MAX_FRAME:usize=4080;pub const MAX_WORDS:usize=16;pub const NAME_LIMIT:usize=64;
+const MAX:u64=0xffff_ffff_ffff_ffff;
+// Local scratch: each component gets the scratch size its own contract proves sufficient,
+// laid out back to back after the text already produced:
+//   setup  <= 1024 (C34 bound 13 + 16*55 = 893)   -> at <= 1024
+//   call   <= 272  ("call " + 266-byte symbol + LF) -> at <= 1296
+//   cleanup<= 32   ("add rsp, 128\n" = 13)          -> at <= 1328
+//   capture<= 64   (C40 bound 56)                    -> at <= 1392 <= TEXT
+// Each component writes at most the slice it is given, so no segment can run past TEXT.
+const SETUP:usize=1024;const CALL:usize=272;const CLEANUP:usize=32;const CAPTURE:usize=64;const TEXT:usize=1536;
+fn span(p:u64,n:u64)bool{return n==0||(p!=0&&n<=MAX-p);}
+fn overlap(a:u64,n:u64,b:u64,m:u64)bool{return n!=0&&m!=0&&a<b+m&&b<a+n;}
+// A used source slot: 8-aligned, 8 <= offset <= frame_bytes.
+fn slot(offset:usize,frame_bytes:usize)bool{return offset>=8&&offset<=frame_bytes&&(offset&7)==0;}
+pub unsafe fn emit(module_name:[]const u8,item_name:[]const u8,kinds:[]const u8,source_offsets:[]const usize,return_kind:u64,frame_bytes:usize,low_offset:usize,high_offset:usize,out:[]u8,written:*usize)u64{unsafe{
+ let wp=written as u64;let mp=module_name.ptr as u64;let ip=item_name.ptr as u64;let kp=kinds.ptr as u64;
+ let sp=source_offsets.ptr as u64;let op=out.ptr as u64;
+ if written==null||(wp&7)!=0||!span(wp,8){return INVALID;}
+ if source_offsets.len>MAX/8{return INVALID;}
+ let mn=module_name.len;let inn=item_name.len;let kn=kinds.len;let sn=source_offsets.len*8;let on=out.len;
+ if !span(mp,mn)||!span(ip,inn)||!span(kp,kn)||!span(sp,sn)||(sn!=0&&(sp&7)!=0)||!span(op,on){return INVALID;}
+ // Inputs may overlap each other; out and written are disjoint from every whole input and from each other.
+ if overlap(wp,8,op,on){return INVALID;}
+ if overlap(wp,8,mp,mn)||overlap(wp,8,ip,inn)||overlap(wp,8,kp,kn)||overlap(wp,8,sp,sn)||overlap(op,on,mp,mn)||overlap(op,on,ip,inn)||overlap(op,on,kp,kn)||overlap(op,on,sp,sn){return INVALID;}
+ if frame_bytes>MAX_FRAME||(frame_bytes&15)!=0{return INVALID;}
+ if mn==0||mn>NAME_LIMIT||inn==0||inn>NAME_LIMIT{return INVALID;}
+ if kn>MAX_WORDS{return INVALID;}
+ var words:usize=0;var i:usize=0;
+ while i<kn{let k=kinds[i];if k==0{words+=1;}else if k==1{words+=2;}else{return INVALID;}i+=1;}
+ if words>MAX_WORDS||source_offsets.len!=words{return INVALID;}
+ i=0;while i<words{if !slot(source_offsets[i],frame_bytes){return INVALID;}i+=1;}
+ // Components, in order, into the local scratch. Any non-OK here is an INVALID input
+ // (the scratch segments are proven large enough), and nothing has touched out yet.
+ var buffer:[1536]u8=[0;1536];var at:usize=0;var n:usize=0;
+ var setup=args.Result{written:0,stack_bytes:0};
+ if args.setup(kinds,source_offsets,slice_from_raw_parts(&buffer[0],SETUP),&setup)!=args.OK{return INVALID;}
+ at=setup.written;
+ if dc.emit(module_name,item_name,slice_from_raw_parts(&buffer[at],CALL),&n)!=dc.OK{return INVALID;}
+ at+=n;
+ if args.cleanup(setup.stack_bytes,slice_from_raw_parts(&buffer[at],CLEANUP),&n)!=args.OK{return INVALID;}
+ at+=n;
+ if cap.emit(return_kind,frame_bytes,low_offset,high_offset,slice_from_raw_parts(&buffer[at],CAPTURE),&n)!=cap.OK{return INVALID;}
+ at+=n;
+ if at>TEXT{return INVALID;}
+ if at>on{return CAPACITY;}
+ i=0;while i<at{out[i]=buffer[i];i+=1;}
+ *written=at;return OK;
+}}

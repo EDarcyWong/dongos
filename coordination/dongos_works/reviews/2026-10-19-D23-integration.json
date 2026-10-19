@@ -1,0 +1,38 @@
+{
+  "task": "deepseek:D23",
+  "verification": {
+    "passed": true,
+    "checks": [
+      {
+        "spec": "discover:deepseek-works/tests:test_artifact_compare.py",
+        "passed": true,
+        "tests": 3,
+        "skips": 0,
+        "returncode": 0,
+        "cancelled": false,
+        "timed_out": false,
+        "elapsed_seconds": 15.862
+      }
+    ],
+    "source_stable": true,
+    "fingerprint": {
+      "deepseek-works/src/bootstrap/artifact_compare.dg": "71951843b9d7d66b4f162e096694f9fae02e2e950b83d4c9e180a105eed10a2c",
+      "deepseek-works/src/bootstrap/artifact_compare.md": "373861f719366484a29ae00d99404c9e27951eb3414c445ef68263d9d7f12403",
+      "deepseek-works/tests/test_artifact_compare.py": "d16d74a677c3b609eaab4771b915c87039e105f8ed1be0b507b4b416daedb281",
+      "deepseek-works/deliveries/D23.md": "1e63c40d045fffa5e20335e1ceaf8c9cfdd60bdb7b65c2252e2de79cd5cf9a88"
+    },
+    "summary": "定向复验通过，等待源码/契约审查",
+    "finished_at": "2026-10-19T09:03:42+00:00",
+    "job": "12ab76bb4f8641909bd66e598ae9f9e6"
+  },
+  "mainline_tests": 3,
+  "mainline_skips": 0,
+  "elapsed": 15.309926399997494,
+  "fingerprints": {
+    "D:\\projects\\projects3\\2026\\dongos\\code\\lang\\bootstrap\\artifact_compare.dg": "71951843b9d7d66b4f162e096694f9fae02e2e950b83d4c9e180a105eed10a2c",
+    "D:\\projects\\projects3\\2026\\dongos\\code\\lang\\bootstrap\\artifact_compare.md": "373861f719366484a29ae00d99404c9e27951eb3414c445ef68263d9d7f12403",
+    "D:\\projects\\projects3\\2026\\dongos\\code\\lang\\tests\\test_bootstrap_artifact_compare.py": "d478a5da757c2f5dcb7d28a5a8c56fb958d5933fda511f7262b953e81b0d1cf2"
+  },
+  "review": "用户授权Codex直接完成原D23。生产描述符完整预检、别名区间、共同前缀先于长度差和256缺失标记正确，生产逻辑未改。修复测试双free/NULL负控协议/未初始化读取和对齐，隔离仅本模块并验证SHA，20个合法主向量含4096/4097及只读页保护成功检查、11独立可达预检。实际坏Dong漏末字节/提前写结果/仅查首字节别名在同输入好体先通过后分别由字段值/完整原子性/指定尾部预检拒绝。主线实际复制.dg/.md及仅路径适配的永久测试；主线3项零skip15.310秒，生产字节与正式输入相同，源码/依赖/主线文件SHA前后稳定。未运行OS/VM，不宣称完整L3。",
+  "status": "integrated"
+}

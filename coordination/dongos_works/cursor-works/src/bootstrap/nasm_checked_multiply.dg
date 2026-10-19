@@ -22,7 +22,7 @@ pub unsafe fn emit(signed:bool,trap_block:u64,out:[]u8,written:*usize)u64{unsafe
  var digits:[24]u8=[0;24];var count:usize=0;
  let status=dec.encode(trap_block,64,false,slice_from_raw_parts(&digits[0],24),&count);
  if status!=dec.OK{return INVALID;}
- // Longest signed: "mov rax, rdi\n"(13)+"imul rax, rsi\n"(14)+"jo __dong_b"(10)+20+"\n" = 58.
+ // Longest signed: "mov rax, rdi\n"(13)+"imul rax, rsi\n"(14)+"jo __dong_b"(11)+20+"\n" = 59.
  var text:[64]u8=[0;64];let buffer=slice_from_raw_parts(&text[0],64);
  var at=copy(buffer,0,"mov rax, rdi\n");
  if signed{

@@ -94,6 +94,16 @@ def synchronize(store):
                 if number == 'D8':
                     patterns.append('kernel/mm/errors.dg')
                 tests = ['module:tests.test_' + module]
+        # Console-generated books declare exact scopes; retain them on a fresh
+        # database rather than replacing them with broad legacy wildcards.
+        scope = re.search(r'^## 可修改文件\s*\n(.*?)(?=^## |\Z)', text, re.M | re.S)
+        if scope:
+            declared = re.findall(r'^- `([^`]+)`\s*$', scope[1], re.M)
+            if declared:
+                patterns = declared
+        check_section = re.search(r'^## 定向验收\s*\n(.*?)(?=^## |\Z)', text, re.M | re.S)
+        if check_section:
+            tests = re.findall(r'^- `([^`]+)`\s*$', check_section[1], re.M)
         if not patterns:
             patterns = [owner + '-works/src/**', owner + '-works/tests/**']
         patterns += [f'{owner}-works/deliveries/{number}.md']

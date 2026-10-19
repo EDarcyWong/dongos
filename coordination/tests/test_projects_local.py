@@ -81,6 +81,23 @@ class ProjectTests(unittest.TestCase):
         migrate.synchronize(store)
         self.assertEqual(store.get('claude:C99')['status'],'todo')
 
+    def test_fresh_local_import_preserves_declared_scope_and_checks(self):
+        store = self.registry.store('alpha')
+        book = store.path('lmstudio-works/tasks/LM9-board.md')
+        book.parent.mkdir(parents=True)
+        book.write_text('# LM9 — Fixed data\n状态：待领取。\n\n'
+                        '## 可修改文件\n\n- `lmstudio-works/fixtures/data.json`\n'
+                        '- `lmstudio-works/deliveries/LM9.md`\n\n'
+                        '## 定向验收\n\n'
+                        '- `discover:lmstudio-works/tests:test_data.py`\n', encoding='utf-8')
+        migrate.synchronize(store)
+        task = store.get('lmstudio:LM9')
+        self.assertEqual(task['write_paths'], ['lmstudio-works/fixtures/data.json',
+                                              'lmstudio-works/deliveries/LM9.md'])
+        self.assertEqual(task['checks'], ['discover:lmstudio-works/tests:test_data.py'])
+        self.assertEqual(task['status'], 'todo')
+        self.assertEqual(migrate.synchronize(store)['added'], [])
+
     def test_historical_variants_require_independent_baseline(self):
         for status in ('R3验收通过','原R2正式验收','已验收'):
             self.assertEqual(migrate.document_status('状态：'+status+'。'),'accepted')

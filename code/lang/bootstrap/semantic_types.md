@@ -62,6 +62,8 @@ RuntimeWorkspace { info:[]Info, initialized:[]u8, snapshots:[]u8,
 - `try`检查所在函数为result返回类型、操作数为result，提取准确payload类型（含!void），禁止defer内传播；错误返回值不能作为普通调用语句丢弃。`orelse`要求optional，回退值按payload检查；支持return/break/continue回退及既有循环出口初始化交集。已知不可变全局/局部const的空/有值标签用于短路可达性，未知optional保留两条路径；不正常返回标志只在必经路径传播，死回退仍检查类型。现有隐式payload包装和null包装清除旧scalar/place事实并记录标签，Info及工作区尺寸/ABI不变。这里只检查类型与流程，不生成错误传播或defer清理指令。
 - 普通defer检查捕获变量在声明处已经初始化，不能把defer中的赋值计入外层确定初始化；defer局部声明独立检查。终止型defer明确拒绝，避免把尚未实现的清理出口语义当作完整支持。
 
-仍未完成：方法接收者与错误码专项、枚举构造/成员及带标签match、some/ok/err等尚未落实语言契约的带标签构造调用、完整聚合常量求值与所有常量长度传播（含全局静态切片物化）、defer清理lowering。方法/error声明即使未被使用也明确UNSUPPORTED；带载荷枚举禁止直接相等比较。**这仍是受限语义子集，不是完整编译器或L3验收。** 目标I/O、后端/CLI、stage1/stage2及真正DongOS自编译仍待完成。
+`match`支持bool、optional的null/some及result的ok/err，检查正确payload类型、是否需要绑定、重复/不可达模式与穷尽性。err绑定为u64，!void的ok无payload。各可达分支的确定初始化取交集，已知不可变const标签过滤不可能出口；payload绑定只进入所在分支。复用现有Info/TAG与快照工作区，ABI不变。此处仅类型和流程检查，不生成match代码。
+
+仍未完成：方法接收者与错误码专项、枚举构造/成员及枚举match、some/ok/err等尚未落实语言契约的带标签构造调用、完整聚合常量求值与所有常量长度传播（含全局静态切片物化）、defer清理lowering。方法/error声明即使未被使用也明确UNSUPPORTED；带载荷枚举禁止直接相等比较。**这仍是受限语义子集，不是完整编译器或L3验收。** 目标I/O、后端/CLI、stage1/stage2及真正DongOS自编译仍待完成。
 
 运行时定向测试：`python -m unittest lang.tests.test_bootstrap_semantic_runtime -v`。实际模块加载/名称/绑定后由Dong原生检查，宿主编译器独立核对可接受性；两模式、双格式组装，输入及描述符真实只读页，29池双端guard与20类INVALID预检。删除真实类型拒绝及把分支交集改为并集的董副本必须完成编译、链接、执行，再被状态断言拒绝。

@@ -46,7 +46,8 @@ def route(server,path):
 
 def task_or_404(store,key):
     try:
-        return store.get(key)
+        task = store.get(key)
+        return task | {'timing': store.timing(task)}
     except ValueError as error:
         raise NotFound('任务不存在') from error
 

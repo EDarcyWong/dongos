@@ -1,0 +1,63 @@
+// Emit a bounded linear i64 switch dispatch on the selector in RDI.
+// The case order and duplicate rejection come from the integrated C11
+// switch_cases.order (not re-implemented); each value is loaded into RAX by the
+// integrated CR9 nasm_integer_load (full 64-bit immediate, so MIN, negatives and
+// high bit patterns need no cmp r64,imm64), and labels use CR4 decimal_integer.
+// Only RAX and flags change. Everything finishes in local scratch before out
+// and written are each written once.
+module bootstrap.nasm_switch_dispatch;
+import bootstrap.switch_cases as cases;
+import bootstrap.nasm_integer_load as load;
+import bootstrap.decimal_integer as dec;
+pub const OK:u64=0;pub const INVALID:u64=1;pub const CAPACITY:u64=2;
+pub const MAX_CASES:usize=16;
+const MAX:u64=0xffff_ffff_ffff_ffff;
+// Length bound, per case (signed value and label at their longest):
+//   "mov rax, -9223372036854775808\n"          = 4+3+2+20+1 = 30
+//   "cmp rdi, rax\n"                           = 13
+//   "je __dong_b18446744073709551614\n"        = 11+20+1    = 32   -> 75
+// final "jmp __dong_b18446744073709551614\n"   = 12+20+1    = 33
+// total <= 16*75 + 33 = 1233 <= TEXT (1280). The CR9 line needs at most 30 <= LINE (40).
+// Every append is still bounds-checked against TEXT.
+const TEXT:usize=1280;const LINE:usize=40;
+fn span(p:u64,n:u64)bool{return n==0||(p!=0&&n<=MAX-p);}
+fn overlap(a:u64,n:u64,b:u64,m:u64)bool{return n!=0&&m!=0&&a<b+m&&b<a+n;}
+// Append text at *at within out; false (without writing) if it would not fit.
+unsafe fn put(out:[]u8,at:*usize,text:[]const u8)bool{unsafe{
+ if text.len>out.len-*at{return false;}
+ var i:usize=0;while i<text.len{out[*at+i]=text[i];i+=1;}*at+=text.len;return true;
+}}
+// "<prefix>__dong_b<label>\n" with the CR4 unsigned decimal label.
+unsafe fn branch(out:[]u8,at:*usize,prefix:[]const u8,label:u64)bool{unsafe{
+ var digits:[24]u8=[0;24];var n:usize=0;
+ if dec.encode(label,64,false,slice_from_raw_parts(&digits[0],24),&n)!=dec.OK{return false;}
+ return put(out,at,prefix)&&put(out,at,"__dong_b")&&put(out,at,slice_from_raw_parts(&digits[0],n))&&put(out,at,"\n");
+}}
+pub unsafe fn emit(input:[]const cases.Case,default_target:u64,out:[]u8,written:*usize)u64{unsafe{
+ let wp=written as u64;let ip=input.ptr as u64;let op=out.ptr as u64;
+ if written==null||(wp&7)!=0||!span(wp,8){return INVALID;}
+ if input.len>MAX/sizeof(cases.Case){return INVALID;}
+ let inn=input.len*sizeof(cases.Case);
+ if !span(ip,inn)||(inn!=0&&(ip&7)!=0)||!span(op,out.len){return INVALID;}
+ if overlap(wp,8,op,out.len)||overlap(ip,inn,op,out.len)||overlap(ip,inn,wp,8){return INVALID;}
+ if input.len>MAX_CASES||default_target==MAX{return INVALID;}
+ var i:usize=0;while i<input.len{if input[i].label as u64==MAX{return INVALID;}i+=1;}
+ // C11 sorts by signed value and rejects any duplicate value; the local
+ // capacity is always sufficient, so CAPACITY/WORKSPACE cannot occur here.
+ var sorted:[16]cases.Case=[cases.Case{value:0,label:0};16];var work:[16]cases.Case=[cases.Case{value:0,label:0};16];var used:usize=0;
+ let s=cases.order(input,slice_from_raw_parts(&sorted[0],MAX_CASES),slice_from_raw_parts(&work[0],MAX_CASES),&used);
+ if s!=cases.OK||used!=input.len{return INVALID;}
+ var buffer:[1280]u8=[0;1280];let text=slice_from_raw_parts(&buffer[0],TEXT);var at:usize=0;
+ i=0;
+ while i<used{
+  var line:[40]u8=[0;40];var n:usize=0;
+  if load.emit(0,sorted[i].value as u64,64,true,slice_from_raw_parts(&line[0],LINE),&n)!=load.OK{return INVALID;}
+  if !put(text,&at,slice_from_raw_parts(&line[0],n))||!put(text,&at,"cmp rdi, rax\n")
+   ||!branch(text,&at,"je ",sorted[i].label as u64){return INVALID;}
+  i+=1;
+ }
+ if !branch(text,&at,"jmp ",default_target){return INVALID;}
+ if at>out.len{return CAPACITY;}
+ i=0;while i<at{out[i]=buffer[i];i+=1;}
+ *written=at;return OK;
+}}

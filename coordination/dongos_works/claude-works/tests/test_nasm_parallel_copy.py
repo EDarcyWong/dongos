@@ -81,12 +81,16 @@ static void ro_free(void*p,uint64_t n){
  munmap(p,n);
 #endif
 }
-/* Each preflight keeps every other field valid (2 legal moves) so only the target check can reject it. */
+/* Each preflight keeps every other field valid so only the target check can reject it: all 8 moves are
+   legal (swap 0<->1, then self moves 2..7) before the snapshot, so a declared-tail alias of a len=8 input
+   cannot be masked by C9 rejecting an illegal slot. Every failing preflight is reported, then exit 93. */
 static unsigned invalid(void){
- static _Alignas(16) uint8_t arena[1024],saved[1024];const unsigned total=14;
+ static _Alignas(16) uint8_t arena[1024],saved[1024];const unsigned total=14;unsigned failed=0;
  Move*m=(Move*)arena;uint8_t*o=arena+256;uint64_t*w=(uint64_t*)(arena+768);
  for(unsigned i=0;i<total;i++){
-  memset(arena,0xa5,sizeof(arena));m[0].dst=0;m[0].src=1;m[1].dst=1;m[1].src=0;memcpy(saved,arena,sizeof(arena));uint64_t s=0;
+  memset(arena,0xa5,sizeof(arena));m[0].dst=0;m[0].src=1;m[1].dst=1;m[1].src=0;
+  for(unsigned k=2;k<8;k++){m[k].dst=k;m[k].src=k;}
+  memcpy(saved,arena,sizeof(arena));uint64_t s=0;
   switch(i){
    case 0:s=dong_pcopy_emit(m,2,o,256,NULL);break;                                     /* written NULL */
    case 1:s=dong_pcopy_emit(m,2,o,256,(uint64_t*)(arena+769));break;                   /* written odd */
@@ -103,8 +107,10 @@ static unsigned invalid(void){
    case 12:s=dong_pcopy_emit(m,2,o,256,(uint64_t*)o);break;                            /* written on out prefix */
    default:s=dong_pcopy_emit(m,2,o,256,(uint64_t*)(o+248));break;                      /* written in out's unused tail */
   }
-  if(s!=1||memcmp(saved,arena,sizeof(arena))){fprintf(stderr,"invalid preflight %u status %u\n",i,(unsigned)s);exit(93);}
+  int same=!memcmp(saved,arena,sizeof(arena));
+  if(s!=1||!same){fprintf(stderr,"invalid preflight %u status %u unchanged %d\n",i,(unsigned)s,same);failed++;}
  }
+ if(failed)exit(93);
  return total;
 }
 int main(void){
@@ -298,7 +304,8 @@ class NasmParallelCopyTests(unittest.TestCase):
             cases+=[(moves,n,0,OK),(moves,n-1,0,CAPACITY),(moves,0,0,CAPACITY)]
         cases+=[([],0,0,OK),([(0,0),(5,5)],0,0,OK),([],256,1,OK)]
         cases+=[([(k,(k+1)%9)for k in range(9)],256,0,INVALID),([(0,1)]*9,0,0,INVALID),([(0,8)],256,0,INVALID),([(8,0)],0,0,INVALID),
-                ([(0,1),(0,2)],256,0,INVALID),([(3,3),(3,3)],256,1,INVALID),([(0,2**64-1)],256,0,INVALID)]
+                ([(0,1),(0,2)],256,0,INVALID),([(3,3),(3,3)],256,1,INVALID),([(0,2**64-1)],256,0,INVALID),
+                ([(0,1),(0,2)],0,0,INVALID),([(3,3),(3,3)],0,1,INVALID)]   # legal count/slots, duplicate dst, cap 0: INVALID before CAPACITY
         for mode,exe in self.executables.items():
             results=self.emit(exe,cases,'bounds-'+mode)
             for (moves,cap,ro,status),(text,_) in zip(cases,results):
@@ -329,6 +336,20 @@ class NasmParallelCopyTests(unittest.TestCase):
         for mode,exe in self.build_all('bad-early-out',source.replace(old,new,1)).items():
             with self.assertRaisesRegex(AssertionError,'guard/atomicity'):self.emit(exe,case,'bad-early-out-'+mode)
         self.records.append(dict(test='bad-early-out',compiled=True,native_executed=True,modes=2,rejected_by='guard/atomicity'))
+
+    def test_prefix_only_input_alias_is_rejected(self):
+        """Preflight sensitivity: a real Dong that checks only the first two moves (32 bytes) for input aliasing."""
+        source=SOURCE.read_text(encoding='utf-8')
+        old='overlap(mp,mn,op,out.len)||overlap(mp,mn,wp,8)';self.assertEqual(source.count(old),1)
+        for mode,exe in self.executables.items():self.emit(exe,[],'prefix-good-'+mode)      # same harness passes all 14
+        for mode,exe in self.build_all('bad-prefix-alias',source.replace(old,'overlap(mp,32,op,out.len)||overlap(mp,32,wp,8)',1)).items():
+            run=subprocess.run([str(exe)],input=struct.pack('<Q',0),capture_output=True,timeout=60)
+            err=run.stderr.decode('ascii','replace');(self.work/('bad-prefix-'+mode+'.stderr')).write_text(err,encoding='ascii')
+            self.assertEqual(run.returncode,93,(mode,err))                                   # normal exit from the preflight check
+            failed=sorted(int(line.split()[2])for line in err.splitlines()if line.startswith('invalid preflight '))
+            self.assertEqual(failed,[10,11],(mode,err))                                      # exactly the two declared-tail cases
+            self.assertNotIn('status 1 unchanged 1',err)
+        self.records.append(dict(test='bad-prefix-alias',compiled=True,native_executed=True,modes=2,rejected_by='preflight 10/11'))
 
 
 if __name__=='__main__':unittest.main()

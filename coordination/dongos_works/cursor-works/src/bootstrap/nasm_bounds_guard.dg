@@ -29,7 +29,7 @@ pub unsafe fn emit(index:u64,length:u64,trap_block:u64,out:[]u8,written:*usize)u
  var digits:[24]u8=[0;24];var count:usize=0;
  let status=dec.encode(trap_block,64,false,slice_from_raw_parts(&digits[0],24),&count);
  if status!=dec.OK{return INVALID;}
- // Longest text: "cmp r15, r15\n" (13) + "jae __dong_b" (11) + 20 digits + "\n" = 45 bytes.
+ // Longest text: "cmp r15, r15\n" (13) + "jae __dong_b" (12) + 20 digits + "\n" = 46 bytes.
  var text:[64]u8=[0;64];let buffer=slice_from_raw_parts(&text[0],64);
  var at=copy(buffer,0,"cmp ");
  at=copy(buffer,at,register(index));buffer[at]=44;buffer[at+1]=32;

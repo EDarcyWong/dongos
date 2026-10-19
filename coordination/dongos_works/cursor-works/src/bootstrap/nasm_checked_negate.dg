@@ -27,7 +27,7 @@ pub unsafe fn emit(destination:u64,trap_block:u64,out:[]u8,written:*usize)u64{un
  var digits:[24]u8=[0;24];var count:usize=0;
  let status=dec.encode(trap_block,64,false,slice_from_raw_parts(&digits[0],24),&count);
  if status!=dec.OK{return INVALID;}
- // Longest: "neg r15\n"(8)+"jo __dong_b"(10)+20+"\n" = 39.
+ // Longest: "neg r15\n"(8)+"jo __dong_b"(11)+20+"\n" = 40.
  var text:[48]u8=[0;48];let buffer=slice_from_raw_parts(&text[0],48);
  var at=copy(buffer,0,"neg ");
  at=copy(buffer,at,register(destination));buffer[at]=10;at+=1;

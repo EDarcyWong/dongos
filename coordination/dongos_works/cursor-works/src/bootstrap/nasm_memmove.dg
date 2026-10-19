@@ -1,0 +1,64 @@
+// Overlap-safe NASM memmove via direction-aware REP MOVSB.
+// Defines __dong_b<forward_block> and __dong_b<end_block> (caller-reserved,
+// distinct, non-NONE). Runtime: RDI=dst, RSI=src, RCX=count, DF entry 0.
+// Digits from CR4 decimal_integer. Built in a 512-byte local buffer (max 263
+// with 20-digit block ids); copied to out only after every check.
+module bootstrap.nasm_memmove;
+import bootstrap.decimal_integer as dec;
+pub const OK:u64=0;pub const INVALID:u64=1;pub const CAPACITY:u64=2;
+pub const NONE:u64=0xffff_ffff_ffff_ffff;
+const MAX:u64=0xffff_ffff_ffff_ffff;
+fn span(p:u64,n:u64)bool{return n==0||(p!=0&&n<=MAX-p);}
+fn overlap(a:u64,n:u64,b:u64,m:u64)bool{return n!=0&&m!=0&&a<b+m&&b<a+n;}
+fn copy(out:[]u8,at:usize,text:[]const u8)usize{
+ var i:usize=0;while i<text.len{out[at+i]=text[i];i+=1;}return at+text.len;
+}
+fn write_lab(out:[]u8,at:usize)usize{
+ out[at]=95;out[at+1]=95;out[at+2]=100;out[at+3]=111;out[at+4]=110;out[at+5]=103;out[at+6]=95;out[at+7]=98;
+ return at+8;
+}
+pub unsafe fn emit(forward_block:u64,end_block:u64,out:[]u8,written:*usize)u64{unsafe{
+ let wp=written as u64;let op=out.ptr as u64;
+ if written==null||(wp&7)!=0||!span(wp,8){return INVALID;}
+ if !span(op,out.len){return INVALID;}
+ if overlap(wp,8,op,out.len){return INVALID;}
+ if forward_block==NONE||end_block==NONE||forward_block==end_block{return INVALID;}
+ var fd:[24]u8=[0;24];var fw:usize=0;
+ var ed:[24]u8=[0;24];var ew:usize=0;
+ let sf=dec.encode(forward_block,64,false,slice_from_raw_parts(&fd[0],24),&fw);
+ if sf!=dec.OK{return INVALID;}
+ let se=dec.encode(end_block,64,false,slice_from_raw_parts(&ed[0],24),&ew);
+ if se!=dec.OK{return INVALID;}
+ // Max: fixed 163 + 3*ew + 2*fw with 20-digit ids = 263; scratch is 512.
+ var text:[512]u8=[0;512];let buffer=slice_from_raw_parts(&text[0],512);
+ var at:usize=0;
+ at=copy(buffer,0,"test rcx, rcx\n");
+ at=copy(buffer,at,"jz ");
+ at=write_lab(buffer,at);
+ at=copy(buffer,at,slice_from_raw_parts(&ed[0],ew));
+ buffer[at]=10;at+=1;
+ at=copy(buffer,at,"cmp rdi, rsi\n");
+ at=copy(buffer,at,"jbe ");
+ at=write_lab(buffer,at);
+ at=copy(buffer,at,slice_from_raw_parts(&fd[0],fw));
+ buffer[at]=10;at+=1;
+ at=copy(buffer,at,"lea rsi, [rsi + rcx - 1]\n");
+ at=copy(buffer,at,"lea rdi, [rdi + rcx - 1]\n");
+ at=copy(buffer,at,"std\n");
+ at=copy(buffer,at,"rep movsb\n");
+ at=copy(buffer,at,"cld\n");
+ at=copy(buffer,at,"jmp ");
+ at=write_lab(buffer,at);
+ at=copy(buffer,at,slice_from_raw_parts(&ed[0],ew));
+ buffer[at]=10;at+=1;
+ at=write_lab(buffer,at);
+ at=copy(buffer,at,slice_from_raw_parts(&fd[0],fw));
+ buffer[at]=58;buffer[at+1]=10;at+=2;
+ at=copy(buffer,at,"rep movsb\n");
+ at=write_lab(buffer,at);
+ at=copy(buffer,at,slice_from_raw_parts(&ed[0],ew));
+ buffer[at]=58;buffer[at+1]=10;at+=2;
+ if at>out.len{return CAPACITY;}
+ var i:usize=0;while i<at{out[i]=buffer[i];i+=1;}
+ *written=at;return OK;
+}}

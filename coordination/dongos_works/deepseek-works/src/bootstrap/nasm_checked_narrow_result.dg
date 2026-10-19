@@ -1,0 +1,44 @@
+// Composed debug checked narrow arithmetic result: CR28 range guard first,
+// then CR14 normalization of the same full 64-bit RAX result. The check must
+// run on the untruncated value, so the guard text is strictly emitted before
+// the cast text. Both components are reused verbatim; this module only
+// prechecks, assembles both sub-texts into stack locals, proves the combined
+// bound, and publishes once. INVALID precedes CAPACITY; any failure leaves
+// the complete out and written untouched.
+// Local bounds (proved in .md): guard segment <= 131 bytes (signed i32 with a
+// 20-digit trap block), cast segment <= 16 bytes ("movsxd rax, eax"), so the
+// combined text is <= 147 bytes. Guard buffer 256 and cast buffer 32 both
+// hold their dependency outputs without capacity failure.
+module bootstrap.nasm_checked_narrow_result;
+import bootstrap.nasm_narrow_range_guard as guardm;
+import bootstrap.nasm_integer_cast as castm;
+pub const OK:u64=0;pub const INVALID:u64=1;pub const CAPACITY:u64=2;
+pub const NONE:u64=0xffff_ffff_ffff_ffff;
+const MAX:u64=0xffff_ffff_ffff_ffff;
+fn span(p:u64,n:u64)bool{return n==0||(p!=0&&n<=MAX-p);}
+fn overlap(a:u64,n:u64,b:u64,m:u64)bool{return n!=0&&m!=0&&a<b+m&&b<a+n;}
+fn width_ok(w:u64)bool{return w==8||w==16||w==32;}
+pub unsafe fn emit(width:u64,signed:bool,trap_block:u64,out:[]u8,written:*usize)u64{unsafe{
+ let wp=written as u64;let op=out.ptr as u64;
+ if written==null||(wp&7)!=0||!span(wp,8){return INVALID;}
+ if !span(op,out.len){return INVALID;}
+ if overlap(wp,8,op,out.len){return INVALID;}
+ if !width_ok(width)||trap_block==NONE{return INVALID;}
+ // Guard on the full 64-bit result first; 256-byte local covers its 131-byte maximum.
+ var gbuf:[256]u8=[0;256];var glen:usize=0;
+ let gs=guardm.emit(width,signed,trap_block,slice_from_raw_parts(&gbuf[0],256),&glen);
+ if gs!=guardm.OK{return INVALID;}
+ if glen>256{return INVALID;}
+ // Normalization second; 32-byte local covers its 16-byte maximum.
+ var cbuf:[32]u8=[0;32];var clen:usize=0;
+ let cs=castm.emit(0,0,width,signed,slice_from_raw_parts(&cbuf[0],32),&clen);
+ if cs!=castm.OK{return INVALID;}
+ if clen>32{return INVALID;}
+ if glen>MAX-clen{return INVALID;}
+ let total=glen+clen;
+ if total>out.len{return CAPACITY;}
+ // Both sub-texts are fully assembled; publish exactly once.
+ var i:usize=0;while i<glen{out[i]=gbuf[i];i+=1;}
+ var j:usize=0;while j<clen{out[glen+j]=cbuf[j];j+=1;}
+ *written=total;return OK;
+}}

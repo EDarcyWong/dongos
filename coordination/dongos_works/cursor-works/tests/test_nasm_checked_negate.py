@@ -19,7 +19,13 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0,str(ROOT))
 
 from lang.dongc import compile_file
-from lang.tests.test_dongc import tool,nasm_flags
+from lang.tests.test_dongc import tool,nasm_flags as _nasm_flags
+
+def nasm_flags(nasm):
+    flags=list(_nasm_flags(nasm))
+    if '-w-reloc-rel-dword' not in flags:
+        flags.append('-w-reloc-rel-dword')
+    return flags
 
 SOURCE=WORKS/'cursor-works/src/bootstrap/nasm_checked_negate.dg'
 DOC=WORKS/'cursor-works/src/bootstrap/nasm_checked_negate.md'
@@ -61,7 +67,9 @@ static void read_exact(void*p,uint64_t n){if(n&&fread(p,1,n,stdin)!=n)exit(91);}
 static void write_exact(const void*p,uint64_t n){if(n&&fwrite(p,1,n,stdout)!=n)exit(92);}
 #define FAKE(x) ((uint8_t*)(uintptr_t)(x))
 static unsigned invalid(void){
- static uint8_t arena[4096],saved[4096];const unsigned total=13;
+ _Alignas(16) static uint8_t arena[4096];
+ _Alignas(16) static uint8_t saved[4096];
+ const unsigned total=13;
  uint8_t*o=arena+1024;uint64_t*w=(uint64_t*)(arena+2048);
  for(unsigned i=0;i<total;i++){
   memset(arena,0xa5,sizeof(arena));
@@ -97,7 +105,7 @@ int main(void){
   uint64_t h[4];read_exact(h,sizeof(h));
   uint64_t dest=h[0],trap=h[1],cap=h[2],nout=h[3];
   if(cap>256)exit(94);
-  uint8_t*out=malloc(cap+64);uint64_t meta[3];
+  uint8_t*out=malloc(cap+64);_Alignas(8) uint64_t meta[3];
   if(!out)exit(95);
   memset(out,0xa5,cap+64);memset(meta,0xa5,sizeof(meta));uint64_t*written=meta+1;
   uint8_t*o=nout?NULL:out+32;
@@ -427,7 +435,7 @@ class NasmCheckedNegateTests(unittest.TestCase):
                     self.assertEqual(st,0);self.assertEqual(g,1)
                     self.assertNotEqual(text,expected(dest,70),(name,mode,text))
                     # MIN: good traps; jno falls through → route rejection.
-                    with self.assertRaises(AssertionError):
+                    with self.assertRaisesRegex(AssertionError,r'route'):
                         self._native_batch(mode+'-'+name,[text],[(dest,val,70)])
             self.records.append(dict(test=name,compiled=True,native_executed=True,modes=2,rejected_by=kind))
 

@@ -1,0 +1,45 @@
+# C40 — 将SysV调用返回值规范化保存到固定帧槽
+
+负责人：claude。状态：待领取。
+
+模块 bootstrap.nasm_sysv_capture_return。真实用途：C34负责调用实参，C39负责callee返回值装载，本项负责caller在call后将RAX/RDX返回结果保存到固定帧槽；与C39无依赖且不得重复实现C39。只依赖已集成C14 sysv_return_plan与CR8 nasm_memory_operand（及其CR4只读闭包）。
+
+pub unsafe fn emit(kind:u64,frame_bytes:usize,low_offset:usize,high_offset:usize,out:[]u8,written:*usize)u64
+
+kind沿用C14的0..11，实际调用plan获取words/width/extension。frame_bytes为0..4080、16倍数。每个使用槽完整预留8字节，offset为8倍数、8<=offset<=frame_bytes；words=0要求两offset=0；words=1要求high=0；PAIR要求两个不同合法槽。未使用offset必须为零。VOID允许frame=0，空输出成功written=0。INVALID优先CAPACITY。源返回值的窄类型高位允许垃圾；BOOL低字节由上游保证0/1。本项统一为64位内部表示再存满8字节，不是仅写窄字节而遗留槽垃圾。
+
+操作数实际使用CR8 encode(5,-offset)。BOOL/U8先movzx r10, al；I8 movsx r10, al；U16 movzx r10, ax；I16 movsx r10, ax；U32 mov r10d, eax；I32 movsxd r10, eax；随后mov qword [rbp - N], r10。U64/I64/PTR直接mov qword [rbp - N], rax。PAIR依次mov qword [rbp - low], rax及mov qword [rbp - high], rdx。每条真实LF结尾，无ret/标签/section/global。VOID零条指令。只窄类型允许R10改变；RAX/RDX等所有其它GPR、flags、RSP/RBP保持，VOID完全保持。只完整目标槽允许变化，源及非目标内存保持。调用方保证运行时帧合法；emit不访问运行时帧。推导最大文本长度，使用固定有界局部scratch完整组装再一次发布，无分配/全局可变/OS。
+
+验收：独立Python任意精度位模型。debug/release实际Dong输出，NASM ELF64/COFF组装及本机C+显式SysV桩执行，不以Python模板替代实际生成文本。每模式主要原生向量合计<=24并永久断言，覆盖12kind、BOOL0/1、所有signed窄最小/最大/负1、无符号高位、源高位垃圾、完整64位、PAIR低高不同及offset8/4080。目标帧和元数据分离；完整8字节槽及双端guard、全部应保持寄存器和非零flags种子实际观察。VOID执行、空out NULL、精确容量/少1/0、所有非法布局/未使用offset/类型、完整out与written重叠/回绕及尾部别名均须有效可达夹具，失败完整out/written不变。
+
+至少两种真实坏Dong正常编译执行后按数值拒绝：signed窄扩展误用zero；PAIR将RDX误写成RAX。好侧必须正式Dong实际输出且同输入先通过；坏侧按槽完整数值指定断言拒绝，不以文本或构建失败代替。另提前写written以完整原子性拒绝；可增加只写低字节导致高位垃圾保留的安全负控。源码/说明/测试/只读依赖前后SHA稳定、0skip，交付真实命令/计数/限制。只原四文件，不改其它组件/IR，不自行验收集成/提交推送，不运行OS/VM/全回归/AI CLI。
+
+## 共用固定契约与执行归属
+
+本任务是L3 Dong自举后端的独立生产组件；仅四个声明文件，Dong实现，不导出C符号（临时测试wrapper可导出），无分配、全局可变状态、OS调用。不可改code/lang、活动编译器、内核、协调器、其它负责人、在途任务或已集成依赖；既有队列/返修优先。依赖只读，只用已integrated模块；不得以宿主Python/C算法替代Dong生产逻辑。
+
+统一OK=0、INVALID=1、CAPACITY=2；接口另有Result时按任务正文完整尺寸。written非NULL、8对齐、完整8字节端点不回绕；out完整声明区间端点不回绕，非空非NULL，空可NULL。written与完整out不重叠（包括成功未使用尾部）。有输入切片/结构/嵌套名字时，必须在任何读写前验证完整描述符、元素乘法、端点、所需对齐、非空非NULL和完整对象别名；输入彼此如正文无禁止可互叠，只读输入与完整out/结果不得重叠。所有数据/枚举/标签/尺寸INVALID优先CAPACITY。失败out、计数或完整Result、输入全文不变；成功只写精确前缀/结果，尾部保持。先全预检及正确求长，在充分且有证明上界的局部区调用只读依赖，再最后发布用户out；不允许内部scratch越界或对合法容量不足输入panic。
+
+文本严格ASCII，换行真实单LF，无NUL/注释/额外空行/隐式section/global/ret（任务另定声明除外）。涉及__dong_b<N>标签时N=0..MAX-1，MAX为NONE非法；数字复用已声明decimal_integer，不另写格式化。寄存器编号若有0..15参数，固定rax,rcx,rdx,rbx,rsp,rbp,rsi,rdi,r8..r15；固定寄存器任务按正文集合测试，不强凑16矩阵。
+
+测试只跑本任务checks：实际编译/链接/原生执行Dong debug与release，NASM ELF64/COFF都组装；原生C桥显式SysV，保护宿主栈/被调用者保存寄存器。COFF组装不冒充Win64调用ABI。只暂存本模块及已声明只读依赖的传递闭包，不引入整个lang根遮蔽坏源码。独立Python/C oracle，不用生产规划器输出当唯一期望。有限固定边界，每模式不超过24个主要原生向量（并发操作另按正文有限检查）；不做全笛卡尔积或性能基准。源码、说明、测试、只读依赖前后SHA256稳定，0skip才可验收。
+
+每个描述符/端点/别名预检要独立可达，其它字段合法。written端点溢出用8对齐UINT64_MAX-7且合法空out，漏检坏体应安全返回CAPACITY而非非法解引用。初始化guard后再取快照，立刻观察失败全文/计数/guard、成功精确文本/长度/未用尾部；输入真实只读保护须检查系统调用成功，不能只声称只读。
+
+至少保留两类真实坏Dong：一种完成构建、链接、正常原生执行后，由指定数值/内存/分支/链接后地址断言拒绝；一种容量不足提前写out或结果，由完整原子性断言拒绝。同夹具先跑好体。构建失败、崩溃、超时、文本不同、无关预检错误不能冒充指定语义负控；源码中缺锁/不同内存序等结构检查单列，不能假装单次正常运行证明并发语义。坏体所有内存访问在预留安全可访问区内，不破坏真实宿主栈/ret、不依靠越界或硬件异常拒绝。
+
+本人客户端先worker MCP get_task/read_document读取最新rev和完整契约/归属，claim成功才执行；先完成已有领取/返修。产物在本人works/build/<编号>/<唯一目录>/，完成原编号交付写真实命令、tests/skips、模式/对象格式、全部输入SHA256、每种坏体实际观察/拒绝依据、未跑与剩余限制，再MCP submit。不得自行accept/integrate、提交/推送、运行OS/VM/全回归、启动模型CLI/定时器/关机，不用管理工具自动启动Cursor。任务发布不代表实现或通过，最后由Codex独立复验再验收集成。
+
+
+## 可修改文件
+
+- `claude-works/src/bootstrap/nasm_sysv_capture_return.dg`
+- `claude-works/src/bootstrap/nasm_sysv_capture_return.md`
+- `claude-works/tests/test_nasm_sysv_capture_return.py`
+- `claude-works/deliveries/C40.md`
+
+## 定向验收
+
+- `discover:claude-works/tests:test_nasm_sysv_capture_return.py`
+
+交付：`claude-works/deliveries/C40.md`。独立工作副本中执行；不提交、推送、运行OS/VM或修改归属外文件。完成后提交交付，等待独立复验。

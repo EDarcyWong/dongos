@@ -1,0 +1,50 @@
+// Composed guarded integer divide: C31 division exception guard, then CR18
+// kind-0 success label, then CR19 quotient/remainder kernel. Strict order
+// guard → success label → divide; no extra jmp/ret/section. Both exception
+// targets are upstream; success_block is defined once inside this fragment.
+// Dependencies are called into bounded locals and published once.
+// Local bounds (proved in .md): guard<=197 into 224, label<=30 into 32,
+// divide<=60 into 64, combined<=287 into 512.
+module bootstrap.nasm_guarded_integer_divide;
+import bootstrap.nasm_division_guard as guardm;
+import bootstrap.nasm_block_emit as blockm;
+import bootstrap.nasm_integer_divide as divm;
+pub const OK:u64=0;pub const INVALID:u64=1;pub const CAPACITY:u64=2;
+pub const NONE:u64=0xffff_ffff_ffff_ffff;
+const MAX:u64=0xffff_ffff_ffff_ffff;
+const GUARD:usize=224;const LABEL:usize=32;const DIV:usize=64;const TEXT:usize=512;
+fn span(p:u64,n:u64)bool{return n==0||(p!=0&&n<=MAX-p);}
+fn overlap(a:u64,n:u64,b:u64,m:u64)bool{return n!=0&&m!=0&&a<b+m&&b<a+n;}
+pub unsafe fn emit(signed:bool,remainder:bool,zero_target:u64,overflow_target:u64,success_block:u64,out:[]u8,written:*usize)u64{unsafe{
+ let wp=written as u64;let op=out.ptr as u64;
+ if written==null||(wp&7)!=0||!span(wp,8){return INVALID;}
+ if !span(op,out.len){return INVALID;}
+ if overlap(wp,8,op,out.len){return INVALID;}
+ if zero_target==NONE||overflow_target==NONE||success_block==NONE{return INVALID;}
+ if zero_target==overflow_target||zero_target==success_block||overflow_target==success_block{return INVALID;}
+ // C31 guard; 224-byte local covers the 197-byte signed maximum.
+ var gbuf:[224]u8=[0;224];var glen:usize=0;
+ let gs=guardm.emit(signed,zero_target,overflow_target,success_block,slice_from_raw_parts(&gbuf[0],GUARD),&glen);
+ if gs!=guardm.OK{return INVALID;}
+ if glen>GUARD{return INVALID;}
+ // CR18 kind=0 defines success_block once; 32-byte local covers 30 bytes.
+ var lbuf:[32]u8=[0;32];var llen:usize=0;
+ let ls=blockm.emit(0,success_block,slice_from_raw_parts(&lbuf[0],LABEL),&llen);
+ if ls!=blockm.OK{return INVALID;}
+ if llen>LABEL{return INVALID;}
+ // CR19 kernel; 64-byte local covers the 60-byte remainder maximum.
+ var dbuf:[64]u8=[0;64];var dlen:usize=0;
+ let ds=divm.emit(signed,remainder,slice_from_raw_parts(&dbuf[0],DIV),&dlen);
+ if ds!=divm.OK{return INVALID;}
+ if dlen>DIV{return INVALID;}
+ if glen>MAX-llen{return INVALID;}
+ let mid=glen+llen;
+ if mid>MAX-dlen{return INVALID;}
+ let total=mid+dlen;
+ if total>TEXT{return INVALID;}
+ if total>out.len{return CAPACITY;}
+ var i:usize=0;while i<glen{out[i]=gbuf[i];i+=1;}
+ var j:usize=0;while j<llen{out[glen+j]=lbuf[j];j+=1;}
+ var k:usize=0;while k<dlen{out[mid+k]=dbuf[k];k+=1;}
+ *written=total;return OK;
+}}

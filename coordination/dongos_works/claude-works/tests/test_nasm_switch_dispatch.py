@@ -79,12 +79,16 @@ static void ro_free(void*p,uint64_t n){
 #endif
 }
 #define FAKE(x) ((void*)(uintptr_t)(x))
-/* Each preflight keeps every other field valid (2 distinct cases, default 9) so only the target check can reject it. */
+/* Each preflight keeps every other field valid (default 9) so only the target check can reject it: all 16
+   cases are legal with distinct values (5, -5, then 100*k) before the snapshot, so the len=16 declared-tail
+   alias cases 10/11 cannot be masked by C11 rejecting a duplicate value. Every failure is reported, then exit 93. */
 static unsigned invalid(void){
- static _Alignas(16) uint8_t arena[4096],saved[4096];const unsigned total=15;
+ static _Alignas(16) uint8_t arena[4096],saved[4096];const unsigned total=15;unsigned failed=0;
  Case*c=(Case*)arena;uint8_t*o=arena+1024;uint64_t*w=(uint64_t*)(arena+3584);
  for(unsigned i=0;i<total;i++){
-  memset(arena,0xa5,sizeof(arena));c[0].value=5;c[0].label=1;c[1].value=-5;c[1].label=2;memcpy(saved,arena,sizeof(arena));uint64_t s=0;
+  memset(arena,0xa5,sizeof(arena));c[0].value=5;c[0].label=1;c[1].value=-5;c[1].label=2;
+  for(unsigned k=2;k<16;k++){c[k].value=100*(int64_t)k;c[k].label=k;}
+  memcpy(saved,arena,sizeof(arena));uint64_t s=0;
   switch(i){
    case 0:s=dong_switch_emit(c,2,9,o,2048,NULL);break;                                /* written NULL */
    case 1:s=dong_switch_emit(c,2,9,o,2048,(uint64_t*)(arena+3585));break;             /* written odd */
@@ -102,8 +106,10 @@ static unsigned invalid(void){
    case 13:s=dong_switch_emit(c,2,9,o,2048,(uint64_t*)(o+2040));break;                /* written in out's unused tail */
    default:s=dong_switch_emit(c,2,9,arena+16,64,w);break;                             /* out over input's second case */
   }
-  if(s!=1||memcmp(saved,arena,sizeof(arena))){fprintf(stderr,"invalid preflight %u status %u\n",i,(unsigned)s);exit(93);}
+  int same=!memcmp(saved,arena,sizeof(arena));
+  if(s!=1||!same){fprintf(stderr,"invalid preflight %u status %u unchanged %d\n",i,(unsigned)s,same);failed++;}
  }
+ if(failed)exit(93);
  return total;
 }
 int main(void){
@@ -338,6 +344,19 @@ class NasmSwitchDispatchTests(unittest.TestCase):
         for mode,exe in self.build_all('bad-early-out',source.replace(old,new,1)).items():
             with self.assertRaisesRegex(AssertionError,'guard/atomicity'):self.run_cases(exe,case,'bad-early-out-'+mode)
         self.records.append(dict(test='bad-early-out',compiled=True,native_executed=True,modes=2,rejected_by='guard/atomicity'))
+
+    def test_prefix_only_input_alias_is_rejected(self):
+        """Preflight sensitivity: a real Dong that checks only the first two cases (32 bytes) for input aliasing."""
+        source=SOURCE.read_text(encoding='utf-8')
+        old='overlap(ip,inn,op,out.len)||overlap(ip,inn,wp,8)';self.assertEqual(source.count(old),1)
+        for mode,exe in self.executables.items():self.run_cases(exe,[],'prefix-good-'+mode)  # same harness passes all
+        for mode,exe in self.build_all('bad-prefix-alias',source.replace(old,'overlap(ip,32,op,out.len)||overlap(ip,32,wp,8)',1)).items():
+            run=subprocess.run([str(exe)],input=struct.pack('<Q',0),capture_output=True,timeout=60)
+            err=run.stderr.decode('ascii','replace');(self.work/('bad-prefix-'+mode+'.stderr')).write_text(err,encoding='ascii')
+            self.assertEqual(run.returncode,93,(mode,err))                                   # normal exit from the preflight check
+            failed=[int(line.split()[2])for line in err.splitlines()if line.startswith('invalid preflight ')]
+            self.assertEqual(failed,[10,11],(mode,err))                                      # exactly the two declared-tail cases
+        self.records.append(dict(test='bad-prefix-alias',compiled=True,native_executed=True,modes=2,rejected_by='preflight 10/11'))
 
 
 if __name__=='__main__':unittest.main()

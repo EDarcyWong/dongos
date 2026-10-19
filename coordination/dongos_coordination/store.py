@@ -20,6 +20,10 @@ class Conflict(ValueError):
     pass
 
 
+class StateRecoveryRequired(ValueError):
+    pass
+
+
 class ClosingConnection(sqlite3.Connection):
     def __exit__(self, *args):
         try:
@@ -106,13 +110,20 @@ def checks(values):
 
 
 class Store:
-    def __init__(self, root, local=None, works_root=None, project_name=None):
+    def __init__(self, root, local=None, works_root=None, project_name=None, *, allow_state_recovery=False):
         self.root = Path(root).resolve()
         self.project_name = project_name or self.root.name
         self.works_root = Path(works_root or self.root).resolve()
         self.local = Path(local or self.root.parent / 'coordination/.local').resolve()
         self.local.mkdir(parents=True, exist_ok=True)
         self.db = self.local / 'tasks.sqlite3'
+        index = self.local.parent / 'index.json'
+        has_snapshot = False
+        if index.is_file():
+            snapshot = json.loads(index.read_text(encoding='utf-8-sig'))
+            has_snapshot = bool(snapshot.get('tasks') or snapshot.get('archived_tasks'))
+        if has_snapshot and not self.db.exists() and not allow_state_recovery:
+            raise StateRecoveryRequired('状态库缺失但任务快照存在；已阻止重导入及覆盖。请使用 recover-state 核对证据后恢复。')
         with self.connect() as c:
             c.executescript('''
                 CREATE TABLE IF NOT EXISTS tasks(id TEXT PRIMARY KEY, rev INTEGER NOT NULL, data TEXT NOT NULL);
@@ -121,6 +132,22 @@ class Store:
                     status TEXT, created TEXT, updated TEXT, data TEXT);
                 CREATE TABLE IF NOT EXISTS settings(key TEXT PRIMARY KEY, value TEXT);
             ''')
+            if has_snapshot and not allow_state_recovery and not c.execute('SELECT 1 FROM tasks LIMIT 1').fetchone():
+                raise StateRecoveryRequired('状态库为空但任务快照存在；已阻止重导入及覆盖。请使用 recover-state 核对证据后恢复。')
+
+    def backup(self):
+        """Consistent SQLite backup, including events/jobs/settings (not a task import)."""
+        target = self.local / 'backups' / (now().replace(':', '-') + '-' + uuid.uuid4().hex[:8])
+        target.mkdir(parents=True)
+        with self.connect() as source, sqlite3.connect(target / 'tasks.sqlite3', factory=ClosingConnection) as destination:
+            source.backup(destination)
+        index = self.local.parent / 'index.json'
+        if index.is_file():
+            (target / 'index.json').write_bytes(index.read_bytes())
+        (target / 'backup.json').write_text(json.dumps(dict(at=now(), source_root=str(self.root),
+            works_root=str(self.works_root), database_sha256=digest(target / 'tasks.sqlite3')),
+            ensure_ascii=False, indent=2) + '\n', encoding='utf-8')
+        return target
 
     def path(self, value, root=None):
         base = Path(root or self.root).resolve()
@@ -417,6 +444,8 @@ class Store:
                 if row['kind'] == 'implement':
                     task['status'] = 'in_progress'
                     self.save(c, task, 'started')
+                elif row['kind'] == 'verify':
+                    self.event(c, task['id'], 'verification_started', {'job': row['id']})
                 return dict(row) | {'status': 'running', 'data': json.loads(row['data'])}
         return None
 
@@ -522,6 +551,28 @@ class Store:
     def recent_events(self):
         with self.connect() as c:
             return [dict(r) | {'data': json.loads(r['data'])} for r in c.execute('SELECT * FROM events ORDER BY seq DESC LIMIT 60')]
+
+    def timing(self, task):
+        """All task events, not the dashboard's truncated recent event feed."""
+        from .timing import summarize, seconds
+        with self.connect() as c:
+            events = [dict(r) | {'data': json.loads(r['data'])} for r in c.execute(
+                'SELECT * FROM events WHERE task_id=? ORDER BY seq', (task['id'],))]
+            jobs = [dict(r) for r in c.execute(
+                "SELECT id,status,created,updated,data FROM jobs WHERE task_id=? AND kind='verify' ORDER BY created,rowid",
+                (task['id'],))]
+        result = summarize(task, events, now())
+        result['verifications'] = []
+        for job in jobs:
+            data = json.loads(job.pop('data'))
+            start = next((e['at'] for e in events if e['kind'] == 'verification_started' and
+                          e['data'].get('job') == job['id']), None)
+            finished = job['updated'] if job['status'] not in ACTIVE else None
+            result['verifications'].append(dict(id=job['id'], status=job['status'],
+                queued_at=job['created'], started_at=start, finished_at=finished,
+                elapsed_seconds=seconds(start, finished or result['as_of']) if start else None,
+                check_seconds=sum(x.get('elapsed_seconds', 0) for x in data['checks']) if data.get('checks') else None))
+        return result
 
 
 def fingerprint(root, patterns, works_root=None):

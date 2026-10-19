@@ -1,11 +1,11 @@
 """Native runtime type/flow checking over real lexer/module/binding graphs."""
 from __future__ import annotations
-import hashlib,json,random,shutil,struct,subprocess,unittest,uuid
+import hashlib,json,os,random,shutil,struct,subprocess,unittest,uuid
 from pathlib import Path
 from lang.dongc import compile_source
 from lang.dongc.model import CompileError
 from lang.tests import test_bootstrap_semantic_types as decl
-from lang.tests.test_dongc import tool
+from lang.tests.test_dongc import tool,nasm_flags
 ROOT=decl.ROOT
 NONE=decl.NONE
 WRAPPER=decl.WRAPPER.replace('w:*const semantic.Workspace,depth:usize,r:*semantic.Result)',
@@ -162,7 +162,28 @@ def tagged_flow_cases():
 
 class BootstrapSemanticRuntimeTests(unittest.TestCase):
     wrapper=WRAPPER
-    build=decl.BootstrapSemanticTypesTests.__dict__['build']
+    @classmethod
+    def build(cls,root,mode,label):
+        # Production is assembled in both containers. Semantic mutations only
+        # need the host container: their rejection is actual native execution,
+        # not portability of an intentionally incorrect implementation.
+        entry=cls.work/(label+'-entry');entry.mkdir()
+        wrapper=entry/'probe.dg';wrapper.write_text(cls.wrapper,encoding='utf-8')
+        asm=cls.work/(label+'.asm')
+        asm.write_text(decl.compile_file(wrapper,roots=[entry,root],mode=mode).assembly,encoding='utf-8')
+        native='win64' if os.name=='nt' else 'elf64'
+        formats=('elf64','win64') if label in ('debug','release') else (native,)
+        obj=cls.work/(label+'.o');exe=cls.work/(label+('.exe' if os.name=='nt' else ''))
+        commands=[]
+        for fmt in formats:
+            target=obj if fmt==native else cls.work/(label+'.'+fmt+'.o')
+            commands.append([cls.nasm,'-f',fmt,*nasm_flags(cls.nasm),'-o',target,asm])
+        commands.append([cls.cc,'-std=c11','-O2','-Wall','-Wextra','-Werror',*([] if os.name=='nt' else ['-no-pie']),cls.work/'probe.c',obj,'-o',exe])
+        for i,command in enumerate(commands):
+            run=subprocess.run(list(map(str,command)),capture_output=True,text=True,timeout=120)
+            (cls.work/(label+f'-{i}.log')).write_text(run.stdout+run.stderr,encoding='utf-8')
+            if run.returncode:raise AssertionError((label,run.returncode,run.stdout,run.stderr))
+        return exe
     run_cases=decl.BootstrapSemanticTypesTests.run_cases
     @classmethod
     def setUpClass(cls):
@@ -353,6 +374,45 @@ class BootstrapSemanticRuntimeTests(unittest.TestCase):
                 with self.assertRaisesRegex(AssertionError,'status'):self.run_cases(exe,[case],name+'-'+mode)
                 self.records.append(dict(test='actual-bad-Dong',variant=name,mode=mode,rejected_by='status',passed=True))
 
+    def test_optional_result_match_payloads_and_flow(self):
+        samples=[
+          ('fn f(x:?u8)u8{match x{null=>{return 0;},some(v)=>{return v;}}}',0),
+          ('fn f(x:?u8)u8{match x{some(v)=>{return v;},_=>{return 0;}}}',0),
+          ('fn f(x:!u8)u64{match x{ok(v)=>{return v as u64;},err(e)=>{return e;}}}',0),
+          ('fn f(x:!void)u64{match x{ok=>{return 0;},err(e)=>{return e;}}}',0),
+          ('fn f(x:!u8)u8{match x{ok(v)=>{return v;},_=>{return 0;}}}',0),
+          ('fn f(x:?u8)u8{var y:u8;match x{null=>{y=0;},some(v)=>{y=v;}}return y;}',0),
+          ('fn f(x:!u8)u8{var y:u8;match x{ok(v)=>{y=v;},err(e)=>{y=0;}}return y;}',0),
+          ('fn f(x:?u8,y:!u8)u8{match x{null=>{return 0;},some(v)=>{match y{ok(z)=>{return z;},err(e)=>{return v;}}}}}',0),
+          ('fn f(x:?u8)void{match x{null=>{},some(v)=>{let n:u8=v;}}}',0),
+          ('fn f(x:!void)void{match x{ok=>{},err(e)=>{let n:u64=e;}}}',0),
+          ('fn f(x:?u8)u8{match x{null=>{return 0;}}}',15),
+          ('fn f(x:!u8)u8{match x{ok(v)=>{return v;}}}',15),
+          ('fn f(x:?u8)void{match x{null=>{},null=>{},some(v)=>{}}}',15),
+          ('fn f(x:!u8)void{match x{err(e)=>{},err(f)=>{},ok(v)=>{}}}',15),
+          ('fn f(x:?u8)void{match x{_=>{},null=>{}}}',15),
+          ('fn f(x:!u8)void{match x{ok(v)=>{},err(e)=>{},_=>{}}}',15),
+          ('fn f(x:?u8)void{match x{true=>{},_=>{}}}',3),
+          ('fn f(x:!u8)void{match x{null=>{},_=>{}}}',3),
+          ('fn f(x:!u8)void{match x{ok=>{},err(e)=>{}}}',3),
+          ('fn f(x:!void)void{match x{ok(v)=>{},err(e)=>{}}}',3),
+          ('fn f(x:?u8)void{match x{null=>{},some(v)=>{let y:bool=v;}}}',3),
+          ('fn f(x:!u8)void{match x{ok(v)=>{},err(e)=>{let y:bool=e;}}}',3),
+          ('fn f(x:?u8)u8{var y:u8;match x{null=>{},some(v)=>{y=v;}}return y;}',11),
+          ('fn f(x:!u8)u8{var y:u8;match x{ok(v)=>{y=v;},err(e)=>{}}return y;}',11),
+          ('const O:?u64=1;fn f()u64{var y:u64;match O{null=>{},some(v)=>{y=v;}}return y;}',0),
+          ('const O:?u64=null;fn f()u64{var y:u64;match O{null=>{y=7;},some(v)=>{}}return y;}',0),
+        ]
+        cases=[]
+        for body,status in samples:
+            source='module a;'+body
+            try:compile_source(source);accepted=True
+            except CompileError:accepted=False
+            self.assertEqual(accepted,status==0,body)
+            cases.append(decl.case(source,status))
+        for mode,exe in self.executables.items():self.run_cases(exe,cases,'tagged-match-'+mode)
+        self.records.append(dict(test='optional-result-match',cases=len(cases),modes=2,host_acceptance_checked=True,passed=True))
+
     def test_unsupported_and_workspace_limits_are_explicit(self):
         cases=[decl.case('module a;fn f()void{}',2,pool=i,cap=0) for i in range(24,29)]
         unsupported=['enum E{A,B}fn f(e:E)u64{match e{E.A=>{return 1;},E.B=>{return 2;}}}',
@@ -366,7 +426,9 @@ class BootstrapSemanticRuntimeTests(unittest.TestCase):
         variants=[('coercion','return rt_fail(c,TYPE,id,target as u64);','(*info).typ=target;return target;',decl.case('module a;fn f(x:u64)bool{return x;}',3)),
           ('intersection','(*w).snapshots[slot*count+i]&=value;','(*w).snapshots[slot*count+i]|=value;',decl.case('module a;fn f(b:bool)u64{var x:u64;if b{x=1;}else{}return x;}',11)),
           ('slice-bounds','if have_length&&((have_lo&&lo>length)||(have_hi&&hi>length))','if false&&have_length&&((have_lo&&lo>length)||(have_hi&&hi>length))',decl.case('module a;fn f()[]const u8{return "abc"[0..4];}',3)),
-          ('slice-readonly','var readonly=t.flags&1;','var readonly:u64=0;',decl.case('module a;fn f(s:[]const u8)[]u8{return s[..];}',3))]
+          ('slice-readonly','var readonly=t.flags&1;','var readonly:u64=0;',decl.case('module a;fn f(s:[]const u8)[]u8{return s[..];}',3)),
+          ('match-error-payload','mask=2;payload=3;','mask=2;payload=8;',decl.case('module a;fn f(x:!u8)void{match x{ok(v)=>{},err(e)=>{let y:bool=e;}}}',3)),
+          ('match-exhaustive','if seen!=3{rt_fail(c,FLOW,id,2);return false;}','if false{rt_fail(c,FLOW,id,2);return false;}',decl.case('module a;fn f(x:?u8)void{match x{null=>{}}}',15))]
         for name,old,new,c in variants:
             self.assertEqual(source.count(old),1);root=self.work/('bad-'+name);(root/'bootstrap').mkdir(parents=True)
             for p in self.files:

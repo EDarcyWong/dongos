@@ -1,0 +1,28 @@
+[
+  {
+    "task": "claude:C44",
+    "direct_tests": 5,
+    "skips": 0,
+    "elapsed": 47.728,
+    "run": "coordination\\dongos_works\\claude-works\\build\\C44\\run-cfb02f9aed03",
+    "fingerprint": {
+      "claude-works\\src\\bootstrap\\nasm_sysv_function_entry.dg": "390ecb168b2312072b95820a0ba16f152c35e1f99f2dc2f8619fffa79e312dd6",
+      "claude-works\\src\\bootstrap\\nasm_sysv_function_entry.md": "ee9f624f0c8e862a48c51d55b67d8256b65856003cd83e2b1d950aaae8a478b5",
+      "claude-works\\tests\\test_nasm_sysv_function_entry.py": "f8d448fee248db577c741cf8db649633b320d1a8c7582e285904bcb8517bf032"
+    },
+    "formal_pending": true
+  },
+  {
+    "task": "claude:C45",
+    "direct_tests": 4,
+    "skips": 0,
+    "elapsed": 25.22,
+    "run": "coordination\\dongos_works\\claude-works\\build\\C45\\run-a7e731706133",
+    "fingerprint": {
+      "claude-works\\src\\bootstrap\\elf64_image.dg": "e861961bbb4900fb639d749755f324caa58eabe7d2264b579a21a8701e92b112",
+      "claude-works\\src\\bootstrap\\elf64_image.md": "df74ece276c059c3e23020029dc335c659eebd46f1b53f4c0d3455b4165dec38",
+      "claude-works\\tests\\test_elf64_image.py": "bc55c992a22520a587edd1b04051bbcec01048d245d874be406f3d27d608c8bd"
+    },
+    "formal_pending": true
+  }
+]

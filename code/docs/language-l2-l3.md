@@ -1,5 +1,15 @@
 # L2 / L3 实施与验收记录
 
+2026-10-19最新推进：CR28窄算术范围门禁、CR29切片lo/hi/len门禁均已独立验收并真实集成；正式各3项零skip，主线各3项零skip（57.381秒/41.553秒），输入指纹稳定。审查者补跑正式实际Dong与坏体相同输入的精确路由对照，共8次正确拒绝。完整L3/IR接线仍未完成。Claude C41在途、C42待领取，以协调器实时状态为准。详见[CR28](../../coordination/dongos_works/reviews/2026-10-19-CR28-integration.md)、[CR29](../../coordination/dongos_works/reviews/2026-10-19-CR29-integration.md)。
+
+2026-10-19最新集成：C39/C40与CR24～CR27返修已完成独立验收、真实文件集成；正式独立与主线相同20项分别零skip通过，主线191.761秒且源码/永久测试/只读依赖/编译器前后指纹稳定。返回值装载/保存、原子store/CAS/fetch-add和重叠memmove均为独立组件，完整L3仍未完成。详见[本批集成证据](../../coordination/dongos_works/reviews/2026-10-19-L3-returns-atomics-integration.md)。历史返修/待领取文字为当时快照，以协调器最新状态为准。
+
+2026-10-19补充：CR22 R2已独立验收并真实集成，正式/主线各3项零skip且来源稳定；与本批C35/C36/C37/C38/CR23合计6组件、26项主线定向测试通过。CR24/CR25审查发现原生观察及实际产出并发验证缺口，已原任务退回Cursor返修。完整L3仍未完成，最新状态以MCP为准。见[CR22 R2记录](../../coordination/dongos_works/reviews/2026-10-19-CR22-R2-integration.md)。
+
+2026-10-19最新后端增量：C35～C38及CR23已完成原负责人返修、独立源码/契约/测试审查、正式共23项零skip及主线同23项零skip验证，并真实集成switch分发、scope零参清理、incoming参数捕获、静态64位指针重定位与checked negate五模块。主线165.804秒、源码/依赖/宿主编译器指纹稳定。CR22因主要向量合计仍超原任务上限退回有限R2。见[后端组件记录](bootstrap-backend-components.md)；完整L3自举仍未完成。
+
+2026-10-19后端增量：C33/C34/CR20/CR21原R1已全部独立验收并真实集成，新增并行复制、SysV outgoing实参建立、无符号边界和完整64位移位计数门禁4个Dong模块及永久主线测试。正式与主线同16个不同测试各零skip通过，主线两批83.438/110.209秒，生产/测试/依赖指纹稳定。C37/C38正式8项通过但完整输入尾部别名测试缺口已被坏Dong实证确认，原任务返修、未集成。详见[后端组件记录](bootstrap-backend-components.md)；这些组件仍未替代完整代码生成/CLI，L3自举未完成。
+
 2026-10-18后端增量：C29、CR16～CR19均已验收集成，16组件与2真实组合共18项主线测试0skip通过、来源稳定，C29/CR16历史待修闭合。除法异常门禁另由Claude C31实现，不据此关闭完整L3；见[组件记录](bootstrap-backend-components.md)。
 
 2026-10-18后端新增：C26～C28已验收集成，主线12组件+1真实shift/select/call组合共13项通过0skip、来源稳定；C29快照中止未执行测试，尚未集成。见[组件记录](bootstrap-backend-components.md)。活动后端未切换，完整L3继续未完成。

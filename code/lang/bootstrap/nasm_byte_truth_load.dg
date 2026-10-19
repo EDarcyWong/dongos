@@ -1,0 +1,56 @@
+// Composed byte truth load: one zero-extended byte load through CR12 with
+// destination RAX, then TWO CR16 zero-compare sequences on RAX. The double
+// zero-compare yields byte!=0 as 0/1 (nonzero truth conversion); a single
+// compare would invert the semantics, so both calls are mandatory. The
+// effective address is guaranteed valid by the upstream caller and the load
+// evaluates the address before RAX is written, so base=RAX is legal.
+// Only RAX and flags change; every other GPR and all memory are kept.
+// Local bounds (proved in .md): load segment <= 35 bytes (r15 + 20-digit
+// i32 displacement through CR8), one unary zero-compare segment is exactly
+// 36 bytes for register 0, so the combined text is <= 107 bytes. The load
+// local 128 and the unary local 64 both hold their dependency outputs
+// without capacity failure. All prechecks and local assembly complete, then
+// the user out is published exactly once; any failure leaves the complete
+// out and written untouched. INVALID precedes CAPACITY.
+module bootstrap.nasm_byte_truth_load;
+import bootstrap.nasm_integer_memory_load as loadm;
+import bootstrap.nasm_integer_unary as unarym;
+pub const OK:u64=0;pub const INVALID:u64=1;pub const CAPACITY:u64=2;
+const MAX:u64=0xffff_ffff_ffff_ffff;
+const I32_MIN:i64=-2147483648;
+const I32_MAX:i64=2147483647;
+fn span(p:u64,n:u64)bool{return n==0||(p!=0&&n<=MAX-p);}
+fn overlap(a:u64,n:u64,b:u64,m:u64)bool{return n!=0&&m!=0&&a<b+m&&b<a+n;}
+fn copy(out:[]u8,at:usize,text:[]const u8)usize{
+ var i:usize=0;while i<text.len{out[at+i]=text[i];i+=1;}return at+text.len;
+}
+pub unsafe fn emit(base:u64,displacement:i64,out:[]u8,written:*usize)u64{unsafe{
+ let wp=written as u64;let op=out.ptr as u64;
+ if written==null||(wp&7)!=0||!span(wp,8){return INVALID;}
+ if !span(op,out.len){return INVALID;}
+ if overlap(wp,8,op,out.len){return INVALID;}
+ if base>15||base==4||base==5{return INVALID;}
+ if displacement<I32_MIN||displacement>I32_MAX{return INVALID;}
+ // Zero-extended byte load into RAX; 128-byte local covers its 35-byte maximum.
+ var lbuf:[128]u8=[0;128];var llen:usize=0;
+ let ls=loadm.emit(0,base,displacement,8,false,slice_from_raw_parts(&lbuf[0],128),&llen);
+ if ls!=loadm.OK{return INVALID;}
+ if llen>128{return INVALID;}
+ // First zero-compare; 64-byte local covers its 36-byte exact size.
+ var ubuf:[64]u8=[0;64];var ulen:usize=0;
+ let us=unarym.emit(2,0,slice_from_raw_parts(&ubuf[0],64),&ulen);
+ if us!=unarym.OK{return INVALID;}
+ if ulen>64{return INVALID;}
+ // Second zero-compare (same text) completes the nonzero truth conversion.
+ let us2=unarym.emit(2,0,slice_from_raw_parts(&ubuf[0],64),&ulen);
+ if us2!=unarym.OK{return INVALID;}
+ if ulen>64{return INVALID;}
+ if llen>MAX-ulen{return INVALID;}let a1=llen+ulen;
+ if ulen>MAX-a1{return INVALID;}let total=a1+ulen;
+ if total>out.len{return CAPACITY;}
+ // All three segments are fully assembled; publish exactly once.
+ var at=copy(out,0,slice_from_raw_parts(&lbuf[0],llen));
+ at=copy(out,at,slice_from_raw_parts(&ubuf[0],ulen));
+ at=copy(out,at,slice_from_raw_parts(&ubuf[0],ulen));
+ *written=total;return OK;
+}}

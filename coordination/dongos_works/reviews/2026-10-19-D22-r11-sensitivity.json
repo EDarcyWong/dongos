@@ -1,0 +1,52 @@
+{
+  "records": [
+    {
+      "mode": "debug",
+      "good_native_passed": true,
+      "bad_native_returned": true,
+      "bad_r11_clobber_escaped_assertions": true,
+      "observed": [
+        0,
+        1,
+        2,
+        3,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        12,
+        13,
+        14,
+        15
+      ]
+    },
+    {
+      "mode": "release",
+      "good_native_passed": true,
+      "bad_native_returned": true,
+      "bad_r11_clobber_escaped_assertions": true,
+      "observed": [
+        0,
+        1,
+        2,
+        3,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        12,
+        13,
+        14,
+        15
+      ]
+    }
+  ],
+  "work": "D:\\projects\\projects3\\2026\\dongos\\coordination\\dongos_works\\deepseek-works\\build\\D22\\run-859b79aebb45",
+  "source_sha256": "4f5b37049de423aaca09fca7698f6ed00710c2d4fc4aba6bf27f097674932a26",
+  "test_sha256": "60a49ff9674490e0a4dad567df5f2ac62a6ae80016d9a25e2376fc2995bcdfcc",
+  "worker_files_modified": false
+}

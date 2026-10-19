@@ -1,0 +1,56 @@
+// A static pointer datum: a storage label followed by a 64-bit "dq" of a
+// target symbol plus a signed addend, so the assembler emits a full 64-bit
+// absolute relocation (never a truncated 32-bit one). Both symbols are exactly
+// the integrated CR3 nasm_symbol encodings of their module/item names (each
+// 1..64 raw bytes), produced in 266-byte local scratch; the addend magnitude
+// uses CR4 decimal_integer. No section/global/extern/align. out and written are
+// each written once, after every check has passed.
+module bootstrap.nasm_symbol_pointer_data;
+import bootstrap.nasm_symbol as sym;
+import bootstrap.decimal_integer as dec;
+pub const OK:u64=0;pub const INVALID:u64=1;pub const CAPACITY:u64=2;
+pub const NAME_LIMIT:usize=64;
+const MAX:u64=0xffff_ffff_ffff_ffff;
+// Length bound: a CR3 symbol for two 64-byte names is 10+2*(64+64) = 266 bytes.
+//   label line  "<storage>:\n"                             = 266+2          = 268
+//   datum line  "dq <target> - 9223372036854775808\n"       = 3+266+3+19+1   = 292
+//   total <= 268 + 292 = 560 <= TEXT (576). The largest magnitude (i64::MIN) has 19 digits <= DIGITS (20).
+// Every append is still bounds-checked.
+const SYMBOL:usize=266;const TEXT:usize=576;const DIGITS:usize=20;
+fn span(p:u64,n:u64)bool{return n==0||(p!=0&&n<=MAX-p);}
+fn overlap(a:u64,n:u64,b:u64,m:u64)bool{return n!=0&&m!=0&&a<b+m&&b<a+n;}
+fn named(n:usize)bool{return n!=0&&n<=NAME_LIMIT;}
+// Append text at *at within out; false (without writing) if it would not fit.
+unsafe fn put(out:[]u8,at:*usize,text:[]const u8)bool{unsafe{
+ if text.len>out.len-*at{return false;}
+ var i:usize=0;while i<text.len{out[*at+i]=text[i];i+=1;}*at+=text.len;return true;
+}}
+pub unsafe fn emit(storage_module:[]const u8,storage_item:[]const u8,target_module:[]const u8,target_item:[]const u8,
+ addend:i64,out:[]u8,written:*usize)u64{unsafe{
+ let wp=written as u64;let op=out.ptr as u64;let on=out.len;
+ let ap=storage_module.ptr as u64;let an=storage_module.len;let bp=storage_item.ptr as u64;let bn=storage_item.len;
+ let cp=target_module.ptr as u64;let cn=target_module.len;let dp=target_item.ptr as u64;let dn=target_item.len;
+ if written==null||(wp&7)!=0||!span(wp,8){return INVALID;}
+ if !span(ap,an)||!span(bp,bn)||!span(cp,cn)||!span(dp,dn)||!span(op,on){return INVALID;}
+ // The four names may overlap each other; out and written are disjoint from every name and from each other.
+ if overlap(wp,8,op,on)||overlap(wp,8,ap,an)||overlap(wp,8,bp,bn)||overlap(wp,8,cp,cn)||overlap(wp,8,dp,dn)
+  ||overlap(op,on,ap,an)||overlap(op,on,bp,bn)||overlap(op,on,cp,cn)||overlap(op,on,dp,dn){return INVALID;}
+ if !named(an)||!named(bn)||!named(cn)||!named(dn){return INVALID;}
+ var storage:[266]u8=[0;266];var sn:usize=0;var target:[266]u8=[0;266];var tn:usize=0;
+ if sym.encode(storage_module,storage_item,slice_from_raw_parts(&storage[0],SYMBOL),&sn)!=sym.OK{return INVALID;}
+ if sym.encode(target_module,target_item,slice_from_raw_parts(&target[0],SYMBOL),&tn)!=sym.OK{return INVALID;}
+ var buffer:[576]u8=[0;576];let text=slice_from_raw_parts(&buffer[0],TEXT);var at:usize=0;
+ if !put(text,&at,slice_from_raw_parts(&storage[0],sn))||!put(text,&at,":\ndq ")||!put(text,&at,slice_from_raw_parts(&target[0],tn)){return INVALID;}
+ if addend!=0{
+  // Magnitude through u64 wrapping negation, so i64::MIN never negates as a signed value.
+  var magnitude=addend as u64;
+  if addend<0{magnitude=wrapping_sub(0,addend as u64);if !put(text,&at," - "){return INVALID;}}
+  else if !put(text,&at," + "){return INVALID;}
+  var digits:[20]u8=[0;20];var n:usize=0;
+  if dec.encode(magnitude,64,false,slice_from_raw_parts(&digits[0],DIGITS),&n)!=dec.OK||!put(text,&at,slice_from_raw_parts(&digits[0],n)){return INVALID;}
+ }
+ if !put(text,&at,"\n"){return INVALID;}
+ if at>on{return CAPACITY;}
+ var i:usize=0;while i<at{out[i]=buffer[i];i+=1;}
+ *written=at;return OK;
+}}

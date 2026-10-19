@@ -1,0 +1,42 @@
+// Composed 64-bit checked variable shift: CR21 full-RCX width guard
+// (count=RCX=1, width=64) then C26 CL variable shift. Count is compared as a
+// complete 64-bit value before any shift; hardware masking is never relied on
+// for the range check. Both dependencies are called into bounded locals and
+// published once. INVALID precedes CAPACITY; failures leave out/written untouched.
+// Local bounds (proved in .md): guard <= 45 bytes into 64, shift <= 12 into 16,
+// combined <= 57 into 80.
+module bootstrap.nasm_checked_variable_shift;
+import bootstrap.nasm_shift_guard as guardm;
+import bootstrap.nasm_variable_shift as shiftm;
+pub const OK:u64=0;pub const INVALID:u64=1;pub const CAPACITY:u64=2;
+pub const NONE:u64=0xffff_ffff_ffff_ffff;
+pub const SHL:u64=0;pub const SHR:u64=1;pub const SAR:u64=2;
+const MAX:u64=0xffff_ffff_ffff_ffff;
+const GUARD:usize=64;const SHIFT:usize=16;const TEXT:usize=80;
+fn span(p:u64,n:u64)bool{return n==0||(p!=0&&n<=MAX-p);}
+fn overlap(a:u64,n:u64,b:u64,m:u64)bool{return n!=0&&m!=0&&a<b+m&&b<a+n;}
+fn dest_ok(d:u64)bool{return d<=15&&d!=4&&d!=5;}
+pub unsafe fn emit(operation:u64,destination:u64,trap_block:u64,out:[]u8,written:*usize)u64{unsafe{
+ let wp=written as u64;let op=out.ptr as u64;
+ if written==null||(wp&7)!=0||!span(wp,8){return INVALID;}
+ if !span(op,out.len){return INVALID;}
+ if overlap(wp,8,op,out.len){return INVALID;}
+ if operation>SAR||!dest_ok(destination)||trap_block==NONE{return INVALID;}
+ // Full 64-bit RCX count vs 64; 64-byte local covers the 45-byte maximum.
+ var gbuf:[64]u8=[0;64];var glen:usize=0;
+ let gs=guardm.emit(1,64,trap_block,slice_from_raw_parts(&gbuf[0],GUARD),&glen);
+ if gs!=guardm.OK{return INVALID;}
+ if glen>GUARD{return INVALID;}
+ // Variable shift by CL; 16-byte local covers the 12-byte maximum.
+ var sbuf:[16]u8=[0;16];var slen:usize=0;
+ let ss=shiftm.emit(operation,destination,slice_from_raw_parts(&sbuf[0],SHIFT),&slen);
+ if ss!=shiftm.OK{return INVALID;}
+ if slen>SHIFT{return INVALID;}
+ if glen>MAX-slen{return INVALID;}
+ let total=glen+slen;
+ if total>TEXT{return INVALID;}
+ if total>out.len{return CAPACITY;}
+ var i:usize=0;while i<glen{out[i]=gbuf[i];i+=1;}
+ var j:usize=0;while j<slen{out[glen+j]=sbuf[j];j+=1;}
+ *written=total;return OK;
+}}

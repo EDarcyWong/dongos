@@ -562,9 +562,9 @@ unsafe fn process_call(frame:*abi.Frame)!usize{unsafe{
             if (*frame).rsi>=procs.CONFIGS as u64||(*frame).rsi==12{return error.proc.Stale;}
             try launch((*frame).rsi as usize,(*frame).rdx,(*frame).r10,slice_from_raw_parts(null as *const u8,0));
         }else{
-            let bytes=(*frame).rdx;if bytes==0||bytes>262144{return error.Protocol;}
+            let bytes=(*frame).rdx;if bytes==0||bytes>proc.MAX_EXEC_IMAGE as u64{return error.Protocol;}
             try memory.check_range(CURRENT,(*frame).rsi,bytes as usize,false);
-            if EXECUTABLE==null{var held=resources.Block{physical:0,virtual:0,pages:0};try resources.allocate(64,1,&held);EXECUTABLE=held.virtual as *u8;}
+            if EXECUTABLE==null{var held=resources.Block{physical:0,virtual:0,pages:0};try resources.allocate((proc.MAX_EXEC_IMAGE+4095)/4096,1,&held);EXECUTABLE=held.virtual as *u8;}
             try memory.copy_in(CURRENT,(*frame).rsi,slice_from_raw_parts(EXECUTABLE,bytes as usize));
             try launch(12,(*CATALOG).states[12].generation,(*frame).r10,slice_from_raw_parts(EXECUTABLE as *const u8,bytes as usize));
         }

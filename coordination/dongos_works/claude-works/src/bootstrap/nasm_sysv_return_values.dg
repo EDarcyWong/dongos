@@ -1,0 +1,62 @@
+// Load a SysV INTEGER return value from fixed frame slots [rbp-offset] into
+// RAX (INTEGER_PAIR: RAX then RDX). Words, width and extension come from the
+// integrated C14 sysv_return_plan; memory operands from the integrated CR8
+// nasm_memory_operand.encode(RBP, -offset). The whole text is built in local
+// scratch; out and written are written once, after every check.
+module bootstrap.nasm_sysv_return_values;
+import bootstrap.sysv_return_plan as rp;
+import bootstrap.nasm_memory_operand as mem;
+pub const OK:u64=0;pub const INVALID:u64=1;pub const CAPACITY:u64=2;
+pub const MAX_FRAME:usize=4080;
+const MAX:u64=0xffff_ffff_ffff_ffff;
+const RBP:u64=5;
+// Length bound (offset <= 4080, so the operand is at most "[rbp - 4080]" = 12):
+//   longest prefix "movsxd rax, dword " (18) + 12 + "\n" (1) = 31 for one word;
+//   INTEGER_PAIR: 2 * ("mov rax, qword " (15) + 12 + 1) = 56.
+//   So every text is <= 56 <= TEXT. Every append is still bounds-checked.
+const TEXT:usize=64;
+fn span(p:u64,n:u64)bool{return n==0||(p!=0&&n<=MAX-p);}
+fn overlap(a:u64,n:u64,b:u64,m:u64)bool{return n!=0&&m!=0&&a<b+m&&b<a+n;}
+// A used slot: 8-aligned, 8 <= offset <= frame_bytes, so [rbp-offset, rbp-offset+8) is inside the frame.
+fn slot(offset:usize,frame_bytes:usize)bool{return offset>=8&&offset<=frame_bytes&&(offset&7)==0;}
+// One-word load chosen by the C14 width/extension.
+fn prefix(width:usize,extension:u64)[]const u8{
+ if width==64{return "mov rax, qword ";}
+ if extension==rp.SIGN{
+  if width==8{return "movsx rax, byte ";}if width==16{return "movsx rax, word ";}return "movsxd rax, dword ";
+ }
+ if width==8{return "movzx rax, byte ";}if width==16{return "movzx rax, word ";}return "mov eax, dword ";
+}
+// Append text at *at within out; false (without writing) if it would not fit.
+unsafe fn put(out:[]u8,at:*usize,text:[]const u8)bool{unsafe{
+ if text.len>out.len-*at{return false;}
+ var i:usize=0;while i<text.len{out[*at+i]=text[i];i+=1;}*at+=text.len;return true;
+}}
+// "<head>[rbp - offset]\n" with the CR8 operand.
+unsafe fn load(out:[]u8,at:*usize,head:[]const u8,offset:usize)bool{unsafe{
+ var text:[24]u8=[0;24];var n:usize=0;
+ if mem.encode(RBP,-(offset as i64),slice_from_raw_parts(&text[0],24),&n)!=mem.OK{return false;}
+ return put(out,at,head)&&put(out,at,slice_from_raw_parts(&text[0],n))&&put(out,at,"\n");
+}}
+pub unsafe fn emit(kind:u64,frame_bytes:usize,low_offset:usize,high_offset:usize,out:[]u8,written:*usize)u64{unsafe{
+ let wp=written as u64;let op=out.ptr as u64;
+ if written==null||(wp&7)!=0||!span(wp,8){return INVALID;}
+ if !span(op,out.len){return INVALID;}
+ if overlap(wp,8,op,out.len){return INVALID;}
+ if frame_bytes>MAX_FRAME||(frame_bytes&15)!=0{return INVALID;}
+ var p=rp.Plan{words:0,width_bits:0,extension:rp.NONE};
+ if rp.plan(kind,&p)!=rp.OK{return INVALID;}
+ // Every unused offset must be zero; INTEGER_PAIR needs two distinct slots.
+ if p.words==0{if low_offset!=0||high_offset!=0{return INVALID;}}
+ else if p.words==1{if !slot(low_offset,frame_bytes)||high_offset!=0{return INVALID;}}
+ else if !slot(low_offset,frame_bytes)||!slot(high_offset,frame_bytes)||low_offset==high_offset{return INVALID;}
+ var buffer:[64]u8=[0;64];let text=slice_from_raw_parts(&buffer[0],TEXT);var at:usize=0;
+ if p.words==1{
+  if !load(text,&at,prefix(p.width_bits,p.extension),low_offset){return INVALID;}
+ }else if p.words==2{
+  if !load(text,&at,"mov rax, qword ",low_offset)||!load(text,&at,"mov rdx, qword ",high_offset){return INVALID;}
+ }
+ if at>out.len{return CAPACITY;}
+ var i:usize=0;while i<at{out[i]=buffer[i];i+=1;}
+ *written=at;return OK;
+}}

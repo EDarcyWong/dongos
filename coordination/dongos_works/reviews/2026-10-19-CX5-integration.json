@@ -1,0 +1,49 @@
+{
+  "task": "codex:CX5",
+  "verification": {
+    "passed": true,
+    "checks": [
+      {
+        "spec": "module:lang.tests.test_bss_compatibility",
+        "passed": true,
+        "tests": 1,
+        "skips": 0,
+        "returncode": 0,
+        "cancelled": false,
+        "timed_out": false,
+        "elapsed_seconds": 1.857
+      },
+      {
+        "spec": "module:lang.tests.test_globals_native",
+        "passed": true,
+        "tests": 3,
+        "skips": 0,
+        "returncode": 0,
+        "cancelled": false,
+        "timed_out": false,
+        "elapsed_seconds": 2.269
+      },
+      {
+        "spec": "module:lang.tests.test_alignment_native",
+        "passed": true,
+        "tests": 2,
+        "skips": 0,
+        "returncode": 0,
+        "cancelled": false,
+        "timed_out": false,
+        "elapsed_seconds": 1.85
+      }
+    ],
+    "source_stable": true,
+    "fingerprint": {
+      "lang/dongc/emitter.py": "89f60d81701269a38e0865aa281ac18e1e056e62ccfd495a566c44d4708164d5",
+      "lang/tests/test_bss_compatibility.py": "aa93801117dd73cd33f66c19114b63d2d4ed0fbb9fc13144fc2f97a2423a6d91",
+      "codex-works/deliveries/CX5.md": "3dd0567bf5729538716f3953a95281415161028d16560287d169436cc4d56fe7"
+    },
+    "summary": "定向复验通过，等待源码/契约审查",
+    "finished_at": "2026-10-19T08:04:40+00:00",
+    "job": "84bc452304474cd7b8d5a9b0fe914ef2"
+  },
+  "review": "已审查BSS节相对padding和最大节基址对齐；正式6项0skip来源稳定，主线6项0skip；独立ELF/COFF节头64字节对齐及原生debug/release零填充/写入验证通过。已实际在主线修改相应源码和永久测试，保留Wall/Werror。",
+  "status": "integrated"
+}

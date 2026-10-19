@@ -177,10 +177,16 @@ class Emitter:
         if sum(len(obj.data) for obj in objects) > 16 * 1024 * 1024:
             fail("E0601", self.module.token, "static storage exceeds the 16 MiB bootstrap limit")
         sections = {".rodata": [], ".data": [], ".bss": []}
+        bss_alignment = 4  # NASM's default .bss alignment, raised by each object.
         for obj in objects:
             name = ".rodata" if not obj.mutable else ".bss" if not obj.relocations and not any(obj.data) else ".data"
             lines = sections[name]
-            lines += [f"alignb {obj.alignment}" if name == ".bss" else f"align {obj.alignment}, db 0",
+            if name == ".bss":
+                bss_alignment = max(bss_alignment, obj.alignment)
+            # Some vendor NASM 2.x alignb macros expand warning-stack directives
+            # the assembler itself does not support. Reserve section-relative
+            # padding directly; the section header below also aligns its base.
+            lines += [f"    resb ({obj.alignment} - ($-$$) % {obj.alignment}) % {obj.alignment}" if name == ".bss" else f"align {obj.alignment}, db 0",
                       "$" + obj.symbol + ":"]
             if name == ".bss":
                 lines.append(f"    resb {len(obj.data)}")
@@ -201,7 +207,8 @@ class Emitter:
         result = ["%if __NASM_MAJOR__ >= 3", "[warning push]", "[warning -reloc-abs-qword]", "%endif"] if objects else []
         for name, lines in sections.items():
             if lines:
-                result += ["section " + name] + lines
+                suffix = f" align={bss_alignment}" if name == ".bss" else ""
+                result += ["section " + name + suffix] + lines
         if objects:
             result += ["%if __NASM_MAJOR__ >= 3", "[warning pop]", "%endif"]
         return result

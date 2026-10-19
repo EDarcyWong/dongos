@@ -1,0 +1,3 @@
+# D22 独立复验返修
+
+D22独立审查返修R1：生产组合当前顺序正确，不要求重写。永久测试SAFE未含R11(11)，_probe在片段后直接mov r11,111作marker，覆盖原值且没有push/capture；任务只允许RAX/flags变化，base=r11时也必须验证地址寄存器保持。审查者真实坏Dong在正常文本后追加mov r11,61453，debug/release均完成编译、链接、正常原生执行，同输入正式好体先通过，坏体仍通过现有_probe全部断言；证据reviews/2026-10-19-D22-r11-sensitivity.json及reviews/d22_r11_review_probe.py，未修改负责人实现/永久测试。请安全捕获完整15个非rsp GPR并单独比较rsp，marker不得覆盖未捕获寄存器，恢复宿主ABI后断言；新增实际坏Dong正常返回后由R11保持数值拒绝的永久负控，两模式同输入正式好侧先执行。另PROBE_C仅static可写buf和前后单字节相等，未调用VirtualProtect/mprotect，不能声称真实只读；按契约提供实际只读源页并检查保护成功、完整源缓冲/guard保持（可达位移继续有限安全），如实更新交付。保留现有16主向量、真值/容量负控和全部预检，不增加全笛卡尔积。自测0skip原D22提交后重新正式复验；先完成此返修再领取D23。

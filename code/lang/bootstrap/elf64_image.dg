@@ -1,0 +1,61 @@
+// Bounded static ELF64 ET_EXEC container (x86-64, little-endian, System V):
+// a 4096-byte header page (ELF header + 1 or 2 program headers, rest zero),
+// the code at file offset 4096 mapped RX at BASE, and optionally the data
+// (plus BSS) page-aligned after it, mapped RW. No dynamic linking, symbols,
+// sections or relocations: addresses inside code are resolved upstream for
+// this fixed layout. Everything is validated and the layout is computed
+// before out is touched; after that the image is written and cannot fail.
+module bootstrap.elf64_image;
+pub const OK:u64=0;pub const INVALID:u64=1;pub const CAPACITY:u64=2;
+pub const BASE:u64=0x40_0000;pub const PAGE:usize=4096;pub const TEXT_OFFSET:usize=4096;
+pub const LIMIT:usize=0x100_0000;                     // 16 MiB: code, data, bss and the whole file
+const MAX:u64=0xffff_ffff_ffff_ffff;
+fn span(p:u64,n:u64)bool{return n==0||(p!=0&&n<=MAX-p);}
+fn overlap(a:u64,n:u64,b:u64,m:u64)bool{return n!=0&&m!=0&&a<b+m&&b<a+n;}
+// Little-endian field stores into the already range-checked header page.
+fn put(out:[]u8,at:usize,value:u64,bytes:usize)void{
+ var i:usize=0;while i<bytes{out[at+i]=((value>>(8*i as u64))&255) as u8;i+=1;}
+}
+fn segment(out:[]u8,at:usize,flags:u64,offset:u64,address:u64,file_size:u64,memory_size:u64)void{
+ put(out,at,1,4);put(out,at+4,flags,4);put(out,at+8,offset,8);put(out,at+16,address,8);put(out,at+24,address,8);
+ put(out,at+32,file_size,8);put(out,at+40,memory_size,8);put(out,at+48,4096,8);
+}
+pub unsafe fn emit(code:[]const u8,data:[]const u8,bss_bytes:usize,entry_offset:usize,out:[]u8,written:*usize)u64{unsafe{
+ let wp=written as u64;let cp=code.ptr as u64;let dp=data.ptr as u64;let op=out.ptr as u64;
+ let cn=code.len;let dn=data.len;let on=out.len;
+ if written==null||(wp&7)!=0||!span(wp,8){return INVALID;}
+ if !span(cp,cn)||!span(dp,dn)||!span(op,on){return INVALID;}
+ // code and data may overlap each other; out and written are disjoint from both whole inputs and from each other.
+ if overlap(wp,8,op,on){return INVALID;}
+ if overlap(wp,8,cp,cn)||overlap(wp,8,dp,dn)||overlap(op,on,cp,cn)||overlap(op,on,dp,dn){return INVALID;}
+ if cn==0||entry_offset>=cn{return INVALID;}
+ if cn>LIMIT||dn>LIMIT||bss_bytes>LIMIT{return INVALID;}
+ // Layout. Every term is <= 16 MiB + 4096, so no sum below can overflow:
+ //   code_end = 4096 + code.len <= 16 MiB + 4096; it must itself be <= LIMIT (it is part of the file).
+ //   data_offset = align_up(code_end, 4096) <= LIMIT; file_size = data_offset + data.len <= LIMIT.
+ let code_end=TEXT_OFFSET+cn;
+ if code_end>LIMIT{return INVALID;}
+ var segments:u64=1;var data_offset:usize=0;var file_size=code_end;
+ if dn!=0||bss_bytes!=0{
+  segments=2;data_offset=(code_end+PAGE-1)&~(PAGE-1);
+  if data_offset>LIMIT||dn>LIMIT-data_offset{return INVALID;}
+  file_size=data_offset+dn;
+ }
+ // Mapped pages: text <= LIMIT/4096 = 4096; data+bss <= (16 MiB + 16 MiB)/4096 + 1 = 8193; total <= 12289
+ // <= kernel MAX_PAGES (16384). Highest address BASE + LIMIT + LIMIT + 4096 is far below USER_LIMIT (2^39).
+ if file_size>on{return CAPACITY;}
+ // Publish: header page zero, then fields; code; zero padding; data. Nothing below can fail.
+ var i:usize=0;while i<TEXT_OFFSET{out[i]=0;i+=1;}
+ out[0]=0x7f;out[1]=0x45;out[2]=0x4c;out[3]=0x46;out[4]=2;out[5]=1;out[6]=1;      // ELFMAG, CLASS64, LSB, version 1, OSABI 0
+ put(out,16,2,2);put(out,18,62,2);put(out,20,1,4);                                // ET_EXEC, EM_X86_64, EV_CURRENT
+ put(out,24,BASE+(TEXT_OFFSET+entry_offset) as u64,8);put(out,32,64,8);put(out,40,0,8);
+ put(out,48,0,4);put(out,52,64,2);put(out,54,56,2);put(out,56,segments,2);         // flags, ehsize, phentsize, phnum
+ segment(out,64,5,0,BASE,code_end as u64,code_end as u64);                          // text: R+X
+ if segments==2{segment(out,120,6,data_offset as u64,BASE+data_offset as u64,dn as u64,(dn+bss_bytes) as u64);}   // data: R+W
+ i=0;while i<cn{out[TEXT_OFFSET+i]=code[i];i+=1;}
+ if segments==2{
+  i=code_end;while i<data_offset{out[i]=0;i+=1;}
+  i=0;while i<dn{out[data_offset+i]=data[i];i+=1;}
+ }
+ *written=file_size;return OK;
+}}

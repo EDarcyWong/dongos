@@ -25,6 +25,7 @@ python coordination/coordinate.py stop
 ```powershell
 python coordination/coordinate.py sync      # 导入任务书和新交付
 python coordination/coordinate.py validate  # 状态、依赖、文件归属校验
+python coordination/coordinate.py --project dongos timing claude:C43  # 完整时间线和每轮耗时；只读，升级后无需等待服务重启
 python coordination/coordinate.py doctor    # 检测可执行文件/API，不执行任务
 python coordination/coordinate.py probe codex
 python coordination/coordinate.py probe claude
@@ -36,6 +37,8 @@ node --test coordination/tests/client_api.test.js
 Web 支持分配任务、手动领取、隔离副本执行、提交、独立定向测试、只读审查、返修、验收、集成登记及持续日志。状态每2秒更新。全局自动化默认关闭；开启后仍须逐项启用自动派单/复验，返修不会无限重试。取消的旧定时任务不会恢复。
 
 任务页提供实时进度图：七种状态分列显示任务卡，按当前负责人、搜索词和状态筛选统计；分别显示已验收（含集成）及已集成数量。卡片标注等待的依赖和实际运行/排队的作业，点击可查看任务详情，再跳转前置任务。状态色条表示任务数量占比，不推测源码完成百分比；暂停、返修和待复验均不计入已验收。每2秒随当前项目快照更新，切换项目清除旧图；原任务表继续保留。
+
+任务详情的“时间记录”显示发布、首次领取、每次提交完成、复验、要求返修、任务书修改及状态更新时间，并提供完整操作时间线（北京时间）。每轮实现/返修分别记录领取至提交的自然经过时长、明确暂停时长及等待领取时长；办理时长扣除明确暂停，不计提交后等待复验时间，不代表实际编辑代码或模型运行的净耗时。释放/中断结束的轮次单独标记为未提交，重新领取另记一轮。复验显示排队/开始/结束、执行时长和定向测试耗时合计；新增开始事件只对升级后启动的复验有效。历史事件缺失则显示未知，不使用导入时间冒充发布时间。HTTP任务详情及MCP get_task提供同样的timing字段；时间统计只读派生，不修改任务版本或验收证据。服务代码升级需重启协调器后生效。
 
 页面顶部另提供“整体任务图”，展示系统 P0–P9 和语言 L0–L3 的阶段关系。点击阶段可查看已完成项、尚待完成项及证据位置；阶段结论明确标注核对日期，协作任务统计随实时快照更新，不受任务筛选影响。图源保存在各项目任务目录的 `roadmap.json`，可读的 Mermaid 版本为 `progress-map.md`；DongOS 版本见 [整体任务图](dongos_works/progress-map.md)。页面可直接下载 Markdown。切换项目时读取对应项目的图；未配置或配置错误不会阻断任务列表。阶段状态由核对证据后维护，不按组件数量自动推断整机完成。
 
@@ -79,6 +82,22 @@ python coordinate.py --home "D:\coordination-data" serve --port 8766
 ```
 
 控制台仅管理自己服务，取消的旧自动化保持取消。每个项目的自动化开关及运行记录分别保存。
+
+## 状态库备份与恢复
+
+`*_works/.local/` 不纳入 Git：克隆仓库不会取得 SQLite、作业日志或候选副本。任务书中的“待领取”常是发布时历史，不能据此恢复验收、集成、返修和归档事实。现在状态库缺失/为空而已有非空快照时会停止启动，保留快照，不再重导入覆盖。
+
+启动服务、项目首次加载和手动同步前自动生成 `.local/backups/<时间-编号>/` SQLite 备份（含 events/jobs/settings）。也可执行 `python coordinate.py --project dongos backup`。备份仍在 Git 忽略目录内；迁移机器时须停止服务并保存整个 works（包括 `.local`），或另存到独立备份位置，不能用 Git 代替数据备份。
+
+有完整SQLite备份时优先核对原库。仅剩派生快照时，人工核对逐项历史审查、验收指纹及集成实物，制作绑定快照SHA256的逐项审计JSON，再运行：
+
+```powershell
+python coordinate.py --project dongos recover-state --snapshot <原快照.json> --audit <逐项审计.json>
+# 先核对预览，再使用同一组文件应用
+python coordinate.py --project dongos recover-state --snapshot <原快照.json> --audit <逐项审计.json> --apply
+```
+
+恢复仅允许空库或只有导入事件且无作业的重建库；拒绝覆盖真实领取/提交等操作。应用前备份，事务内复查实物和版本，原子恢复、增加rev、记录来源、关闭自动化；不重新授予验收或伪造丢失作业。DongOS本次的逐项依据见[恢复审计](dongos_works/reviews/2026-10-19-state-recovery.md)。
 
 ## LM Studio：只接简单任务
 

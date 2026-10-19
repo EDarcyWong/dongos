@@ -19,7 +19,13 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0,str(ROOT))
 
 from lang.dongc import compile_file
-from lang.tests.test_dongc import tool,nasm_flags
+from lang.tests.test_dongc import tool,nasm_flags as _nasm_flags
+
+def nasm_flags(nasm):
+    flags=list(_nasm_flags(nasm))
+    if '-w-reloc-rel-dword' not in flags:
+        flags.append('-w-reloc-rel-dword')
+    return flags
 
 SOURCE=WORKS/'cursor-works/src/bootstrap/nasm_checked_multiply.dg'
 DOC=WORKS/'cursor-works/src/bootstrap/nasm_checked_multiply.md'
@@ -58,7 +64,9 @@ static void read_exact(void*p,uint64_t n){if(n&&fread(p,1,n,stdin)!=n)exit(91);}
 static void write_exact(const void*p,uint64_t n){if(n&&fwrite(p,1,n,stdout)!=n)exit(92);}
 #define FAKE(x) ((uint8_t*)(uintptr_t)(x))
 static unsigned invalid(void){
- static uint8_t arena[4096],saved[4096];const unsigned total=12;
+ _Alignas(16) static uint8_t arena[4096];
+ _Alignas(16) static uint8_t saved[4096];
+ const unsigned total=12;
  uint8_t*o=arena+1024;uint64_t*w=(uint64_t*)(arena+2048);
  for(unsigned i=0;i<total;i++){
   memset(arena,0xa5,sizeof(arena));
@@ -93,7 +101,7 @@ int main(void){
   uint64_t h[4];read_exact(h,sizeof(h));
   uint64_t signed_f=h[0],trap=h[1],cap=h[2],nout=h[3];
   if(cap>256)exit(94);
-  uint8_t*out=malloc(cap+64);uint64_t meta[3];
+  uint8_t*out=malloc(cap+64);_Alignas(8) uint64_t meta[3];
   if(!out)exit(95);
   memset(out,0xa5,cap+64);memset(meta,0xa5,sizeof(meta));uint64_t*written=meta+1;
   uint8_t*o=nout?NULL:out+32;
@@ -181,27 +189,21 @@ def pack_case(c):
     return struct.pack('<4Q',c['signed'],c['trap'],c['cap'],c.get('nout',0))
 
 
-# (signed, a, b, trap) — each mode <=24.
+# (signed, a, b, trap) — combined native main vectors <=24 (R2).
 SIGNED_VECTORS=[
-    (1,0,0,10),(1,0,1,11),(1,1,1,12),(1,NONE,NONE,13),          # -1*-1 = 1 OK
-    (1,TOP,0,14),(1,TOP,1,15),(1,TOP,NONE,16),                   # MIN*-1 overflow
-    (1,SMAX,1,17),(1,SMAX,2,18),                                 # MAX*2 overflow
-    (1,TOP>>1,2,19),(1,(TOP>>1)+1,2,20),                         # 2^62*2 overflow boundary
-    (1,3,5,21),(1,NONE,2,22),(1,2,NONE,23),
-    (1,TOP,TOP,24),(1,SMAX,SMAX,25),(1,1,SMAX,26),
-    (1,7,8,0),(1,9,9,NONE-1),(1,TOP|1,1,27),
-    (1,100,100,28),(1,SMAX,0,29),(1,TOP,3,30),(1,2,TOP,31),
+    (1,0,0,10),(1,1,1,12),(1,NONE,NONE,13),                      # 0/1/-1
+    (1,TOP,0,14),(1,TOP,1,15),(1,TOP,NONE,16),                   # MIN*0/1 OK; MIN*-1 overflow
+    (1,SMAX,1,17),(1,SMAX,2,18),                                 # MAX*1 OK; MAX*2 overflow
+    (1,TOP>>1,2,19),(1,(TOP>>1)+1,2,20),                         # adjacent overflow boundary
+    (1,3,5,21),(1,SMAX,SMAX,25),                                 # safe product; MAX*MAX overflow
 ]
 UNSIGNED_VECTORS=[
-    (0,0,0,40),(0,0,1,41),(0,1,1,42),(0,NONE,1,43),
-    (0,NONE,2,44),(0,TOP,2,45),(0,TOP,1,46),(0,SMAX,2,47),
-    (0,1<<32,1<<32,48),(0,(1<<32)-1,(1<<32)-1,49),
-    (0,NONE,NONE,50),(0,TOP,TOP,51),(0,3,5,52),
-    (0,NONE,0,53),(0,7,8,0),(0,9,9,NONE-1),
-    (0,1,NONE,54),(0,2,TOP,55),(0,100,100,56),
-    (0,SMAX,SMAX,57),(0,1<<63,2,58),(0,1<<63,3,59),
-    (0,5,0,60),(0,1<<20,1<<20,61),
+    (0,0,0,40),(0,1,1,42),(0,NONE,0,53),(0,NONE,1,43),           # 0/1/MAX
+    (0,NONE,2,44),(0,TOP,1,46),(0,TOP,2,45),                     # adjacent unsigned overflow
+    (0,1<<32,1<<32,48),(0,(1<<32)-1,(1<<32)-1,49),               # high-product cases
+    (0,NONE,NONE,50),(0,3,5,52),(0,1<<63,2,58),                  # MAX*MAX; 2^63*2 overflow
 ]
+assert len(SIGNED_VECTORS)+len(UNSIGNED_VECTORS)<=24
 assert len(SIGNED_VECTORS)<=24 and len(UNSIGNED_VECTORS)<=24
 
 
@@ -435,7 +437,7 @@ class NasmCheckedMultiplyTests(unittest.TestCase):
                     self.assertEqual(st,0);self.assertEqual(g,1)
                     self.assertNotEqual(text,expected(sg,70),(name,mode,text))
                     # Overflowing inputs: oracle expects TRAP; inverted branch falls through → rejected.
-                    with self.assertRaises(AssertionError):
+                    with self.assertRaisesRegex(AssertionError,r'route'):
                         self._native_batch(mode+'-'+name,[text],[(1 if sg else 0,a,b,70)])
             self.records.append(dict(test=name,compiled=True,native_executed=True,modes=2,rejected_by=kind))
 

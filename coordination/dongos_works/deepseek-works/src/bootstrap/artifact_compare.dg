@@ -1,0 +1,57 @@
+// Byte-exact comparison of two in-memory build artifacts (stage1/stage2
+// consistency checking primitive). Both inputs are read-only views; they may
+// alias each other, be fully identical, or partially overlap. The 32-byte
+// 8-aligned Result is published exactly once, after the complete local
+// computation: kind 0 identical (offset = common length, byte values 256),
+// kind 1 first differing byte inside the common prefix (offset = first
+// difference index, byte values 0..255), kind 2 equal common prefix but
+// different lengths (offset = min of the two lengths, the shorter side is 256
+// = absent, the longer side carries its byte at that offset). The common
+// prefix is scanned first, so a byte difference inside it is kind 1 even when
+// the lengths differ. Every normal comparison (including unequal) returns OK;
+// INVALID only means an illegal descriptor and leaves the complete Result,
+// both inputs and all guards untouched. No allocation, no global mutable
+// state, no OS calls, only constant-size locals.
+module bootstrap.artifact_compare;
+pub const OK:u64=0;pub const INVALID:u64=1;
+const ABSENT:u64=256;
+const MAX:u64=0xffff_ffff_ffff_ffff;
+pub struct Result{pub kind:u64,pub offset:usize,pub expected:u64,pub actual:u64}
+fn span(p:u64,n:u64)bool{return n==0||(p!=0&&n<=MAX-p);}
+fn overlap(a:u64,n:u64,b:u64,m:u64)bool{return n!=0&&m!=0&&a<b+m&&b<a+n;}
+// Descriptor gate: out present, 8-aligned and its full 32 bytes do not wrap;
+// both inputs' full declared ranges do not wrap (empty may be NULL); the full
+// 32-byte out is separate from both complete declared input ranges. The inputs
+// are allowed to overlap each other. Nothing is read or written before every
+// descriptor/alias check has passed.
+unsafe fn valid(expected:[]const u8,actual:[]const u8,out:*Result)bool{unsafe{
+ if out==null{return false;}
+ let op=out as u64;
+ if (op&7)!=0||!span(op,32){return false;}
+ let ep=expected.ptr as u64;let ap=actual.ptr as u64;
+ if !span(ep,expected.len)||!span(ap,actual.len){return false;}
+ if overlap(op,32,ep,expected.len)||overlap(op,32,ap,actual.len){return false;}
+ return true;
+}}
+pub unsafe fn compare(expected:[]const u8,actual:[]const u8,out:*Result)u64{unsafe{
+ if !valid(expected,actual,out){return INVALID;}
+ let le=expected.len;let la=actual.len;
+ var n:usize=le;if la<n{n=la;}
+ // Local computation only; the Result is published after the loop finishes.
+ var kind:u64=0;var offset:usize=n;var ebyte:u64=ABSENT;var abyte:u64=ABSENT;
+ var i:usize=0;
+ while i<n{
+  let x:u8=expected[i];let y:u8=actual[i];
+  if x!=y{kind=1;offset=i;ebyte=x as u64;abyte=y as u64;break;}
+  i+=1;
+ }
+ if kind==0{
+  if le!=la{
+   kind=2;
+   if le<la{abyte=actual[offset] as u64;}
+   else{ebyte=expected[offset] as u64;}
+  }
+ }
+ (*out).kind=kind;(*out).offset=offset;(*out).expected=ebyte;(*out).actual=abyte;
+ return OK;
+}}

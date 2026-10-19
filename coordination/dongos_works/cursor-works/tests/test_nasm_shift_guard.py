@@ -19,7 +19,13 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0,str(ROOT))
 
 from lang.dongc import compile_file
-from lang.tests.test_dongc import tool,nasm_flags
+from lang.tests.test_dongc import tool,nasm_flags as _nasm_flags
+
+def nasm_flags(nasm):
+    flags=list(_nasm_flags(nasm))
+    if '-w-reloc-rel-dword' not in flags:
+        flags.append('-w-reloc-rel-dword')
+    return flags
 
 SOURCE=WORKS/'cursor-works/src/bootstrap/nasm_shift_guard.dg'
 DOC=WORKS/'cursor-works/src/bootstrap/nasm_shift_guard.md'
@@ -62,7 +68,9 @@ static void read_exact(void*p,uint64_t n){if(n&&fread(p,1,n,stdin)!=n)exit(91);}
 static void write_exact(const void*p,uint64_t n){if(n&&fwrite(p,1,n,stdout)!=n)exit(92);}
 #define FAKE(x) ((uint8_t*)(uintptr_t)(x))
 static unsigned invalid(void){
- static uint8_t arena[4096],saved[4096];const unsigned total=14;
+ _Alignas(16) static uint8_t arena[4096];
+ _Alignas(16) static uint8_t saved[4096];
+ const unsigned total=18;
  uint8_t*o=arena+1024;uint64_t*w=(uint64_t*)(arena+2048);
  for(unsigned i=0;i<total;i++){
   memset(arena,0xa5,sizeof(arena));
@@ -81,7 +89,11 @@ static unsigned invalid(void){
    case 9:st=dong_shift_guard_emit(16,64,0,o,128,w);break;
    case 10:st=dong_shift_guard_emit(0,7,0,o,128,w);break;
    case 11:st=dong_shift_guard_emit(0,64,UINT64_MAX,o,128,w);break;
-   case 12:st=dong_shift_guard_emit(0,128,0,o,0,w);break;
+   case 12:st=dong_shift_guard_emit(16,64,0,o,0,w);break;
+   case 13:st=dong_shift_guard_emit(0,0,0,o,0,w);break;
+   case 14:st=dong_shift_guard_emit(0,7,0,o,0,w);break;
+   case 15:st=dong_shift_guard_emit(0,128,0,o,0,w);break;
+   case 16:st=dong_shift_guard_emit(0,UINT64_MAX,0,o,0,w);break;
    default:st=dong_shift_guard_emit(0,64,UINT64_MAX,o,0,w);break;
   }
   if(st!=1||memcmp(saved,arena,sizeof(arena))){
@@ -99,7 +111,7 @@ int main(void){
   uint64_t h[5];read_exact(h,sizeof(h));
   uint64_t reg=h[0],width=h[1],trap=h[2],cap=h[3],nout=h[4];
   if(cap>256)exit(94);
-  uint8_t*out=malloc(cap+64);uint64_t meta[3];
+  uint8_t*out=malloc(cap+64);_Alignas(8) uint64_t meta[3];
   if(!out)exit(95);
   memset(out,0xa5,cap+64);memset(meta,0xa5,sizeof(meta));uint64_t*written=meta+1;
   uint8_t*o=nout?NULL:out+32;
@@ -168,7 +180,7 @@ assert len(NATIVE_VECTORS)<=24
 
 
 class NasmShiftGuardTests(unittest.TestCase):
-    PREFLIGHTS=14
+    PREFLIGHTS=18
 
     @classmethod
     def setUpClass(cls):
@@ -250,14 +262,23 @@ class NasmShiftGuardTests(unittest.TestCase):
                     cases+=[item(reg,width,trap),
                             item(reg,width,trap,cap=need+3),
                             item(reg,width,trap,cap=max(0,need-1))]
-        cases+=[item(16,64,0,cap=64,status=INVALID),
+        max_need=need_total(15,64,NONE-1)
+        self.assertEqual(max_need,45)
+        cases+=[item(15,64,NONE-1),
+                item(15,64,NONE-1,cap=max_need),
+                item(15,64,NONE-1,cap=max_need-1),
+                item(16,64,0,cap=64,status=INVALID),
                 item(0,0,0,cap=64,status=INVALID),
                 item(0,7,0,cap=64,status=INVALID),
                 item(0,128,0,cap=64,status=INVALID),
                 item(0,NONE,0,cap=64,status=INVALID),
                 item(0,64,NONE,cap=64,status=INVALID),
                 item(0,64,0,nout=1,cap=64,status=INVALID),
+                item(16,64,0,nout=0,cap=0,status=INVALID),
+                item(0,0,0,nout=0,cap=0,status=INVALID),
                 item(0,7,0,nout=0,cap=0,status=INVALID),
+                item(0,128,0,nout=0,cap=0,status=INVALID),
+                item(0,NONE,0,nout=0,cap=0,status=INVALID),
                 item(0,64,NONE,nout=0,cap=0,status=INVALID),
                 item(0,64,0,cap=0,status=CAPACITY)]
         self.run_both(cases,'seeded')
@@ -293,21 +314,53 @@ class NasmShiftGuardTests(unittest.TestCase):
             for index,(vec,out) in enumerate(zip(NATIVE_VECTORS,outs)):
                 reg,width,cval,trap=vec
                 self.assertIn(reg,SAFE,(mode,index,reg))
-                got=self._probe(mode,index,reg,cval,width,trap,out)
+                marker,captured=self._probe(mode,index,reg,cval,width,trap,out)
                 want=TRAP if py_route(cval,width)=='trap' else FALL
-                self.assertEqual(got,want,(mode,index,vec,py_route(cval,width),out,got))
+                self.assertEqual(marker,want,(mode,index,vec,py_route(cval,width),out,marker))
+                self._assert_preserved(mode,index,reg,cval,captured)
                 probed+=1
         self.records.append(dict(test='dong-assemble-native-shift-guard',assemble_samples=len(samples),
                                  assembled=assembled,native_vectors=len(NATIVE_VECTORS),probed=probed,
-                                 modes=2,formats=2,passed=True))
+                                 register_preserve=True,modes=2,formats=2,passed=True))
 
-    def _probe(self,mode,index,reg,cval,width,trap,text:bytes)->int:
-        rname=REGS64[reg].decode()
+    def _expected_regs(self,reg,cval,observe):
+        expected={}
+        for r in observe:
+            expected[r]=(cval&NONE) if r==reg else (0x1111111111111100+r)
+        return expected
+
+    def _assert_preserved(self,mode,index,reg,cval,captured):
+        expected=self._expected_regs(reg,cval,sorted(captured))
+        for r,want in expected.items():
+            self.assertEqual(captured[r],want,
+                             (mode,index,'reg%d preserved'%r,REGS64[r].decode(),
+                              hex(captured[r]),hex(want)))
+
+    def _probe(self,mode,index,reg,cval,width,trap,text:bytes):
+        """Path marker + capture of count input and other controlled SAFE GPRs."""
+        spill=next(r for r in (11,10,9,8,2,1,6,7,0) if r!=reg)
+        observe=sorted(SAFE-{spill})
+        expected=self._expected_regs(reg,cval,observe)
+        spill_name=REGS64[spill].decode()
         lines=['bits 64','section .text','global probe_shift_guard','probe_shift_guard:',
-               f' mov {rname}, 0x{cval&NONE:x}']
+               f' mov {spill_name}, rdi']
+        for r in observe:
+            if r!=reg:
+                lines.append(f' mov {REGS64[r].decode()}, 0x{expected[r]:x}')
+        lines.append(f' mov {REGS64[reg].decode()}, 0x{cval&NONE:x}')
         lines+=text.decode('ascii').rstrip('\n').split('\n')
-        lines+=[f' mov rax, {FALL}',' ret',
-                f'__dong_b{trap}:',f' mov rax, {TRAP}',' ret']
+
+        def capture(marker):
+            block=[]
+            for i,r in enumerate(observe):
+                block.append(f' mov [{spill_name}+{i*8}], {REGS64[r].decode()}')
+            block+=[f' mov rax, {marker}',
+                    f' mov [{spill_name}+{len(observe)*8}], rax',
+                    ' ret']
+            return block
+
+        lines+=capture(FALL)
+        lines+=[f'__dong_b{trap}:']+capture(TRAP)
         body='\n'.join(lines)+'\n'
         d=self.work/'shift-guard-probe';d.mkdir(exist_ok=True)
         asm=d/f'{mode}-{index:03d}.asm';obj=d/f'{mode}-{index:03d}.o'
@@ -317,17 +370,31 @@ class NasmShiftGuardTests(unittest.TestCase):
         r=subprocess.run([str(self.nasm),'-f',native,*nasm_flags(self.nasm),'-o',str(obj),str(asm)],
                          capture_output=True,timeout=30)
         self.assertEqual(r.returncode,0,(r.stderr,body))
+        nwords=len(observe)+1
         csrc=d/f'{mode}-{index:03d}.c'
         csrc.write_text(
-            '#include <stdint.h>\n#include <stdio.h>\n#include <inttypes.h>\n'
-            'uint64_t __attribute__((sysv_abi)) probe_shift_guard(void);\n'
-            'int main(void){printf("%" PRIu64 "\\n",probe_shift_guard());return 0;}\n',encoding='utf-8')
+            '#include <stdint.h>\n#include <stdio.h>\n#include <stdalign.h>\n'
+            '#ifdef _WIN32\n#include <io.h>\n#include <fcntl.h>\n#endif\n'
+            'void __attribute__((sysv_abi)) probe_shift_guard(uint64_t *state);\n'
+            'int main(void){\n'
+            '#ifdef _WIN32\n'
+            '_setmode(_fileno(stdout),_O_BINARY);\n'
+            '#endif\n'
+            f'alignas(16) uint64_t state[{nwords}];\n'
+            f'for(int i=0;i<{nwords};i++)state[i]=0;\n'
+            'probe_shift_guard(state);\n'
+            f'fwrite(state,8,{nwords},stdout);\n'
+            'return 0;\n}\n',encoding='utf-8')
         r=subprocess.run([str(self.cc),'-std=c11','-O2','-Wall','-Wextra','-Werror',
                           str(csrc),str(obj),'-o',str(exe)],capture_output=True,text=True,timeout=60)
         self.assertEqual(r.returncode,0,r.stderr)
-        run=subprocess.run([str(exe)],capture_output=True,text=True,timeout=30)
+        run=subprocess.run([str(exe)],capture_output=True,timeout=30)
         self.assertEqual(run.returncode,0,(run.returncode,run.stderr,run.stdout))
-        return int(run.stdout.strip())
+        self.assertEqual(len(run.stdout),8*nwords)
+        words=list(struct.unpack(f'<{nwords}Q',run.stdout))
+        captured={r:words[i] for i,r in enumerate(observe)}
+        marker=words[len(observe)]
+        return marker,captured
 
     def bad_build(self,name,old,new):
         source=SOURCE.read_text(encoding='utf-8');self.assertEqual(source.count(old),1,(name,source.count(old)))
@@ -342,6 +409,11 @@ class NasmShiftGuardTests(unittest.TestCase):
     def test_actual_compiled_wrong_sources_are_rejected(self):
         jae_old=' at=copy(buffer,at,"jae __dong_b");'
         jae_new=' at=copy(buffer,at,"ja __dong_b");'
+        clobber_old=(' at=copy(buffer,at+2,slice_from_raw_parts(&wdig[0],wcount));buffer[at]=10;at+=1;\n'
+                     ' at=copy(buffer,at,"jae __dong_b");')
+        clobber_new=(' at=copy(buffer,at+2,slice_from_raw_parts(&wdig[0],wcount));buffer[at]=10;at+=1;\n'
+                     ' at=copy(buffer,at,"mov rdi, 0\\n");\n'
+                     ' at=copy(buffer,at,"jae __dong_b");')
         reg32_old=('fn register(r:u64)[]const u8{\n'
                    ' if r==0{return "rax";}if r==1{return "rcx";}if r==2{return "rdx";}if r==3{return "rbx";}\n'
                    ' if r==4{return "rsp";}if r==5{return "rbp";}if r==6{return "rsi";}if r==7{return "rdi";}\n'
@@ -357,20 +429,41 @@ class NasmShiftGuardTests(unittest.TestCase):
         early_old=' if at>out.len{return CAPACITY;}'
         early_new=' *written=at;if at>out.len{return CAPACITY;}'
         short=item(0,64,0,cap=5)
+        hold=item(7,64,52,cap=need_total(7,64,52)+16)
         controls=[
             ('bad-jae-as-ja',jae_old,jae_new,'native-jae'),
+            ('bad-clobber-rdi',clobber_old,clobber_new,'native-hold'),
             ('bad-cmp-low32',reg32_old,reg32_new,'native-low32'),
             ('bad-early-written',early_old,early_new,'atomic'),
         ]
         for name,old,new,kind in controls:
             if kind=='atomic':
                 self.run_both([short],name+'-good')
+            elif kind=='native-hold':
+                good_text=expected(7,64,52)
+                for mode in self.executables:
+                    marker,captured=self._probe(mode,700,7,3,64,52,good_text)
+                    self.assertEqual(marker,FALL,(name,mode,'good-route',marker))
+                    self._assert_preserved(mode,700,7,3,captured)
             else:
                 self.run_both([item(7,64,50)],name+'-good')
             for mode,exe in self.bad_build(name,old,new).items():
                 if kind=='atomic':
                     with self.assertRaisesRegex(AssertionError,'guard/atomicity'):
                         self.run_cases(exe,[short],name+'-'+mode)
+                elif kind=='native-hold':
+                    payload=bytearray(struct.pack('<Q',1));payload.extend(pack_case(hold))
+                    run=subprocess.run([str(exe)],input=bytes(payload),capture_output=True,timeout=60)
+                    self.assertEqual(run.returncode,0,run.stderr)
+                    st,g,w=struct.unpack_from('<3Q',run.stdout,8)
+                    text=run.stdout[32:32+hold['cap']][:w]
+                    self.assertEqual(st,0);self.assertEqual(g,1)
+                    self.assertNotEqual(text,hold['text'],(name,mode,text))
+                    self.assertIn(b'mov rdi, 0',text,(name,mode,text))
+                    marker,captured=self._probe(mode,750,7,3,64,52,text)
+                    self.assertEqual(marker,FALL,(name,mode,'bad-route-still-fall',marker))
+                    with self.assertRaisesRegex(AssertionError,r'reg7 preserved'):
+                        self._assert_preserved(mode,750,7,3,captured)
                 elif kind=='native-jae':
                     # count==width=64 must trap for good; ja falls through.
                     c=item(7,64,50)
@@ -381,8 +474,9 @@ class NasmShiftGuardTests(unittest.TestCase):
                     text=run.stdout[32:32+c['cap']][:w]
                     self.assertEqual(st,0);self.assertEqual(g,1)
                     self.assertNotEqual(text,c['text'],(name,mode,text))
-                    got=self._probe(mode,800,7,64,64,50,text)
-                    self.assertEqual(got,FALL,(name,mode,got))
+                    marker,captured=self._probe(mode,800,7,64,64,50,text)
+                    self.assertEqual(marker,FALL,(name,mode,marker))
+                    self._assert_preserved(mode,800,7,64,captured)
                 else:
                     # count=2^32, width=64: good traps; low32 edi=0 falls through.
                     c=item(7,64,51)
@@ -394,9 +488,10 @@ class NasmShiftGuardTests(unittest.TestCase):
                     self.assertEqual(st,0);self.assertEqual(g,1)
                     self.assertNotEqual(text,c['text'],(name,mode,text))
                     self.assertIn(b'edi',text,(name,mode,text))
-                    got=self._probe(mode,900,7,POW32,64,51,text)
-                    self.assertEqual(got,FALL,(name,mode,got))
-                    self.assertNotEqual(got,TRAP,(name,mode,got))
+                    marker,captured=self._probe(mode,900,7,POW32,64,51,text)
+                    self.assertEqual(marker,FALL,(name,mode,marker))
+                    self.assertNotEqual(marker,TRAP,(name,mode,marker))
+                    self._assert_preserved(mode,900,7,POW32,captured)
             self.records.append(dict(test=name,compiled=True,native_executed=True,modes=2,rejected_by=kind))
 
 

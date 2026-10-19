@@ -19,6 +19,7 @@ NAMES=('shell','fs','block','compositor','input','init','devmgr','echo','fault',
 DEPS=(2,4,64,18,64,0,32,2,2,2,2,2,2,64,10,10,10,10)
 CONFIG_BYTES,SNAPSHOT_BYTES,EVENT_BYTES,CATALOG_BYTES,PROCESS_BYTES=128,64,64,10776,1288
 NONE=(1<<64)-1
+MAX_EXEC_IMAGE=2*1024*1024
 NF=1<<63
 
 
@@ -144,7 +145,7 @@ def input_files(payload):return {'/README.TXT':SEED,'/APP.ELF':payload,**rejecte
 
 def seed_executable(path,payload):
     """Populate recorded ordinary ELF fixtures before any VM has started."""
-    settings.check(payload[:4]==b'\x7fELF' and 0<len(payload)<=262144,'seed must be the completed admitted waiter ELF')
+    settings.check(payload[:4]==b'\x7fELF' and 0<len(payload)<=MAX_EXEC_IMAGE,'seed must be a completed admitted ELF within the bounded EXEC limit')
     geometry=create(path,64);cursor=4
     with path.open('r+b') as stream:
         stream.seek(geometry['data_start']*512);root=bytearray(stream.read(512))

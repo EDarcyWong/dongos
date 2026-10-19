@@ -1,0 +1,44 @@
+{
+  "task": "codex:CX4",
+  "verification": {
+    "passed": true,
+    "checks": [
+      {
+        "spec": "module:tests.test_shell_commands",
+        "passed": true,
+        "tests": 1,
+        "skips": 0,
+        "returncode": 0,
+        "cancelled": false,
+        "timed_out": false,
+        "elapsed_seconds": 35.753
+      },
+      {
+        "spec": "module:tests.test_process_lifecycle_qemu",
+        "passed": true,
+        "tests": 11,
+        "skips": 0,
+        "returncode": 0,
+        "cancelled": false,
+        "timed_out": false,
+        "elapsed_seconds": 2.076
+      }
+    ],
+    "source_stable": true,
+    "fingerprint": {
+      "services/lib/process_abi.dg": "0f2e3ef8bb6c3a4ac8374c2f611490fc509dc52e8035e2b81329658bf8da6568",
+      "services/shell/main.dg": "32c818b13ae3f8c840adf4a7b586fb9084ddfd15ef3bb5f6c0c43f3439e417ce",
+      "kernel/user/services.dg": "35f8538a11b58e7e2eae284af1a9eaef66944eec7bb98368f9f887ee36fa75cd",
+      "tests/shell_commands_probe.c": "bf58bd2089c050d6f4a34accaa5330f88f44dd8a41550bab75b371a8bc416310",
+      "tests/test_shell_commands.py": "ed9b68cf410e1c79d305c733efb771873f7ef29f1c3ef87f21f137e3972c7fe1",
+      "tests/run_process_lifecycle_qemu.py": "642c69b9eaf67c2df486f813e0165294a003629a86780c93d04cb52b7a5c870a",
+      "tests/test_process_lifecycle_qemu.py": "b1a264ee16194782691f8606352a37faa3de8bc6ae4e5e7cff7cbfe33c1b8f76",
+      "codex-works/deliveries/CX4.md": "c5de02adc3476fbb7a2cf81aa0180e7d1f5bbabe0d9a15ac1ebd23645351aa5f"
+    },
+    "summary": "定向复验通过，等待源码/契约审查",
+    "finished_at": "2026-10-19T08:05:29+00:00",
+    "job": "b7b3757bd49b420bb8fafd498af4b9ab"
+  },
+  "review": "已审查共享2MiB上限、内核512页分配及既有authority/range/zero检查；正式12项0skip来源稳定，主线12项0skip；真实shell执行覆盖262145/1048577/2097152字节及超限提前拒绝。内核服务叶编译及NASM ELF64 O0组装成功170.242秒，证据code/build/test/l3-exec-limit/assemble-O0-result.json；未运行OS/VM，guest持久化门禁仍未完成。源码和永久测试已实际在主线。",
+  "status": "integrated"
+}

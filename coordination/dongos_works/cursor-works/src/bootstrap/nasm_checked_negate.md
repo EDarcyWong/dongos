@@ -26,4 +26,4 @@ jo __dong_b<N>
 2. `INVALID`：`destination > 15` 或 `trap_block == NONE`（容量为 0 时也先报 INVALID）。
 3. `CAPACITY`：文本长度大于 out.len。
 
-文本在 48 字节局部缓冲区组装（最长 39 字节），全部通过后一次复制到 out 并写 `*written`。失败不改 out 和 written。无分配、无全局可变状态、无 OS 调用；模块不导出 C 符号，测试经临时 wrapper 导出 `dong_checked_neg_emit`。
+文本在 48 字节局部缓冲区组装（最长 40 字节：`jo __dong_b` 为 11 字节），全部通过后一次复制到 out 并写 `*written`。失败不改 out 和 written。无分配、无全局可变状态、无 OS 调用；模块不导出 C 符号，测试经临时 wrapper 导出 `dong_checked_neg_emit`。

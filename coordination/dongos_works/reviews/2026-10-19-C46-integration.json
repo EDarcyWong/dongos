@@ -1,0 +1,41 @@
+{
+  "task": "claude:C46",
+  "verification": {
+    "passed": true,
+    "checks": [
+      {
+        "spec": "discover:claude-works/tests:test_nasm_checked_variable_shift.py",
+        "passed": true,
+        "tests": 3,
+        "skips": 0,
+        "returncode": 0,
+        "cancelled": false,
+        "timed_out": false,
+        "elapsed_seconds": 99.305
+      }
+    ],
+    "source_stable": true,
+    "fingerprint": {
+      "claude-works/src/bootstrap/nasm_checked_variable_shift.dg": "5e08a5da8b03b0e54fe2f6a0529848b589585ccac43e2a9938cd0cd91da2b630",
+      "claude-works/src/bootstrap/nasm_checked_variable_shift.md": "2e9f194214a75a0c865782a464b6b6e4561b4eab37b9f90f5a1a7881364932bb",
+      "claude-works/tests/test_nasm_checked_variable_shift.py": "1c8a1a2e17d96c02edccdab4e777db344611fe0e068dc5022db54d58a5a60fb4",
+      "claude-works/deliveries/C46.md": "778d1f69fb9098a80adcc1dafcf9d498095be192355f4fe5a742a4fd4472504a"
+    },
+    "summary": "定向复验通过，等待源码/契约审查",
+    "finished_at": "2026-10-19T08:39:54+00:00",
+    "job": "0d30888c917d4cb19142dfb72877613f"
+  },
+  "mainline_tests": 3,
+  "mainline_skips": 0,
+  "elapsed": 100.63886769999954,
+  "fingerprints": {
+    "D:\\projects\\projects3\\2026\\dongos\\code\\lang\\bootstrap\\nasm_checked_variable_shift.dg": "5e08a5da8b03b0e54fe2f6a0529848b589585ccac43e2a9938cd0cd91da2b630",
+    "D:\\projects\\projects3\\2026\\dongos\\code\\lang\\bootstrap\\nasm_checked_variable_shift.md": "2e9f194214a75a0c865782a464b6b6e4561b4eab37b9f90f5a1a7881364932bb",
+    "D:\\projects\\projects3\\2026\\dongos\\code\\lang\\tests\\test_bootstrap_nasm_checked_variable_shift.py": "aa2beb804d04a34df70d91bd945636e11b5d11e4f181a2b8ca3cdf3f21b296ac",
+    "D:\\projects\\projects3\\2026\\dongos\\code\\lang\\bootstrap\\nasm_shift_guard.dg": "deee79a0f45c7cd8d6b7740401d0066f9175999781b9206338674bece851cb3d",
+    "D:\\projects\\projects3\\2026\\dongos\\code\\lang\\bootstrap\\nasm_variable_shift.dg": "2527f3d2cbc69bfc2e86a9e5dc0fbd498aec9f78e360b5259116024161d8ff08",
+    "D:\\projects\\projects3\\2026\\dongos\\code\\lang\\bootstrap\\decimal_integer.dg": "58a4e4d746393d0e5944656aeb4c6f2aff96acca047afd455c60a47464ce0b76"
+  },
+  "review": "已实际审查完整继承任务书/返修、生产与说明、全部永久测试及依赖。完整RCX宽64门禁在CL移位前；scratch64/16上界与一次发布正确。R1已关闭：同输入正式Dong好侧实际执行，全部15个非rsp GPR加rsp捕获，坏宽/漏guard按路由拒绝、坏rbx按保持数值拒绝，容量负控拒绝提前written。主线实际复制.dg/.md及仅路径适配的永久测试；主线3项零skip100.639秒，生产字节与正式输入相同，源码/依赖/主线文件SHA前后稳定。未运行OS/VM，不宣称完整L3。",
+  "status": "integrated"
+}

@@ -9,6 +9,22 @@ function node(tag,cls,text){const e=document.createElement(tag);if(cls)e.classNa
 function badge(value,label){return node('span','badge '+value,label||state.labels[value]||value);}
 function time(value){return new Date(value).toLocaleString('zh-CN',{month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',hour12:false});}
 function notice(message){$('notice').textContent=message;$('notice').hidden=!message;}
+function duration(value){if(value===null||value===undefined)return '未知';const n=Math.floor(value);return (n>=3600?Math.floor(n/3600)+'小时':'')+(n>=60?Math.floor(n%3600/60)+'分':'')+(n%60)+'秒';}
+function exactTime(value){return value?new Date(value).toLocaleString('zh-CN',{timeZone:'Asia/Shanghai',hour12:false}):'未知';}
+function renderTiming(body,t){
+  const data=t.timing;if(!data)return;
+  body.append(node('h3','','时间记录（北京时间）'));
+  const summary=node('div','path-list');summary.textContent=[
+    '发布：'+exactTime(data.published_at),'首次领取：'+exactTime(data.first_claimed_at),
+    '最近提交完成：'+exactTime(data.last_submitted_at),'最近复验完成：'+exactTime(data.last_verified_at),
+    '最近要求返修：'+exactTime(data.last_rework_requested_at),
+    '任务书最近修改：'+exactTime(data.last_modified_at),'状态最近更新：'+exactTime(t.updated_at),
+    '累计办理：'+duration(data.total_active_seconds),'其中返修：'+duration(data.rework_active_seconds)].join('\n');body.append(summary);
+  body.append(node('p','hint',data.duration_basis+'。提交完成与验收、集成分别记录；任务书修改时间不代表源码编辑时间。'+(data.history_incomplete?'历史记录不完整，缺失时间不补造。':'')));
+  for(const r of data.rounds){body.append(node('p','',`第${r.number}轮${r.kind==='rework'?'返修':'实现'}：${exactTime(r.claimed_at)} → ${r.ongoing?'进行中':exactTime(r.ended_at)} · 办理 ${duration(r.active_seconds)} · 暂停 ${duration(r.paused_seconds)} · 等待领取 ${duration(r.waiting_seconds)}${r.end_reason&&!r.submitted_at?' · 未提交结束':''}`));}
+  for(const v of data.verifications){body.append(node('p','',`复验 ${v.id.slice(0,8)}：排队 ${exactTime(v.queued_at)} · 开始 ${exactTime(v.started_at)} · 结束 ${exactTime(v.finished_at)} · ${jobStates[v.status]||v.status} · 执行 ${duration(v.elapsed_seconds)} · 测试合计 ${duration(v.check_seconds)}`));}
+  const details=node('details');details.append(node('summary','','完整操作时间线'));for(const e of data.timeline){details.append(node('p','',exactTime(e.at)+' · '+(eventNames[e.kind]||({verification_started:'开始定向复验',release:'释放任务',archive:'归档',unarchive:'恢复归档'}[e.kind])||e.kind)+(e.data?.status?' · '+(state.labels[e.data.status]||e.data.status):'')));}body.append(details);
+}
 const roadmapStatuses={complete:'✓ 已通过验收',partial:'◐ 部分完成',pending:'○ 尚未完成'};
 let roadmapSignature='',roadmapSelection='';
 function clearRoadmap(){
@@ -179,6 +195,7 @@ async function showTask(id){selected=id;const t=state.tasks.find(t=>t.id===id);i
   if(t.depends_on.length){body.append(node('h3','','前置任务'));const deps=node('div','actions');for(const id of t.depends_on){const dep=state.tasks.find(x=>x.id===id);const b=button(dep?(dep.number+' · '+(state.labels[dep.status]||dep.status)):id+' · 依赖不存在',()=>showTask(id),!dep);b.title=dep?.title||id;deps.append(b);}body.append(deps);}
   if(t.candidate)body.append(node('p','','交付位于当前项目的独立工作副本；原项目文件尚未自动集成。'));
   if(t.verification)body.append(node('p','',t.verification.summary));
+  renderTiming(body,t);
   body.append(node('h3','','审查 / 返修说明'));const note=node('textarea','review-note');note.placeholder='记录源码、契约和测试有效性的审查结论；返修时写明具体问题。';note.value=t.review_note||'';body.append(note);const controls=node('div','actions');
   async function change(action,options){await actionRequest('/api/action',{task:t.id,rev:t.rev,action,note:note.value,options});}
   async function queue(kind,provider){await actionRequest('/api/queue',{task:t.id,rev:t.rev,kind,provider});}

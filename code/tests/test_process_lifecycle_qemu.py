@@ -79,9 +79,15 @@ class ProcessLifecycleControls(unittest.TestCase):
     def test_no_invalid_executable_seed_or_oversize(self):
         with tempfile.TemporaryDirectory() as temp:
             path=Path(temp)/'bad.img'
-            for payload in (b'',b'not an ELF',b'\x7fELF'+bytes(262144)):
+            for payload in (b'',b'not an ELF',b'\x7fELF'+bytes(runner.MAX_EXEC_IMAGE-3)):
                 with self.assertRaises(ValueError):runner.seed_executable(path,payload)
             self.assertFalse(path.exists())
+    def test_exec_seed_crosses_old_limit_and_accepts_exact_new_limit(self):
+        with tempfile.TemporaryDirectory() as temp:
+            for length in (262145,runner.MAX_EXEC_IMAGE):
+                payload=b'\x7fELF'+bytes(length-4)
+                result=runner.seed_executable(Path(temp)/('app-%d.img'%length),payload)
+                self.assertEqual(length,result['raw']['entries']['/APP.ELF']['size'])
     def test_fixed_va_probe_requires_cpu_value_and_selected_distinct_pa(self):
         image=dict(image='waiter',pid=7,root=0x900000,bias=0x10000000)
         class Guest:

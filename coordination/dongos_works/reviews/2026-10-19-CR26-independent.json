@@ -1,0 +1,109 @@
+{
+  "reviewed": {
+    "id": "cursor:CR26",
+    "number": "CR26",
+    "owner": "cursor",
+    "title": "原子fetch-add返回旧值与模加法",
+    "description": "module `bootstrap.nasm_atomic_fetch_add`；依赖`[]`。\r\n\r\n`pub unsafe fn emit(width:u64,out:[]u8,written:*usize)u64`\r\n\r\nwidth仅32/64。RDI=地址、RSI=delta。width32严格`mov eax, esi\\nlock xadd dword [rdi], eax\\n`，width64严格`mov rax, rsi\\nlock xadd qword [rdi], rax\\n`。目标变为(old+delta) mod 2^width，RAX返回old（32位零扩展）；只RAX/flags改变，RDI/RSI和其它GPR保持；只目标width字节改变。调用方保证自然对齐、真实可访问且可写的普通可缓存内存、正确对象生命周期及原子使用契约，不用于MMIO；本片段不做运行时地址校验。后续lowering须标记不可删除/重排的内存副作用，本任务不改IR接线，不以指令库宣称完整原子语义集成。\r\n\r\n原生oracle：各宽度0、delta0、old全1+1回绕、最高位、delta低位与高位不同、32位只改4字节，独立任意精度模算与旧返回/guard/输入保持；不要以新值代替旧返回。另有限并发4线程各256次delta1，收集1024个真实返回，排序后必须恰0..1023且最终1024，guard不变；两模式均执行，所有共享对象访问在并发期间只走本snippet。字节/反汇编独立确认LOCK XADD。语义坏Dong将XADD换成XCHG（正常执行并返回old但内存不再求和），使用old=7,delta=3按最终10拒绝；另容量提前写。删LOCK只由确定性字节检查拒绝，不把并发偶发误差冒充必现负控。\n\n\n## 共用固定契约与执行归属\n\n本任务是L3 Dong自举后端的独立生产组件；仅四个声明文件，Dong实现，不导出C符号（临时测试wrapper可导出），无分配、全局可变状态、OS调用。不可改code/lang、活动编译器、内核、协调器、其它负责人、在途任务或已集成依赖；既有队列/返修优先。依赖只读，只用已integrated模块；不得以宿主Python/C算法替代Dong生产逻辑。\n\n统一OK=0、INVALID=1、CAPACITY=2；接口另有Result时按任务正文完整尺寸。written非NULL、8对齐、完整8字节端点不回绕；out完整声明区间端点不回绕，非空非NULL，空可NULL。written与完整out不重叠（包括成功未使用尾部）。有输入切片/结构/嵌套名字时，必须在任何读写前验证完整描述符、元素乘法、端点、所需对齐、非空非NULL和完整对象别名；输入彼此如正文无禁止可互叠，只读输入与完整out/结果不得重叠。所有数据/枚举/标签/尺寸INVALID优先CAPACITY。失败out、计数或完整Result、输入全文不变；成功只写精确前缀/结果，尾部保持。先全预检及正确求长，在充分且有证明上界的局部区调用只读依赖，再最后发布用户out；不允许内部scratch越界或对合法容量不足输入panic。\n\n文本严格ASCII，换行真实单LF，无NUL/注释/额外空行/隐式section/global/ret（任务另定声明除外）。涉及__dong_b<N>标签时N=0..MAX-1，MAX为NONE非法；数字复用已声明decimal_integer，不另写格式化。寄存器编号若有0..15参数，固定rax,rcx,rdx,rbx,rsp,rbp,rsi,rdi,r8..r15；固定寄存器任务按正文集合测试，不强凑16矩阵。\n\n测试只跑本任务checks：实际编译/链接/原生执行Dong debug与release，NASM ELF64/COFF都组装；原生C桥显式SysV，保护宿主栈/被调用者保存寄存器。COFF组装不冒充Win64调用ABI。只暂存本模块及已声明只读依赖的传递闭包，不引入整个lang根遮蔽坏源码。独立Python/C oracle，不用生产规划器输出当唯一期望。有限固定边界，每模式不超过24个主要原生向量（并发操作另按正文有限检查）；不做全笛卡尔积或性能基准。源码、说明、测试、只读依赖前后SHA256稳定，0skip才可验收。\n\n每个描述符/端点/别名预检要独立可达，其它字段合法。written端点溢出用8对齐UINT64_MAX-7且合法空out，漏检坏体应安全返回CAPACITY而非非法解引用。初始化guard后再取快照，立刻观察失败全文/计数/guard、成功精确文本/长度/未用尾部；输入真实只读保护须检查系统调用成功，不能只声称只读。\n\n至少保留两类真实坏Dong：一种完成构建、链接、正常原生执行后，由指定数值/内存/分支/链接后地址断言拒绝；一种容量不足提前写out或结果，由完整原子性断言拒绝。同夹具先跑好体。构建失败、崩溃、超时、文本不同、无关预检错误不能冒充指定语义负控；源码中缺锁/不同内存序等结构检查单列，不能假装单次正常运行证明并发语义。坏体所有内存访问在预留安全可访问区内，不破坏真实宿主栈/ret、不依靠越界或硬件异常拒绝。\n\n本人客户端先worker MCP get_task/read_document读取最新rev和完整契约/归属，claim成功才执行；先完成已有领取/返修。产物在本人works/build/<编号>/<唯一目录>/，完成原编号交付写真实命令、tests/skips、模式/对象格式、全部输入SHA256、每种坏体实际观察/拒绝依据、未跑与剩余限制，再MCP submit。不得自行accept/integrate、提交/推送、运行OS/VM/全回归、启动模型CLI/定时器/关机，不用管理工具自动启动Cursor。任务发布不代表实现或通过，最后由Codex独立复验再验收集成。\n",
+    "status": "submitted",
+    "rev": 5,
+    "write_paths": [
+      "cursor-works/src/bootstrap/nasm_atomic_fetch_add.dg",
+      "cursor-works/src/bootstrap/nasm_atomic_fetch_add.md",
+      "cursor-works/tests/test_nasm_atomic_fetch_add.py",
+      "cursor-works/deliveries/CR26.md"
+    ],
+    "depends_on": [],
+    "checks": [
+      "discover:cursor-works/tests:test_nasm_atomic_fetch_add.py"
+    ],
+    "auto_dispatch": false,
+    "auto_verify": false,
+    "complexity": "standard",
+    "created_at": "2026-10-18T15:46:00+00:00",
+    "updated_at": "2026-10-19T06:29:19+00:00",
+    "historical": false,
+    "document": "cursor-works/tasks/CR26-board.md",
+    "delivery": "cursor-works/deliveries/CR26.md",
+    "candidate": null,
+    "verification": {
+      "passed": true,
+      "checks": [
+        {
+          "spec": "discover:cursor-works/tests:test_nasm_atomic_fetch_add.py",
+          "passed": true,
+          "tests": 3,
+          "skips": 0,
+          "returncode": 0,
+          "cancelled": false,
+          "timed_out": false,
+          "elapsed_seconds": 37.156
+        }
+      ],
+      "source_stable": true,
+      "fingerprint": {
+        "cursor-works/src/bootstrap/nasm_atomic_fetch_add.dg": "5f928e6e5f19e26f381e1fa3eacd7c289743eda4c38233d130d4cbcd743098b2",
+        "cursor-works/src/bootstrap/nasm_atomic_fetch_add.md": "0d565426d8ed6b4741d26093d44ee920f63e8d057b3aaa47989e840c8c80031c",
+        "cursor-works/tests/test_nasm_atomic_fetch_add.py": "63402caf9b5095ea1c0180c5ebba4ca29a50ac9ed48069c87c316c6f1edec63b",
+        "cursor-works/deliveries/CR26.md": "dc81dc7551c9980572378c0b315503b8729e5d2d8fa99e35cbdf2842c7e5af6a"
+      },
+      "summary": "定向复验通过，等待源码/契约审查",
+      "finished_at": "2026-10-19T06:29:19+00:00",
+      "job": "c2551a28b4ef4ea981b70376e99c24fa"
+    },
+    "review_note": "",
+    "legacy_hash": "0306af7bcaa411dd6ac3ee0632604f0c35a7dc280eec537f0a9400fafd4f31e0",
+    "state_recovery": {
+      "at": "2026-10-19T04:43:01+00:00",
+      "snapshot_rev": 1,
+      "snapshot_sha256": "f3ab929e33419f40dfc417217d588acf8b1b26cbac50724a51942a11e438c171",
+      "audit_sha256": "3ea0db756d56092976092ed0d1216118e145a8e34aa02c5060cb913d088d553e",
+      "note": "恢复已有验收/集成/返修事实；原复验为历史记录，未声称本次重跑；不恢复丢失作业或启动模型。"
+    },
+    "claimed_by": "cursor-mcp-05de65f92bc04a7c",
+    "claimed_at": "2026-10-19T06:22:19+00:00"
+  },
+  "result": {
+    "project": "dongos",
+    "task": {
+      "id": "cursor:CR26",
+      "number": "CR26",
+      "owner": "cursor",
+      "title": "原子fetch-add返回旧值与模加法",
+      "description": "module `bootstrap.nasm_atomic_fetch_add`；依赖`[]`。\r\n\r\n`pub unsafe fn emit(width:u64,out:[]u8,written:*usize)u64`\r\n\r\nwidth仅32/64。RDI=地址、RSI=delta。width32严格`mov eax, esi\\nlock xadd dword [rdi], eax\\n`，width64严格`mov rax, rsi\\nlock xadd qword [rdi], rax\\n`。目标变为(old+delta) mod 2^width，RAX返回old（32位零扩展）；只RAX/flags改变，RDI/RSI和其它GPR保持；只目标width字节改变。调用方保证自然对齐、真实可访问且可写的普通可缓存内存、正确对象生命周期及原子使用契约，不用于MMIO；本片段不做运行时地址校验。后续lowering须标记不可删除/重排的内存副作用，本任务不改IR接线，不以指令库宣称完整原子语义集成。\r\n\r\n原生oracle：各宽度0、delta0、old全1+1回绕、最高位、delta低位与高位不同、32位只改4字节，独立任意精度模算与旧返回/guard/输入保持；不要以新值代替旧返回。另有限并发4线程各256次delta1，收集1024个真实返回，排序后必须恰0..1023且最终1024，guard不变；两模式均执行，所有共享对象访问在并发期间只走本snippet。字节/反汇编独立确认LOCK XADD。语义坏Dong将XADD换成XCHG（正常执行并返回old但内存不再求和），使用old=7,delta=3按最终10拒绝；另容量提前写。删LOCK只由确定性字节检查拒绝，不把并发偶发误差冒充必现负控。\n\n\n## 共用固定契约与执行归属\n\n本任务是L3 Dong自举后端的独立生产组件；仅四个声明文件，Dong实现，不导出C符号（临时测试wrapper可导出），无分配、全局可变状态、OS调用。不可改code/lang、活动编译器、内核、协调器、其它负责人、在途任务或已集成依赖；既有队列/返修优先。依赖只读，只用已integrated模块；不得以宿主Python/C算法替代Dong生产逻辑。\n\n统一OK=0、INVALID=1、CAPACITY=2；接口另有Result时按任务正文完整尺寸。written非NULL、8对齐、完整8字节端点不回绕；out完整声明区间端点不回绕，非空非NULL，空可NULL。written与完整out不重叠（包括成功未使用尾部）。有输入切片/结构/嵌套名字时，必须在任何读写前验证完整描述符、元素乘法、端点、所需对齐、非空非NULL和完整对象别名；输入彼此如正文无禁止可互叠，只读输入与完整out/结果不得重叠。所有数据/枚举/标签/尺寸INVALID优先CAPACITY。失败out、计数或完整Result、输入全文不变；成功只写精确前缀/结果，尾部保持。先全预检及正确求长，在充分且有证明上界的局部区调用只读依赖，再最后发布用户out；不允许内部scratch越界或对合法容量不足输入panic。\n\n文本严格ASCII，换行真实单LF，无NUL/注释/额外空行/隐式section/global/ret（任务另定声明除外）。涉及__dong_b<N>标签时N=0..MAX-1，MAX为NONE非法；数字复用已声明decimal_integer，不另写格式化。寄存器编号若有0..15参数，固定rax,rcx,rdx,rbx,rsp,rbp,rsi,rdi,r8..r15；固定寄存器任务按正文集合测试，不强凑16矩阵。\n\n测试只跑本任务checks：实际编译/链接/原生执行Dong debug与release，NASM ELF64/COFF都组装；原生C桥显式SysV，保护宿主栈/被调用者保存寄存器。COFF组装不冒充Win64调用ABI。只暂存本模块及已声明只读依赖的传递闭包，不引入整个lang根遮蔽坏源码。独立Python/C oracle，不用生产规划器输出当唯一期望。有限固定边界，每模式不超过24个主要原生向量（并发操作另按正文有限检查）；不做全笛卡尔积或性能基准。源码、说明、测试、只读依赖前后SHA256稳定，0skip才可验收。\n\n每个描述符/端点/别名预检要独立可达，其它字段合法。written端点溢出用8对齐UINT64_MAX-7且合法空out，漏检坏体应安全返回CAPACITY而非非法解引用。初始化guard后再取快照，立刻观察失败全文/计数/guard、成功精确文本/长度/未用尾部；输入真实只读保护须检查系统调用成功，不能只声称只读。\n\n至少保留两类真实坏Dong：一种完成构建、链接、正常原生执行后，由指定数值/内存/分支/链接后地址断言拒绝；一种容量不足提前写out或结果，由完整原子性断言拒绝。同夹具先跑好体。构建失败、崩溃、超时、文本不同、无关预检错误不能冒充指定语义负控；源码中缺锁/不同内存序等结构检查单列，不能假装单次正常运行证明并发语义。坏体所有内存访问在预留安全可访问区内，不破坏真实宿主栈/ret、不依靠越界或硬件异常拒绝。\n\n本人客户端先worker MCP get_task/read_document读取最新rev和完整契约/归属，claim成功才执行；先完成已有领取/返修。产物在本人works/build/<编号>/<唯一目录>/，完成原编号交付写真实命令、tests/skips、模式/对象格式、全部输入SHA256、每种坏体实际观察/拒绝依据、未跑与剩余限制，再MCP submit。不得自行accept/integrate、提交/推送、运行OS/VM/全回归、启动模型CLI/定时器/关机，不用管理工具自动启动Cursor。任务发布不代表实现或通过，最后由Codex独立复验再验收集成。\n",
+      "status": "rework",
+      "rev": 6,
+      "write_paths": [
+        "cursor-works/src/bootstrap/nasm_atomic_fetch_add.dg",
+        "cursor-works/src/bootstrap/nasm_atomic_fetch_add.md",
+        "cursor-works/tests/test_nasm_atomic_fetch_add.py",
+        "cursor-works/deliveries/CR26.md"
+      ],
+      "depends_on": [],
+      "checks": [
+        "discover:cursor-works/tests:test_nasm_atomic_fetch_add.py"
+      ],
+      "auto_dispatch": false,
+      "auto_verify": false,
+      "complexity": "standard",
+      "created_at": "2026-10-18T15:46:00+00:00",
+      "updated_at": "2026-10-19T06:29:46+00:00",
+      "historical": false,
+      "document": "cursor-works/tasks/CR26-board.md",
+      "delivery": "cursor-works/deliveries/CR26.md",
+      "candidate": null,
+      "verification": null,
+      "review_note": "R1：正式3项0skip通过，但并发text=expected(width)未用实际Dong产出，桩额外普通读shared_cell违反所有目标访问须走片段；并发须双端guard且join后检查。串行目标与元数据分离、检查双端guard及RDI精确等于原地址；两宽16+16需合计<=24并断言；真实坏XCHG的好侧改正式Dong同输入。保留4x256真实RAX排列0..1023/final1024、零扩展、精确LOCK机器码及提前写负控。仅原四文件完善测试说明交付，不重写生产算法。详见reviews/2026-10-19-CR26-independent.md。",
+      "legacy_hash": "0306af7bcaa411dd6ac3ee0632604f0c35a7dc280eec537f0a9400fafd4f31e0",
+      "state_recovery": {
+        "at": "2026-10-19T04:43:01+00:00",
+        "snapshot_rev": 1,
+        "snapshot_sha256": "f3ab929e33419f40dfc417217d588acf8b1b26cbac50724a51942a11e438c171",
+        "audit_sha256": "3ea0db756d56092976092ed0d1216118e145a8e34aa02c5060cb913d088d553e",
+        "note": "恢复已有验收/集成/返修事实；原复验为历史记录，未声称本次重跑；不恢复丢失作业或启动模型。"
+      },
+      "claimed_by": "cursor-mcp-05de65f92bc04a7c",
+      "claimed_at": "2026-10-19T06:22:19+00:00"
+    }
+  }
+}

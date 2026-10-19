@@ -1,0 +1,48 @@
+// SysV function exit: load the return value from fixed frame slots with the
+// integrated C39 nasm_sysv_return_values, then the integrated CR11
+// nasm_function_frame epilogue (restores callee-saved registers, pop rbp, ret).
+// Both are called for real into a bounded local scratch; out and written are
+// written once, after every check. The epilogue's "add rsp" changes flags.
+module bootstrap.nasm_sysv_function_exit;
+import bootstrap.nasm_sysv_return_values as rv;
+import bootstrap.nasm_function_frame as ff;
+pub const OK:u64=0;pub const INVALID:u64=1;pub const CAPACITY:u64=2;
+pub const MAX_EXTENT:usize=4080;
+const MAX:u64=0xffff_ffff_ffff_ffff;
+// Local scratch: the C39 text is at most 56 bytes (PAIR) and gets 64; the CR11 epilogue is at most
+// "add rsp, 4080\n" (14) + 5 pops of 8 + "pop rbp\nret\n" (12) = 66 and gets 128 (its adjust is at most
+// extent <= 4080, so the number has at most 4 digits). 64 + 128 = 192 = TEXT, so neither segment can run past it.
+const LOAD:usize=64;const EPILOGUE:usize=128;const TEXT:usize=192;
+fn span(p:u64,n:u64)bool{return n==0||(p!=0&&n<=MAX-p);}
+fn overlap(a:u64,n:u64,b:u64,m:u64)bool{return n!=0&&m!=0&&a<b+m&&b<a+n;}
+fn popcount5(mask:u64)usize{
+ var n:usize=0;var i:u64=0;
+ while i<5{if (mask&(1<<i))!=0{n+=1;}i+=1;}
+ return n;
+}
+// A non-zero (used) return slot must lie in the local area: above the n pushed registers and not in
+// the bottom alignment padding, i.e. 8*n < offset <= 8*n + frame_bytes. Zero offsets are left to C39.
+fn local(offset:usize,saved:usize,frame_bytes:usize)bool{return offset==0||(offset>saved&&offset<=saved+frame_bytes);}
+pub unsafe fn emit(kind:u64,frame_bytes:usize,saved_mask:u64,low_offset:usize,high_offset:usize,out:[]u8,written:*usize)u64{unsafe{
+ let wp=written as u64;let op=out.ptr as u64;
+ if written==null||(wp&7)!=0||!span(wp,8){return INVALID;}
+ if !span(op,out.len){return INVALID;}
+ if overlap(wp,8,op,out.len){return INVALID;}
+ if frame_bytes>4096||(frame_bytes&15)!=0||(saved_mask>>5)!=0{return INVALID;}
+ let n=popcount5(saved_mask);let saved=8*n;
+ var pad:usize=0;if (n&1)!=0{pad=8;}
+ let extent=saved+frame_bytes+pad;
+ if extent>MAX_EXTENT{return INVALID;}
+ if !local(low_offset,saved,frame_bytes)||!local(high_offset,saved,frame_bytes){return INVALID;}
+ // C39 sees the whole rbp-based extent and checks kind, unused offsets, alignment and PAIR distinctness;
+ // CR11 gets the original frame_bytes and mask. Any non-OK is an INVALID input; out is still untouched.
+ var buffer:[192]u8=[0;192];var at:usize=0;var n1:usize=0;
+ if rv.emit(kind,extent,low_offset,high_offset,slice_from_raw_parts(&buffer[0],LOAD),&n1)!=rv.OK{return INVALID;}
+ at=n1;
+ if ff.epilogue(frame_bytes,saved_mask,slice_from_raw_parts(&buffer[at],EPILOGUE),&n1)!=ff.OK{return INVALID;}
+ at+=n1;
+ if at>TEXT{return INVALID;}
+ if at>out.len{return CAPACITY;}
+ var i:usize=0;while i<at{out[i]=buffer[i];i+=1;}
+ *written=at;return OK;
+}}

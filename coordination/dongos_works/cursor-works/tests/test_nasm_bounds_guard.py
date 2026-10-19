@@ -19,7 +19,15 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0,str(ROOT))
 
 from lang.dongc import compile_file
-from lang.tests.test_dongc import tool,nasm_flags
+from lang.tests.test_dongc import tool,nasm_flags as _nasm_flags
+
+def nasm_flags(nasm):
+    # NASM 2.16+ also emits reloc-rel-dword under -Werror for RIP-relative refs;
+    # keep the same suppression the shared helper applies for NASM 3.
+    flags=list(_nasm_flags(nasm))
+    if '-w-reloc-rel-dword' not in flags:
+        flags.append('-w-reloc-rel-dword')
+    return flags
 
 SOURCE=WORKS/'cursor-works/src/bootstrap/nasm_bounds_guard.dg'
 DOC=WORKS/'cursor-works/src/bootstrap/nasm_bounds_guard.md'
@@ -61,7 +69,9 @@ static void read_exact(void*p,uint64_t n){if(n&&fread(p,1,n,stdin)!=n)exit(91);}
 static void write_exact(const void*p,uint64_t n){if(n&&fwrite(p,1,n,stdout)!=n)exit(92);}
 #define FAKE(x) ((uint8_t*)(uintptr_t)(x))
 static unsigned invalid(void){
- static uint8_t arena[4096],saved[4096];const unsigned total=14;
+ _Alignas(16) static uint8_t arena[4096];
+ _Alignas(16) static uint8_t saved[4096];
+ const unsigned total=15;
  uint8_t*o=arena+1024;uint64_t*w=(uint64_t*)(arena+2048);
  for(unsigned i=0;i<total;i++){
   memset(arena,0xa5,sizeof(arena));
@@ -81,7 +91,8 @@ static unsigned invalid(void){
    case 10:st=dong_bounds_emit(0,16,0,o,128,w);break;
    case 11:st=dong_bounds_emit(0,1,UINT64_MAX,o,128,w);break;
    case 12:st=dong_bounds_emit(16,1,0,o,0,w);break;
-   default:st=dong_bounds_emit(0,1,UINT64_MAX,o,0,w);break;
+   case 13:st=dong_bounds_emit(0,1,UINT64_MAX,o,0,w);break;
+   default:st=dong_bounds_emit(0,16,0,o,0,w);break;
   }
   if(st!=1||memcmp(saved,arena,sizeof(arena))){
    fprintf(stderr,"invalid preflight %u status %u\n",i,(unsigned)st);exit(93);
@@ -98,7 +109,7 @@ int main(void){
   uint64_t h[5];read_exact(h,sizeof(h));
   uint64_t index=h[0],length=h[1],trap=h[2],cap=h[3],nout=h[4];
   if(cap>256)exit(94);
-  uint8_t*out=malloc(cap+64);uint64_t meta[3];
+  uint8_t*out=malloc(cap+64);_Alignas(8) uint64_t meta[3];
   if(!out)exit(95);
   memset(out,0xa5,cap+64);memset(meta,0xa5,sizeof(meta));uint64_t*written=meta+1;
   uint8_t*o=nout?NULL:out+32;
@@ -175,7 +186,7 @@ NATIVE_VECTORS=[
 
 
 class NasmBoundsGuardTests(unittest.TestCase):
-    PREFLIGHTS=14
+    PREFLIGHTS=15
 
     @classmethod
     def setUpClass(cls):
@@ -260,11 +271,18 @@ class NasmBoundsGuardTests(unittest.TestCase):
                         item(i,length,trap,cap=max(0,need-1))]
             # same-register form
             cases+=[item(i,i,7)]
-        cases+=[item(16,0,0,cap=64,status=INVALID),
+        # Exact max-length capacity (46) and need-1 (45) for same-reg + 20-digit trap.
+        max_need=need_total(15,15,NONE-1)
+        self.assertEqual(max_need,46)
+        cases+=[item(15,15,NONE-1),
+                item(15,15,NONE-1,cap=max_need),
+                item(15,15,NONE-1,cap=max_need-1),
+                item(16,0,0,cap=64,status=INVALID),
                 item(0,16,0,cap=64,status=INVALID),
                 item(0,1,NONE,cap=64,status=INVALID),
                 item(0,1,0,nout=1,cap=64,status=INVALID),
                 item(16,0,0,nout=0,cap=0,status=INVALID),
+                item(0,16,0,nout=0,cap=0,status=INVALID),
                 item(0,1,NONE,nout=0,cap=0,status=INVALID),
                 item(0,1,0,cap=0,status=CAPACITY)]
         self.run_both(cases,'seeded')
@@ -303,27 +321,65 @@ class NasmBoundsGuardTests(unittest.TestCase):
             for index,(vec,out) in enumerate(zip(NATIVE_VECTORS,outs)):
                 ireg,lreg,ival,lval,trap=vec
                 self.assertTrue(ireg in SAFE and lreg in SAFE,(mode,index,ireg,lreg))
-                got=self._probe(mode,index,ireg,lreg,ival,lval,trap,out)
+                marker,captured=self._probe(mode,index,ireg,lreg,ival,lval,trap,out)
                 want=TRAP if py_route(ival,lval)=='trap' else FALL
-                self.assertEqual(got,want,(mode,index,vec,py_route(ival,lval),out,got))
+                self.assertEqual(marker,want,(mode,index,vec,py_route(ival,lval),out,marker))
+                self._assert_preserved(mode,index,ireg,lreg,ival,lval,captured)
                 probed+=1
         self.records.append(dict(test='dong-assemble-native-bounds',assemble_samples=len(samples),
                                  assembled=assembled,native_vectors=len(NATIVE_VECTORS),probed=probed,
-                                 modes=2,formats=2,passed=True))
+                                 register_preserve=True,modes=2,formats=2,passed=True))
 
-    def _probe(self,mode,index,ireg,lreg,ival,lval,trap,text:bytes)->int:
-        iname=REGS64[ireg].decode();lname=REGS64[lreg].decode()
-        # Preserve non-target data regs with sentinels; observe path marker only.
-        lines=['bits 64','section .text','global probe_bounds','probe_bounds:']
-        # Load values; if same register, one mov is enough (values must match for same-reg cases).
+    def _expected_regs(self,ireg,lreg,ival,lval,observe):
+        expected={}
+        for r in observe:
+            if r==ireg:expected[r]=ival&NONE
+            elif r==lreg:expected[r]=lval&NONE
+            else:expected[r]=0x1111111111111100+r
+        return expected
+
+    def _assert_preserved(self,mode,index,ireg,lreg,ival,lval,captured):
+        expected=self._expected_regs(ireg,lreg,ival,lval,sorted(captured))
+        for r,want in expected.items():
+            self.assertEqual(captured[r],want,
+                             (mode,index,'reg%d preserved'%r,REGS64[r].decode(),
+                              hex(captured[r]),hex(want)))
+
+    def _probe(self,mode,index,ireg,lreg,ival,lval,trap,text:bytes):
+        """Native path marker + capture of inputs and other controlled SAFE GPRs.
+
+        Marker is written to an independent state slot after register capture, so an
+        RAX input is never overwritten before observation. State pointer lives in a
+        non-input spill register chosen from SAFE.
+        """
+        used={ireg,lreg}
+        spill=next(r for r in (11,10,9,8,2,1,6,7,0) if r not in used)
+        observe=sorted(SAFE-{spill})
+        expected=self._expected_regs(ireg,lreg,ival,lval,observe)
+        spill_name=REGS64[spill].decode()
+        lines=['bits 64','section .text','global probe_bounds','probe_bounds:',
+               f' mov {spill_name}, rdi']
+        for r in observe:
+            if r not in (ireg,lreg):
+                lines.append(f' mov {REGS64[r].decode()}, 0x{expected[r]:x}')
         if ireg==lreg:
-            lines.append(f' mov {iname}, 0x{ival&NONE:x}')
+            lines.append(f' mov {REGS64[ireg].decode()}, 0x{ival&NONE:x}')
         else:
-            lines.append(f' mov {iname}, 0x{ival&NONE:x}')
-            lines.append(f' mov {lname}, 0x{lval&NONE:x}')
+            lines.append(f' mov {REGS64[ireg].decode()}, 0x{ival&NONE:x}')
+            lines.append(f' mov {REGS64[lreg].decode()}, 0x{lval&NONE:x}')
         lines+=text.decode('ascii').rstrip('\n').split('\n')
-        lines+=[f' mov rax, {FALL}',' ret',
-                f'__dong_b{trap}:',f' mov rax, {TRAP}',' ret']
+
+        def capture(marker):
+            block=[]
+            for i,r in enumerate(observe):
+                block.append(f' mov [{spill_name}+{i*8}], {REGS64[r].decode()}')
+            block+=[f' mov rax, {marker}',
+                    f' mov [{spill_name}+{len(observe)*8}], rax',
+                    ' ret']
+            return block
+
+        lines+=capture(FALL)
+        lines+=[f'__dong_b{trap}:']+capture(TRAP)
         body='\n'.join(lines)+'\n'
         d=self.work/'bounds-probe';d.mkdir(exist_ok=True)
         asm=d/f'{mode}-{index:03d}.asm';obj=d/f'{mode}-{index:03d}.o'
@@ -333,17 +389,31 @@ class NasmBoundsGuardTests(unittest.TestCase):
         r=subprocess.run([str(self.nasm),'-f',native,*nasm_flags(self.nasm),'-o',str(obj),str(asm)],
                          capture_output=True,timeout=30)
         self.assertEqual(r.returncode,0,(r.stderr,body))
+        nwords=len(observe)+1
         csrc=d/f'{mode}-{index:03d}.c'
         csrc.write_text(
-            '#include <stdint.h>\n#include <stdio.h>\n#include <inttypes.h>\n'
-            'uint64_t __attribute__((sysv_abi)) probe_bounds(void);\n'
-            'int main(void){printf("%" PRIu64 "\\n",probe_bounds());return 0;}\n',encoding='utf-8')
+            '#include <stdint.h>\n#include <stdio.h>\n#include <stdalign.h>\n'
+            '#ifdef _WIN32\n#include <io.h>\n#include <fcntl.h>\n#endif\n'
+            'void __attribute__((sysv_abi)) probe_bounds(uint64_t *state);\n'
+            'int main(void){\n'
+            '#ifdef _WIN32\n'
+            '_setmode(_fileno(stdout),_O_BINARY);\n'
+            '#endif\n'
+            f'alignas(16) uint64_t state[{nwords}];\n'
+            f'for(int i=0;i<{nwords};i++)state[i]=0;\n'
+            'probe_bounds(state);\n'
+            f'fwrite(state,8,{nwords},stdout);\n'
+            'return 0;\n}\n',encoding='utf-8')
         r=subprocess.run([str(self.cc),'-std=c11','-O2','-Wall','-Wextra','-Werror',
                           str(csrc),str(obj),'-o',str(exe)],capture_output=True,text=True,timeout=60)
         self.assertEqual(r.returncode,0,r.stderr)
-        run=subprocess.run([str(exe)],capture_output=True,text=True,timeout=30)
+        run=subprocess.run([str(exe)],capture_output=True,timeout=30)
         self.assertEqual(run.returncode,0,(run.returncode,run.stderr,run.stdout))
-        return int(run.stdout.strip())
+        self.assertEqual(len(run.stdout),8*nwords)
+        words=list(struct.unpack(f'<{nwords}Q',run.stdout))
+        captured={r:words[i] for i,r in enumerate(observe)}
+        marker=words[len(observe)]
+        return marker,captured
 
     def bad_build(self,name,old,new):
         source=SOURCE.read_text(encoding='utf-8');self.assertEqual(source.count(old),1,(name,source.count(old)))
@@ -359,23 +429,53 @@ class NasmBoundsGuardTests(unittest.TestCase):
         # jae → ja: index==len must trap for good, fallthrough for bad.
         jae_old=' at=copy(buffer,at,"jae __dong_b");'
         jae_new=' at=copy(buffer,at,"ja __dong_b");'
+        # After CMP, clobber rdi without touching flags; route stays fallthrough.
+        clobber_old=' at=copy(buffer,at+2,register(length));buffer[at]=10;at+=1;\n at=copy(buffer,at,"jae __dong_b");'
+        clobber_new=(' at=copy(buffer,at+2,register(length));buffer[at]=10;at+=1;\n'
+                     ' at=copy(buffer,at,"mov rdi, 0\\n");\n'
+                     ' at=copy(buffer,at,"jae __dong_b");')
         early_old=' if at>out.len{return CAPACITY;}'
         early_new=' *written=at;if at>out.len{return CAPACITY;}'
         short=item(0,1,0,cap=5)
         equal=item(7,6,40)  # text only; native uses index==len values
+        # Cap must fit the longer clobber text (extra "mov rdi, 0\n").
+        fall_hold=item(7,6,41,cap=need_total(7,6,41)+16)
         controls=[
-            ('bad-jae-as-ja',jae_old,jae_new,'native'),
+            ('bad-jae-as-ja',jae_old,jae_new,'native-route'),
+            ('bad-clobber-rdi',clobber_old,clobber_new,'native-hold'),
             ('bad-early-written',early_old,early_new,'atomic'),
         ]
         for name,old,new,kind in controls:
             if kind=='atomic':
                 self.run_both([short],name+'-good')
+            elif kind=='native-hold':
+                # Good emitter: index=3 < length=5 → FALL and rdi stays 3.
+                good_text=expected(7,6,41)
+                for mode in self.executables:
+                    marker,captured=self._probe(mode,800,7,6,3,5,41,good_text)
+                    self.assertEqual(marker,FALL,(name,mode,'good-route',marker))
+                    self._assert_preserved(mode,800,7,6,3,5,captured)
             else:
                 self.run_both([equal],name+'-good')
             for mode,exe in self.bad_build(name,old,new).items():
                 if kind=='atomic':
                     with self.assertRaisesRegex(AssertionError,'guard/atomicity'):
                         self.run_cases(exe,[short],name+'-'+mode)
+                elif kind=='native-hold':
+                    c=fall_hold
+                    payload=bytearray(struct.pack('<Q',1));payload.extend(pack_case(c))
+                    run=subprocess.run([str(exe)],input=bytes(payload),capture_output=True,timeout=60)
+                    self.assertEqual(run.returncode,0,run.stderr)
+                    st,g,w=struct.unpack_from('<3Q',run.stdout,8)
+                    text=run.stdout[32:32+c['cap']][:w]
+                    self.assertEqual(st,0);self.assertEqual(g,1)
+                    self.assertNotEqual(text,c['text'],(name,mode,text))
+                    self.assertIn(b'mov rdi, 0',text,(name,mode,text))
+                    marker,captured=self._probe(mode,900+hash(name)%100,7,6,3,5,41,text)
+                    # Route still fallthrough; rdi clobber is what the hold assert rejects.
+                    self.assertEqual(marker,FALL,(name,mode,'bad-route-still-fall',marker))
+                    with self.assertRaisesRegex(AssertionError,r'reg7 preserved'):
+                        self._assert_preserved(mode,900,7,6,3,5,captured)
                 else:
                     # Emit with rdi/rsi and trap 40; run index==len=5 → good traps, bad falls.
                     c=item(7,6,40)
@@ -386,10 +486,11 @@ class NasmBoundsGuardTests(unittest.TestCase):
                     text=run.stdout[32:32+c['cap']][:w]
                     self.assertEqual(st,0);self.assertEqual(g,1)
                     self.assertNotEqual(text,c['text'],(name,mode,text))
-                    got=self._probe(mode,900+hash(name)%100,7,6,5,5,40,text)
+                    marker,captured=self._probe(mode,900+hash(name)%100,7,6,5,5,40,text)
                     # Good would return TRAP; bad ja falls through → FALL.
-                    self.assertEqual(got,FALL,(name,mode,got))
-                    self.assertNotEqual(got,TRAP,(name,mode,got))
+                    self.assertEqual(marker,FALL,(name,mode,marker))
+                    self.assertNotEqual(marker,TRAP,(name,mode,marker))
+                    self._assert_preserved(mode,900,7,6,5,5,captured)
             self.records.append(dict(test=name,compiled=True,native_executed=True,modes=2,rejected_by=kind))
 
 

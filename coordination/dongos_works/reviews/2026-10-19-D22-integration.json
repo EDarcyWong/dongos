@@ -1,0 +1,42 @@
+{
+  "task": "deepseek:D22",
+  "verification": {
+    "passed": true,
+    "checks": [
+      {
+        "spec": "discover:deepseek-works/tests:test_nasm_byte_truth_load.py",
+        "passed": true,
+        "tests": 5,
+        "skips": 0,
+        "returncode": 0,
+        "cancelled": false,
+        "timed_out": false,
+        "elapsed_seconds": 99.977
+      }
+    ],
+    "source_stable": true,
+    "fingerprint": {
+      "deepseek-works/src/bootstrap/nasm_byte_truth_load.dg": "4f5b37049de423aaca09fca7698f6ed00710c2d4fc4aba6bf27f097674932a26",
+      "deepseek-works/src/bootstrap/nasm_byte_truth_load.md": "71d8c8f1bd0f2b7f67fd72867004c59ab38d6b3007045567ea8df9abaab85330",
+      "deepseek-works/tests/test_nasm_byte_truth_load.py": "4e8305ef01c9c57c870ad3808cdad7138e47762430984c93abbf8d4f349e7508",
+      "deepseek-works/deliveries/D22.md": "46a5bfc6f0ae2e4965aa3f43a05b9670344b214959007990ba2fcef5a5a53a1b"
+    },
+    "summary": "定向复验通过，等待源码/契约审查",
+    "finished_at": "2026-10-19T08:54:24+00:00",
+    "job": "b31e2e3b4b1d447d9818978aeb0df63b"
+  },
+  "mainline_tests": 5,
+  "mainline_skips": 0,
+  "elapsed": 98.60025010000027,
+  "fingerprints": {
+    "D:\\projects\\projects3\\2026\\dongos\\code\\lang\\bootstrap\\nasm_byte_truth_load.dg": "4f5b37049de423aaca09fca7698f6ed00710c2d4fc4aba6bf27f097674932a26",
+    "D:\\projects\\projects3\\2026\\dongos\\code\\lang\\bootstrap\\nasm_byte_truth_load.md": "71d8c8f1bd0f2b7f67fd72867004c59ab38d6b3007045567ea8df9abaab85330",
+    "D:\\projects\\projects3\\2026\\dongos\\code\\lang\\tests\\test_bootstrap_nasm_byte_truth_load.py": "942deecac66079e5b53557fc1ce1bb0f17332804a85874119133dbf74bc1e064",
+    "D:\\projects\\projects3\\2026\\dongos\\code\\lang\\bootstrap\\nasm_integer_memory_load.dg": "88624e98077d19615117f2a0f9ac6c67e80993ce222609c376288da3e45d3fec",
+    "D:\\projects\\projects3\\2026\\dongos\\code\\lang\\bootstrap\\nasm_integer_unary.dg": "d80c9627e30b587489263e44fbffca30020211640f546e9ed8e78314e7d78cc4",
+    "D:\\projects\\projects3\\2026\\dongos\\code\\lang\\bootstrap\\nasm_memory_operand.dg": "e3d072a3ea1314975427bb0e24426da2adaf3de692101f3e3e8d6768697f1d24",
+    "D:\\projects\\projects3\\2026\\dongos\\code\\lang\\bootstrap\\decimal_integer.dg": "58a4e4d746393d0e5944656aeb4c6f2aff96acca047afd455c60a47464ce0b76"
+  },
+  "review": "用户授权Codex直接处理原D22 R1。已审查生产CR12字节加载与两次CR16零比较、全部描述符/容量预检及局部上界；生产逻辑不变。永久测试现捕获含R11全部15个非rsp GPR并独立比较rsp，marker在捕获后写；真实16KiB源只读映射保护/释放成功检查及完整快照通过。真实坏Dong改R11在正常返回后按保持值拒绝，真值反转与容量提前发布负控及16个主向量保留。主线实际复制.dg/.md及仅路径适配的永久测试；主线5项零skip98.600秒，生产字节与正式输入相同，源码/依赖/主线文件SHA前后稳定。未运行OS/VM，不宣称完整L3。",
+  "status": "integrated"
+}

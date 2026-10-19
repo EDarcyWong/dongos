@@ -32,11 +32,15 @@ def tool(name: str, override: str):
 
 
 def nasm_flags(nasm: str):
-    version = subprocess.run([nasm, "-v"], capture_output=True, text=True, check=True).stdout
-    # NASM 3's optional warning flags represent valid ELF PC32/COFF REL32
-    # linker relocations used by explicit RIP-relative references.
-    major = re.search(r"NASM version (\d+)\.", version)
-    return ["-Wall", "-Werror"] + (["-w-reloc-rel-dword"] if major and int(major[1]) >= 3 else [])
+    help_text = subprocess.run([nasm, "-h"], capture_output=True, text=True, check=True).stdout
+    # Some 2.x builds backport these optional warnings. Detect each warning:
+    # valid PC32/REL32 references and absolute 64-bit pointer data must assemble, while other warnings
+    # remain errors. Old assemblers must not receive an unknown warning option.
+    warnings = ('reloc-rel-dword', 'reloc-abs-qword')
+    return ["-Wall", "-Werror"] + [
+        '-w-' + name for name in warnings
+        if re.search(r'(?m)^\s*' + re.escape(name) + r'\s', help_text)
+    ]
 
 
 class FrontendTests(unittest.TestCase):

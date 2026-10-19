@@ -1,0 +1,195 @@
+{
+  "project": "dongos",
+  "acceptance": [
+    {
+      "project": "dongos",
+      "task": {
+        "id": "cursor:CR28",
+        "number": "CR28",
+        "owner": "cursor",
+        "title": "8/16/32位debug算术结果范围门禁",
+        "description": "module `bootstrap.nasm_narrow_range_guard`；依赖`[cursor:CR4]`。\r\n\r\n`pub unsafe fn emit(width:u64,signed:bool,trap_block:u64,out:[]u8,written:*usize)u64`\r\n\r\nwidth仅8/16/32，64/0/其它INVALID。固定RAX为尚未截断/规范化的完整64位算术结果；signed解释为i64，无符号解释为u64。signed=true严格：\r\n\r\n```text\r\nmov r11, <min>\r\ncmp rax, r11\r\njl __dong_b<N>\r\nmov r11, <max>\r\ncmp rax, r11\r\njg __dong_b<N>\r\n```\r\n\r\nfalse严格：\r\n\r\n```text\r\nmov r11, <max>\r\ncmp rax, r11\r\nja __dong_b<N>\r\n```\r\n\r\nsigned范围分别[-128,127]、[-32768,32767]、[-2147483648,2147483647]；unsigned上界255/65535/4294967295。数字全部规范十进制、负号ASCII，复用CR4（min以64位二补码bits和signed=true编码）。上界u32不能作为sign-extended imm32直接CMP，统一先MOV到R11。RAX和其它GPR保持，仅R11/flags可变。trap由上游定义，debug溢出kind2；必须在CR14规范化之前接入，不补64位先前已发生的机器溢出，不用于shift/cast/显式wrapping。对规范窄值的+−*和负号，上游64位完整结果足以判断；此组件不改变release模运算契约。\r\n\r\n局部256字节足够（按20位块号计算有符号32位模板上界），要求实现说明实际求长/上界。原生oracle每width×signed至少4个边界：signed min−1/min/max/max+1，unsigned0/max/max+1/u64最大，共24主要向量；观察实际安全trap/落空、RAX原值及非R11寄存器保持。独立Python范围判定，不先截低width位。至少两种语义负控：删signed下界检查以min−1单独触发，unsigned JA→JG以u64最大被错当负数时正常执行错误落空；另容量提前写。\n\n\n## 共用固定契约与执行归属\n\n本任务是L3 Dong自举后端的独立生产组件；仅四个声明文件，Dong实现，不导出C符号（临时测试wrapper可导出），无分配、全局可变状态、OS调用。不可改code/lang、活动编译器、内核、协调器、其它负责人、在途任务或已集成依赖；既有队列/返修优先。依赖只读，只用已integrated模块；不得以宿主Python/C算法替代Dong生产逻辑。\n\n统一OK=0、INVALID=1、CAPACITY=2；接口另有Result时按任务正文完整尺寸。written非NULL、8对齐、完整8字节端点不回绕；out完整声明区间端点不回绕，非空非NULL，空可NULL。written与完整out不重叠（包括成功未使用尾部）。有输入切片/结构/嵌套名字时，必须在任何读写前验证完整描述符、元素乘法、端点、所需对齐、非空非NULL和完整对象别名；输入彼此如正文无禁止可互叠，只读输入与完整out/结果不得重叠。所有数据/枚举/标签/尺寸INVALID优先CAPACITY。失败out、计数或完整Result、输入全文不变；成功只写精确前缀/结果，尾部保持。先全预检及正确求长，在充分且有证明上界的局部区调用只读依赖，再最后发布用户out；不允许内部scratch越界或对合法容量不足输入panic。\n\n文本严格ASCII，换行真实单LF，无NUL/注释/额外空行/隐式section/global/ret（任务另定声明除外）。涉及__dong_b<N>标签时N=0..MAX-1，MAX为NONE非法；数字复用已声明decimal_integer，不另写格式化。寄存器编号若有0..15参数，固定rax,rcx,rdx,rbx,rsp,rbp,rsi,rdi,r8..r15；固定寄存器任务按正文集合测试，不强凑16矩阵。\n\n测试只跑本任务checks：实际编译/链接/原生执行Dong debug与release，NASM ELF64/COFF都组装；原生C桥显式SysV，保护宿主栈/被调用者保存寄存器。COFF组装不冒充Win64调用ABI。只暂存本模块及已声明只读依赖的传递闭包，不引入整个lang根遮蔽坏源码。独立Python/C oracle，不用生产规划器输出当唯一期望。有限固定边界，每模式不超过24个主要原生向量（并发操作另按正文有限检查）；不做全笛卡尔积或性能基准。源码、说明、测试、只读依赖前后SHA256稳定，0skip才可验收。\n\n每个描述符/端点/别名预检要独立可达，其它字段合法。written端点溢出用8对齐UINT64_MAX-7且合法空out，漏检坏体应安全返回CAPACITY而非非法解引用。初始化guard后再取快照，立刻观察失败全文/计数/guard、成功精确文本/长度/未用尾部；输入真实只读保护须检查系统调用成功，不能只声称只读。\n\n至少保留两类真实坏Dong：一种完成构建、链接、正常原生执行后，由指定数值/内存/分支/链接后地址断言拒绝；一种容量不足提前写out或结果，由完整原子性断言拒绝。同夹具先跑好体。构建失败、崩溃、超时、文本不同、无关预检错误不能冒充指定语义负控；源码中缺锁/不同内存序等结构检查单列，不能假装单次正常运行证明并发语义。坏体所有内存访问在预留安全可访问区内，不破坏真实宿主栈/ret、不依靠越界或硬件异常拒绝。\n\n本人客户端先worker MCP get_task/read_document读取最新rev和完整契约/归属，claim成功才执行；先完成已有领取/返修。产物在本人works/build/<编号>/<唯一目录>/，完成原编号交付写真实命令、tests/skips、模式/对象格式、全部输入SHA256、每种坏体实际观察/拒绝依据、未跑与剩余限制，再MCP submit。不得自行accept/integrate、提交/推送、运行OS/VM/全回归、启动模型CLI/定时器/关机，不用管理工具自动启动Cursor。任务发布不代表实现或通过，最后由Codex独立复验再验收集成。\n",
+        "status": "accepted",
+        "rev": 6,
+        "write_paths": [
+          "cursor-works/src/bootstrap/nasm_narrow_range_guard.dg",
+          "cursor-works/src/bootstrap/nasm_narrow_range_guard.md",
+          "cursor-works/tests/test_nasm_narrow_range_guard.py",
+          "cursor-works/deliveries/CR28.md"
+        ],
+        "depends_on": [
+          "cursor:CR4"
+        ],
+        "checks": [
+          "discover:cursor-works/tests:test_nasm_narrow_range_guard.py"
+        ],
+        "auto_dispatch": false,
+        "auto_verify": false,
+        "complexity": "standard",
+        "created_at": "2026-10-18T15:46:00+00:00",
+        "updated_at": "2026-10-19T07:09:16+00:00",
+        "historical": false,
+        "document": "cursor-works/tasks/CR28-board.md",
+        "delivery": "cursor-works/deliveries/CR28.md",
+        "candidate": null,
+        "verification": {
+          "passed": true,
+          "checks": [
+            {
+              "spec": "discover:cursor-works/tests:test_nasm_narrow_range_guard.py",
+              "passed": true,
+              "tests": 3,
+              "skips": 0,
+              "returncode": 0,
+              "cancelled": false,
+              "timed_out": false,
+              "elapsed_seconds": 62.287
+            }
+          ],
+          "source_stable": true,
+          "fingerprint": {
+            "cursor-works/src/bootstrap/nasm_narrow_range_guard.dg": "93dfae6e739f56ce8b0d55e9a2962d2c81434e319069c35c612264322fb8d8ba",
+            "cursor-works/src/bootstrap/nasm_narrow_range_guard.md": "fa37fd84b5056d5d5c63a7f5be456a10b6dc7bf5a68ad341cece989c9896145f",
+            "cursor-works/tests/test_nasm_narrow_range_guard.py": "11e84adea07545f624e99f2288bfb7a44814715aeb0c1cab399bd54ff8bebae1",
+            "cursor-works/deliveries/CR28.md": "b3179903d0be1f19b8d6bb5a7445af8caf10f327c23af651f022766e9784891e"
+          },
+          "summary": "定向复验通过，等待源码/契约审查",
+          "finished_at": "2026-10-19T07:08:44+00:00",
+          "job": "f8ccd74b173948b1882d255071859be4"
+        },
+        "review_note": "已实际审查源码/完整任务契约/有效测试：Reviewed 131-byte bound/256 scratch, full-64-bit signed/unsigned limits, actual 24 boundary routes and RAX/safe GPR preservation. Reviewer independently built actual formal and bad Dong on identical inputs, four exact-route rejections, supplementing original template-only positive controls. 正式独立复验tests>0、零skip、来源稳定且当前指纹一致。详见reviews/2026-10-19-CR28-integration.md；集成另做实际复制及主线验证。",
+        "legacy_hash": "7fbb1c4264ff8af16620a316d747f401e3f9497194af304d3afcb9e4727fea88",
+        "state_recovery": {
+          "at": "2026-10-19T04:43:01+00:00",
+          "snapshot_rev": 1,
+          "snapshot_sha256": "f3ab929e33419f40dfc417217d588acf8b1b26cbac50724a51942a11e438c171",
+          "audit_sha256": "3ea0db756d56092976092ed0d1216118e145a8e34aa02c5060cb913d088d553e",
+          "note": "恢复已有验收/集成/返修事实；原复验为历史记录，未声称本次重跑；不恢复丢失作业或启动模型。"
+        },
+        "claimed_by": "cursor-mcp-05de65f92bc04a7c",
+        "claimed_at": "2026-10-19T06:35:11+00:00"
+      }
+    }
+  ],
+  "files": [
+    {
+      "source": "D:\\projects\\projects3\\2026\\dongos\\coordination\\dongos_works\\cursor-works\\src\\bootstrap\\nasm_narrow_range_guard.dg",
+      "target": "D:\\projects\\projects3\\2026\\dongos\\code\\lang\\bootstrap\\nasm_narrow_range_guard.dg",
+      "sha256": "93dfae6e739f56ce8b0d55e9a2962d2c81434e319069c35c612264322fb8d8ba"
+    },
+    {
+      "source": "D:\\projects\\projects3\\2026\\dongos\\coordination\\dongos_works\\cursor-works\\src\\bootstrap\\nasm_narrow_range_guard.md",
+      "target": "D:\\projects\\projects3\\2026\\dongos\\code\\lang\\bootstrap\\nasm_narrow_range_guard.md",
+      "sha256": "fa37fd84b5056d5d5c63a7f5be456a10b6dc7bf5a68ad341cece989c9896145f"
+    },
+    {
+      "source": "D:\\projects\\projects3\\2026\\dongos\\coordination\\dongos_works\\cursor-works\\tests\\test_nasm_narrow_range_guard.py",
+      "target": "D:\\projects\\projects3\\2026\\dongos\\code\\lang\\tests\\test_bootstrap_nasm_narrow_range_guard.py",
+      "sha256": "6e21c8e1612b13ed677b65e6cd1326445069256a876a13ae01c9ad41f8c31163",
+      "adaptation": "Only ROOT/SOURCE/DOC/build paths"
+    }
+  ],
+  "mainline": {
+    "returncode": 0,
+    "tests": 3,
+    "skips": 0,
+    "elapsed_seconds": 57.381,
+    "source_stable": true,
+    "files": {
+      "lang/bootstrap/nasm_narrow_range_guard.dg": "93dfae6e739f56ce8b0d55e9a2962d2c81434e319069c35c612264322fb8d8ba",
+      "lang/bootstrap/nasm_narrow_range_guard.md": "fa37fd84b5056d5d5c63a7f5be456a10b6dc7bf5a68ad341cece989c9896145f",
+      "lang/tests/test_bootstrap_nasm_narrow_range_guard.py": "6e21c8e1612b13ed677b65e6cd1326445069256a876a13ae01c9ad41f8c31163",
+      "lang/bootstrap/decimal_integer.dg": "58a4e4d746393d0e5944656aeb4c6f2aff96acca047afd455c60a47464ce0b76",
+      "lang/dongc/checker.py": "d82cf3233e084512d7cc97ea319fcfbb054b1c65c4aa5b8ecae37a332fc3d1ae",
+      "lang/dongc/compiler.py": "c410bbfa24695d20a016c66bcee8522c59296d19393e83860bd3b1b67600d062",
+      "lang/dongc/debug_info.py": "0f730753a4e97747e0a90bda961825e67d7a6fe3599b77f444d73dced2a86eed",
+      "lang/dongc/declarations.py": "ba39725a064c6d5ba0f9398cb18438d62c6e3525a2cb847dd954d2cc547d6827",
+      "lang/dongc/emitter.py": "6df48fe534a359557a211440b358dae0cc6258c1fe3cb29b034450fc2beb73b5",
+      "lang/dongc/frontend.py": "2a632d67c208b3ed9ddfbbc14614cc91ebecc069bf741b51bc6e3822075cf4bb",
+      "lang/dongc/l1_declarations.py": "5077bfa698b4d2e4f0b284296f2abdd56ec63c980dfe59856ed88936513511b0",
+      "lang/dongc/l1_semantics.py": "8b0b323bbf49ce06f18259eca7aa2ab9068b59552c5844955cd584a4901b7549",
+      "lang/dongc/model.py": "ec2defb32d42a9ca3c8bc6927c8ed981f3a7a394320d06ca342de3780c300174",
+      "lang/dongc/modules.py": "4b5c2608f4c18ead9022d8e5323e2c619cd3c2b0ae61860bc72635133c1abfad",
+      "lang/dongc/ssa.py": "af6d5a8c319854e29bc6cfdbfad971e0a8da11c62200f1bc78b49d34b96e286d",
+      "lang/dongc/ssa_lower.py": "7cd3d3bd4240e7b7c210464c1448e5458881a4ee97083f4d32a8bdf80ad0eaf4",
+      "lang/dongc/ssa_x86.py": "6a7aa0b9a925240613ef3fb2cf9d5169463247bc50453dae07232ea2c6a7b52f",
+      "lang/dongc/typesys.py": "9b06238e8ea4064b6c9c9435e30a91e3dc503042bb807e7b53eb7545c8d7ae6a",
+      "lang/dongc/__init__.py": "9dd889b2fc00f5a7204a17c10b534346e2598e0062e5f954124ee7cd5ddb71c1",
+      "lang/dongc/__main__.py": "a1cf10c2d2f5651268095bce7d029103b33a4e32354a1c69f42f5e7b4d056fd4",
+      "lang/tests/test_dongc.py": "22963a04d63a8a36d97d8dcddaf7230c69a3960adf782a24874cec0d18d7bd21"
+    },
+    "passed": true
+  },
+  "integration": [
+    {
+      "project": "dongos",
+      "task": {
+        "id": "cursor:CR28",
+        "number": "CR28",
+        "owner": "cursor",
+        "title": "8/16/32位debug算术结果范围门禁",
+        "description": "module `bootstrap.nasm_narrow_range_guard`；依赖`[cursor:CR4]`。\r\n\r\n`pub unsafe fn emit(width:u64,signed:bool,trap_block:u64,out:[]u8,written:*usize)u64`\r\n\r\nwidth仅8/16/32，64/0/其它INVALID。固定RAX为尚未截断/规范化的完整64位算术结果；signed解释为i64，无符号解释为u64。signed=true严格：\r\n\r\n```text\r\nmov r11, <min>\r\ncmp rax, r11\r\njl __dong_b<N>\r\nmov r11, <max>\r\ncmp rax, r11\r\njg __dong_b<N>\r\n```\r\n\r\nfalse严格：\r\n\r\n```text\r\nmov r11, <max>\r\ncmp rax, r11\r\nja __dong_b<N>\r\n```\r\n\r\nsigned范围分别[-128,127]、[-32768,32767]、[-2147483648,2147483647]；unsigned上界255/65535/4294967295。数字全部规范十进制、负号ASCII，复用CR4（min以64位二补码bits和signed=true编码）。上界u32不能作为sign-extended imm32直接CMP，统一先MOV到R11。RAX和其它GPR保持，仅R11/flags可变。trap由上游定义，debug溢出kind2；必须在CR14规范化之前接入，不补64位先前已发生的机器溢出，不用于shift/cast/显式wrapping。对规范窄值的+−*和负号，上游64位完整结果足以判断；此组件不改变release模运算契约。\r\n\r\n局部256字节足够（按20位块号计算有符号32位模板上界），要求实现说明实际求长/上界。原生oracle每width×signed至少4个边界：signed min−1/min/max/max+1，unsigned0/max/max+1/u64最大，共24主要向量；观察实际安全trap/落空、RAX原值及非R11寄存器保持。独立Python范围判定，不先截低width位。至少两种语义负控：删signed下界检查以min−1单独触发，unsigned JA→JG以u64最大被错当负数时正常执行错误落空；另容量提前写。\n\n\n## 共用固定契约与执行归属\n\n本任务是L3 Dong自举后端的独立生产组件；仅四个声明文件，Dong实现，不导出C符号（临时测试wrapper可导出），无分配、全局可变状态、OS调用。不可改code/lang、活动编译器、内核、协调器、其它负责人、在途任务或已集成依赖；既有队列/返修优先。依赖只读，只用已integrated模块；不得以宿主Python/C算法替代Dong生产逻辑。\n\n统一OK=0、INVALID=1、CAPACITY=2；接口另有Result时按任务正文完整尺寸。written非NULL、8对齐、完整8字节端点不回绕；out完整声明区间端点不回绕，非空非NULL，空可NULL。written与完整out不重叠（包括成功未使用尾部）。有输入切片/结构/嵌套名字时，必须在任何读写前验证完整描述符、元素乘法、端点、所需对齐、非空非NULL和完整对象别名；输入彼此如正文无禁止可互叠，只读输入与完整out/结果不得重叠。所有数据/枚举/标签/尺寸INVALID优先CAPACITY。失败out、计数或完整Result、输入全文不变；成功只写精确前缀/结果，尾部保持。先全预检及正确求长，在充分且有证明上界的局部区调用只读依赖，再最后发布用户out；不允许内部scratch越界或对合法容量不足输入panic。\n\n文本严格ASCII，换行真实单LF，无NUL/注释/额外空行/隐式section/global/ret（任务另定声明除外）。涉及__dong_b<N>标签时N=0..MAX-1，MAX为NONE非法；数字复用已声明decimal_integer，不另写格式化。寄存器编号若有0..15参数，固定rax,rcx,rdx,rbx,rsp,rbp,rsi,rdi,r8..r15；固定寄存器任务按正文集合测试，不强凑16矩阵。\n\n测试只跑本任务checks：实际编译/链接/原生执行Dong debug与release，NASM ELF64/COFF都组装；原生C桥显式SysV，保护宿主栈/被调用者保存寄存器。COFF组装不冒充Win64调用ABI。只暂存本模块及已声明只读依赖的传递闭包，不引入整个lang根遮蔽坏源码。独立Python/C oracle，不用生产规划器输出当唯一期望。有限固定边界，每模式不超过24个主要原生向量（并发操作另按正文有限检查）；不做全笛卡尔积或性能基准。源码、说明、测试、只读依赖前后SHA256稳定，0skip才可验收。\n\n每个描述符/端点/别名预检要独立可达，其它字段合法。written端点溢出用8对齐UINT64_MAX-7且合法空out，漏检坏体应安全返回CAPACITY而非非法解引用。初始化guard后再取快照，立刻观察失败全文/计数/guard、成功精确文本/长度/未用尾部；输入真实只读保护须检查系统调用成功，不能只声称只读。\n\n至少保留两类真实坏Dong：一种完成构建、链接、正常原生执行后，由指定数值/内存/分支/链接后地址断言拒绝；一种容量不足提前写out或结果，由完整原子性断言拒绝。同夹具先跑好体。构建失败、崩溃、超时、文本不同、无关预检错误不能冒充指定语义负控；源码中缺锁/不同内存序等结构检查单列，不能假装单次正常运行证明并发语义。坏体所有内存访问在预留安全可访问区内，不破坏真实宿主栈/ret、不依靠越界或硬件异常拒绝。\n\n本人客户端先worker MCP get_task/read_document读取最新rev和完整契约/归属，claim成功才执行；先完成已有领取/返修。产物在本人works/build/<编号>/<唯一目录>/，完成原编号交付写真实命令、tests/skips、模式/对象格式、全部输入SHA256、每种坏体实际观察/拒绝依据、未跑与剩余限制，再MCP submit。不得自行accept/integrate、提交/推送、运行OS/VM/全回归、启动模型CLI/定时器/关机，不用管理工具自动启动Cursor。任务发布不代表实现或通过，最后由Codex独立复验再验收集成。\n",
+        "status": "integrated",
+        "rev": 7,
+        "write_paths": [
+          "cursor-works/src/bootstrap/nasm_narrow_range_guard.dg",
+          "cursor-works/src/bootstrap/nasm_narrow_range_guard.md",
+          "cursor-works/tests/test_nasm_narrow_range_guard.py",
+          "cursor-works/deliveries/CR28.md"
+        ],
+        "depends_on": [
+          "cursor:CR4"
+        ],
+        "checks": [
+          "discover:cursor-works/tests:test_nasm_narrow_range_guard.py"
+        ],
+        "auto_dispatch": false,
+        "auto_verify": false,
+        "complexity": "standard",
+        "created_at": "2026-10-18T15:46:00+00:00",
+        "updated_at": "2026-10-19T07:10:44+00:00",
+        "historical": false,
+        "document": "cursor-works/tasks/CR28-board.md",
+        "delivery": "cursor-works/deliveries/CR28.md",
+        "candidate": null,
+        "verification": {
+          "passed": true,
+          "checks": [
+            {
+              "spec": "discover:cursor-works/tests:test_nasm_narrow_range_guard.py",
+              "passed": true,
+              "tests": 3,
+              "skips": 0,
+              "returncode": 0,
+              "cancelled": false,
+              "timed_out": false,
+              "elapsed_seconds": 62.287
+            }
+          ],
+          "source_stable": true,
+          "fingerprint": {
+            "cursor-works/src/bootstrap/nasm_narrow_range_guard.dg": "93dfae6e739f56ce8b0d55e9a2962d2c81434e319069c35c612264322fb8d8ba",
+            "cursor-works/src/bootstrap/nasm_narrow_range_guard.md": "fa37fd84b5056d5d5c63a7f5be456a10b6dc7bf5a68ad341cece989c9896145f",
+            "cursor-works/tests/test_nasm_narrow_range_guard.py": "11e84adea07545f624e99f2288bfb7a44814715aeb0c1cab399bd54ff8bebae1",
+            "cursor-works/deliveries/CR28.md": "b3179903d0be1f19b8d6bb5a7445af8caf10f327c23af651f022766e9784891e"
+          },
+          "summary": "定向复验通过，等待源码/契约审查",
+          "finished_at": "2026-10-19T07:08:44+00:00",
+          "job": "f8ccd74b173948b1882d255071859be4"
+        },
+        "review_note": "已实际审查源码/完整任务契约/有效测试：Reviewed 131-byte bound/256 scratch, full-64-bit signed/unsigned limits, actual 24 boundary routes and RAX/safe GPR preservation. Reviewer independently built actual formal and bad Dong on identical inputs, four exact-route rejections, supplementing original template-only positive controls. 正式独立复验tests>0、零skip、来源稳定且当前指纹一致。详见reviews/2026-10-19-CR28-integration.md；集成另做实际复制及主线验证。",
+        "legacy_hash": "7fbb1c4264ff8af16620a316d747f401e3f9497194af304d3afcb9e4727fea88",
+        "state_recovery": {
+          "at": "2026-10-19T04:43:01+00:00",
+          "snapshot_rev": 1,
+          "snapshot_sha256": "f3ab929e33419f40dfc417217d588acf8b1b26cbac50724a51942a11e438c171",
+          "audit_sha256": "3ea0db756d56092976092ed0d1216118e145a8e34aa02c5060cb913d088d553e",
+          "note": "恢复已有验收/集成/返修事实；原复验为历史记录，未声称本次重跑；不恢复丢失作业或启动模型。"
+        },
+        "claimed_by": "cursor-mcp-05de65f92bc04a7c",
+        "claimed_at": "2026-10-19T06:35:11+00:00",
+        "integration_note": "已按验收字节真实复制生产.dg/.md至code/lang/bootstrap，永久test_bootstrap_*仅适配根/源码/说明/唯一产物路径，全部断言/负控保留。主线CR28三项通过0skip、57.381秒，生产/永久测试/只读依赖/宿主编译器指纹前后稳定且当前实物一致。见reviews/2026-10-19-CR28-integration.md及同名JSON。仅独立后端组件集成，完整L3未完成。"
+      }
+    }
+  ]
+}

@@ -19,7 +19,8 @@ static char output[100000];static uint64_t output_size,checks,bad,sequence=20,ev
 static Boot boot;
 static Config configs[32];static Snapshot states[32];static Event events[64];static unsigned events_count;
 static uint64_t catalog_count=18,incarnation=1;
-typedef struct {char path[1024];uint8_t content[160000];uint64_t size,live,directory;} File;
+enum { MAX_EXEC_IMAGE=2*1024*1024 };
+typedef struct {char path[1024];uint8_t content[MAX_EXEC_IMAGE+1];uint64_t size,live,directory;} File;
 typedef struct {uint64_t live,generation,rights,target,root;} Handle;
 static File files[16];static Handle handles[32];
 #define CHECK(x) do{checks++;if(!(x)){fprintf(stderr,"SHELL_COMMAND_ASSERT line %u checks=%llu bad=%llu output=%s\n",__LINE__,(unsigned long long)checks,(unsigned long long)bad,output);return 1;}}while(0)
@@ -63,7 +64,7 @@ uint64_t SYSV svc_call(uint64_t number,uint64_t a,uint64_t b,uint64_t c,uint64_t
  if(number==0x83&&a==77){for(unsigned i=7;i<catalog_count;i++)if(states[i].process==b){finish(i,b,5,c);return 0;}return 0x05110003;}
  if(number==0x87&&a==77){uint64_t value[8]={1,1,100,40,131104,0x123000,1,0};if(c||d||e||f){bad++;return 99;}memcpy((void*)(uintptr_t)b,value,sizeof value);return 0;}
  if(number==0x88&&a==77){if((b!=1&&b!=3)||c!=states[b].generation||d||e||f){bad++;return 99;}restarts++;return 0;}
- if(number==0x85&&a==77){const uint8_t*bytes=(const uint8_t*)(uintptr_t)b;if(c!=150000||d!=42||memcmp(bytes,files[2].content,150000)){bad++;return 99;}executions++;states[12].generation++;states[12].process=0xabc001200ULL|states[12].generation;states[12].state=1;states[12].sequence=++sequence;memcpy((void*)(uintptr_t)e,&states[12],sizeof(Snapshot));finish(12,states[12].process,3,42);return 0;}
+ if(number==0x85&&a==77){const uint8_t*bytes=(const uint8_t*)(uintptr_t)b;if(!c||c>MAX_EXEC_IMAGE||c!=files[2].size||d!=42||memcmp(bytes,files[2].content,(size_t)c)){bad++;return 99;}executions++;states[12].generation++;states[12].process=0xabc001200ULL|states[12].generation;states[12].state=1;states[12].sequence=++sequence;memcpy((void*)(uintptr_t)e,&states[12],sizeof(Snapshot));finish(12,states[12].process,3,42);return 0;}
  bad++;return 99;
 }
 static int command(const char*line,const char*expected){output_size=0;output[0]=0;CHECK(!shc_command((const uint8_t*)line,strlen(line)));CHECK(strstr(output,expected)!=NULL);CHECK(!bad);return 0;}
@@ -85,6 +86,20 @@ int main(void){
  CHECK(!command("run echo 18446744073709551615","RUN OK echo"));char old_wait[80];snprintf(old_wait,sizeof old_wait,"wait %llu",(unsigned long long)old_echo);CHECK(!command(old_wait,"state=3 status=0"));CHECK(events_read==1);CHECK(!command("wait","state=3 status=18446744073709551615"));CHECK(!command("run echo 18446744073709551616","ERROR 0x0000000005110001"));CHECK(!command("run shell","ERROR 0x0000000004010003"));CHECK(!command("run file-app","ERROR 0x0000000004010003"));
  CHECK(!command("run fault","RUN OK fault"));CHECK(!command("wait","state=4 status=14"));CHECK(!command("run waiter","RUN OK waiter"));char kill[80];snprintf(kill,sizeof kill,"kill %llu",(unsigned long long)states[9].process);CHECK(!command(kill,"KILL OK"));CHECK(!command("wait","state=5 status=0"));
  CHECK(!command("exec binary.elf 42","EXEC OK binary.elf"));CHECK(executions==1);CHECK(!command("wait","state=3 status=42"));CHECK(!command("exec missing.elf","ERROR 0x0000000005040006"));CHECK(!command("wait 1","ERROR 0x0000000005110003"));
+ // Cross the old 256 KiB cap, then exercise the exact new cap through real
+ // production chunk reads. The model compares every byte passed to EXEC.
+ const uint64_t lengths[]={262145,1048577,MAX_EXEC_IMAGE};
+ for(unsigned k=0;k<sizeof lengths/sizeof lengths[0];k++){
+  files[2].size=lengths[k];for(uint64_t i=0;i<files[2].size;i++)files[2].content[i]=(uint8_t)(i*73+19);
+  uint64_t before_exec=executions,before_read=read_bytes;
+  CHECK(!command("exec binary.elf 42","EXEC OK binary.elf"));CHECK(executions==before_exec+1);CHECK(read_bytes==before_read+files[2].size);
+  CHECK(!command("wait","state=3 status=42"));
+ }
+ files[2].size=MAX_EXEC_IMAGE+1;
+ uint64_t before_exec=executions,before_read=read_bytes,before_close=closes;
+ CHECK(!command("exec binary.elf 42","ERROR 0x0000000005110001"));
+ CHECK(executions==before_exec&&read_bytes==before_read&&closes==before_close+1);
+ files[2].size=150000;
  unsigned live=0;for(unsigned i=0;i<32;i++)live+=(unsigned)handles[i].live;CHECK(live==1&&spawns==4&&opens>=10&&closes>=10&&read_bytes>=150000);
  CHECK(!command("ps","PROCESS settings id=17"));CHECK(strstr(output,"PROCESS editor id=16"));
  CHECK(!command("run xhci","ERROR 0x0000000004010003"));

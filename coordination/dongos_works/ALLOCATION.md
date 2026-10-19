@@ -1,5 +1,59 @@
 # DongOS 客户端分工（2026-10-18）
 
+2026-10-19用户授权Codex直接修复D23：测试夹具内存/NULL协议/对齐与隔离问题已修，生产逻辑不变；正式及主线各3项零skip、SHA稳定，已验收并真实集成。见[D23修复与集成](reviews/2026-10-19-D23-fixed.md)。不等同已执行自编译产物比较。
+
+2026-10-19用户授权Codex直接修复D22：原编号R1已补齐全GPR/RSP捕获、真实只读源页与完整快照及实际坏R11数值负控，生产逻辑不变。正式和主线各5项零skip、SHA稳定，已验收并真实集成；覆盖此前D22待返修状态。见[D22修复集成](reviews/2026-10-19-D22-R1-fixed.md)。
+
+2026-10-19最新复验：C46/C47正式与主线各同6项零skip、SHA稳定，已验收并真实集成；原CR30/CR31继续归档。D22独立真实坏Dong证明R11保持检查缺口，原任务已退回DeepSeek R1，另须落实真实只读源页保护；先返修再领取新项，在途任务不抢占。见[本轮审查与集成](reviews/2026-10-19-C46-C47-D22-review.md)。
+
+2026-10-19用户要求DeepSeek一个简单任务：新增[D23 编译产物逐字节比较与首差定位](deepseek-works/tasks/D23-board.md)，所属L3：Dong自举后端/产物一致性基础工具，发布todo rev1。仅四文件、无依赖/分配/I/O/VM，只比较内存切片并报告首差或长度差；实际Dong两模式、双格式、有限向量、只读/别名原子性和真实坏体验证。D21已integrated，D22已submitted；若本人收到返修则先返修再领取D23，不启动AI CLI。工具通过不代表已完成stage1/stage2自编译比较。
+
+2026-10-19本轮L3复验收尾：C43、C44（原CR32）、C45（原CR33）、D21 R1、CX2、CX4、CX5均已完成独立源码/契约/有效测试审查并登记integrated（CX4/CX5状态由另客户端推进，本审查者补审并独立主线18项零skip）。C43/C44/C45/D21生产/说明及永久测试已真实复制适配主线，集成后对应4/5/4/5项均零skip，耗时60.124/47.885/23.228/66.719秒、文件前后SHA稳定。CX2优化版正式10项0skip1209.695秒，另19项两模式38次独立追加检查通过，主线现有文件与正式隔离输入一致后验收/集成。D21复制失败旧作业零测试不计通过，按最新rev显式重发布同一稳定交付并重新正式5项0skip67.678秒后才验收。CR30首交已退R1，后由其它客户端依用户要求归档转claude:C46；不继承验收，本轮未登记C46通过。后续新提交另行复验，不将本批收尾写成整个队列或完整L3已完成。证据见[ C43/CX2 ](reviews/2026-10-19-C43-CX2-independent.md)、[ C44/C45 ](reviews/2026-10-19-C44-C45-independent.md)、[ CR30/D21 ](reviews/2026-10-19-CR30-D21-independent.md)、[ CX4/CX5 ](reviews/2026-10-19-CX4-CX5-independent.md)。
+
+2026-10-19用户要求再给Claude两项：新增[C49 条件比较/双分支返回整函数](claude-works/tasks/C49-board.md)和[C50 实参重排/跨函数调用整函数](claude-works/tasks/C50-board.md)，均属L3：Dong自举后端/整函数接线，发布todo rev1。依赖全部integrated、各四文件，与在途C48独立无文件重叠。先完成C48和本人返修，再领取；真实Dong生成完整函数并call/ret，数值与完整保持、容量原子性负控必需。只派单不启动AI CLI，不等同整个L3完成。
+
+2026-10-19用户再次要求Claude派单：新增[C48 受限u64直线IR到完整SysV函数接线](claude-works/tasks/C48-board.md)，所属L3：Dong自举后端/整函数接线。八项依赖全部integrated，四文件无冲突，发布todo rev1；C46/C47已提交，其它既有提交继续独立审查，有返修先处理。C48须真实生成并call/ret完整函数，独立解释器核对结果、完整保持和原子性负控；不宣称完整AST/IR或自举完成，不启动AI CLI。
+
+2026-10-19用户明确要求转交Cursor全部进行中/返修任务：cursor:CR30（rework rev4）→ [claude:C46](claude-works/tasks/C46-board.md)，cursor:CR31（in_progress rev2）→ [claude:C47](claude-works/tasks/C47-board.md)。原任务已暂停并归档，原历史/时间/审查/文件不变；新任务均待Claude领取，现有代码/测试已带入claude-works，C46必须继承R1全部返修意见，C47继续未交付开发。旧交付仅历史基线，须实际补齐并重新正式复验；不继承验收。证据[2026-10-19-Cursor-Claude-transfer-20261019T081242Z](reviews/2026-10-19-Cursor-Claude-transfer-20261019T081242Z/transfer.json)。Cursor停止原两项，Claude读取完整任务后手动领取，不启动AI CLI。
+
+2026-10-19本轮L3审查最终进展：C43正式4项零skip59.802秒，独立直接4项零skip59.726秒；已验收并实际复制生产/说明/永久测试到主线，主线同4项零skip60.124秒、文件SHA稳定，已登记integrated rev6。见[审查集成记录](reviews/2026-10-19-C43-CX2-independent.md)。CR30/D21已原任务退回R1，缺口见[返修记录](reviews/2026-10-19-CR30-D21-independent.md)。CX2首轮正式作业由原负责人取消（非超时、源码稳定），原负责人仅优化坏体非本机格式构建后提交rev9并排新作业58621310cc104b8a8ba3f9676f219106，本轮未验收CX2新提交。期间新增CX4/CX5已由另客户端推进integrated rev6；本审查者亦实际补审源码/契约/测试并在主线独立18项零skip40.940秒，不重复写状态，见[补审证据及限制](reviews/2026-10-19-CX4-CX5-independent.md)。未运行OS/VM，完整L3/客体门禁未据此宣称完成。
+
+2026-10-19本轮处理L3待复验：CR30、D21首交已实际审查生产/契约/永久测试，发现完整GPR保持观察缺口，CR30另有负控好侧使用Python汇编模板。仅取消两项queued复验，未中断运行作业，已原编号退回R1；不得重写已正确组合或移交给别人。详见[返修依据](reviews/2026-10-19-CR30-D21-independent.md)。C43独立直接4项零skip通过（59.726秒），CX2追加19项两模式共38次通过，正式作业仍运行/排队；这些中间结果不等同验收/集成，最终以协调器状态和后续审查记录为准。
+
+2026-10-19用户明确要求CR32、CR33重新指派给Claude：已通过协调器将未领取、无作业/实现产物的cursor:CR32、cursor:CR33先暂停再归档（各rev3），完整原任务书和原发布时间/事件保留；正式后继为[claude:C44 接续CR32](claude-works/tasks/C44-board.md)、[claude:C45 接续CR33](claude-works/tasks/C45-board.md)，发布时均todo rev1。两项均属于L3：Dong自举后端；C44子阶段为后端基础组件组合接线，C45为目标产物静态ELF64镜像。各四文件已映射至claude-works，原接口/验证要求/依赖保留；新任务书记录来源与原任务书SHA256。Claude读取最新rev后手动领取，既有领取/返修优先，不自动启动CLI，不恢复Cursor原任务。转交后时间按各自事件保留和统计，不能将新发布时间覆盖原发布时间。
+
+2026-10-19总门禁推进：C41/C42已真实集成（主线9项零skip），CX3合法静态指针重定位兼容修复已集成；CX2 optional/result match主线用例已通过但正式全模块负控复验中，尚未验收。Cursor新增[CR33 ELF64产物容器](cursor-works/tasks/CR33-board.md)，与现有CR30～CR32不重号/不冲突；按本人队列执行。完整L3剩余门禁见[实况记录](reviews/2026-10-19-L3-completion-progress.md)，不得以组件通过替代stage1/stage2/客体FLUSH及重启验收。
+
+## 派单阶段标注（用户要求，2026-10-19起生效）
+
+以后每项新任务必须在标题或任务书开头明确标注所属阶段，并在对用户的派单汇总中列出。标注采用项目既有阶段编号及名称（例如“L3：Dong自举后端”）；必要时追加子阶段和本项推进目标。不得将独立组件完成等同于整个阶段完成；涉及多个阶段时列明主阶段与关联阶段。
+
+本批C43、CR30、CR31、CR32、D22均属于“L3：Dong自举后端”，子阶段为“后端基础组件组合接线”；这些任务尚不等同于活动IR接入或完整L3完成。
+
+2026-10-19本轮按用户要求检测Claude并向三客户端补单：MCP查询时C41/C42均accepted rev5，正式复验分别4/5项、零skip，尚未登记integrated；本轮仅读取既有审查/复验状态，不冒充重新验收或集成。新增Claude [C43 间接调用组合](claude-works/tasks/C43-board.md)；Cursor [CR30 完整计数可变移位](cursor-works/tasks/CR30-board.md)、[CR31 门禁与除法组合](cursor-works/tasks/CR31-board.md)、[CR32 序言与入口捕获](cursor-works/tasks/CR32-board.md)；DeepSeek [D22 字节真值装入](deepseek-works/tasks/D22-board.md)。发布时均todo rev1、各四文件、依赖逐项确认integrated、文件互不重叠。DeepSeek D21查询时in_progress rev2，D22明确先完成D21及返修再领取。全部经worker MCP读取最新rev/领取后在本人客户端手动执行，不自动启动任何模型CLI；任务状态实时以MCP为准。
+
+2026-10-19用户授权恢复DeepSeek派单：DeepSeek Harness desktop Cordis profile已加入coordination-tasks MCP，owner=deepseek、worker角色，实际stdio握手/8工具/本人todo查询通过，既有配置保留并备份。新增一项[D21 窄算术门禁与规范化组合](deepseek-works/tasks/D21-board.md)，依赖CR28/CR14均integrated，四文件，不与Claude C41/C42冲突；先只做本项。客户端重载后读取最新rev并自行claim，不自动启动模型CLI。旧“DeepSeek不可用/不派单”是历史状态，本条为当前用户授权。交付仍需Codex独立复验与实际集成。
+
+2026-10-19最新推进：CR28窄算术范围门禁、CR29切片lo/hi/len门禁均已独立验收并真实集成；正式各3项零skip，主线各3项零skip（57.381秒/41.553秒），输入指纹稳定。审查者补跑正式实际Dong与坏体相同输入的精确路由对照，共8次正确拒绝。完整L3/IR接线仍未完成。Claude C41在途、C42待领取，以协调器实时状态为准。详见[CR28](reviews/2026-10-19-CR28-integration.md)、[CR29](reviews/2026-10-19-CR29-integration.md)。
+
+2026-10-19按用户要求给Claude新增两项接线任务：[C41 直接调用及结果接收](claude-works/tasks/C41-board.md)、[C42 返回值装载与函数尾声](claude-works/tasks/C42-board.md)。依赖均已integrated，两项互不依赖、各四文件；必须实际复用既有组件，以真实Dong产出完成本机call/ret及数值负控。worker读取最新rev并领取后手动执行，不启动AI CLI。交付后由Codex独立复验并实际集成，不重复既有组件或宣称完整L3完成。
+
+2026-10-19最新集成：C39/C40与CR24～CR27返修已完成独立验收、真实文件集成；正式独立与主线相同20项分别零skip通过，主线191.761秒且源码/永久测试/只读依赖/编译器前后指纹稳定。返回值装载/保存、原子store/CAS/fetch-add和重叠memmove均为独立组件，完整L3仍未完成。详见[本批集成证据](reviews/2026-10-19-L3-returns-atomics-integration.md)。历史返修/待领取文字为当时快照，以协调器最新状态为准。
+
+2026-10-19最新审查：CR27正式3项零skip通过，但主原生路径执行Python模板且指针终值仅检查差值；独立实际坏Dong使两终值同时+1仍通过现有原生断言，两模式已实证。已原任务退回Cursor R1，详见[CR27复验记录](reviews/2026-10-19-CR27-independent.md)。CR24～CR27优先由原负责人完善返修；CR28在途、C39/C40待领取，均以MCP最新状态为准。不重复派单或恢复已验收/集成任务。
+
+2026-10-19再次按用户要求补充Claude队列：新增[C40 调用返回值保存](claude-works/tasks/C40-board.md)，与已有[C39 返回值装载](claude-works/tasks/C39-board.md)分别处理caller/callee，文件互不冲突，不依赖尚未验收的新组件。两项均须worker MCP读取最新rev后领取，客户端手动执行，不启动AI CLI；完成后由Codex独立复验并决定验收/集成。
+
+2026-10-19用户追加授权给Claude派单：已通过协调器发布C39「从固定帧槽发射SysV返回值及窄值扩展」，最新状态以MCP为准。仅四文件，依赖C14/CR8均已integrated，补齐入口/出站实参之后的返回值发射，不重复既有组件；完整任务书见[ C39 ](claude-works/tasks/C39-board.md)。原生测试须实际Dong产出、合计<=24、真实数值负控及完整保持检查，不启动AI CLI。CR24/CR25/CR26已原任务退回Cursor补测试契约，见对应2026-10-19独审记录。
+
+2026-10-19补充：CR22 R2已独立验收并真实集成，正式/主线各3项零skip且来源稳定；与本批C35/C36/C37/C38/CR23合计6组件、26项主线定向测试通过。CR24/CR25审查发现原生观察及实际产出并发验证缺口，已原任务退回Cursor返修。完整L3仍未完成，最新状态以MCP为准。见[CR22 R2记录](reviews/2026-10-19-CR22-R2-integration.md)。
+
+2026-10-19最新复验：C35/C36/C37/C38/CR23均已独立验收并真实集成，正式与主线同23项分别零skip通过、来源稳定；CR22原R1仍有48>24主要向量契约缺口，已有限R2退回并由原负责人领取。见[本批记录](reviews/2026-10-19-L3-latest-review-integration.md)。CR24新增交付继续独立审查，其余本人在途不抢占、不启动CLI；下方同编号返修描述为旧快照，最新以MCP为准。
+
+2026-10-19继续推进：C34、CR21 R1亦已独立验收并真实集成，正式与主线同8项分别零skip通过、来源稳定；CR21交付文字在复验后变化曾被验收指纹关卡拒绝，重新正式复验后才验收。与下批C33/CR20合计4组件完成集成，见[后续证据](reviews/2026-10-19-C34-CR21-R1-integration.md)。其它任务按本人队列继续，最新状态以MCP为准。
+
+2026-10-19后续复验：C33与CR20 R1已独立验收并真实集成，正式/主线同8项分别零skip通过，见[集成记录](reviews/2026-10-19-C33-CR20-R1-integration.md)。C37/C38正式各4项零skip通过但独立坏Dong证明完整输入尾部别名测试缺口，已原任务退回R1，见[逐项要求](reviews/2026-10-19-C37-C38-independent.md)。公共NASM警告能力检测已由Codex CX1修复并独立验收集成。下方“本批8项均返修”为早期状态，后续各项实时以MCP为准；原负责人继续本人返修，不重复派单或启动CLI。
+
 2026-10-19复验更新：C33～C36、CR20～CR23本批8项已原任务退回R1，正式28测试0skip通过但独立实证测试契约尚有缺口，未验收集成；两客户端优先补本人返修，再领取剩余新项。无需重写已正确生产算法，不增加新任务或恢复归档任务。见[逐项复验依据](reviews/2026-10-19-Claude-Cursor-submitted-review.md)。
 
 最新追加授权（2026-10-18）：用户要求多生成任务，已通过MCP再发布10项——Cursor CR24～CR29六项（原子store/CAS/fetch-add、重叠memmove、窄值范围、切片上下界），Claude C35～C38四项（switch分发、scope清理调用、incoming实参捕获、静态64位重定位）。每项四文件，依赖均已集成，彼此无依赖；原CR20～CR23、C33/C34保持原队列，先完成已领取/返修。客户端worker MCP手动执行，不启动CLI；DeepSeek/LM Studio本轮0新增。见[正式派单与完整任务链接](reviews/2026-10-18-Claude-C35-C38-Cursor-CR24-CR29-allocation.md)。

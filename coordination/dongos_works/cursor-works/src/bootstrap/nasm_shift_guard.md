@@ -26,4 +26,4 @@ jae __dong_b<trap_block>
 2. `INVALID`：寄存器 > 15、非法 width、`trap_block == NONE`（容量为 0 时也先报 INVALID）。
 3. `CAPACITY`：文本长度大于 out.len。
 
-文本在 64 字节局部缓冲区组装（最长 44 字节），全部通过后一次复制到 out 并写 `*written`。失败不改 out 和 written；成功只写精确前缀，尾部不变。无分配、无全局可变状态、无 OS 调用；模块不导出 C 符号，测试经临时 wrapper 导出 `dong_shift_guard_emit`。
+文本在 64 字节局部缓冲区组装（最长 45 字节：`cmp r15, 64\n` + `jae __dong_b`（12 字节）+ 20 位十进制 + `\n`），全部通过后一次复制到 out 并写 `*written`。失败不改 out 和 written；成功只写精确前缀，尾部不变。无分配、无全局可变状态、无 OS 调用；模块不导出 C 符号，测试经临时 wrapper 导出 `dong_shift_guard_emit`。

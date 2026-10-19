@@ -53,6 +53,7 @@ class Console(ThreadingHTTPServer):
             if ident not in self.contexts:
                 from .runner import Runner
                 store = self.registry.store(ident)
+                store.backup()
                 migrate.synchronize(store)
                 store.export()
                 runner = Runner(store, self.provider_info, timeout=self.config.get('job_timeout_seconds',1800), parallel=self.config.get('parallel_jobs',2))
@@ -64,7 +65,8 @@ class Console(ThreadingHTTPServer):
     def snapshot(self, store=None, runner=None):
         store, runner = store or self.store, runner or self.runner
         probes = store.local / 'connection-probes.json'
-        return dict(at=now(), tasks=store.tasks(), jobs=store.jobs(),
+        tasks = [t | {'timing': store.timing(t)} for t in store.tasks()]
+        return dict(at=now(), tasks=tasks, jobs=store.jobs(),
                     events=store.recent_events(), issues=store.validate(),
                     providers=runner.providers, labels=LABELS,
                     project_root=str(store.root), works_root=str(store.works_root),

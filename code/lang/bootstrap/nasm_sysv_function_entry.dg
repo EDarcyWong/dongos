@@ -1,0 +1,43 @@
+// SysV function entry with no saved registers: the integrated CR11
+// nasm_function_frame.prologue(frame_bytes, 0) ("push rbp", "mov rbp, rsp",
+// "sub rsp, frame_bytes" when non-zero), then the integrated C37
+// nasm_sysv_incoming_args capture of the incoming INTEGER arguments into
+// [rbp - offset] slots. No epilogue or ret. Both are called for real into a
+// bounded local scratch; out and written are written once, after every check,
+// so the prologue is never published when the capture is invalid or does not fit.
+module bootstrap.nasm_sysv_function_entry;
+import bootstrap.nasm_function_frame as ff;
+import bootstrap.nasm_sysv_incoming_args as inc;
+pub const OK:u64=0;pub const INVALID:u64=1;pub const CAPACITY:u64=2;
+pub const MAX_FRAME:usize=4080;
+const MAX:u64=0xffff_ffff_ffff_ffff;
+// Local scratch, two segments back to back:
+//   prologue <= 64: "push rbp\nmov rbp, rsp\n" (22) + "sub rsp, 4080\n" (14) = 36   -> at <= 64
+//   capture  <= 1024: C37 bound 16 words * 55 = 880                               -> at <= 1088 <= TEXT
+// Each component writes at most the slice it is given, so neither segment can run past TEXT.
+const PROLOGUE:usize=64;const CAPTURE:usize=1024;const TEXT:usize=1536;
+fn span(p:u64,n:u64)bool{return n==0||(p!=0&&n<=MAX-p);}
+fn overlap(a:u64,n:u64,b:u64,m:u64)bool{return n!=0&&m!=0&&a<b+m&&b<a+n;}
+pub unsafe fn emit(kinds:[]const u8,destination_offsets:[]const usize,frame_bytes:usize,out:[]u8,written:*usize)u64{unsafe{
+ let wp=written as u64;let kp=kinds.ptr as u64;let dp=destination_offsets.ptr as u64;let op=out.ptr as u64;
+ if written==null||(wp&7)!=0||!span(wp,8){return INVALID;}
+ if destination_offsets.len>MAX/8{return INVALID;}
+ let kn=kinds.len;let dn=destination_offsets.len*8;let on=out.len;
+ if !span(kp,kn)||!span(dp,dn)||(dn!=0&&(dp&7)!=0)||!span(op,on){return INVALID;}
+ // Inputs may overlap each other; out and written are disjoint from both whole inputs and from each other.
+ if overlap(wp,8,op,on){return INVALID;}
+ if overlap(kp,kn,op,on)||overlap(dp,dn,op,on)||overlap(kp,kn,wp,8)||overlap(dp,dn,wp,8){return INVALID;}
+ // CR11 alone would accept 4096; C37 (and so this entry) needs frame_bytes <= 4080.
+ if frame_bytes>MAX_FRAME||(frame_bytes&15)!=0{return INVALID;}
+ // Kinds, word count, slot range/alignment/uniqueness are C37's rules and are checked by C37 itself
+ // here, in local scratch: any non-OK is an INVALID input and out is still untouched.
+ var buffer:[1536]u8=[0;1536];var at:usize=0;var n:usize=0;
+ if ff.prologue(frame_bytes,0,slice_from_raw_parts(&buffer[0],PROLOGUE),&n)!=ff.OK{return INVALID;}
+ at=n;
+ if inc.emit(kinds,destination_offsets,frame_bytes,slice_from_raw_parts(&buffer[at],CAPTURE),&n)!=inc.OK{return INVALID;}
+ at+=n;
+ if at>TEXT{return INVALID;}
+ if at>on{return CAPACITY;}
+ var i:usize=0;while i<at{out[i]=buffer[i];i+=1;}
+ *written=at;return OK;
+}}

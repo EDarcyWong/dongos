@@ -81,10 +81,14 @@ static void ro_free(void*p,uint64_t n){
 #define R UINT64_MAX
 /* Each preflight keeps every other field valid (root + child scope, ids {3,4}, from 1 to ROOT) so only the target check can reject it. */
 static unsigned invalid(void){
- static _Alignas(16) uint8_t arena[4096],saved[4096];const unsigned total=21;
+ static _Alignas(16) uint8_t arena[4096],saved[4096];const unsigned total=21;unsigned failed=0;
  Scope*sc=(Scope*)arena;uint64_t*id=(uint64_t*)(arena+512);uint8_t*o=arena+1024;uint64_t*w=(uint64_t*)(arena+3584);
  for(unsigned i=0;i<total;i++){
-  memset(arena,0xa5,sizeof(arena));sc[0]=(Scope){R,0,1};sc[1]=(Scope){0,1,1};id[0]=3;id[1]=4;memcpy(saved,arena,sizeof(arena));uint64_t s=0;
+  memset(arena,0xa5,sizeof(arena));sc[0]=(Scope){R,0,1};sc[1]=(Scope){0,1,1};id[0]=3;id[1]=4;
+  /* scopes 2..7 are legal empty children of the root before the snapshot, so the len=8 declared-tail alias
+     case 14 is not masked by the count-sum limit; every other field is unchanged */
+  for(unsigned k=2;k<8;k++)sc[k]=(Scope){0,0,0};
+  memcpy(saved,arena,sizeof(arena));uint64_t s=0;
   switch(i){
    case 0:s=dong_cleanup_emit(sc,2,id,2,1,R,o,2048,NULL);break;                              /* written NULL */
    case 1:s=dong_cleanup_emit(sc,2,id,2,1,R,o,2048,(uint64_t*)(arena+3585));break;           /* written odd */
@@ -108,8 +112,10 @@ static unsigned invalid(void){
    case 19:s=dong_cleanup_emit(sc,2,id,2,1,R,o,2048,(uint64_t*)o);break;                     /* written on out prefix */
    default:s=dong_cleanup_emit(sc,2,id,2,1,R,o,2048,(uint64_t*)(o+2040));break;              /* written in out's unused tail */
   }
-  if(s!=1||memcmp(saved,arena,sizeof(arena))){fprintf(stderr,"invalid preflight %u status %u\n",i,(unsigned)s);exit(93);}
+  int same=!memcmp(saved,arena,sizeof(arena));
+  if(s!=1||!same){fprintf(stderr,"invalid preflight %u status %u unchanged %d\n",i,(unsigned)s,same);failed++;}
  }
+ if(failed)exit(93);
  return total;
 }
 int main(void){
@@ -358,6 +364,19 @@ class NasmScopeCleanupTests(unittest.TestCase):
         for mode,exe in self.build_all('bad-early-out',source.replace(old,new,1)).items():
             with self.assertRaisesRegex(AssertionError,'guard/atomicity'):self.run_cases(exe,case,'bad-early-out-'+mode)
         self.records.append(dict(test='bad-early-out',compiled=True,native_executed=True,modes=2,rejected_by='guard/atomicity'))
+
+    def test_prefix_only_scopes_written_alias_is_rejected(self):
+        """Preflight sensitivity: a real Dong that checks only the first two scopes (48 bytes) against written."""
+        source=SOURCE.read_text(encoding='utf-8')
+        old='overlap(sp,sn,wp,8)';self.assertEqual(source.count(old),1)
+        for mode,exe in self.executables.items():self.run_cases(exe,[],'prefix-good-'+mode)   # same harness passes all 21
+        for mode,exe in self.build_all('bad-prefix48-alias',source.replace(old,'overlap(sp,48,wp,8)',1)).items():
+            run=subprocess.run([str(exe)],input=struct.pack('<Q',0),capture_output=True,timeout=60)
+            err=run.stderr.decode('ascii','replace');(self.work/('bad-prefix48-'+mode+'.stderr')).write_text(err,encoding='ascii')
+            self.assertEqual(run.returncode,93,(mode,err))                                   # normal exit from the preflight check
+            failed=[int(line.split()[2])for line in err.splitlines()if line.startswith('invalid preflight ')]
+            self.assertEqual(failed,[14],(mode,err))                                         # exactly the declared-tail case
+        self.records.append(dict(test='bad-prefix48-alias',compiled=True,native_executed=True,modes=2,rejected_by='preflight 14'))
 
 
 if __name__=='__main__':unittest.main()

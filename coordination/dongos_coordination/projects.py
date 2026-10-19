@@ -59,6 +59,7 @@ class Registry:
             store.export()
             return self.get(ident)
 
-    def store(self, ident):
+    def store(self, ident, *, allow_state_recovery=False):
         project = self.get(ident)
-        return Store(project['source_root'], Path(project['works_root']) / '.local', project['works_root'], project['name'])
+        return Store(project['source_root'], Path(project['works_root']) / '.local', project['works_root'], project['name'],
+                     allow_state_recovery=allow_state_recovery)

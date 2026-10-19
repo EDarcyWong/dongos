@@ -3,6 +3,8 @@
 module lib.process_abi;
 pub const VERSION:u64=1;
 pub const LIMIT:usize=32;
+// Bounded file EXEC input; shell storage and kernel staging use this same cap.
+pub const MAX_EXEC_IMAGE:usize=0x20_0000;
 pub const AUTOSTART:u64=1;
 pub const RESTART:u64=2;
 pub const ESSENTIAL:u64=4;

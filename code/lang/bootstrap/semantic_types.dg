@@ -893,12 +893,27 @@ unsafe fn rt_loop(c:*Runtime,id:usize,depth:usize)bool{unsafe{
  }return (*c).live;
 }}
 unsafe fn rt_match(c:*Runtime,id:usize,depth:usize)bool{unsafe{
- let s=(*c).s;let u=(*c).unit;let n=*at(s,u,id);if rt_expr(c,n.a,NONE,true,depth+1)!=8{rt_fail(c,UNSUPPORTED,id,ast.MATCH);return false;}
- let live=(*c).live;let truth=rt_truth(c,n.a);let slot=(*c).snapshot_depth*2;(*c).snapshot_depth+=1;if !rt_copy(c,slot,true){return false;}
+ let s=(*c).s;let u=(*c).unit;let n=*at(s,u,id);let typ=rt_expr(c,n.a,NONE,true,depth+1);
+ if (*s).status!=0{return false;}let kind=rt_kind(c,typ);
+ if typ!=8&&kind!=OPTIONAL&&kind!=RESULT{rt_fail(c,UNSUPPORTED,id,ast.MATCH);return false;}
+ let live=(*c).live;var truth:u64=2;if typ==8{truth=rt_truth(c,n.a);}else{truth=rt_tag(c,u,n.a,0);}
+ let slot=(*c).snapshot_depth*2;(*c).snapshot_depth+=1;if !rt_copy(c,slot,true){return false;}
  var seen:u64=0;var any_live=false;var arm=n.b;while arm!=NONE{let a=*at(s,u,arm);let p=*at(s,u,a.a);var mask:u64=0;
-  if p.op==286{mask=2;}else if p.op==287{mask=1;}else if p.op==0&&p.a!=NONE&&equal(text(s,u,(*at(s,u,p.a)).token),"_"){mask=3^seen;}
-  else{rt_fail(c,TYPE,a.a,42);return false;}
+  var payload:usize=NONE;var name:[]const u8="";
+  if p.a!=NONE{let path=*at(s,u,p.a);if path.kind==ast.NAME{name=text(s,u,path.token);}}
+  if p.op==0&&equal(name,"_"){mask=3^seen;}
+  else if typ==8{if p.op==286{mask=2;}else if p.op==287{mask=1;}}
+  else if kind==OPTIONAL{
+   if p.op==288{mask=1;}else if p.op==0&&equal(name,"some"){mask=2;payload=(*(*s).w).types[typ].element;}
+  }else if kind==RESULT{
+   if p.op==0&&equal(name,"ok"){mask=1;payload=(*(*s).w).types[typ].element;}
+   else if p.op==0&&equal(name,"err"){mask=2;payload=3;}
+  }
+  if payload==VOID{payload=NONE;}
+  if mask==0&&!equal(name,"_"){rt_fail(c,TYPE,a.a,42);return false;}
+  if (payload==NONE)!=(p.b==NONE){rt_fail(c,TYPE,a.a,88);return false;}
   if mask==0||(seen&mask)!=0{rt_fail(c,FLOW,a.a,1);return false;}seen|=mask;rt_copy(c,slot,false);
+  if p.b!=NONE{let g=gid(s,u,p.b);(*(*s).w).node_types[g]=payload;(*(*c).w).initialized[g]=1;}
   var selected=truth==2;if truth==0{selected=(mask&1)!=0;}if truth==1{selected=(mask&2)!=0;}
   (*c).live=live&&selected;rt_statement(c,a.b,depth+1);if (*c).live{rt_merge(c,slot+1,!any_live);any_live=true;}
   if (*s).status!=0{return false;}arm=a.next;
