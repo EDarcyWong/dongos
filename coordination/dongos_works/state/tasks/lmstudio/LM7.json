@@ -1,0 +1,72 @@
+{
+  "auto_dispatch": false,
+  "auto_verify": false,
+  "candidate": "265c70bdde3e46f78e294ff05129df20",
+  "checks": [
+    "discover:lmstudio-works/tests:test_decimal_vectors.py"
+  ],
+  "complexity": "simple",
+  "created_at": "2026-10-18T11:00:41+00:00",
+  "delivery": "lmstudio-works/deliveries/LM7.md",
+  "depends_on": [],
+  "description": "只做最简单的固定数据任务，不写实现或测试，不承担编译器修复。仅新增 lmstudio-works/fixtures/decimal-known-vectors.json 与 LM7 交付两个文件。\nJSON 顶层恰好 version/cases，version 整数1；cases 恰好下列顺序的8项。每项恰好 id/width/signed/raw/text；width 是 JSON 整数，signed 是 JSON 布尔，raw/text 是给定十进制字符串，不改写为JSON大整数，不加前导零/空白/加号。\n1. id=u8_zero,width=8,signed=false,raw=\"0\",text=\"0\"\n2. id=u8_max,width=8,signed=false,raw=\"255\",text=\"255\"\n3. id=i8_min,width=8,signed=true,raw=\"128\",text=\"-128\"\n4. id=u32_max,width=32,signed=false,raw=\"4294967295\",text=\"4294967295\"\n5. id=i32_min,width=32,signed=true,raw=\"2147483648\",text=\"-2147483648\"\n6. id=u64_max,width=64,signed=false,raw=\"18446744073709551615\",text=\"18446744073709551615\"\n7. id=i64_min,width=64,signed=true,raw=\"9223372036854775808\",text=\"-9223372036854775808\"\n8. id=i64_minus1,width=64,signed=true,raw=\"18446744073709551615\",text=\"-1\"\nUTF-8 JSON，不能增删项目/字段，不编辑 Codex 提供的独立检查。写 lmstudio-works/deliveries/LM7.md，说明只完成固定数据；测试没运行就明确未运行，不虚构通过，不声称后端/自举完成。通过自己的 worker MCP 查看、领取及提交，只有落盘后才能提交；若无文件工具，说明并释放任务，不能只返回聊天正文当文件。禁止运行OS/VM、全回归、提交推送、自行验收或改索引。LM Studio同一时刻只接这一项简单任务，不自动启动CLI。\n",
+  "document": "lmstudio-works/tasks/LM7-board.md",
+  "historical": false,
+  "id": "lmstudio:LM7",
+  "integration_note": "按验收hash真实集成到主线模块/固定数据，永久测试及原生组合共24项零skip、指纹稳定。仅适配测试路径和只读依赖隔离；见reviews/2026-10-18-CR2-CR7-D14-D18-LM7-integration.md。不是完整L3自举。",
+  "last_run_note": "交付已收集，尚未验收",
+  "legacy_hash": "d7287bf4ad37dec3bd85b0e388e05d0e02a349f988f4d62ab62c3753c141b4a1",
+  "number": "LM7",
+  "owner": "lmstudio",
+  "rev": 8,
+  "review_note": "源码/契约/测试有效性人工审查及正式零skip定向复验通过，指纹稳定；见lmstudio-works/reviews/2026-10-18-LM7-acceptance.md。仅验收，集成另行验证。",
+  "state_reconciliation": {
+    "at": "2026-10-19T11:42:09+00:00",
+    "audit_sha256": "5daf98a663cd249783a8432a5fcbed3ec4e96275b1910fa54b7903c084fe9ebc",
+    "note": "协调已有历史事实；保留原事件/作业；历史复验未重跑，未新增验收或集成，不启动模型。",
+    "previous_data_sha256": "6b0c64b06d153e7d4065d7c93ca2b2b8c2da6bc66e180b70cd6cef052230bf3b",
+    "previous_rev": 6,
+    "project": "dongos",
+    "snapshot_generated_at": "2026-10-19T09:04:28+00:00",
+    "snapshot_rev": 7,
+    "snapshot_sha256": "a40cf9aabcbb43779b5c60414d7142cab791f85888022c84625568dbb579ac96",
+    "verification_reexecuted": false
+  },
+  "state_recovery": {
+    "at": "2026-10-19T04:43:01+00:00",
+    "audit_sha256": "3ea0db756d56092976092ed0d1216118e145a8e34aa02c5060cb913d088d553e",
+    "note": "恢复已有验收/集成/返修事实；原复验为历史记录，未声称本次重跑；不恢复丢失作业或启动模型。",
+    "snapshot_rev": 6,
+    "snapshot_sha256": "f3ab929e33419f40dfc417217d588acf8b1b26cbac50724a51942a11e438c171"
+  },
+  "status": "integrated",
+  "title": "简单数据：8条定宽整数十进制已知向量",
+  "updated_at": "2026-10-19T11:42:09+00:00",
+  "verification": {
+    "checks": [
+      {
+        "cancelled": false,
+        "elapsed_seconds": 0.203,
+        "passed": true,
+        "returncode": 0,
+        "skips": 0,
+        "spec": "discover:lmstudio-works/tests:test_decimal_vectors.py",
+        "tests": 1,
+        "timed_out": false
+      }
+    ],
+    "fingerprint": {
+      "lmstudio-works/deliveries/LM7.md": "554d7b9ea31d8a1ed60fa10ca5ecf94451a23cff9226a95b85f2f46d0655ec38",
+      "lmstudio-works/fixtures/decimal-known-vectors.json": "e718f77b6159b64cfa308e5ddae19b890a36c26a724d235f0993ac7e585f57e0"
+    },
+    "finished_at": "2026-10-18T11:30:29+00:00",
+    "job": "987b960603354200accdb518c9091634",
+    "passed": true,
+    "source_stable": true,
+    "summary": "定向复验通过，等待源码/契约审查"
+  },
+  "write_paths": [
+    "lmstudio-works/fixtures/decimal-known-vectors.json",
+    "lmstudio-works/deliveries/LM7.md"
+  ]
+}

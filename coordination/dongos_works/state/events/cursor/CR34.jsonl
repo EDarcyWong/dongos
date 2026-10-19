@@ -1,0 +1,4 @@
+{"at":"2026-10-19T12:00:17+00:00","data":{"rev":1,"status":"todo"},"kind":"created","task_id":"cursor:CR34"}
+{"at":"2026-10-19T12:01:38+00:00","data":{"rev":2,"status":"in_progress"},"kind":"claim","task_id":"cursor:CR34"}
+{"at":"2026-10-19T12:06:08+00:00","data":{"rev":3,"status":"paused"},"kind":"pause","task_id":"cursor:CR34"}
+{"at":"2026-10-19T12:06:09+00:00","data":{"rev":4,"status":"paused"},"kind":"archive","task_id":"cursor:CR34"}

@@ -1,0 +1,140 @@
+{
+  "project": "dongos",
+  "request": "复验C51和D24",
+  "tasks": [
+    {
+      "id": "claude:C51",
+      "status": "accepted",
+      "rev": 5,
+      "updated_at": "2026-10-19T15:11:58+00:00",
+      "verification": {
+        "passed": true,
+        "checks": [
+          {
+            "spec": "discover:claude-works/tests:test_u64_expression_ir.py",
+            "passed": true,
+            "tests": 6,
+            "skips": 0,
+            "returncode": 0,
+            "cancelled": false,
+            "timed_out": false,
+            "elapsed_seconds": 458.734
+          }
+        ],
+        "source_stable": true,
+        "fingerprint": {
+          "claude-works/src/bootstrap/u64_expression_ir.dg": "4ec12810918b6f1bf9de88e89a46bf385a4e9b9bd686291dc4125344d21dbb9e",
+          "claude-works/src/bootstrap/u64_expression_ir.md": "097846cf72f23f6c3dbca6915cfc1af9e34aa1def0cf7e7ba095a5cd4ca22f76",
+          "claude-works/tests/test_u64_expression_ir.py": "2f89b00bfe476086c0d1eb29fe40e46d42b72dad6cdbf20115e34b50eceb8f08",
+          "claude-works/deliveries/C51.md": "05435afb08dbaa31b364614c1386973c334257f1a6d38dc5c5e0a38b21d2440f"
+        },
+        "summary": "定向复验通过，等待源码/契约审查",
+        "finished_at": "2026-10-19T15:11:13+00:00",
+        "job": "f7289623842e4deba12e58db53c293a3"
+      },
+      "review_note": "已实际审查完整任务书、四交付、u64_expression_ir.dg、说明与永久测试；支持节点/参数/token/完整区间及别名全预检、UNSUPPORTED优先、bigint解析、唯一可达树、后序槽分配与最终发布符合受限u64契约。直接依赖C48 integrated rev13。正式独立作业 f7289623842e4deba12e58db53c293a3：6 tests、0 skip、returncode0、458.734秒、source_stable=true，四文件指纹与交付一致；实际debug/release、ELF64/COFF、Windows显式SysV原生调用。额外只读产物审查 reviews/2026-10-19-C51-D24-audit.py C51：20项输入/依赖和552个产物SHA一致，逐条核对148组原生返回的全部寄存器/栈/canary；SUB坏体14组均正常返回并出现指定RAX差异，RBX坏体40组均RAX正确、RBX精确+8，其余ABI正常。未知NAME、提前IR/Result、别名负控及只读保护也通过。证据 reviews/2026-10-19-C51-evidence.json。无阻塞发现；登记组件验收，尚未实际主线集成，不代表完整语义/IR或L3完成。"
+    },
+    {
+      "id": "deepseek:D24",
+      "status": "accepted",
+      "rev": 5,
+      "updated_at": "2026-10-19T15:13:46+00:00",
+      "verification": {
+        "passed": true,
+        "checks": [
+          {
+            "spec": "discover:deepseek-works/tests:test_nasm_u64_loop_function.py",
+            "passed": true,
+            "tests": 3,
+            "skips": 0,
+            "returncode": 0,
+            "cancelled": false,
+            "timed_out": false,
+            "elapsed_seconds": 130.297
+          }
+        ],
+        "source_stable": true,
+        "fingerprint": {
+          "deepseek-works/src/bootstrap/nasm_u64_loop_function.dg": "6cadf5518a1204f7e0470c562ae3e5ca6464c4ae81bf6d66889d23d7c8170848",
+          "deepseek-works/src/bootstrap/nasm_u64_loop_function.md": "a176a233751623ced905463ef9a73b0f94ddcdec99f4a4e10e596fbe19dfe98c",
+          "deepseek-works/tests/test_nasm_u64_loop_function.py": "0a9633bf20b29ba44f042088a6108527c940855caff0dbde2b0a5e944d8347e4",
+          "deepseek-works/deliveries/D24.md": "ab14d407b4b132bb276d72b87fd6bfbf0c159dabefd4809b1fa3628fda7d769b"
+        },
+        "summary": "定向复验通过，等待源码/契约审查",
+        "finished_at": "2026-10-19T15:13:30+00:00",
+        "job": "9c0c6514f96c47bdb0df53afeac76677"
+      },
+      "review_note": "已实际审查完整D24任务书、四交付、nasm_u64_loop_function.dg、上界说明与永久测试。固定32字节frame四槽，复用已integrated闭包的入口、load/store、比较、跳转、IMUL/ADD/SUB、真实回边及U64出口，0/1/2/64次执行符合模2^64语义；全描述符/区间/别名/次数/标签预检及1188字节保守界<1536 scratch成立，全部局部构造后最终发布。正式独立作业 9c0c6514f96c47bdb0df53afeac76677：3 tests、0 skip、returncode0、130.297秒、source_stable=true；debug/release、ELF64/COFF与Windows显式SysV原生执行均实际完成，四文件与提交SHA一致。额外只读产物审查 reviews/2026-10-19-C51-D24-audit.py D24：21项输入/依赖及311个产物SHA一致，逐条核对50组原生返回，所有RSP/保存寄存器/canary/对齐正常，两个语义坏体共8组均正常返回且出现指定RAX差异；提前发布真实函数头由失败原子性拒绝，同夹具好体先执行。16主要原生向量、90文本/容量/非法/只读用例和31独立预检有效。证据 reviews/2026-10-19-D24-evidence.json。无阻塞发现，登记组件验收；本轮未真实集成主线，不代表完整CFG/IR或L3完成。"
+    }
+  ],
+  "dependency_snapshot": [
+    {
+      "id": "claude:C48",
+      "status": "integrated",
+      "rev": 13,
+      "error": false
+    },
+    {
+      "id": "cursor:CR3",
+      "status": "integrated",
+      "rev": 8,
+      "error": false
+    },
+    {
+      "id": "cursor:CR9",
+      "status": "integrated",
+      "rev": 8,
+      "error": false
+    },
+    {
+      "id": "cursor:CR10",
+      "status": "integrated",
+      "rev": 8,
+      "error": false
+    },
+    {
+      "id": "cursor:CR12",
+      "status": "integrated",
+      "rev": 14,
+      "error": false
+    },
+    {
+      "id": "cursor:CR13",
+      "status": "integrated",
+      "rev": 16,
+      "error": false
+    },
+    {
+      "id": "cursor:CR18",
+      "status": "integrated",
+      "rev": 8,
+      "error": false
+    },
+    {
+      "id": "claude:C22",
+      "status": "integrated",
+      "rev": 9,
+      "error": false
+    },
+    {
+      "id": "claude:C23",
+      "status": "integrated",
+      "rev": 9,
+      "error": false
+    },
+    {
+      "id": "claude:C42",
+      "status": "integrated",
+      "rev": 7,
+      "error": false
+    },
+    {
+      "id": "claude:C44",
+      "status": "integrated",
+      "rev": 7,
+      "error": false
+    }
+  ],
+  "integrated": false,
+  "review": "2026-10-19-C51-D24-reviewed.md"
+}

@@ -12,6 +12,37 @@ python coordination/coordinate.py stop
 
 浏览器打开 http://127.0.0.1:8765。`start.ps1` 也可启动前台服务。端口可用 `serve --port 8766` 修改。
 
+## 跨开发机的任务状态（state/）
+
+任务库的权威运行数据仍是本机的 `dongos_works/.local/tasks.sqlite3`（**不进 git**，同目录下的日志、锁、作业工作副本也一样）。
+为了让任何开发机在更新代码、启动协调服务后都得到同一份最新任务清单，服务把任务状态以文本形式保存在仓库内的
+`dongos_works/state/`（**进 git**），并在启动时合并、每次状态变化后自动写回：
+
+- `state/tasks/<负责人>/<编号>.json`：一个任务一个文件，键按字典序、缩进 2 空格、LF 换行。只改动的任务才会重写，不同任务的改动互不冲突。
+- `state/events/<负责人>/<编号>.jsonl`：该任务的事件，一行一个 JSON，只追加；`state/.gitattributes` 让 git 用 union 合并，两台机器各自追加的行都会保留。任务时间线按事件时间排序，所以合并后顺序仍正确。
+- 作业记录、全局自动化开关、日志、端口/锁和运行副本留在本机，不同步。
+
+**启动合并规则**：快照里有而本机没有的任务直接加入；两边都有时 `rev` 大的一方获胜（`rev` 相同但内容不同，取 `updated_at` 较晚的并在同步报告里列为 diverged）；
+合并绝不降低任何任务的 `rev`，也不删除任务。新克隆的仓库（没有 `.local`）启动时直接从 `state/` 重建任务库，不会再从任务书重新猜测状态。
+服务运行期间用 `git pull` 带来的新文件会在下一次页面轮询时被加载，写回时也不会覆盖比本机更新的文件。
+
+典型流程（任何一台机器）：
+
+```powershell
+git pull
+python coordination/coordinate.py serve        # 启动即合并 state/，之后每次状态变化自动写回 state/
+# 需要提交任务状态时：
+git add coordination/dongos_works/state
+git commit -m "tasks: sync state"
+```
+
+- 手动同步并查看结果：`python coordination/coordinate.py state-sync`（先合并再写回，输出新增/更新/写出的文件和问题）。
+- 同一任务在两台机器上各自改动，`git merge` 产生冲突标记时：保留 `rev` 更大的一方（或手工合并后把 `rev` 加 1）。带冲突标记或内容无效的文件会被**跳过且不被覆盖**，
+  服务照常启动，`validate`/`status` 的 issues 里会列出该文件，修好后下一次同步自动恢复。事件日志（union 合并）不会产生冲突。
+- `candidate`（隔离副本的作业编号）和作业记录只在产生它们的机器上有意义；其它机器看到该任务仍是正确的状态，但不能在本机复验那个候选副本。
+- `dongos_works/index.json` 现在只是派生的汇总导出（每次状态变化仍会重写，带 `generated_at`）。它不是权威，也不参与合并；合并冲突时任选一方即可，下次导出会重写。
+  只有旧版仅含 `index.json` 而没有 `state/` 的仓库，空库启动仍会要求按原流程 `recover-state`，不会静默重新导入。
+
 ## AI任务接口
 
 把 `http://127.0.0.1:8765/api/ai` 交给AI即可发现如何发布、查看、领取、释放任务及提交交付。
@@ -98,6 +129,14 @@ python coordinate.py --project dongos recover-state --snapshot <原快照.json> 
 ```
 
 恢复仅允许空库或只有导入事件且无作业的重建库；拒绝覆盖真实领取/提交等操作。应用前备份，事务内复查实物和版本，原子恢复、增加rev、记录来源、关闭自动化；不重新授予验收或伪造丢失作业。DongOS本次的逐项依据见[恢复审计](dongos_works/reviews/2026-10-19-state-recovery.md)。
+
+本地库已有较早的真实历史、而 Git 保留了更新的完整快照时，使用 `reconcile-state` 协调历史事实，不能用重导入任务书替代。该命令要求显式项目、快照SHA256、逐项审查文件及当前全部任务的rev和原始data SHA256；拒绝覆盖快照之后的真实操作或活动作业，保留现有events/jobs。先运行预览，核对后以相同参数加 `--apply`：
+
+```powershell
+python coordinate.py --project dongos reconcile-state --snapshot <原快照.json> --audit <逐项审计.json>
+```
+
+协调前完整备份，事务内再次核对版本、历史边界及文件证据，然后增加rev、记录来源并关闭自动化。行尾差异须显式审计；已被后继任务改写的历史文件，须绑定同一快照中较晚、已集成且独立复验通过的后继指纹。此操作不重新执行或授予验收，也不补造缺失作业。2026-10-19本次依据见[状态同步审计](dongos_works/reviews/2026-10-19-status-sync-audit.json)。
 
 ## LM Studio：只接简单任务
 

@@ -1,0 +1,72 @@
+{
+  "auto_dispatch": false,
+  "auto_verify": false,
+  "candidate": "b1c863ad833540b098a1feccc7c0b3f5",
+  "checks": [
+    "discover:lmstudio-works/tests:test_leb128_vectors.py"
+  ],
+  "complexity": "simple",
+  "created_at": "2026-10-18T09:46:43+00:00",
+  "delivery": "lmstudio-works/deliveries/LM6.md",
+  "depends_on": [],
+  "description": "只写一份固定12条LEB128已知向量JSON，不写实现代码，不改测试。文件lmstudio-works/fixtures/leb128-known-vectors.json，顶层只有version/cases，version整数1；cases恰好12项，每项只有id/signed/value/hex。signed是JSON布尔，value是十进制字符串，hex是无空格小写十六进制字符串、不加0x。\n按给定顺序填写，未注明的signed均false：u0(value=\"0\",hex=\"00\")；u127(\"127\",\"7f\")；u128(\"128\",\"8001\")；u624485(\"624485\",\"e58e26\")；u64_max(\"18446744073709551615\",hex为9个ff后接01，即\"ffffffffffffffffff01\")。随后七项signed均true：s0(\"0\",\"00\")；s_minus1(\"-1\",\"7f\")；s63(\"63\",\"3f\")；s64(\"64\",\"c000\")；s_minus64(\"-64\",\"40\")；s_minus65(\"-65\",\"bf7f\")；s_minus123456(\"-123456\",\"c0bb78\")。\n这是给定测试数据，不增删案例、字段或规范化数值，不声称已运行测试/已完成自举。另写固定LM6交付，明确未运行测试及限制。只有JSON和交付两个文件；Codex提供独立整数编码结构检查，禁止修改测试。不自行验收、不提交推送、不运行OS/VM。",
+  "document": "lmstudio-works/tasks/LM6-board.md",
+  "historical": false,
+  "id": "lmstudio:LM6",
+  "integration_note": "12条数据及交付按验收hash回写lmstudio-works，主目录同1项unittest通过零skip，见.local/reviews/mcp-review-2a04a5ddb9d8/LM6-live-unittest.log。仅数据集成，不代表L3完成。",
+  "last_run_note": "交付已收集，尚未验收",
+  "legacy_hash": "19fbbc625d0b4ccc76784717ae048568991126142d6e679ecfaabc48cd68ee4f",
+  "number": "LM6",
+  "owner": "lmstudio",
+  "rev": 8,
+  "review_note": "已人工审查12条固定数据、契约、独立编码测试及真实交付说明；正式1项零skip且指纹稳定，见lmstudio-works/reviews/2026-10-18-LM6-acceptance.md。",
+  "state_reconciliation": {
+    "at": "2026-10-19T11:42:09+00:00",
+    "audit_sha256": "5daf98a663cd249783a8432a5fcbed3ec4e96275b1910fa54b7903c084fe9ebc",
+    "note": "协调已有历史事实；保留原事件/作业；历史复验未重跑，未新增验收或集成，不启动模型。",
+    "previous_data_sha256": "35219aae7f2e38a19aa9de1aeff3c3e2b8dc25b3302adcb4b962c9fdb52480df",
+    "previous_rev": 6,
+    "project": "dongos",
+    "snapshot_generated_at": "2026-10-19T09:04:28+00:00",
+    "snapshot_rev": 7,
+    "snapshot_sha256": "a40cf9aabcbb43779b5c60414d7142cab791f85888022c84625568dbb579ac96",
+    "verification_reexecuted": false
+  },
+  "state_recovery": {
+    "at": "2026-10-19T04:43:01+00:00",
+    "audit_sha256": "3ea0db756d56092976092ed0d1216118e145a8e34aa02c5060cb913d088d553e",
+    "note": "恢复已有验收/集成/返修事实；原复验为历史记录，未声称本次重跑；不恢复丢失作业或启动模型。",
+    "snapshot_rev": 6,
+    "snapshot_sha256": "f3ab929e33419f40dfc417217d588acf8b1b26cbac50724a51942a11e438c171"
+  },
+  "status": "integrated",
+  "title": "简单数据：12条LEB128已知向量",
+  "updated_at": "2026-10-19T11:42:09+00:00",
+  "verification": {
+    "checks": [
+      {
+        "cancelled": false,
+        "elapsed_seconds": 0.203,
+        "passed": true,
+        "returncode": 0,
+        "skips": 0,
+        "spec": "discover:lmstudio-works/tests:test_leb128_vectors.py",
+        "tests": 1,
+        "timed_out": false
+      }
+    ],
+    "fingerprint": {
+      "lmstudio-works/deliveries/LM6.md": "ce578bba7f567b56ef7801cec0a03acda1c2d7823063cb77849d4685c33b5363",
+      "lmstudio-works/fixtures/leb128-known-vectors.json": "acdd28c417ab8b8f2577e60a078c0d5b08a7f0c7a6a9f99a7ba6869b7fb1d9b6"
+    },
+    "finished_at": "2026-10-18T10:42:43+00:00",
+    "job": "3131875ab91c4aab81d9fafccfaa7cfd",
+    "passed": true,
+    "source_stable": true,
+    "summary": "定向复验通过，等待源码/契约审查"
+  },
+  "write_paths": [
+    "lmstudio-works/fixtures/leb128-known-vectors.json",
+    "lmstudio-works/deliveries/LM6.md"
+  ]
+}

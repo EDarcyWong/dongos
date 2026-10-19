@@ -1,0 +1,358 @@
+{
+  "task": "claude:C52",
+  "submission_rev": 3,
+  "formal_job": "64634c302d0c434bbf0216f94eb8f495",
+  "formal": {
+    "passed": true,
+    "checks": [
+      {
+        "spec": "discover:claude-works/tests:test_nasm_u64_module.py",
+        "passed": true,
+        "tests": 5,
+        "skips": 0,
+        "returncode": 0,
+        "cancelled": false,
+        "timed_out": false,
+        "elapsed_seconds": 146.64
+      }
+    ],
+    "source_stable": true,
+    "fingerprint": {
+      "claude-works/src/bootstrap/nasm_u64_module.dg": "95063f7da39ace538e24417b2a74ad69e29260b23d9651ce7352eba20abf2555",
+      "claude-works/src/bootstrap/nasm_u64_module.md": "6fe899694679f573ecfe464d0c2c36968e09416e34da58cc98f26ac8b73fdb8a",
+      "claude-works/tests/test_nasm_u64_module.py": "6d0db2cf678a9bc38520925dc5675fc52f86149ed56390097e75f96a17098054",
+      "claude-works/deliveries/C52.md": "0a666594f4c586eb9499c5c564545f4be31f3d342a0116712d2766cb46fedcdf"
+    },
+    "summary": "定向复验通过，等待源码/契约审查",
+    "finished_at": "2026-10-19T15:30:37+00:00"
+  },
+  "run": "D:\\projects\\2026\\dongos\\coordination\\dongos_works\\.local\\runs\\64634c302d0c434bbf0216f94eb8f495\\workspace\\claude-works\\build\\C52\\run-f6b328f2f5da",
+  "input_sha256": {
+    "nasm_u64_module.dg": "95063f7da39ace538e24417b2a74ad69e29260b23d9651ce7352eba20abf2555",
+    "nasm_u64_module.md": "6fe899694679f573ecfe464d0c2c36968e09416e34da58cc98f26ac8b73fdb8a",
+    "test_nasm_u64_module.py": "6d0db2cf678a9bc38520925dc5675fc52f86149ed56390097e75f96a17098054",
+    "nasm_u64_function.dg": "26bd4c55ecfb5601c1c30ce573080409baff1f30acca8ce9e4f798634f489789",
+    "nasm_symbol.dg": "25675ec83d79c6f2b34bebfdd837e75d80dc384e900939be0c75d06a7bde4c06",
+    "decimal_integer.dg": "58a4e4d746393d0e5944656aeb4c6f2aff96acca047afd455c60a47464ce0b76",
+    "nasm_function_frame.dg": "08580fdf8ebbd75dc27812bb63f4e425a18e66b285fd5ccd7805d1d6dc55e9ff",
+    "nasm_sysv_incoming_args.dg": "bbaf9d38f0b7993e0d9da3ff86e8c0d86ecc0bbdca09e7617a878b57c3e3f714",
+    "sysv_integer_args.dg": "75c4ab5fd07d586684eb753958654e6e6658ff90e4d77f2a1ea96cb110573204",
+    "nasm_memory_operand.dg": "e3d072a3ea1314975427bb0e24426da2adaf3de692101f3e3e8d6768697f1d24",
+    "nasm_integer_memory_load.dg": "88624e98077d19615117f2a0f9ac6c67e80993ce222609c376288da3e45d3fec",
+    "nasm_integer_memory_store.dg": "bab7c97377a90eb581ff25b681e7462fb4ab97bd082de1c203bca5b3587b0b24",
+    "nasm_integer_binary.dg": "5fcddcad96268f20584022e89c9f17bf0ea827e7d09ae84b451d5aacfcd2f14b",
+    "nasm_sysv_function_exit.dg": "9dffc7415ea414310cb68e81457fb1b0c04040fc52d01c4bb1a2643af9fd29f2",
+    "nasm_sysv_return_values.dg": "7a3760f6ef81dbc3f436541a2de3fb746aff723fa72dc4ba851c293d2a064b32",
+    "sysv_return_plan.dg": "f880c0e387e9561f00a51b87713fcdd7af24a065dd0be407325b3290e6a0c08e"
+  },
+  "artifact_hashes_checked": 672,
+  "native_observations": [
+    {
+      "label": "native-debug",
+      "vectors": 13,
+      "raw_sha256": "10be3ede1acb95dd30596442dcb6772b50a49735c0709237cf27e2d27fd21e37",
+      "all_abi_guards_checked": true,
+      "rbx_delta": 0,
+      "rax_mismatches": []
+    },
+    {
+      "label": "bad-slot-good-debug",
+      "vectors": 13,
+      "raw_sha256": "10be3ede1acb95dd30596442dcb6772b50a49735c0709237cf27e2d27fd21e37",
+      "all_abi_guards_checked": true,
+      "rbx_delta": 0,
+      "rax_mismatches": []
+    },
+    {
+      "label": "bad-slot-debug",
+      "vectors": 13,
+      "raw_sha256": "d5ce0d962271d48536c47d00ed97dde5b57d6828e0c8ea8f053d15faef9f0541",
+      "all_abi_guards_checked": true,
+      "rbx_delta": 0,
+      "rax_mismatches": [
+        {
+          "index": 4,
+          "expected": 18446744073709551613,
+          "actual": 9223372036854775807
+        },
+        {
+          "index": 8,
+          "expected": 18446744073709551614,
+          "actual": 3
+        }
+      ]
+    },
+    {
+      "label": "bad-rbx-good-debug",
+      "vectors": 13,
+      "raw_sha256": "10be3ede1acb95dd30596442dcb6772b50a49735c0709237cf27e2d27fd21e37",
+      "all_abi_guards_checked": true,
+      "rbx_delta": 0,
+      "rax_mismatches": []
+    },
+    {
+      "label": "bad-rbx-debug",
+      "vectors": 13,
+      "raw_sha256": "061bc5005a39e6a40f7e5e7433933698304d5b9a114e58d54569d742095239ca",
+      "all_abi_guards_checked": true,
+      "rbx_delta": 8,
+      "rax_mismatches": []
+    },
+    {
+      "label": "native-release",
+      "vectors": 13,
+      "raw_sha256": "10be3ede1acb95dd30596442dcb6772b50a49735c0709237cf27e2d27fd21e37",
+      "all_abi_guards_checked": true,
+      "rbx_delta": 0,
+      "rax_mismatches": []
+    },
+    {
+      "label": "bad-slot-good-release",
+      "vectors": 13,
+      "raw_sha256": "10be3ede1acb95dd30596442dcb6772b50a49735c0709237cf27e2d27fd21e37",
+      "all_abi_guards_checked": true,
+      "rbx_delta": 0,
+      "rax_mismatches": []
+    },
+    {
+      "label": "bad-slot-release",
+      "vectors": 13,
+      "raw_sha256": "d5ce0d962271d48536c47d00ed97dde5b57d6828e0c8ea8f053d15faef9f0541",
+      "all_abi_guards_checked": true,
+      "rbx_delta": 0,
+      "rax_mismatches": [
+        {
+          "index": 4,
+          "expected": 18446744073709551613,
+          "actual": 9223372036854775807
+        },
+        {
+          "index": 8,
+          "expected": 18446744073709551614,
+          "actual": 3
+        }
+      ]
+    },
+    {
+      "label": "bad-rbx-good-release",
+      "vectors": 13,
+      "raw_sha256": "10be3ede1acb95dd30596442dcb6772b50a49735c0709237cf27e2d27fd21e37",
+      "all_abi_guards_checked": true,
+      "rbx_delta": 0,
+      "rax_mismatches": []
+    },
+    {
+      "label": "bad-rbx-release",
+      "vectors": 13,
+      "raw_sha256": "061bc5005a39e6a40f7e5e7433933698304d5b9a114e58d54569d742095239ca",
+      "all_abi_guards_checked": true,
+      "rbx_delta": 8,
+      "rax_mismatches": []
+    }
+  ],
+  "test_records": [
+    {
+      "test": "bad-return-slot-swapped",
+      "compiled": true,
+      "linked": true,
+      "native_executed": true,
+      "modes": 2,
+      "rejected_by": "native rax"
+    },
+    {
+      "test": "bad-no-duplicate-check",
+      "compiled": true,
+      "native_executed": true,
+      "modes": 2,
+      "rejected_by": "status (not INVALID)"
+    },
+    {
+      "test": "bad-early-header-in-out",
+      "compiled": true,
+      "native_executed": true,
+      "modes": 2,
+      "rejected_by": "out/written atomicity guard"
+    },
+    {
+      "test": "bad-early-work-write",
+      "compiled": true,
+      "native_executed": true,
+      "modes": 2,
+      "rejected_by": "work dirty byte on WORKSPACE"
+    },
+    {
+      "test": "bad-rbx-clobbered",
+      "vectors": 13,
+      "compiled": true,
+      "linked": true,
+      "native_executed": true,
+      "modes": 2,
+      "rejected_by": "native rbx preserved (rax and rsp assertions passed first)"
+    },
+    {
+      "test": "bad-no-alias",
+      "compiled": true,
+      "native_executed": true,
+      "modes": 2,
+      "rejected_by": "preflights 13..18, 27..35"
+    },
+    {
+      "test": "native-module-link-and-call",
+      "modules": 4,
+      "vectors_per_mode": 13,
+      "modes": 2,
+      "formats": [
+        "elf64",
+        "win64"
+      ],
+      "nm_checked": true,
+      "exports": 16,
+      "passed": true
+    },
+    {
+      "test": "exact-text-priorities-work-out",
+      "modules": 4,
+      "cases_per_mode": 32,
+      "modes": 2,
+      "preflights_per_native": 36,
+      "passed": true
+    },
+    {
+      "test": "overlapping-duplicate-invalid",
+      "ok_cases": 5,
+      "invalid_cases": 36,
+      "modes": 2,
+      "passed": true
+    }
+  ],
+  "source_unchanged_since_formal": true,
+  "audit_script_sha256": "cff32618bb715a8c9065641bf25a62b0f68e1f61d2c6f355e868fd89d8ce6ce0",
+  "integrated": false,
+  "finding": {
+    "priority": "P2",
+    "file": "claude-works/src/bootstrap/nasm_u64_module.dg",
+    "line": 46,
+    "title": "Reject invalid nested name/count limits before duplicate byte comparison",
+    "explanation": "The nested loop omits name 1..64 and IR <=64 count limits. Duplicate same() at line57 reads invalid 65-byte names before C48 preflight. Both modes reproduce module/item early reads using PAGE_GUARD notifications that resume safely.",
+    "probe_source_sha256": "bd61ec517ef9e192d4f0da2c1c3abe914fce843744408a605f0b46ab79c4843b",
+    "probe": [
+      {
+        "mode": "debug",
+        "normal_exit": true,
+        "observations": [
+          {
+            "field": "module",
+            "length": 64,
+            "functions": 1,
+            "status": 3,
+            "name_page_reads": 1,
+            "output_and_table_unchanged": true
+          },
+          {
+            "field": "module",
+            "length": 65,
+            "functions": 1,
+            "status": 1,
+            "name_page_reads": 0,
+            "output_and_table_unchanged": true
+          },
+          {
+            "field": "module",
+            "length": 65,
+            "functions": 2,
+            "status": 1,
+            "name_page_reads": 1,
+            "output_and_table_unchanged": true
+          },
+          {
+            "field": "item",
+            "length": 64,
+            "functions": 1,
+            "status": 3,
+            "name_page_reads": 1,
+            "output_and_table_unchanged": true
+          },
+          {
+            "field": "item",
+            "length": 65,
+            "functions": 1,
+            "status": 1,
+            "name_page_reads": 0,
+            "output_and_table_unchanged": true
+          },
+          {
+            "field": "item",
+            "length": 65,
+            "functions": 2,
+            "status": 1,
+            "name_page_reads": 1,
+            "output_and_table_unchanged": true
+          }
+        ],
+        "formal_object": "D:\\projects\\2026\\dongos\\coordination\\dongos_works\\.local\\runs\\64634c302d0c434bbf0216f94eb8f495\\workspace\\claude-works\\build\\C52\\run-f6b328f2f5da\\good-debug.o",
+        "formal_object_sha256": "9c242d2f33bbde57d6cbc377af63078249f9b48e1aba0b4615b98e5aa58d036a",
+        "executable_sha256": "7aba353d1516f9d33f76392a02e7b3bfd6145227d76da26dc07c12b4f745f422",
+        "output_sha256": "61b2be97449ebce4f073b64277b8c0f30c3586f50897c6ec1f5d44a3eadf8b23"
+      },
+      {
+        "mode": "release",
+        "normal_exit": true,
+        "observations": [
+          {
+            "field": "module",
+            "length": 64,
+            "functions": 1,
+            "status": 3,
+            "name_page_reads": 1,
+            "output_and_table_unchanged": true
+          },
+          {
+            "field": "module",
+            "length": 65,
+            "functions": 1,
+            "status": 1,
+            "name_page_reads": 0,
+            "output_and_table_unchanged": true
+          },
+          {
+            "field": "module",
+            "length": 65,
+            "functions": 2,
+            "status": 1,
+            "name_page_reads": 1,
+            "output_and_table_unchanged": true
+          },
+          {
+            "field": "item",
+            "length": 64,
+            "functions": 1,
+            "status": 3,
+            "name_page_reads": 1,
+            "output_and_table_unchanged": true
+          },
+          {
+            "field": "item",
+            "length": 65,
+            "functions": 1,
+            "status": 1,
+            "name_page_reads": 0,
+            "output_and_table_unchanged": true
+          },
+          {
+            "field": "item",
+            "length": 65,
+            "functions": 2,
+            "status": 1,
+            "name_page_reads": 1,
+            "output_and_table_unchanged": true
+          }
+        ],
+        "formal_object": "D:\\projects\\2026\\dongos\\coordination\\dongos_works\\.local\\runs\\64634c302d0c434bbf0216f94eb8f495\\workspace\\claude-works\\build\\C52\\run-f6b328f2f5da\\good-release.o",
+        "formal_object_sha256": "d639b07e0f2e55c5efafd9fc3cfd35bf19c7d02389dfa55606c66d79eef08d49",
+        "executable_sha256": "8d1e011cd1ada9930cce2f42b470b2afa8a6f7ab0a92c5cba0e82ac5dcc5c888",
+        "output_sha256": "61b2be97449ebce4f073b64277b8c0f30c3586f50897c6ec1f5d44a3eadf8b23"
+      }
+    ]
+  },
+  "review_decision": "rework_required_despite_passing_declared_tests"
+}

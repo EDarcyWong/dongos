@@ -1,0 +1,83 @@
+{
+  "task": "claude:C48",
+  "submission_rev": 10,
+  "formal_job": "ac548cd8d9db4152bfa2059c2d4cf58e",
+  "formal": {
+    "passed": true,
+    "checks": [
+      {
+        "spec": "discover:claude-works/tests:test_nasm_u64_function.py",
+        "passed": true,
+        "tests": 4,
+        "skips": 0,
+        "returncode": 0,
+        "cancelled": false,
+        "timed_out": false,
+        "elapsed_seconds": 132.062
+      }
+    ],
+    "source_stable": true,
+    "fingerprint": {
+      "claude-works/src/bootstrap/nasm_u64_function.dg": "26bd4c55ecfb5601c1c30ce573080409baff1f30acca8ce9e4f798634f489789",
+      "claude-works/src/bootstrap/nasm_u64_function.md": "eb0c6cc8cf26e10c8f626b6bc192b8403b14331e8a2919c7f6c6abf967f96a91",
+      "claude-works/tests/test_nasm_u64_function.py": "98ae8b0078924600b098e9aa98d0b7d45b91a8e33fd3bafe5aa763b8241c5ba1",
+      "claude-works/deliveries/C48.md": "2d18c1c72fe804e993705f0899abe2730d1129d64c08cbb34fac0f668877268d"
+    },
+    "summary": "定向复验通过，等待源码/契约审查",
+    "finished_at": "2026-10-19T13:56:58+00:00"
+  },
+  "run": "D:\\projects\\2026\\dongos\\coordination\\dongos_works\\.local\\runs\\ac548cd8d9db4152bfa2059c2d4cf58e\\workspace\\claude-works\\build\\C48\\run-63a069035f6f",
+  "input_sha256": {
+    "nasm_u64_function.dg": "26bd4c55ecfb5601c1c30ce573080409baff1f30acca8ce9e4f798634f489789",
+    "nasm_u64_function.md": "eb0c6cc8cf26e10c8f626b6bc192b8403b14331e8a2919c7f6c6abf967f96a91",
+    "nasm_symbol.dg": "25675ec83d79c6f2b34bebfdd837e75d80dc384e900939be0c75d06a7bde4c06",
+    "decimal_integer.dg": "58a4e4d746393d0e5944656aeb4c6f2aff96acca047afd455c60a47464ce0b76",
+    "nasm_function_frame.dg": "08580fdf8ebbd75dc27812bb63f4e425a18e66b285fd5ccd7805d1d6dc55e9ff",
+    "nasm_sysv_incoming_args.dg": "bbaf9d38f0b7993e0d9da3ff86e8c0d86ecc0bbdca09e7617a878b57c3e3f714",
+    "sysv_integer_args.dg": "75c4ab5fd07d586684eb753958654e6e6658ff90e4d77f2a1ea96cb110573204",
+    "nasm_memory_operand.dg": "e3d072a3ea1314975427bb0e24426da2adaf3de692101f3e3e8d6768697f1d24",
+    "nasm_integer_memory_load.dg": "88624e98077d19615117f2a0f9ac6c67e80993ce222609c376288da3e45d3fec",
+    "nasm_integer_memory_store.dg": "bab7c97377a90eb581ff25b681e7462fb4ab97bd082de1c203bca5b3587b0b24",
+    "nasm_integer_binary.dg": "5fcddcad96268f20584022e89c9f17bf0ea827e7d09ae84b451d5aacfcd2f14b",
+    "nasm_sysv_function_exit.dg": "9dffc7415ea414310cb68e81457fb1b0c04040fc52d01c4bb1a2643af9fd29f2",
+    "nasm_sysv_return_values.dg": "7a3760f6ef81dbc3f436541a2de3fb746aff723fa72dc4ba851c293d2a064b32",
+    "sysv_return_plan.dg": "f880c0e387e9561f00a51b87713fcdd7af24a065dd0be407325b3290e6a0c08e",
+    "test_nasm_u64_function.py": "98ae8b0078924600b098e9aa98d0b7d45b91a8e33fd3bafe5aa763b8241c5ba1"
+  },
+  "records": [
+    {
+      "mode": "debug",
+      "vectors": 16,
+      "rax_equal": true,
+      "rsp_balanced": true,
+      "other_callee_saved_preserved": true,
+      "canary_intact": true,
+      "alignment_zero": true,
+      "good_rbx": 845282253045697467,
+      "bad_rbx": 845282253045697475,
+      "rbx_delta": 8
+    },
+    {
+      "mode": "release",
+      "vectors": 16,
+      "rax_equal": true,
+      "rsp_balanced": true,
+      "other_callee_saved_preserved": true,
+      "canary_intact": true,
+      "alignment_zero": true,
+      "good_rbx": 845282253045697467,
+      "bad_rbx": 845282253045697475,
+      "rbx_delta": 8
+    }
+  ],
+  "raw_sha256": {
+    "bad-rbx-good-debug.native.output": "a9bf0e6d029ac9763f83c7cfe0a3b4e68f29e59e5c5456882048dc5e5758d498",
+    "bad-rbx-debug.native.output": "bb377c9eef89a1b9d9f1d6dc8084d5711ff2faeb359c5f8cbc64b0fcbd2b914d",
+    "bad-rbx-good-release.native.output": "a9bf0e6d029ac9763f83c7cfe0a3b4e68f29e59e5c5456882048dc5e5758d498",
+    "bad-rbx-release.native.output": "bb377c9eef89a1b9d9f1d6dc8084d5711ff2faeb359c5f8cbc64b0fcbd2b914d"
+  },
+  "script_sha256": "961bf296373fdef2eb00ad5dfe371baddcfee55c9d128839744a67890083e13d",
+  "source_unchanged_since_formal": true,
+  "acceptance_performed_by_audit": false,
+  "integration_performed_by_audit": false
+}

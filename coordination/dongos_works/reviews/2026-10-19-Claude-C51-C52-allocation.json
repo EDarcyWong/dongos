@@ -1,0 +1,235 @@
+{
+  "project": "dongos",
+  "authorization": "用户要求：给Claude分配任务",
+  "phase": "L3：Dong自举后端",
+  "dependencies": [
+    {
+      "id": "claude:C48",
+      "status": "integrated",
+      "rev": 13
+    },
+    {
+      "id": "cursor:CR3",
+      "status": "integrated",
+      "rev": 8
+    }
+  ],
+  "core_read_only_baseline_sha256": {
+    "code\\lang\\bootstrap\\lexer.dg": "4b30b6a24486610881d5246b3eb40bf5a14b7399c362ecabae17e951abfab2bc",
+    "code\\lang\\bootstrap\\unicode.dg": "93b79572d7b0505d643a89acac85207d5223ad24f43b7f92ba44a38c87f86450",
+    "code\\lang\\bootstrap\\expression.dg": "59ac6185285d82d4999053630b2f8b4dab2fb4111f5b882d187c35c395381596",
+    "code\\lang\\bootstrap\\expression.md": "fe1830b0619d0dc7483f36206d1845638b161ee6cc0097d1ca8eb9bcec03053a",
+    "code\\lang\\bootstrap\\bigint.dg": "6c63ed4b11051aff9477f04c643d0595184a881a6fbcc41284c3099ace257a3b"
+  },
+  "existing_active_tasks": [
+    {
+      "id": "deepseek:D24",
+      "owner": "deepseek",
+      "title": "[L3] 接续CR34：固定有限次数u64循环与真实回边的完整SysV函数接线",
+      "status": "in_progress",
+      "rev": 2,
+      "claimed_by": "deepseek-mcp-7e0d3e364e8b4727",
+      "updated_at": "2026-10-19T13:07:48+00:00",
+      "depends_on": [
+        "cursor:CR3",
+        "cursor:CR9",
+        "cursor:CR10",
+        "cursor:CR12",
+        "cursor:CR13",
+        "cursor:CR18",
+        "claude:C22",
+        "claude:C23",
+        "claude:C42",
+        "claude:C44"
+      ]
+    }
+  ],
+  "existing_todo_tasks": [
+    {
+      "id": "deepseek:D25",
+      "owner": "deepseek",
+      "title": "[L3] 接续CR35：有界i64 switch及case返回关联的完整SysV函数接线",
+      "status": "todo",
+      "rev": 1,
+      "claimed_by": null,
+      "updated_at": "2026-10-19T12:12:15+00:00",
+      "depends_on": [
+        "cursor:CR3",
+        "cursor:CR9",
+        "cursor:CR12",
+        "cursor:CR13",
+        "cursor:CR18",
+        "claude:C11",
+        "claude:C35",
+        "claude:C42",
+        "claude:C44"
+      ]
+    },
+    {
+      "id": "deepseek:D26",
+      "owner": "deepseek",
+      "title": "[L3] 接续CR36：受检64位算术与错误返回的完整SysV函数接线",
+      "status": "todo",
+      "rev": 1,
+      "claimed_by": null,
+      "updated_at": "2026-10-19T12:12:15+00:00",
+      "depends_on": [
+        "cursor:CR3",
+        "claude:C44",
+        "cursor:CR12",
+        "cursor:CR13",
+        "claude:C24",
+        "cursor:CR22",
+        "cursor:CR23",
+        "cursor:CR9",
+        "claude:C42",
+        "cursor:CR18"
+      ]
+    },
+    {
+      "id": "deepseek:D27",
+      "owner": "deepseek",
+      "title": "[L3] 接续CR37：有界索引装入与存储的完整SysV函数接线",
+      "status": "todo",
+      "rev": 1,
+      "claimed_by": null,
+      "updated_at": "2026-10-19T12:12:15+00:00",
+      "depends_on": [
+        "cursor:CR3",
+        "claude:C44",
+        "cursor:CR12",
+        "cursor:CR13",
+        "cursor:CR20",
+        "claude:C30",
+        "cursor:CR14",
+        "cursor:CR9",
+        "claude:C42",
+        "cursor:CR18"
+      ]
+    }
+  ],
+  "published": [
+    {
+      "id": "claude:C51",
+      "number": "C51",
+      "owner": "claude",
+      "title": "[L3] 原生表达式AST降为C48的受限u64直线IR",
+      "description": "所属阶段：L3：Dong自举后端 → AST到已集成整函数IR的首次受限接线。不是再造词法/语法器或C48发射器；新增bootstrap.u64_expression_ir，把真正Dong lexer/expression输出的树转换成C48.Instruction。仅u64显式模2^64的测试后端子集，不冒充一般Dong源码的默认受检算术或完整类型检查。\n\nimport bootstrap.lexer as lex; import bootstrap.expression as ast; import bootstrap.bigint as bi; import bootstrap.nasm_u64_function as f;\npub struct Result{pub instruction_count:usize,pub slot_count:usize,pub return_slot:usize} // 24字节，8对齐\npub unsafe fn lower(source:[]const u8,tokens:[]const lex.Token,nodes:[]const ast.Node,root:usize,parameter_tokens:[]const usize,out:[]f.Instruction,result:*Result)u64\nOK=0 INVALID=1 CAPACITY=2 UNSUPPORTED=3。source<=4096字节，tokens1..256，nodes1..24，参数token索引0..6个，root<nodes.len。传入nodes仅是该表达式的已用树，所有索引均相对该切片；token指向原完整只读source/token流。parameter_tokens顺序定义参数槽0..p-1，每项指向IDENTIFIER token，拼写非空且各项字节名不同；它们可位于完整函数签名中，表达式parse可从return后的token开始，因此无需伪造AST或把参数表拼进表达式。\n\n核心只读基线：code/lang/bootstrap/{lexer,unicode,expression,bigint}.dg及实际存在的说明文档，它们是已存在的原生前端/整数核心，不是本次新任务；C48及其只读发射闭包来自integrated主线。不能修改这些基线或为它们虚构新协调任务。本项依赖C48 integrated后方可领取。\n\n先校验所有source/token/node/parameter_tokens/out/Result描述符、完整输出及输入别名和数量。tokens整流start<=end<=source.len、单调不交叠，最后且仅最后EOF；root、参数token索引及各node.token均在范围。调用者保证source/token对应成功lexer输出，本模块不重写lexer；节点与对应token种类/操作符仍须核对。参数表重复、无此参数的NAME、非法引用、环、共享孩子、多父或不可达垃圾节点均INVALID，不能无限递归或静默忽略。只对支持的三种node做完整形状预检：INTEGER/NAME的op=0且a/b/c=NONE；BINARY的a/b为孩子、c=NONE；所有next=NONE，flags仅允许括号位0。三类之外的kind或BINARY不支持的operator返回UNSUPPORTED，不声称验证其完整复杂子树；此判定在安全描述符/索引预检后且不写输出。对支持树要求全部nodes恰被root树访问一次。\n\n仅支持INTEGER、NAME、BINARY的+、-、*、&、|、^。BINARY.op须对应其token.kind且拼写是该单字符，不用Python解释器执行生产转换。无unary、call、cast、bool、比较、除法、移位、控制流或局部绑定；这些明确UNSUPPORTED，不常量折叠成受支持树。INTEGER拼写<=256字节，必须实际调用bi.parse，复用十进制/0x/0b及合法下划线规则，非负且最终<=UINT64_MAX；超范围/非法字面量INVALID，不截断。可用局部2个u32输出limb、32个u32解析work（最多256字节字面量够用）；零used=0解释为0，禁止自写第二套整数解析。\n\n确定性lowering：左子树后序→右子树后序→父，NAME直接引用其参数槽不发指令；每个INTEGER依次分配一个新槽并发CONST；每个BINARY在两个源已生成后分配新槽，映射C48.ADD/SUB/IMUL/AND/OR/XOR（不是按字符值推算opcode）。新槽从p开始，不重用、不折叠；每个CONST unused left/right=0，每个二元immediate=0。instruction_count为非NAME节点数<=24，slot_count=max(1,p+instruction_count)<=30，return_slot为root对应槽；可用本地24条Instruction先完成全部检查和lower，最后一次发布out精确前缀及整个Result。用户out不足才CAPACITY；INVALID/UNSUPPORTED优先；out和Result失败全文不变。\n\n永久测试必须真实Dong lexer→expression.parse→本lower→已集成C48.emit→汇编/真实call/ret，并用独立Python表达式求值/输入AST期望核对IR次序/槽/结果。禁止在Python直接构造生产IR代替lower，也不能仅检查生成文本。用完整函数源码夹具，真实lexer定位签名参数token与return表达式起点，真实parser生成nodes，再lower。覆盖0/1/6参数、单NAME/单常量、左右不交换的SUB、嵌套优先级/括号、重复参数读取、六运算、0/max/高位、乘加环绕、十/十六/二进制及下划线、最大合法树规模（支持的叶/二叉树节点数必为奇数，24上限内最大23）、精确IR容量/短1/0/富余尾部。全部正常向量<=24。负面包括未知/重复参数、超大字面量、节点/参数token越界、token/Node字段不匹配、未支持构造、环/共享/多父/不可达节点、完整尾部别名与只读保护；不得执行非法lower生成的机器码。\n\n至少：真实坏Dong交换SUB两个IR源→同输入正式好侧先lower并执行，坏侧正常函数返回后按RAX拒绝；删除未知NAME拒绝并错误映射到合法参数槽→只用有安全参数槽的夹具，按INVALID状态拒绝；输出容量不足提前写一条IR或Result→完整原子性拒绝。另保留共用要求的安全RBX数值保持敏感性。测试需对parser的工作区失败契约与本lower最终产物原子性分开观察，不能拿parser允许写scratch为理由放宽lower输出。临时产物claude-works/build/C51/<唯一目录>。\n\n## 执行、内存和复验共同要求\n只改声明的四文件，生产为Dong；不修改code/lang、编译器、既有组件、其它负责人或本批另一任务。本人领取/返修优先。没有隐式分配、全局可变生产状态或OS/I/O调用，新模块不导出C符号（临时wrapper可导出）。依赖仅从已integrated主线及明确列出的既有核心只读基线暂存完整传递闭包，不能复制整个lang掩盖坏源码。不得改旧任务/恢复归档项或用Python/C代替生产lowering。\n所有切片/结构/结果先检查完整声明区间：非空非NULL、元素乘法、自然对齐、端点不回绕；空切片可NULL。结果非NULL、自然8对齐、完整对象端点有效。输入彼此可重叠且只读；所有输出/Result及显式work按正文要求彼此并与全部完整输入（含嵌套名字/数组、未消费尾部）不重叠。在任何输入正文读取或输出写入前先完成可安全做的描述符检查，非法数量不读正文。正文限定的INVALID/UNSUPPORTED先于用户输出容量。除C52显式work外，失败所有输出、整个Result/计数、输入全文和guards不变；成功只写精确前缀及结果，未用尾部不变。\n局部栈以当前dongc的4096 worst-case frame限制设计；给出结构尺寸、临时片段、每段及总上界证明，实际debug/release均可编译。不要照搬无法编译的大局部最终数组，不改编译器来逃避限制。若正文给显式work，只能修改该调用方工作区，不影响最终产物失败原子性。\n只跑本任务checks，实际Dong debug/release编译、NASM ELF64/COFF组装及显式SysV桥链接/原生执行；COFF组装不冒充Win64调用ABI。单模式不同主要原生函数向量总量<=24，复用相同输入的好/坏重放不另算。独立Python/C oracle，不能用生产输出作为唯一oracle。观察真实RAX、所有callee-saved和RSP：独立保存观察区地址和宿主栈锚，返回后先从独立地址捕获现场，再恢复宿主栈及ABI，最后断言；不能用返回RBX作观察指针或信任返回RSP。永久保留安全真实坏Dong的RBX数值保持负控（同输入好侧先实际生成调用，坏侧正常返回后按指定数值拒绝）；不要重现C48~C50首交的桥缺口。\n覆盖完整描述符/端点/尾部别名的独立可达用例，written/Result端点溢出用8对齐UINT64_MAX-7或与Result尺寸匹配的安全参数，不能通过非法解引用拒绝；输入真实只读保护并断言保护调用成功，输入/依赖/生产/说明/测试SHA256前后稳定。有限边界，不跑笛卡尔积、全回归、OS/VM或性能基准。真实坏体必须正常构建/链接/执行后由指定语义/状态/原子性断言拒绝；构建失败、缺符号、崩溃、超时、仅文本不同不算指定语义负控，所有坏体访问和返回路径在预留安全范围内。\n本人客户端先worker MCP get_task/read_document读最新rev、完整契约、review_note、write_paths和依赖，claim成功后执行；不由协调器启动AI CLI。临时产物仅本人works/build/<编号>/<唯一目录>/。交付记录实际命令、tests/skips、模式/格式、全部输入SHA、各坏体实际拒绝依据及未执行限制，再原编号submit。不得自行accept/integrate、提交/推送或启动定时器。交付仍须Codex独立复验、验收和真实集成；本组件不代表完整IR/语义/CLI、stage1/stage2或整个L3完成。",
+      "status": "todo",
+      "rev": 1,
+      "write_paths": [
+        "claude-works/src/bootstrap/u64_expression_ir.dg",
+        "claude-works/src/bootstrap/u64_expression_ir.md",
+        "claude-works/tests/test_u64_expression_ir.py",
+        "claude-works/deliveries/C51.md"
+      ],
+      "depends_on": [
+        "claude:C48"
+      ],
+      "checks": [
+        "discover:claude-works/tests:test_u64_expression_ir.py"
+      ],
+      "auto_dispatch": false,
+      "auto_verify": false,
+      "complexity": "standard",
+      "created_at": "2026-10-19T14:14:02+00:00",
+      "updated_at": "2026-10-19T14:14:02+00:00",
+      "historical": false,
+      "document": "claude-works/tasks/C51-board.md",
+      "delivery": "claude-works/deliveries/C51.md",
+      "candidate": null,
+      "verification": null,
+      "review_note": "",
+      "legacy_hash": "6d973e7ac4ca693ced65891b93d788b3598c4a5c60052ab911f2fd3fb24560df",
+      "timing": {
+        "as_of": "2026-10-19T14:14:55+00:00",
+        "published_at": "2026-10-19T14:14:02+00:00",
+        "first_claimed_at": null,
+        "last_submitted_at": null,
+        "last_verified_at": null,
+        "last_modified_at": null,
+        "rounds": [],
+        "timeline": [
+          {
+            "seq": 997,
+            "at": "2026-10-19T14:14:02+00:00",
+            "task_id": "claude:C51",
+            "kind": "created",
+            "data": {
+              "rev": 1,
+              "status": "todo"
+            }
+          }
+        ],
+        "last_rework_requested_at": null,
+        "duration_basis": "领取至提交的自然经过时间，扣除明确暂停；不是实际编辑净耗时",
+        "total_active_seconds": null,
+        "rework_active_seconds": 0,
+        "history_incomplete": false,
+        "verifications": []
+      }
+    },
+    {
+      "id": "claude:C52",
+      "number": "C52",
+      "owner": "claude",
+      "title": "[L3] 复用C48组装多函数NASM模块及可链接导出",
+      "description": "所属阶段：L3：Dong自举后端 → 整函数到目标模块文本/工具链接线。新增bootstrap.nasm_u64_module，复用已integrated C48和CR3生成1..8个受限直线u64函数的完整NASM模块。不是另做单函数发射器，不依赖C49/C50未集成文件，不重复DeepSeek D24~D27循环/switch/受检算术/索引工作，也不生成机器码/ELF或执行I/O。\n\nimport bootstrap.nasm_u64_function as f; import bootstrap.nasm_symbol as sym;\npub struct Function{pub module_name:[]const u8,pub item_name:[]const u8,pub parameter_count:usize,pub slot_count:usize,pub instructions:[]const f.Instruction,pub return_slot:usize} // 72字节、8对齐\npub unsafe fn emit(functions:[]const Function,work:[]u8,out:[]u8,written:*usize)u64\nOK=0 INVALID=1 CAPACITY=2 WORKSPACE=3。functions.len1..8，每项的名字/参数/槽/IR/返回槽完整遵循C48现有契约。所有函数的(module_name,item_name)字节对必须唯一；同module不同item、同item不同module均合法，按CR3的单射编码判定，不使用未验证裸名字作标签。输入函数顺序就是输出顺序。\n\n先完整检查written、Function数组乘法/8对齐/端点、work/out描述符，以及每项嵌套名字和Instruction数组的乘法/对齐/端点/数量。written/work/out三者完整声明区间两两不重叠，并与Function数组、全部名字及全部IR数组的整个输入区间不重叠；输入之间可以任意重叠，只读。非法functions数量不能读正文；嵌套描述符验证必须在读取嵌套IR/名字之前完成。完成安全描述符和重复名字检查后，对每项实际调用C48.emit(names,p,slots,IR,return_slot,NULL空out,&局部计数)做既有完整IR预检：合法函数必须返回C48.CAPACITY，任何非CAPACITY作为INVALID，局部计数不得错误使用；不复制C48初始化/enum/字段/返回槽检查算法，也不靠用户out回滚试写。所有函数都通过后才判断work不足与最终out容量；尾部最后一项非法也必须INVALID优先。\n\n输出严格为ASCII/单LF：固定'bits 64\\\\nsection .text\\\\n'（22字节）；然后每项一行'global '+CR3.encode(module,item)+'\\\\n'，立即跟C48.emit完整函数体；不插入其它section/global数据、extern、注释、空行或入口main。每个函数标签与其自己的IR主体关联，不能重排主体导致符号错配。CR3符号<=266，global行<=274；C48函数体已证明<=6591，总保守上界B=22+functions.len*(274+6591)，最多54942。work.len<B返回WORKSPACE（即使短work可能装下实际文本，也按此公开固定预算），优先于用户out CAPACITY。work足够后在调用方work里逐段实际生成，CR3临时符号片段可局部266字节，C48每次拿到至少6591的安全片段，证明每段和最后一段不会越过work。实际模块生成完后，以实际长度比较out.len，不足返回CAPACITY；否则最后复制精确模块前缀并发布written。不能要求一个大于dongc栈限制的局部模块缓冲。\n\nwork是明确可变的调用方scratch：完成全部INVALID与WORKSPACE检查之前不写work；CAPACITY可保留生成模块前缀在work，输入/out/written始终不变。成功只改work已用前缀、out精确前缀与written，两者未用尾部保持。INVALID/WORKSPACE时work亦全文不变；所有失败out/written全文不变。若充分work情况下依赖内部仍非OK，返回INVALID，work允许已改（说明中区分预检INVALID与已进入生成的异常INVALID）；在当前确定性已验证输入下证明该后置失败不可达，不能用它正常拒绝合法输入。\n\n永久测试：实际Dong生成完整模块，同一个模块文本直接作为NASM ELF64/COFF输入（不由Python重建函数体/global/section）；分别链接到显式SysV独立调用桥，实际调用每个导出符号。有限组合1/2/8函数（单模式不同主要函数向量合计<=24），不同名字/相同module或item、1/64字节和非ASCII原名字编码、0/1/6参数、空IR返回参数/常量/所有二元的有限IR、不同返回槽和高位边界。独立Python文本模型核对头/global/顺序/完整体，独立IR解释器核对每个函数数值；不能只用另一次C48输出当oracle。组装/链接证明导出真实存在，但缺符号/组装失败不是指定语义负控。可用nm/对象工具辅助核对导出集合，记录真实调用及RAX、完整callee-saved/RSP恢复。\n\n覆盖函数数组和每项嵌套名字/IR的完整尾部别名与独立可达描述符；重复字节名字（独立副本与同指针）、仅一名相同、函数数组前项合法末项非法、work B/短1/0/富余、out实际exact/短1/0/富余，INVALID>WORKSPACE>CAPACITY优先级；只读输入保护成功、work/out/计数/input guards和前后SHA。不得只验证第一项。\n\n至少三类真实坏Dong：将某函数传给C48的return_slot安全改为另一个已初始化参数槽（只在>=2参数且返回值不同的夹具）→同输入正式好侧先实际生成模块并执行，坏侧正常链接/返回后按该导出函数RAX拒绝；删除duplicate检查→重复名字输入只调模块发射器，以INVALID状态拒绝，不组装/执行冲突模块；out容量不足提前发布work头部→完整原子性拒绝。另按共同要求补安全RBX保持数值敏感性，不破坏ret/宿主栈。临时产物claude-works/build/C52/<唯一目录>。\n\n## 执行、内存和复验共同要求\n只改声明的四文件，生产为Dong；不修改code/lang、编译器、既有组件、其它负责人或本批另一任务。本人领取/返修优先。没有隐式分配、全局可变生产状态或OS/I/O调用，新模块不导出C符号（临时wrapper可导出）。依赖仅从已integrated主线及明确列出的既有核心只读基线暂存完整传递闭包，不能复制整个lang掩盖坏源码。不得改旧任务/恢复归档项或用Python/C代替生产lowering。\n所有切片/结构/结果先检查完整声明区间：非空非NULL、元素乘法、自然对齐、端点不回绕；空切片可NULL。结果非NULL、自然8对齐、完整对象端点有效。输入彼此可重叠且只读；所有输出/Result及显式work按正文要求彼此并与全部完整输入（含嵌套名字/数组、未消费尾部）不重叠。在任何输入正文读取或输出写入前先完成可安全做的描述符检查，非法数量不读正文。正文限定的INVALID/UNSUPPORTED先于用户输出容量。除C52显式work外，失败所有输出、整个Result/计数、输入全文和guards不变；成功只写精确前缀及结果，未用尾部不变。\n局部栈以当前dongc的4096 worst-case frame限制设计；给出结构尺寸、临时片段、每段及总上界证明，实际debug/release均可编译。不要照搬无法编译的大局部最终数组，不改编译器来逃避限制。若正文给显式work，只能修改该调用方工作区，不影响最终产物失败原子性。\n只跑本任务checks，实际Dong debug/release编译、NASM ELF64/COFF组装及显式SysV桥链接/原生执行；COFF组装不冒充Win64调用ABI。单模式不同主要原生函数向量总量<=24，复用相同输入的好/坏重放不另算。独立Python/C oracle，不能用生产输出作为唯一oracle。观察真实RAX、所有callee-saved和RSP：独立保存观察区地址和宿主栈锚，返回后先从独立地址捕获现场，再恢复宿主栈及ABI，最后断言；不能用返回RBX作观察指针或信任返回RSP。永久保留安全真实坏Dong的RBX数值保持负控（同输入好侧先实际生成调用，坏侧正常返回后按指定数值拒绝）；不要重现C48~C50首交的桥缺口。\n覆盖完整描述符/端点/尾部别名的独立可达用例，written/Result端点溢出用8对齐UINT64_MAX-7或与Result尺寸匹配的安全参数，不能通过非法解引用拒绝；输入真实只读保护并断言保护调用成功，输入/依赖/生产/说明/测试SHA256前后稳定。有限边界，不跑笛卡尔积、全回归、OS/VM或性能基准。真实坏体必须正常构建/链接/执行后由指定语义/状态/原子性断言拒绝；构建失败、缺符号、崩溃、超时、仅文本不同不算指定语义负控，所有坏体访问和返回路径在预留安全范围内。\n本人客户端先worker MCP get_task/read_document读最新rev、完整契约、review_note、write_paths和依赖，claim成功后执行；不由协调器启动AI CLI。临时产物仅本人works/build/<编号>/<唯一目录>/。交付记录实际命令、tests/skips、模式/格式、全部输入SHA、各坏体实际拒绝依据及未执行限制，再原编号submit。不得自行accept/integrate、提交/推送或启动定时器。交付仍须Codex独立复验、验收和真实集成；本组件不代表完整IR/语义/CLI、stage1/stage2或整个L3完成。",
+      "status": "todo",
+      "rev": 1,
+      "write_paths": [
+        "claude-works/src/bootstrap/nasm_u64_module.dg",
+        "claude-works/src/bootstrap/nasm_u64_module.md",
+        "claude-works/tests/test_nasm_u64_module.py",
+        "claude-works/deliveries/C52.md"
+      ],
+      "depends_on": [
+        "claude:C48",
+        "cursor:CR3"
+      ],
+      "checks": [
+        "discover:claude-works/tests:test_nasm_u64_module.py"
+      ],
+      "auto_dispatch": false,
+      "auto_verify": false,
+      "complexity": "standard",
+      "created_at": "2026-10-19T14:14:02+00:00",
+      "updated_at": "2026-10-19T14:14:02+00:00",
+      "historical": false,
+      "document": "claude-works/tasks/C52-board.md",
+      "delivery": "claude-works/deliveries/C52.md",
+      "candidate": null,
+      "verification": null,
+      "review_note": "",
+      "legacy_hash": "64f2f3f1eb8c71efd06e8ef71c62b39e17e93366bb955eb5e513a1d1ed5c6500",
+      "timing": {
+        "as_of": "2026-10-19T14:14:55+00:00",
+        "published_at": "2026-10-19T14:14:02+00:00",
+        "first_claimed_at": null,
+        "last_submitted_at": null,
+        "last_verified_at": null,
+        "last_modified_at": null,
+        "rounds": [],
+        "timeline": [
+          {
+            "seq": 998,
+            "at": "2026-10-19T14:14:02+00:00",
+            "task_id": "claude:C52",
+            "kind": "created",
+            "data": {
+              "rev": 1,
+              "status": "todo"
+            }
+          }
+        ],
+        "last_rework_requested_at": null,
+        "duration_basis": "领取至提交的自然经过时间，扣除明确暂停；不是实际编辑净耗时",
+        "total_active_seconds": null,
+        "rework_active_seconds": 0,
+        "history_incomplete": false,
+        "verifications": []
+      }
+    }
+  ],
+  "no_ai_cli_started": true
+}

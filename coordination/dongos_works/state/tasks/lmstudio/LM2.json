@@ -1,0 +1,72 @@
+{
+  "auto_dispatch": false,
+  "auto_verify": false,
+  "candidate": "f56a634e98f54e9fa7f9d06678465995",
+  "checks": [
+    "discover:lmstudio-works/tests:test_handoff_checklist.py"
+  ],
+  "complexity": "simple",
+  "created_at": "2026-10-18T06:55:31+00:00",
+  "delivery": "lmstudio-works/deliveries/LM2.md",
+  "depends_on": [],
+  "description": "只生成一份简短中文JSON文档，不写业务代码。文件lmstudio-works/docs/handoff-checklist.zh-CN.json：顶层只有version和items，version=1，items恰好5个对象，各只有id/title/description。id顺序固定为scope、claim、test、delivery、review。title为1～12个字符，description为1～40个字符。五项分别说明只改授权文件；先领取并使用最新版本；只报告实际运行的测试；交付须附证据和限制；提交后等待独立复验，不能自行验收。不得声称测试通过，不含shell命令或模型配置。另在固定LM2.md写交付说明。测试由Codex提供，禁止修改。",
+  "document": "lmstudio-works/tasks/LM2-board.md",
+  "historical": false,
+  "id": "lmstudio:LM2",
+  "integration_note": "按验收hash集成模块/文档/主线测试，定向及组合验证通过；映射和新回执见reviews/2026-10-18-batch3-integration.md。LM2为回写项目文档，七个Dong组件为lang/bootstrap集成；L3未完成。",
+  "last_run_note": "交付已收集，尚未验收",
+  "legacy_hash": "ae5127d39e0322d54d5c88d563fdca7c0b15069e50fbdf4799923a2360bc4d7b",
+  "number": "LM2",
+  "owner": "lmstudio",
+  "rev": 8,
+  "review_note": "Codex已审查源码/契约及测试有效性，独立定向复跑零skip且文件指纹稳定；详见 lmstudio-works/reviews/2026-10-18-LM2-acceptance.md。独立验收，不代表主线集成或L3完成。",
+  "state_reconciliation": {
+    "at": "2026-10-19T11:42:09+00:00",
+    "audit_sha256": "5daf98a663cd249783a8432a5fcbed3ec4e96275b1910fa54b7903c084fe9ebc",
+    "note": "协调已有历史事实；保留原事件/作业；历史复验未重跑，未新增验收或集成，不启动模型。",
+    "previous_data_sha256": "7984729a767df891c4736f3bc37fd3569bf69f5b773540b1bc119aad589b8d7c",
+    "previous_rev": 6,
+    "project": "dongos",
+    "snapshot_generated_at": "2026-10-19T09:04:28+00:00",
+    "snapshot_rev": 7,
+    "snapshot_sha256": "a40cf9aabcbb43779b5c60414d7142cab791f85888022c84625568dbb579ac96",
+    "verification_reexecuted": false
+  },
+  "state_recovery": {
+    "at": "2026-10-19T04:43:01+00:00",
+    "audit_sha256": "3ea0db756d56092976092ed0d1216118e145a8e34aa02c5060cb913d088d553e",
+    "note": "恢复已有验收/集成/返修事实；原复验为历史记录，未声称本次重跑；不恢复丢失作业或启动模型。",
+    "snapshot_rev": 6,
+    "snapshot_sha256": "f3ab929e33419f40dfc417217d588acf8b1b26cbac50724a51942a11e438c171"
+  },
+  "status": "integrated",
+  "title": "简单文档：AI交付检查清单JSON",
+  "updated_at": "2026-10-19T11:42:09+00:00",
+  "verification": {
+    "checks": [
+      {
+        "cancelled": false,
+        "elapsed_seconds": 0.203,
+        "passed": true,
+        "returncode": 0,
+        "skips": 0,
+        "spec": "discover:lmstudio-works/tests:test_handoff_checklist.py",
+        "tests": 1,
+        "timed_out": false
+      }
+    ],
+    "fingerprint": {
+      "lmstudio-works/deliveries/LM2.md": "46f0c20818863a468c5c704d101889214921cdf8a2d21920793a4e98320bbffa",
+      "lmstudio-works/docs/handoff-checklist.zh-CN.json": "b2008db56854c986375ce62e7289fa531d91a9ebc4125e8378fccf1e035fc9b1"
+    },
+    "finished_at": "2026-10-18T09:05:33+00:00",
+    "job": "4c9c7eecce134705a154110b8f1f0fdb",
+    "passed": true,
+    "source_stable": true,
+    "summary": "定向复验通过，等待源码/契约审查"
+  },
+  "write_paths": [
+    "lmstudio-works/docs/handoff-checklist.zh-CN.json",
+    "lmstudio-works/deliveries/LM2.md"
+  ]
+}

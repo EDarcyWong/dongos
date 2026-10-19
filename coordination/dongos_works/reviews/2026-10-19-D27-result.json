@@ -1,0 +1,91 @@
+{
+  "project": "dongos",
+  "request": "检查d27",
+  "task": {
+    "id": "deepseek:D27",
+    "status": "accepted",
+    "rev": 5,
+    "updated_at": "2026-10-19T15:39:23+00:00",
+    "verification": {
+      "passed": true,
+      "checks": [
+        {
+          "spec": "discover:deepseek-works/tests:test_nasm_indexed_memory_function.py",
+          "passed": true,
+          "tests": 3,
+          "skips": 0,
+          "returncode": 0,
+          "cancelled": false,
+          "timed_out": false,
+          "elapsed_seconds": 160.703
+        }
+      ],
+      "source_stable": true,
+      "fingerprint": {
+        "deepseek-works/src/bootstrap/nasm_indexed_memory_function.dg": "2d040bfe6e59b522fdafcfee8155af791fa44937698233b1e6acee5d3b3a6194",
+        "deepseek-works/src/bootstrap/nasm_indexed_memory_function.md": "59630b8a197f7c169eeb1cf325e32ee688e1df16152ef07a96bb7f584fd6a6b3",
+        "deepseek-works/tests/test_nasm_indexed_memory_function.py": "a32ca13a4a643beb9d93a1cf01a9e6894f8b16b6a6f63c0cf5f557493df1b07f",
+        "deepseek-works/deliveries/D27.md": "aaedfaed97333d28a227daf9b11289207dab18725002a9ccdca09f6dce8663da"
+      },
+      "summary": "定向复验通过，等待源码/契约审查",
+      "finished_at": "2026-10-19T15:38:18+00:00",
+      "job": "5830ef22792f4e57ab60d920f30bb0ec"
+    },
+    "review_note": "已实际审查D27完整任务书、四交付、源码/说明/永久测试，未发现阻塞问题。written/名字/out完整描述符、端点、全尾部别名与名长/枚举组合/NONE均先验；真实CR20 unsigned门禁严格先于base槽读取/C30地址/目标访问。7合法LOAD与4STORE、STORE低位规范化不重读、C42 kind11 RAX/RDX Pair及OOB{0,1}符合契约。逐段1297上界<1536 scratch成立，依赖和容量判断全部完成后最终发布。正式独立作业5830ef22792f4e57ab60d920f30bb0ec：3 tests/0 skip/returncode0/160.703秒/source_stable=true；debug/release、ELF64/COFF、Windows显式SysV原生调用通过。21主要向量、86文本/容量/非法/只读case与31独立预检有效，NULL base/len0好体正常返回，坏门禁只施加于非NULL物理安全缓冲。额外只读审查核对20输入/依赖、407产物SHA及60组原生Pair/完整320字节内存/全部callee-saved/RSP/canary/对齐；错误scale的LOAD Pair确实错误，STORE Pair正确但精确内存错位，错误门禁LOAD/STORE访问预留隐藏元素后正常返回且状态被检出，提前发布由失败原子性拒绝，各模式同输入好侧先执行。当前四交付仍匹配正式指纹，全部10直接依赖integrated。证据reviews/2026-10-19-D27-evidence.json；审查reviews/2026-10-19-D27-reviewed.md。登记受限组件验收，本轮未集成主线，不代表通用数组/切片IR或L3完成。"
+  },
+  "dependency_snapshot": [
+    {
+      "id": "cursor:CR3",
+      "status": "integrated",
+      "rev": 8
+    },
+    {
+      "id": "claude:C44",
+      "status": "integrated",
+      "rev": 7
+    },
+    {
+      "id": "cursor:CR12",
+      "status": "integrated",
+      "rev": 14
+    },
+    {
+      "id": "cursor:CR13",
+      "status": "integrated",
+      "rev": 16
+    },
+    {
+      "id": "cursor:CR20",
+      "status": "integrated",
+      "rev": 12
+    },
+    {
+      "id": "claude:C30",
+      "status": "integrated",
+      "rev": 8
+    },
+    {
+      "id": "cursor:CR14",
+      "status": "integrated",
+      "rev": 9
+    },
+    {
+      "id": "cursor:CR9",
+      "status": "integrated",
+      "rev": 8
+    },
+    {
+      "id": "claude:C42",
+      "status": "integrated",
+      "rev": 7
+    },
+    {
+      "id": "cursor:CR18",
+      "status": "integrated",
+      "rev": 8
+    }
+  ],
+  "integrated": false,
+  "review": "2026-10-19-D27-reviewed.md",
+  "evidence": "2026-10-19-D27-evidence.json"
+}

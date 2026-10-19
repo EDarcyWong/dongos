@@ -1,0 +1,78 @@
+{
+  "auto_dispatch": false,
+  "auto_verify": false,
+  "candidate": "be4356c954e74702b6923d1a2bf9b90a",
+  "checks": [
+    "discover:claude-works/tests:test_linear_intervals.py"
+  ],
+  "complexity": "standard",
+  "created_at": "2026-10-18T09:17:34+00:00",
+  "delivery": "claude-works/deliveries/C14.md",
+  "depends_on": [],
+  "description": "模块bootstrap.linear_intervals。Event{value:usize,position:usize}；Interval{first:usize,last:usize}；NONE=MAX。固定接口pub unsafe fn build(events:[]const Event,value_count:usize,out:[]Interval,used:*usize)u64。每个value输出所有事件position的闭区间最小/最大；未出现输出{first:NONE,last:0}。events可乱序和重复；value必须<value_count，position不得为MAX；used成功为value_count。out至少value_count，空events/value_count允许，不要求按首次出现压缩。先验证全部事件、value_count对应元素字节及容量，再初始化/写输出，O(value_count+events.len)。这是线性编号的保守包络，不声称CFG活跃分析/phi/跨函数寄存器分配。Python字典按value收集min/max，覆盖乱序/重复/空值、末尾非法事件与高位position；坏实现至少last只取最后遍历值、漏检查最后非法事件或未清除不存在值。\n本批仅实现独立的纯Dong工具，不修改已验收组件、lang/编译器/内核或Codex活动集成。只写本任务声明的同名源码、接口说明、定向测试和交付。不得自行验收、提交或推送，不运行OS/VM/完整回归。新源码先留在claude-works/src/bootstrap/。\n公共契约：OK=0、INVALID=1、CAPACITY=2。借用非空指针、自然对齐、元素乘法及区间端点先验检查；空切片可NULL，有效结果对象仍必需。读输入前检查完整声明区间：只读输入可互相重叠，可写对象彼此及与所有输入不得重叠。数据INVALID检查完成后才检查CAPACITY。非OK不改整个输出与结果对象；成功只改有效前缀及明确字段，尾部/输入/双端保护不变。所有需要长度/偏移计算检查溢出，不以debug panic代替返回。unsafe调用方保证通过数值预检后实际访问的内存可访问。无分配、全局可变状态、OS调用；只做明确子集。\n验收测试：独立Python期望，至少100个固定种子的小案例及边界；真实Dong→NASM→C/SysV，debug/release原生运行、ELF64/COFF组装、零skip。C每次调用检查输入全文、输出尾部、结果对象和真实双端guard，接口有只读输入参数时至少一组真实只读输入；C13仅有标量输入，无此项。至少两类错误Dong私有副本成功编译链接运行，并被预先指定的状态/字节/原子性断言拒绝；编译失败、崩溃和超时不算拒绝。伪地址仅走应拒绝的数值预检，须排除更早别名/对齐遮蔽，不做巨大分配。产物写claude-works/build/<任务号>/<唯一目录>/。交付写实际命令、数量/skip、hash、证据和限制；不能虚构未运行结果。CLI没有命令工具时只提交实现和可执行测试，明确未运行，由协调器执行，不绕过权限。\n",
+  "document": "claude-works/tasks/C14-board.md",
+  "document_status": "todo",
+  "historical": false,
+  "id": "claude:C14",
+  "integration_note": "按验收hash回写，C13–C15主线模块/永久测试及真实组合10项通过，LM5数据按hash集成；见reviews/2026-10-18-C13-C15-LM5-integration.md。L3未完成。",
+  "last_run_note": "交付已收集，尚未验收",
+  "legacy_hash": "def606f5c3b11151d0ad86f93a03330769a44af303807ecfb3d5c87a7f3d8f6f",
+  "number": "C14",
+  "owner": "claude",
+  "rev": 10,
+  "review_note": "Codex已审查源码/契约及测试有效性，独立定向零skip且指纹稳定；详见claude-works/reviews/2026-10-18-C13-C15-acceptance.md。",
+  "state_reconciliation": {
+    "at": "2026-10-19T11:42:09+00:00",
+    "audit_sha256": "5daf98a663cd249783a8432a5fcbed3ec4e96275b1910fa54b7903c084fe9ebc",
+    "note": "协调已有历史事实；保留原事件/作业；历史复验未重跑，未新增验收或集成，不启动模型。",
+    "previous_data_sha256": "6f7b3475ad1e128ec36a68b87b62e46962194c3151736ab2136dfd98736287aa",
+    "previous_rev": 8,
+    "project": "dongos",
+    "snapshot_generated_at": "2026-10-19T09:04:28+00:00",
+    "snapshot_rev": 9,
+    "snapshot_sha256": "a40cf9aabcbb43779b5c60414d7142cab791f85888022c84625568dbb579ac96",
+    "verification_reexecuted": false
+  },
+  "state_recovery": {
+    "at": "2026-10-19T04:43:01+00:00",
+    "audit_sha256": "3ea0db756d56092976092ed0d1216118e145a8e34aa02c5060cb913d088d553e",
+    "note": "恢复已有验收/集成/返修事实；原复验为历史记录，未声称本次重跑；不恢复丢失作业或启动模型。",
+    "snapshot_rev": 8,
+    "snapshot_sha256": "f3ab929e33419f40dfc417217d588acf8b1b26cbac50724a51942a11e438c171"
+  },
+  "status": "integrated",
+  "title": "线性值活跃区间保守包络",
+  "updated_at": "2026-10-19T11:42:09+00:00",
+  "verification": {
+    "checks": [
+      {
+        "cancelled": false,
+        "elapsed_seconds": 6.062,
+        "passed": true,
+        "returncode": 0,
+        "skips": 0,
+        "spec": "discover:claude-works/tests:test_linear_intervals.py",
+        "tests": 3,
+        "timed_out": false
+      }
+    ],
+    "fingerprint": {
+      "claude-works/deliveries/C14.md": "3e0612c463c2e25c9ad57d261058e05b81d18c50633945dc2d882cdd4d804abb",
+      "claude-works/src/bootstrap/linear_intervals.dg": "d7ad1ce02173f7aa7caa3b4a610dc831881bfcfccdcb356e85ce2b3d9d7ca336",
+      "claude-works/src/bootstrap/linear_intervals.md": "845d98aab2330c7260b0e24d7c7c99821379a2c906c95ef3e34ba0ec158471f8",
+      "claude-works/tests/test_linear_intervals.py": "b2d0500a7e6fd2f61226d6e3ac2d6abb431c7d4e691faa4c128141612b4c74a1"
+    },
+    "finished_at": "2026-10-18T09:38:37+00:00",
+    "job": "9d1b6250b7714e49b6e677fe9d3aa005",
+    "passed": true,
+    "source_stable": true,
+    "summary": "定向复验通过，等待源码/契约审查"
+  },
+  "write_paths": [
+    "claude-works/src/bootstrap/linear_intervals.dg",
+    "claude-works/src/bootstrap/linear_intervals.md",
+    "claude-works/tests/test_linear_intervals.py",
+    "claude-works/tests/linear_intervals_probe*",
+    "claude-works/deliveries/C14.md"
+  ]
+}

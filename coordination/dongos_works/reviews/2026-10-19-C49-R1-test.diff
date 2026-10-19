@@ -1,0 +1,87 @@
+--- C49-first
++++ C49-R1
+@@ -184,7 +184,8 @@
+ # State layout (qwords): 0 rax after; 1 rsp before call; 2 rsp after; 3 rbx before; 4 rbx after; 5 rbp after;
+ # 6..9 r12..r15 after; 10 caller stack canary after; 11 rsp%16 just before the call.
+ RAX,RSP_BEFORE,RSP_AFTER,RBX_BEFORE,RBX_AFTER,RBP_AFTER,R12_AFTER,CANARY_AFTER,ALIGN,STATE=0,1,2,3,4,5,6,10,11,12
+-CALLER={'rbp':0x0b0b0b0b0b0b0b0b,'r12':0x1212121212121212,'r13':0x1313131313131313,'r14':0x1414141414141414,'r15':0x1515151515151515}
++# Known values planted in every callee-saved register (rbx included: it is under test, never the observation pointer).
++CALLER={'rbx':0x0bbb0bbb0bbb0bbb,'rbp':0x0b0b0b0b0b0b0b0b,'r12':0x1212121212121212,'r13':0x1313131313131313,'r14':0x1414141414141414,'r15':0x1515151515151515}
+ CANARY=0x5ca1ab1e0ddba11c
+ JUNK_RAX=0x0a0a0a0a0a0a0a0a
+ 
+@@ -316,21 +317,27 @@
+         return texts
+ 
+     def native_run(self,texts,vectors,label):
+-        """All generated functions go in one file (distinct symbols and block IDs). Each hand-written SysV stub saves the
+-        host's callee-saved registers, plants known caller values and a stack canary, really calls the generated function
+-        with (lhs, rhs, yes_value, no_value), records RAX and every callee-saved register/rsp, then restores the host ABI
+-        and returns; the assertions run afterwards in Python."""
+-        stub=['bits 64','section .text']
++        """All generated functions go in one file. Each hand-written SysV stub saves the host's callee-saved registers, then
++        stores the observation-area address and a host stack anchor in independent static memory (no register under test
++        holds either). It plants known values in every callee-saved register (rbx included), the arguments (junk in unused
++        argument registers) and a stack canary, and really calls the generated function. After the return it first parks
++        RAX in static memory, reloads the observation address from static memory, records RAX, RSP and every callee-saved
++        register exactly as returned, reads the canary through the saved anchor, then restores RSP from the anchor and the
++        host's registers from its own pushes before returning. All assertions run afterwards in Python."""
++        stub=['bits 64','section .data','align 8','observation: dq 0','host_anchor: dq 0','parked_rax: dq 0','section .text']
+         for k,(m,it,c,y,n,a,b,yv,nv) in enumerate(vectors):
+-            stub+=['global v%d'%k,'v%d:'%k,'push rbx','push rbp','push r12','push r13','push r14','push r15','mov rbx, rdi','sub rsp, 8']
++            stub+=['global v%d'%k,'v%d:'%k,'push rbx','push rbp','push r12','push r13','push r14','push r15','sub rsp, 8']
++            stub+=['mov [rel observation], rdi','mov [rel host_anchor], rsp','mov r11, rdi']
+             stub+=['mov %s, 0x%x'%(r,v)for r,v in CALLER.items()]
+-            stub+=['mov rax, 0x%x'%CANARY,'mov [rsp], rax','mov [rbx+%d], rbx'%(8*RBX_BEFORE),'mov [rbx+%d], rsp'%(8*RSP_BEFORE),
+-                   'mov rax, rsp','and rax, 15','mov [rbx+%d], rax'%(8*ALIGN)]
++            stub+=['mov rax, 0x%x'%CANARY,'mov [rsp], rax','mov [r11+%d], rsp'%(8*RSP_BEFORE),
++                   'mov rax, rsp','and rax, 15','mov [r11+%d], rax'%(8*ALIGN),'mov rax, 0x%x'%CALLER['rbx'],'mov [r11+%d], rax'%(8*RBX_BEFORE)]
+             stub+=['mov rdi, 0x%x'%a,'mov rsi, 0x%x'%b,'mov rdx, 0x%x'%yv,'mov rcx, 0x%x'%nv,'mov rax, 0x%x'%JUNK_RAX,'call '+symbol(m,it)]
+-            stub+=['mov [rbx+%d], rsp'%(8*RSP_AFTER),'mov [rbx+%d], rax'%(8*RAX),'mov [rbx+%d], rbx'%(8*RBX_AFTER),'mov [rbx+%d], rbp'%(8*RBP_AFTER)]
+-            stub+=['mov [rbx+%d], r%d'%(8*(R12_AFTER+j),12+j)for j in range(4)]
+-            stub+=['mov rax, [rsp]','mov [rbx+%d], rax'%(8*CANARY_AFTER)]
+-            stub+=['add rsp, 8','pop r15','pop r14','pop r13','pop r12','pop rbp','pop rbx','ret']
++            stub+=['mov [rel parked_rax], rax','mov rax, [rel observation]',
++                   'mov [rax+%d], rsp'%(8*RSP_AFTER),'mov [rax+%d], rbx'%(8*RBX_AFTER),'mov [rax+%d], rbp'%(8*RBP_AFTER)]
++            stub+=['mov [rax+%d], r%d'%(8*(R12_AFTER+j),12+j)for j in range(4)]
++            stub+=['mov rcx, [rel parked_rax]','mov [rax+%d], rcx'%(8*RAX),
++                   'mov rcx, [rel host_anchor]','mov rcx, [rcx]','mov [rax+%d], rcx'%(8*CANARY_AFTER)]
++            stub+=['mov rsp, [rel host_anchor]','add rsp, 8','pop r15','pop r14','pop r13','pop r12','pop rbp','pop rbx','ret']
+         for text in texts:stub+=text.decode('ascii').rstrip('\n').split('\n')
+         (self.work/(label+'.stubs.asm')).write_text('\n'.join(stub)+'\n',encoding='ascii')
+         for fmt in ('elf64','win64'):
+@@ -349,8 +356,9 @@
+             self.assertEqual(got[ALIGN],0,(label,k,'caller rsp aligned before call'))
+             self.assertEqual(got[RAX],yv if holds(c,a,b)else nv,(label,k,'native rax',SETCC[c],hex(a),hex(b)))
+             self.assertEqual(got[RSP_AFTER],got[RSP_BEFORE],(label,k,'native rsp balanced across call/ret'))
+-            self.assertEqual(got[RBX_AFTER],got[RBX_BEFORE],(label,k,'native rbx preserved'))
+-            self.assertEqual((got[RBP_AFTER],*got[R12_AFTER:R12_AFTER+4]),tuple(CALLER.values()),(label,k,'native rbp/r12..r15 preserved'))
++            self.assertEqual(got[RBX_BEFORE],CALLER['rbx'],(label,k,'planted rbx recorded'))
++            self.assertEqual(got[RBX_AFTER],CALLER['rbx'],(label,k,'native rbx preserved'))
++            self.assertEqual((got[RBP_AFTER],*got[R12_AFTER:R12_AFTER+4]),tuple(v for r,v in CALLER.items()if r!='rbx'),(label,k,'native rbp/r12..r15 preserved'))
+             self.assertEqual(got[CANARY_AFTER],CANARY,(label,k,'caller stack canary'))
+ 
+     def test_exact_text_capacity_invalid_and_read_only_inputs(self):
+@@ -404,6 +412,22 @@
+                 texts=self.emit(exe,[(m,it,c,y,n,1024,0,0,OK)for m,it,c,y,n,*_ in VECTORS],name+'-'+mode)
+                 with self.assertRaisesRegex(AssertionError,'native rax'):self.native_run(texts,VECTORS,name+'-'+mode)
+             self.records.append(dict(test=name,compiled=True,linked=True,native_executed=True,modes=2,rejected_by='native rax'))
++        # Callee-saved RBX not preserved on BOTH exits: "add rbx, 8" right before each ret. It builds, links and returns
++        # normally on both the yes and the no route with the right RAX and a balanced RSP; only the recorded RBX rejects it.
++        yes_line=' if ex.emit(U64_KIND,FRAME,0,24,0,slice_from_raw_parts(&buffer[at],EXIT),&n)!=ex.OK{return INVALID;}\n at+=n;\n'
++        no_line=' if ex.emit(U64_KIND,FRAME,0,32,0,slice_from_raw_parts(&buffer[at],EXIT),&n)!=ex.OK{return INVALID;}\n at+=n;\n'
++        for s in (yes_line,no_line):self.assertEqual(source.count(s),1,s)
++        inject='at-=4;put(text,&at,"add rbx, 8\\nret\\n");\n'
++        tail=b'pop rbp\nadd rbx, 8\nret\n'
++        clobber=source.replace(yes_line,yes_line+inject,1).replace(no_line,no_line+inject,1)
++        for mode,exe in self.executables.items():
++            self.native_run(self.generate(exe,VECTORS,'bad-rbx-good-'+mode),VECTORS,'bad-rbx-good-'+mode)
++        for mode,exe in self.build_all('bad-rbx-clobbered',clobber).items():
++            texts=self.emit(exe,[(m,it,c,y,n,1024,0,0,OK)for m,it,c,y,n,*_ in VECTORS],'bad-rbx-'+mode)
++            self.assertTrue(all(t.count(tail)==2 and t.endswith(tail)for t in texts),(mode,'injected before both rets'))
++            with self.assertRaisesRegex(AssertionError,'native rbx preserved'):self.native_run(texts,VECTORS,'bad-rbx-'+mode)
++        self.records.append(dict(test='bad-rbx-clobbered',vectors=len(VECTORS),exits=2,compiled=True,linked=True,native_executed=True,modes=2,
++                                 rejected_by='native rbx preserved (rax and rsp assertions passed first)'))
+         old='if at>on{return CAPACITY;}';self.assertEqual(source.count(old),1)
+         new='if at>on{var k:usize=0;while k<on{out[k]=buffer[k];k+=1;}return CAPACITY;}'    # publishes the function header early
+         m,it,c,y,n,*_=VECTORS[0];size=len(expected_text(m,it,c,y,n));case=[(m,it,c,y,n,size-1,0,0,CAPACITY)]

@@ -1,0 +1,38 @@
+# CR42 — [L3] 带边界与地址溢出检查的切片视图PAIR构造
+
+负责人：cursor。状态：待领取。
+
+所属阶段：L3：Dong自举后端 → 运行时切片lo/hi到指针/长度视图接线。新增bootstrap.nasm_slice_view_function。只计算视图、不装入/存储元素，不重复DeepSeek D27有界索引访存；不依赖未集成的C51/C52，不声称完整slice AST lowering。
+pub unsafe fn emit(module_name:[]const u8,item_name:[]const u8,element_size:u64,error_block:u64,out:[]u8,written:*usize)u64
+element_size仅1/2/4/8，其它INVALID；error_block!=NONE。生成真正SysV Pair f(u64 base,u64 length,u64 lo,u64 hi)，成功RAX=base+lo*element_size、RDX=hi-lo。验证完整原视图而不只子视图：lo<=hi<=length；base==0只允许length==0；length*element_size不能溢出usize，base+length*element_size端点不能回绕（允许等于UINT64_MAX）。合法空端点lo==hi==length与NULL/0/0/0必须成功。任一失败返回{0,UINT64_MAX}，不panic、不做元素访存，所有路径正常ret；该失败Pair不会与合法原视图结果混淆。接口参数是原始地址位模式，调用者负责实际存储权限和上游元素对齐；本组件只检查上述算术/NULL协议，不探测页权限，也不声称指针可解引用。
+frame48、mask0，四输入槽8/16/24/32，结果ptr/len槽40/48。严格CR3标签→C44 kinds四个0、offsets8/16/24/32、frame48→CR12装lo到RDI、hi到RSI、length到RDX→CR29.emit(error_block)完整联合无符号边界门禁。不能用有符号比较或只检查其中一个端点。
+其余NULL和溢出验证必须真实复用CR9常量、CR12/13槽、C22规范bool比较、C23二元、CR17立即数shl、CR20无符号边界门禁、C24无符号ADD及其紧邻jc，而非重写已有组件或用宿主预求运行结果。一个可行的明确接线：
+- 用C22把base!=0与length==0各归一化，局部帧槽40暂存一个标志，C23 OR得到valid=0/1；CR9装另一寄存器0，CR20.emit(index=0寄存器,length=valid寄存器,error)在valid=0时拒绝（比较的是寄存器，不把常数当寄存器编号）。valid=1时落空，避免额外自造块号。
+- element_size>1时，令k=log2(element_size)，CR9装阈值2^(64-k)，CR20检查length<阈值；size=1不需要不可表示的2^64阈值。然后CR17算length<<k，CR12重载base，C24.ADD(unsigned)检查完整原视图端点base+byte_length的carry，不能把乘法先溢出后的低位当合法长度。
+- 再用CR12/CR17/C24计算base+(lo<<k)，CR13写槽40；CR12装hi/lo、C23.SUB求hi-lo并CR13写槽48；C42(kind11,frame48,mask0,low40,high48)真实成功ret。成功ret后CR18定义错误块，CR9/CR13写槽40=0、槽48=MAX，再同规格C42 ret。
+可选择等价的组件接线，但所有验证和结果必须符合上述确定协议，不能增加未声明输入或依赖。块只有公开error_block；其它条件若需标签必须通过等价无额外块号方案实现，不能从error ID加减自造全局标签。完整预检与充分局部生成后一次发布，给出每段及总上界/栈证明。
+永久测试<=24主要向量，有限覆盖4种stride、普通/全段/中间空/末端空、NULL空、hi>len、lo>hi、非空NULL、完整64位高位unsigned比较、length乘法溢出和base+byte_length加法溢出、边界端点恰MAX与越1，含lo=0/hi=len。正常例用真实预留只读源缓冲并检查源不变；高位/溢出例只把地址当u64传入，不解引用，不能靠故障拒绝。实际Dong产生整函数并真实call/ret，用独立Python无限精度数学判定协议再对RAX/RDX核对，错误严格{0,MAX}，正确不截断长度或指针；双返回路径完整保持/恢复。
+真实坏Dong：安全删掉CR29 hi<=length联合门禁（用hi=length+1且其它参数合法的有界输入）→正常返回后按Pair拒绝；删掉C24完整原视图加法carry保护（用数值溢出但不访存的安全夹具）→正常返回后按错误Pair拒绝，不能只测试子视图加法掩盖整视图溢出；CAPACITY提前发布函数头→完整原子性拒绝。另按共同要求补两个出口RBX保持数值敏感性，发射层非法stride/NONE/描述符/尾部别名及只读保护齐全。
+
+## 共用执行与复验要求
+本项仅四个声明文件，生产为Dong，无隐式分配/全局可变生产缓存/OS调用，新模块不导出C符号（临时wrapper可导出）。不得修改code/lang、编译器、已集成依赖、协调器、其它负责人或本批其它任务。CR38继续原队列，本人已领取/返修优先；不恢复已转交归档任务。
+统一发射状态OK0/INVALID1/CAPACITY2。先完整检查written非NULL、8对齐、8字节端点；所有输入/嵌套数组和out完整区间非空非NULL、自然对齐、元素乘法、端点不回绕；空可NULL。written与整个out（包括未用尾部）及全部完整输入互斥；out亦与全部输入互斥，输入之间可重叠且只读。所有非法枚举/名称长度/块ID/结构内容先于容量拒绝，非法数量不读取正文。任何INVALID/CAPACITY均保持输入、out、written全文不变；成功只写精确前缀和written，尾部不变。
+module/item及被调用者名字均为1..64原始字节，CR3编码，不能裸拼标签。块ID不得NONE，多个块必须不同，上游保证全文件唯一。本模块不分配全局编号。文本严格ASCII/单LF，仅函数标签、必要块标签和指令，无bits/section/global/extern/注释/额外空行；测试包装可补节/global和独立桥。
+真实复用正文指定已集成组件及只读完整传递闭包，不复制既有规划/发射算法，不以Python/C模拟生产。每段给保守长度证明和完整缓冲/栈证明，不能拿一次输出实长代替上界；遵守dongc每函数4096 worst-case frame限制，不能直接堆无法编译的大局部数组。可在证明外部失败原子性、输入不变与依赖确定性的前提下使用有界片段完整预演后重放，必须说明第二遍失败为何不可达；或用充分且可编译的最终局部缓冲。不要改编译器/依赖逃避限制，不能先写用户out再回滚。
+只跑本项checks：真实Dong debug/release编译、ELF64/COFF组装、显式SysV桥链接并原生执行。单模式不同主要原生输入向量总数<=24，复用同输入的好/坏重放不新增向量；不做全笛卡尔积/全回归/性能基准。独立Python/C oracle，不用生产输出作为唯一oracle。全部返回路径捕获真实RAX（PAIR还RDX）、所有callee-saved及RSP，独立保存观察区/宿主栈锚，先独立捕获现场，再恢复宿主ABI后断言；不能让返回RBX承担观察指针或依赖返回RSP恢复宿主。
+除正文语义/原子性负控外，永久保留安全实际坏Dong的RBX保持数值负控（正文有两个出口则覆盖两个出口）：同输入正式好侧先实际生成并执行，坏侧正常编译/链接/原生返回后按指定RBX数值拒绝，不用错位/guard/对齐/崩溃代替。其它坏体也必须正常构建执行后按指定数值/状态/顺序/原子性拒绝，缺符号、组装失败、崩溃、超时、仅文本不同不算指定语义负控；所有访问和ret都在预留安全范围。
+有限覆盖exact/短1/0/富余容量、成功未用尾部、INVALID优先、完整描述符和尾部别名独立可达；written端点溢出使用8对齐UINT64_MAX-7+合法空out，避免漏检后非法解引用。输入真实只读保护须断言保护调用成功；源码、说明、测试、全部只读依赖/输入SHA前后稳定，0skip才可验收。
+仅用户在Cursor客户端手动通过worker MCP读最新rev/完整任务书/review_note/write_paths/依赖，claim成功后实现，交付真实命令、tests/skips、双模式/双格式、全部SHA、坏体实际观察和未执行限制，再原编号submit。临时产物cursor-works/build/<编号>/<唯一目录>。不启动Cursor CLI或任何AI CLI/自动化，不自行accept/integrate、提交/推送、运行OS/VM。最后由Codex独立复验、验收和真实集成；组件通过不等于完整语义/IR、stage1/stage2、客体自举或L3完成。
+
+## 可修改文件
+
+- `cursor-works/src/bootstrap/nasm_slice_view_function.dg`
+- `cursor-works/src/bootstrap/nasm_slice_view_function.md`
+- `cursor-works/tests/test_nasm_slice_view_function.py`
+- `cursor-works/deliveries/CR42.md`
+
+## 定向验收
+
+- `discover:cursor-works/tests:test_nasm_slice_view_function.py`
+
+交付：`cursor-works/deliveries/CR42.md`。独立工作副本中执行；不提交、推送、运行OS/VM或修改归属外文件。完成后提交交付，等待独立复验。

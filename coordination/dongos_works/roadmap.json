@@ -1,10 +1,10 @@
 {
   "version": 1,
   "title": "DongOS 整体任务图",
-  "updated_at": "2026-10-18T23:36:46+08:00",
+  "updated_at": "2026-10-19T23:32:18+08:00",
   "scope": "P0–P9；P10另定范围",
   "summary": "已形成从 UEFI 启动到用户态图形桌面、文件持久化与四核用户调度的受控闭环；完整阶段仍有扩展、回归和外部环境验收待关闭。",
-  "focus": "当前重点：L3 Dong编译器自举",
+  "focus": "当前重点：L3 Dong编译器自举——已有\"源码表达式→AST→IR→完整函数\"的受限链路，通用后端、CLI与自编译尚未开始",
   "tracks": [
     {
       "id": "system",
@@ -124,14 +124,39 @@
           "id": "L3",
           "title": "Dong 编译器自举",
           "status": "partial",
-          "done": ["Dong原生词法、解析、模块/名称与运行时语义子集已接入", "多个后端规划/发射组件及真实组件组合已验收集成"],
-          "remaining": ["完整语义、方法/标签/错误与defer清理", "完整后端、目标模块I/O、诊断CLI及工具链接线", "宿主stage1/stage2产物一致性", "DongOS内编译自身、FLUSH、同盘重启与产物一致性"],
-          "evidence": ["code/PLAN.md:362", "code/docs/language-l2-l3.md:3", "code/docs/language-l2-l3.md:30", "code/docs/language-l2-l3.md:34", "code/docs/language-l2-l3.md:46", "code/docs/language-l2-l3.md:144"]
+          "done": ["Dong原生词法(UTF-8/Unicode)、表达式与语法解析、模块/名称/绑定及运行时语义子集(类型、初始化、分支、循环、返回、defer捕获)已集成", "任意精度整数、常量求值、类型布局、诊断格式化、源码位置、字符串表等支撑组件已验收并进入主线lang/bootstrap", "主线lang/bootstrap现有93个Dong模块，其中55个nasm_发射/门禁组件：比较、分支、移位、调用/参数/返回、原子、内存内建、checked算术与窄化、切片/越界/除法门禁、switch分发、作用域清理、静态指针重定位等；C45可生成内核可验证的静态ELF64代码/数据镜像，D23可逐字节比较产物", "受限整函数接线已集成：C48(直线u64 IR→完整SysV函数)、D24(固定次数u64循环函数)；C51把真实lexer/parser的INTEGER/NAME/+-*&|^表达式树降为C48 IR——首次打通\"源码→token→AST→IR→完整函数→汇编→真实调用\"，但仅限u64单表达式"],
+          "remaining": ["接线中：C49(条件比较双分支返回)与C50(实参重排跨函数调用)已验收、尚未集成；C52(多函数NASM模块与可链接导出)、D25(有界i64 switch函数)、D27(有界索引装入/存储函数)已提交、待独立复验", "暂停：Cursor CR38～CR42(受检64位算术与错误返回、AND/OR短路、双字返回清理、窄算术、切片视图)已发布但处于paused", "完整语义：方法、标签、错误与defer清理的lowering、聚合常量", "通用降级：C51只覆盖u64单表达式；局部绑定、调用、比较/条件、循环、switch、除法/移位、受检算术、类型与聚合目前是彼此独立的受限函数组件，尚无统一的AST→IR→后端"],
+          "evidence": ["code/PLAN.md:362", "code/docs/language-l2-l3.md:3", "code/docs/language-l2-l3.md:30", "code/docs/language-l2-l3.md:46", "code/lang/bootstrap/nasm_u64_function.dg", "code/lang/bootstrap/nasm_u64_loop_function.dg", "code/lang/bootstrap/u64_expression_ir.dg", "coordination/dongos_works/reviews/2026-10-19-C48-integrated-C49-C50-R1.md", "coordination/dongos_works/reviews/2026-10-19-C51-D24-integrated.md"]
+        },
+        {
+          "id": "L3A",
+          "title": "完整后端与命令行",
+          "status": "pending",
+          "done": [],
+          "remaining": ["把表达式、函数、控制流等受限组件统一进一个后端，覆盖完整Dong源码子集", "目标模块I/O、诊断CLI及汇编/链接工具链接线(C52只生成模块文本，C45只生成镜像组件，均无CLI)"],
+          "evidence": ["code/docs/language-l2-l3.md:34", "code/docs/language-l2-l3.md:144"]
+        },
+        {
+          "id": "L3B",
+          "title": "宿主 stage1/stage2 一致性",
+          "status": "pending",
+          "done": [],
+          "remaining": ["宿主上用Dong编译器编译自身得到stage1，再由stage1编译得到stage2，产物逐字节一致(D23比较组件已有，但还没有可比较的整编译器产物)"],
+          "evidence": ["code/docs/language-l2-l3.md:144"]
+        },
+        {
+          "id": "L3C",
+          "title": "DongOS内自编译",
+          "status": "pending",
+          "done": [],
+          "remaining": ["DongOS内编译自身，经FLUSH与同盘重启后产物与宿主一致", "普通file-app目前仅有只读FS权限、262144字节EXEC上限、单u64参数和有界工作内存，需明确接线与复验"],
+          "evidence": ["code/docs/language-l2-l3.md:144"]
         }
       ]
     }
   ],
   "notes": [
+    "本次(2026-10-19)只按代码与协调器实时状态重算语言主线L3；系统主线P0–P9自上次快照后没有源码或PLAN.md变化(code下除lang/外无改动)，其状态与证据沿用原文。任务表此刻共120项：已集成91、已验收未集成21、待独立复验3(C52、D25、D27)、暂停5(Cursor CR38～CR42)。",
     "本图是2026-10-18按源码计划与验收记录核对的人工证据快照，不自动登记accepted或integrated；任务领取和验收状态以协调器实时snapshot为准。",
     "完成表示所列受控范围通过既定门槛；既有功能验收不替代新版镜像回归。P7既有桌面功能已验收，当前R6完整输入/GUI回归仍未关闭。",
     "任务数量与各状态数量由页面实时读取协调器；它们不是整个操作系统的完成百分比。",

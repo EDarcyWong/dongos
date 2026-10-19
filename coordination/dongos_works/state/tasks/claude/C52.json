@@ -1,0 +1,36 @@
+{
+  "auto_dispatch": false,
+  "auto_verify": false,
+  "candidate": null,
+  "checks": [
+    "discover:claude-works/tests:test_nasm_u64_module.py"
+  ],
+  "claimed_at": "2026-10-19T15:35:14+00:00",
+  "claimed_by": "claude-mcp-7375d33562084f6a",
+  "complexity": "standard",
+  "created_at": "2026-10-19T14:14:02+00:00",
+  "delivery": "claude-works/deliveries/C52.md",
+  "depends_on": [
+    "claude:C48",
+    "cursor:CR3"
+  ],
+  "description": "所属阶段：L3：Dong自举后端 → 整函数到目标模块文本/工具链接线。新增bootstrap.nasm_u64_module，复用已integrated C48和CR3生成1..8个受限直线u64函数的完整NASM模块。不是另做单函数发射器，不依赖C49/C50未集成文件，不重复DeepSeek D24~D27循环/switch/受检算术/索引工作，也不生成机器码/ELF或执行I/O。\n\nimport bootstrap.nasm_u64_function as f; import bootstrap.nasm_symbol as sym;\npub struct Function{pub module_name:[]const u8,pub item_name:[]const u8,pub parameter_count:usize,pub slot_count:usize,pub instructions:[]const f.Instruction,pub return_slot:usize} // 72字节、8对齐\npub unsafe fn emit(functions:[]const Function,work:[]u8,out:[]u8,written:*usize)u64\nOK=0 INVALID=1 CAPACITY=2 WORKSPACE=3。functions.len1..8，每项的名字/参数/槽/IR/返回槽完整遵循C48现有契约。所有函数的(module_name,item_name)字节对必须唯一；同module不同item、同item不同module均合法，按CR3的单射编码判定，不使用未验证裸名字作标签。输入函数顺序就是输出顺序。\n\n先完整检查written、Function数组乘法/8对齐/端点、work/out描述符，以及每项嵌套名字和Instruction数组的乘法/对齐/端点/数量。written/work/out三者完整声明区间两两不重叠，并与Function数组、全部名字及全部IR数组的整个输入区间不重叠；输入之间可以任意重叠，只读。非法functions数量不能读正文；嵌套描述符验证必须在读取嵌套IR/名字之前完成。完成安全描述符和重复名字检查后，对每项实际调用C48.emit(names,p,slots,IR,return_slot,NULL空out,&局部计数)做既有完整IR预检：合法函数必须返回C48.CAPACITY，任何非CAPACITY作为INVALID，局部计数不得错误使用；不复制C48初始化/enum/字段/返回槽检查算法，也不靠用户out回滚试写。所有函数都通过后才判断work不足与最终out容量；尾部最后一项非法也必须INVALID优先。\n\n输出严格为ASCII/单LF：固定'bits 64\\\\nsection .text\\\\n'（22字节）；然后每项一行'global '+CR3.encode(module,item)+'\\\\n'，立即跟C48.emit完整函数体；不插入其它section/global数据、extern、注释、空行或入口main。每个函数标签与其自己的IR主体关联，不能重排主体导致符号错配。CR3符号<=266，global行<=274；C48函数体已证明<=6591，总保守上界B=22+functions.len*(274+6591)，最多54942。work.len<B返回WORKSPACE（即使短work可能装下实际文本，也按此公开固定预算），优先于用户out CAPACITY。work足够后在调用方work里逐段实际生成，CR3临时符号片段可局部266字节，C48每次拿到至少6591的安全片段，证明每段和最后一段不会越过work。实际模块生成完后，以实际长度比较out.len，不足返回CAPACITY；否则最后复制精确模块前缀并发布written。不能要求一个大于dongc栈限制的局部模块缓冲。\n\nwork是明确可变的调用方scratch：完成全部INVALID与WORKSPACE检查之前不写work；CAPACITY可保留生成模块前缀在work，输入/out/written始终不变。成功只改work已用前缀、out精确前缀与written，两者未用尾部保持。INVALID/WORKSPACE时work亦全文不变；所有失败out/written全文不变。若充分work情况下依赖内部仍非OK，返回INVALID，work允许已改（说明中区分预检INVALID与已进入生成的异常INVALID）；在当前确定性已验证输入下证明该后置失败不可达，不能用它正常拒绝合法输入。\n\n永久测试：实际Dong生成完整模块，同一个模块文本直接作为NASM ELF64/COFF输入（不由Python重建函数体/global/section）；分别链接到显式SysV独立调用桥，实际调用每个导出符号。有限组合1/2/8函数（单模式不同主要函数向量合计<=24），不同名字/相同module或item、1/64字节和非ASCII原名字编码、0/1/6参数、空IR返回参数/常量/所有二元的有限IR、不同返回槽和高位边界。独立Python文本模型核对头/global/顺序/完整体，独立IR解释器核对每个函数数值；不能只用另一次C48输出当oracle。组装/链接证明导出真实存在，但缺符号/组装失败不是指定语义负控。可用nm/对象工具辅助核对导出集合，记录真实调用及RAX、完整callee-saved/RSP恢复。\n\n覆盖函数数组和每项嵌套名字/IR的完整尾部别名与独立可达描述符；重复字节名字（独立副本与同指针）、仅一名相同、函数数组前项合法末项非法、work B/短1/0/富余、out实际exact/短1/0/富余，INVALID>WORKSPACE>CAPACITY优先级；只读输入保护成功、work/out/计数/input guards和前后SHA。不得只验证第一项。\n\n至少三类真实坏Dong：将某函数传给C48的return_slot安全改为另一个已初始化参数槽（只在>=2参数且返回值不同的夹具）→同输入正式好侧先实际生成模块并执行，坏侧正常链接/返回后按该导出函数RAX拒绝；删除duplicate检查→重复名字输入只调模块发射器，以INVALID状态拒绝，不组装/执行冲突模块；out容量不足提前发布work头部→完整原子性拒绝。另按共同要求补安全RBX保持数值敏感性，不破坏ret/宿主栈。临时产物claude-works/build/C52/<唯一目录>。\n\n## 执行、内存和复验共同要求\n只改声明的四文件，生产为Dong；不修改code/lang、编译器、既有组件、其它负责人或本批另一任务。本人领取/返修优先。没有隐式分配、全局可变生产状态或OS/I/O调用，新模块不导出C符号（临时wrapper可导出）。依赖仅从已integrated主线及明确列出的既有核心只读基线暂存完整传递闭包，不能复制整个lang掩盖坏源码。不得改旧任务/恢复归档项或用Python/C代替生产lowering。\n所有切片/结构/结果先检查完整声明区间：非空非NULL、元素乘法、自然对齐、端点不回绕；空切片可NULL。结果非NULL、自然8对齐、完整对象端点有效。输入彼此可重叠且只读；所有输出/Result及显式work按正文要求彼此并与全部完整输入（含嵌套名字/数组、未消费尾部）不重叠。在任何输入正文读取或输出写入前先完成可安全做的描述符检查，非法数量不读正文。正文限定的INVALID/UNSUPPORTED先于用户输出容量。除C52显式work外，失败所有输出、整个Result/计数、输入全文和guards不变；成功只写精确前缀及结果，未用尾部不变。\n局部栈以当前dongc的4096 worst-case frame限制设计；给出结构尺寸、临时片段、每段及总上界证明，实际debug/release均可编译。不要照搬无法编译的大局部最终数组，不改编译器来逃避限制。若正文给显式work，只能修改该调用方工作区，不影响最终产物失败原子性。\n只跑本任务checks，实际Dong debug/release编译、NASM ELF64/COFF组装及显式SysV桥链接/原生执行；COFF组装不冒充Win64调用ABI。单模式不同主要原生函数向量总量<=24，复用相同输入的好/坏重放不另算。独立Python/C oracle，不能用生产输出作为唯一oracle。观察真实RAX、所有callee-saved和RSP：独立保存观察区地址和宿主栈锚，返回后先从独立地址捕获现场，再恢复宿主栈及ABI，最后断言；不能用返回RBX作观察指针或信任返回RSP。永久保留安全真实坏Dong的RBX数值保持负控（同输入好侧先实际生成调用，坏侧正常返回后按指定数值拒绝）；不要重现C48~C50首交的桥缺口。\n覆盖完整描述符/端点/尾部别名的独立可达用例，written/Result端点溢出用8对齐UINT64_MAX-7或与Result尺寸匹配的安全参数，不能通过非法解引用拒绝；输入真实只读保护并断言保护调用成功，输入/依赖/生产/说明/测试SHA256前后稳定。有限边界，不跑笛卡尔积、全回归、OS/VM或性能基准。真实坏体必须正常构建/链接/执行后由指定语义/状态/原子性断言拒绝；构建失败、缺符号、崩溃、超时、仅文本不同不算指定语义负控，所有坏体访问和返回路径在预留安全范围内。\n本人客户端先worker MCP get_task/read_document读最新rev、完整契约、review_note、write_paths和依赖，claim成功后执行；不由协调器启动AI CLI。临时产物仅本人works/build/<编号>/<唯一目录>/。交付记录实际命令、tests/skips、模式/格式、全部输入SHA、各坏体实际拒绝依据及未执行限制，再原编号submit。不得自行accept/integrate、提交/推送或启动定时器。交付仍须Codex独立复验、验收和真实集成；本组件不代表完整IR/语义/CLI、stage1/stage2或整个L3完成。",
+  "document": "claude-works/tasks/C52-board.md",
+  "historical": false,
+  "id": "claude:C52",
+  "legacy_hash": "64f2f3f1eb8c71efd06e8ef71c62b39e17e93366bb955eb5e513a1d1ed5c6500",
+  "number": "C52",
+  "owner": "claude",
+  "rev": 7,
+  "review_note": "[P2] 源码/契约审查不通过，不能因现有5项测试全过而验收。nasm_u64_module.dg:41-46 的嵌套预检缺少名字1..64和IR<=64等数量限制，57行重复名字same()先读字节，66行后才交C48拒绝非法数量，违反先完整嵌套数量预检、非法数量不读正文的契约。直接链接正式未修改Dong对象的安全PAGE_GUARD读观察证明：debug/release，module/item 65字节单函数INVALID且0次读，双函数同为65字节名字却在INVALID前读1次；64字节单函数读观察正控为1且WORKSPACE，12个观察均正常返回，输出/written/表不变，无崩溃/超时/构建失败。正式作业64634c302d0c434bbf0216f94eb8f495为5tests/0skip/146.640秒/source_stable=true，16输入和672产物SHA一致，130组原生负控审查正常，但未覆盖本缺口。返修仅原四文件：任何名字/IR正文读取前先完成所有函数嵌套名字及IR数量/描述符预检，保留C48实际语义预检；增加能使当前实现因提前读取而失败的安全永久回归，覆盖module/item、多函数/位置，保留现有负控、优先级和原子性。更新说明与交付原编号重新submit；不改C48/他人实现。证据reviews/2026-10-19-C52-evidence.json、-C52-name-preflight.c，详审reviews/2026-10-19-C52-D25-reviewed.md。",
+  "status": "submitted",
+  "title": "[L3] 复用C48组装多函数NASM模块及可链接导出",
+  "updated_at": "2026-10-19T15:42:48+00:00",
+  "verification": null,
+  "write_paths": [
+    "claude-works/src/bootstrap/nasm_u64_module.dg",
+    "claude-works/src/bootstrap/nasm_u64_module.md",
+    "claude-works/tests/test_nasm_u64_module.py",
+    "claude-works/deliveries/C52.md"
+  ]
+}

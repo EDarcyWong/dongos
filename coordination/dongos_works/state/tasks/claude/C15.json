@@ -1,0 +1,78 @@
+{
+  "auto_dispatch": false,
+  "auto_verify": false,
+  "candidate": "d4d23cfe36cc4251b0ea9ed65bff8e78",
+  "checks": [
+    "discover:claude-works/tests:test_register_slots.py"
+  ],
+  "complexity": "standard",
+  "created_at": "2026-10-18T09:17:34+00:00",
+  "delivery": "claude-works/deliveries/C15.md",
+  "depends_on": [],
+  "description": "模块bootstrap.register_slots。Interval{start:usize,end:usize}；Location{kind:u64,index:usize}；Result{used:usize,spill_slots:usize}。固定接口pub unsafe fn assign(input:[]const Interval,register_count:usize,out:[]Location,result:*Result)u64。register_count必须1..16，input按start非降序，所有start<=end，端点允许MAX。区间为闭区间，旧end<新start才释放。按输入顺序选择编号最小的空闲寄存器(kind=0,index=0..register_count-1)；没有空闲就分配新spill槽(kind=1,index从0递增)，不驱逐现有寄存器、不复用spill槽。out至少input.len，used=n，spill_slots为槽数，空输入成功0/0；全部INVALID/CAPACITY预检后才写输出。允许局部固定16项状态，不要求工作区/堆分配。这是明确的保守策略，不冒称最优分配。Python独立按寄存器占用历史选择，并验证同寄存器的区间严格不相交。覆盖同起点、端点相接、MAX端点、空输入和全部spill；坏实现至少把end==start错误释放、选错最低空闲寄存器或复用spill槽。\n本批仅实现独立的纯Dong工具，不修改已验收组件、lang/编译器/内核或Codex活动集成。只写本任务声明的同名源码、接口说明、定向测试和交付。不得自行验收、提交或推送，不运行OS/VM/完整回归。新源码先留在claude-works/src/bootstrap/。\n公共契约：OK=0、INVALID=1、CAPACITY=2。借用非空指针、自然对齐、元素乘法及区间端点先验检查；空切片可NULL，有效结果对象仍必需。读输入前检查完整声明区间：只读输入可互相重叠，可写对象彼此及与所有输入不得重叠。数据INVALID检查完成后才检查CAPACITY。非OK不改整个输出与结果对象；成功只改有效前缀及明确字段，尾部/输入/双端保护不变。所有需要长度/偏移计算检查溢出，不以debug panic代替返回。unsafe调用方保证通过数值预检后实际访问的内存可访问。无分配、全局可变状态、OS调用；只做明确子集。\n验收测试：独立Python期望，至少100个固定种子的小案例及边界；真实Dong→NASM→C/SysV，debug/release原生运行、ELF64/COFF组装、零skip。C每次调用检查输入全文、输出尾部、结果对象和真实双端guard，接口有只读输入参数时至少一组真实只读输入；C13仅有标量输入，无此项。至少两类错误Dong私有副本成功编译链接运行，并被预先指定的状态/字节/原子性断言拒绝；编译失败、崩溃和超时不算拒绝。伪地址仅走应拒绝的数值预检，须排除更早别名/对齐遮蔽，不做巨大分配。产物写claude-works/build/<任务号>/<唯一目录>/。交付写实际命令、数量/skip、hash、证据和限制；不能虚构未运行结果。CLI没有命令工具时只提交实现和可执行测试，明确未运行，由协调器执行，不绕过权限。\n",
+  "document": "claude-works/tasks/C15-board.md",
+  "document_status": "todo",
+  "historical": false,
+  "id": "claude:C15",
+  "integration_note": "按验收hash回写，C13–C15主线模块/永久测试及真实组合10项通过，LM5数据按hash集成；见reviews/2026-10-18-C13-C15-LM5-integration.md。L3未完成。",
+  "last_run_note": "交付已收集，尚未验收",
+  "legacy_hash": "12415a4f22ec56eb067c7f5031ac0afea4e1285feaa83b1af84d79189aa8cede",
+  "number": "C15",
+  "owner": "claude",
+  "rev": 10,
+  "review_note": "Codex已审查源码/契约及测试有效性，独立定向零skip且指纹稳定；详见claude-works/reviews/2026-10-18-C13-C15-acceptance.md。",
+  "state_reconciliation": {
+    "at": "2026-10-19T11:42:09+00:00",
+    "audit_sha256": "5daf98a663cd249783a8432a5fcbed3ec4e96275b1910fa54b7903c084fe9ebc",
+    "note": "协调已有历史事实；保留原事件/作业；历史复验未重跑，未新增验收或集成，不启动模型。",
+    "previous_data_sha256": "7c0d9761a2468ad598ce3735e10bfd91149e2e45d75b60504135625765b7cbef",
+    "previous_rev": 8,
+    "project": "dongos",
+    "snapshot_generated_at": "2026-10-19T09:04:28+00:00",
+    "snapshot_rev": 9,
+    "snapshot_sha256": "a40cf9aabcbb43779b5c60414d7142cab791f85888022c84625568dbb579ac96",
+    "verification_reexecuted": false
+  },
+  "state_recovery": {
+    "at": "2026-10-19T04:43:01+00:00",
+    "audit_sha256": "3ea0db756d56092976092ed0d1216118e145a8e34aa02c5060cb913d088d553e",
+    "note": "恢复已有验收/集成/返修事实；原复验为历史记录，未声称本次重跑；不恢复丢失作业或启动模型。",
+    "snapshot_rev": 8,
+    "snapshot_sha256": "f3ab929e33419f40dfc417217d588acf8b1b26cbac50724a51942a11e438c171"
+  },
+  "status": "integrated",
+  "title": "确定性的有限寄存器与溢出槽规划",
+  "updated_at": "2026-10-19T11:42:09+00:00",
+  "verification": {
+    "checks": [
+      {
+        "cancelled": false,
+        "elapsed_seconds": 7.688,
+        "passed": true,
+        "returncode": 0,
+        "skips": 0,
+        "spec": "discover:claude-works/tests:test_register_slots.py",
+        "tests": 3,
+        "timed_out": false
+      }
+    ],
+    "fingerprint": {
+      "claude-works/deliveries/C15.md": "2b94546387b7bc07a5850d65b354cb76b07a00337e70b18ff2e313288e0eb509",
+      "claude-works/src/bootstrap/register_slots.dg": "caa1204f0843c910182682be7e376d750392810b4ccc55f0e6a60c2a482b14df",
+      "claude-works/src/bootstrap/register_slots.md": "55ee3fd6cdabd2b232a48ecea6b7b7c4a9863e5f4a7c015e905cb0ec1d853bdd",
+      "claude-works/tests/test_register_slots.py": "1bdb0fe6a6e0bd378cb99db80214a27afa1caff259a1ee350c88625d9a43952e"
+    },
+    "finished_at": "2026-10-18T09:38:48+00:00",
+    "job": "e2b8c5df6af3465b92652213cf139a63",
+    "passed": true,
+    "source_stable": true,
+    "summary": "定向复验通过，等待源码/契约审查"
+  },
+  "write_paths": [
+    "claude-works/src/bootstrap/register_slots.dg",
+    "claude-works/src/bootstrap/register_slots.md",
+    "claude-works/tests/test_register_slots.py",
+    "claude-works/tests/register_slots_probe*",
+    "claude-works/deliveries/C15.md"
+  ]
+}

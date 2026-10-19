@@ -1,5 +1,20 @@
 # DongOS 客户端分工（2026-10-18）
 
+2026-10-19用户明确要求直接完成Cursor进行中及待领取任务，并确认是代码实现和测试：Codex已接管并完成CR38～CR42，保留原编号/任务书/历史。CR38保留正确生产实现并补两出口RBX负控，CR39～CR42新增生产、说明、永久测试及交付；正式隔离每项4测试、共20项0skip、源码稳定，全部已accepted（CR38 rev9、CR39 rev7、CR40 rev13、CR41 rev7、CR42 rev7），尚未集成主线。本轮覆盖下方本批“Cursor手动执行/待领取”的旧快照，不改变未来分配偏好；Cursor无需重复执行本批。未启动任何AI CLI。见[直接实现与最终验收](reviews/2026-10-19-Cursor-CR38-CR42-direct.md)。
+
+
+2026-10-19用户要求给Cursor分配任务：通过协调器MCP新增[CR39 短路布尔真实调用](cursor-works/tasks/CR39-board.md)、[CR40 双字返回前的作用域清理](cursor-works/tasks/CR40-board.md)、[CR41 8/16/32位checked/wrapping算术](cursor-works/tasks/CR41-board.md)、[CR42 切片视图PAIR构造](cursor-works/tasks/CR42-board.md)，均属 **L3：Dong自举后端/完整函数运行时语义接线**。各四文件、互不依赖且不冲突，20项涉及依赖已逐项MCP确认integrated；发布时均todo rev1。查询期间其它协调会话刚发布的[CR38 接续D26的64位受检算术](cursor-works/tasks/CR38-board.md)保持原队列，不重建/抢占；CR41仅窄位宽，CR42只构造视图不做D27的元素访存，不修改Claude C51/C52。已有领取/返修优先，由用户在Cursor客户端手动worker MCP读最新rev/完整任务后领取，未启动Cursor CLI或任何AI CLI。各项明确真实双模式/双格式/完整安全寄存器捕获及坏体数值、轨迹、容量原子性要求，交付仍须Codex独立复验/验收/真实集成，不代表完整L3完成。完整契约、依赖版本、CR38保留快照与发布回执见[派单证据](reviews/2026-10-19-Cursor-CR39-CR42-allocation.json)。
+
+2026-10-19用户明确要求“将d26给cursor执行”：DeepSeek D26已暂停归档（rev3），接续为[Cursor CR38：受检64位算术与错误返回的完整SysV函数接线](cursor-works/tasks/CR38-board.md)，发布todo rev1。完整保留原L3契约、10项已integrated只读依赖及定向验证要求；四个可写文件映射cursor-works，检查时来源/目标均无实现、测试或交付，无需复制。来源D26任务书SHA不变，原cursor:CR36仍归档；历史链CR36→D26→CR38。Cursor在本人客户端手动worker MCP读完整任务与最新rev后领取，不自动启动AI CLI；DeepSeek停止D26写入/提交，D24/D25/D27保持原队列。见[转派记录](reviews/2026-10-19-D26-Cursor-CR38-transfer.json)。
+
+2026-10-19用户要求给Claude分配任务：已通过协调器MCP发布[C51 原生表达式AST到C48直线IR](claude-works/tasks/C51-board.md)、[C52 多函数NASM模块及可链接导出](claude-works/tasks/C52-board.md)，均属于 **L3：Dong自举后端**。C51推进原生lexer/parser树到IR的真实接线，C52推进C48完整函数到目标模块文本的接线；各四文件、互不依赖且不重叠，不抢DeepSeek D24～D27。C48已integrated rev13、CR3已integrated rev8；C51仅读已有前端/整数核心基线，C52不用尚未集成的C49/C50。发布时两项均todo rev1，由Claude本人客户端worker MCP读最新rev/完整任务后手动领取；先处理本人返修，未启动AI CLI。完整契约、依赖、只读核心SHA与回执见[派单证据](reviews/2026-10-19-Claude-C51-C52-allocation.json)。C52输出中的换行均按任务明确的真实单LF及22字节模块头定义，不输出反斜杠字符。
+
+2026-10-19本聊天收尾状态：C48已实际复制生产/说明/路径适配永久测试到主线，主线4项0skip、输入稳定，登记integrated rev13；C49/C50 R1已分别正式4项0skip并独立核对40/32组原生好坏输出，已accepted rev10，尚未主线集成。见[集成与R1审查](reviews/2026-10-19-C48-integrated-C49-C50-R1.md)。新组件派单或验收不代表完整L3、stage1/stage2或客体自举完成，实时状态仍以MCP最新rev为准。
+
+2026-10-19用户明确要求将Cursor任务转派DeepSeek：未完成的CR34～CR37已暂停并归档，后继依次为[DeepSeek D24 循环与真实回边](deepseek-works/tasks/D24-board.md)、[D25 switch多分支返回](deepseek-works/tasks/D25-board.md)、[D26 受检64位算术](deepseek-works/tasks/D26-board.md)、[D27 有界索引访存](deepseek-works/tasks/D27-board.md)。均属于L3：Dong自举后端/完整函数接线，发布todo rev1，完整继承原契约/18项已集成只读依赖/验证要求，各四文件改映射deepseek-works。CR34转交前in_progress rev2，其余todo rev1；检查时四项尚无实现或交付落盘，原任务书/领取/发布时间/事件保留，不继承验收。Cursor停止原编号写入/提交，DeepSeek在本人客户端手动worker MCP取最新rev、先处理本人领取/返修，再逐项执行；未启动AI CLI，不恢复原归档任务。此明确转派覆盖本批“Cursor执行”和DeepSeek少量新增的一般偏好，不改变其它队列；完整来源与回执见[转派证据](reviews/2026-10-19-Cursor-DeepSeek-transfer.json)。
+
+2026-10-19用户要求给Cursor派单：已通过协调器MCP新增[CR34 有限循环与真实回边](cursor-works/tasks/CR34-board.md)、[CR35 switch及case结果关联](cursor-works/tasks/CR35-board.md)、[CR36 受检64位算术与错误返回](cursor-works/tasks/CR36-board.md)、[CR37 有界索引装入/存储](cursor-works/tasks/CR37-board.md)。均属于L3：Dong自举后端/完整函数接线，发布时todo rev1，各四文件、互不依赖，18项只读依赖已逐一查询integrated；不重写既有组件，与Claude C48/C49/C50无文件冲突。原CR30～CR33继续归档，不恢复、不转派Claude在途任务。本人已有领取/返修优先，Cursor在客户端手动worker MCP读取最新rev后领取，未启动AI CLI；交付仍需Codex独立复验、验收及真实集成，不能据此宣称L3完成。完整任务、依赖版本和发布回执见[本批派单记录](reviews/2026-10-19-Cursor-CR34-CR37-allocation.json)。
+
 2026-10-19用户授权Codex直接修复D23：测试夹具内存/NULL协议/对齐与隔离问题已修，生产逻辑不变；正式及主线各3项零skip、SHA稳定，已验收并真实集成。见[D23修复与集成](reviews/2026-10-19-D23-fixed.md)。不等同已执行自编译产物比较。
 
 2026-10-19用户授权Codex直接修复D22：原编号R1已补齐全GPR/RSP捕获、真实只读源页与完整快照及实际坏R11数值负控，生产逻辑不变。正式和主线各5项零skip、SHA稳定，已验收并真实集成；覆盖此前D22待返修状态。见[D22修复集成](reviews/2026-10-19-D22-R1-fixed.md)。

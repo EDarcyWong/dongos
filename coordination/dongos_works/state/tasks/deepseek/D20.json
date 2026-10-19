@@ -1,0 +1,80 @@
+{
+  "auto_dispatch": false,
+  "auto_verify": false,
+  "candidate": null,
+  "checks": [
+    "discover:deepseek-works/tests:test_sleb128_decode.py"
+  ],
+  "claimed_at": "2026-10-18T13:21:34+00:00",
+  "claimed_by": null,
+  "complexity": "standard",
+  "created_at": "2026-10-18T12:49:24+00:00",
+  "delivery": "deepseek-works/deliveries/D20.md",
+  "depends_on": [
+    "deepseek:D19"
+  ],
+  "description": "## 目标与范围\n\n交付独立Dong模块bootstrap.sleb128_decode，为L3现有LEB128编码/无符号解码组件补齐有符号解码侧。仅实现最短SLEB128 i64解码，不承担文件解析、DWARF节、CLI、完整后端或自举。D19已集成，只读参考其描述符/原子性契约和测试经验；不要改D19，也不能把ULEB解码结果简单转成i64冒充SLEB。\n\n固定接口：\npub unsafe fn decode(input:[]const u8,value:*i64,consumed:*usize)u64\n状态：OK=0、INVALID=1、TRUNCATED=2、OVERFLOW=3、NONCANONICAL=4；没有CAPACITY状态。\n\n## 描述符、别名与原子性\n\n先验证完整input描述符/地址端点（空input可NULL；非空不可NULL）、value和consumed均非空8字节对齐且各自完整8字节端点无溢出。完整input声明区间与两个输出、两个输出之间两两分离。不能只检查已解码前缀；即使第1字节就终止，input未使用尾部与输出重叠仍INVALID。地址验证完成前不读input、不写输出。unsafe调用方保证声明的对象实际可访问，描述符预检不证明任意伪造地址可解引用。\n\n任何非OK都不修改input或两个输出的任何字节；成功只写value和consumed，各输出真实双端guard不变。值在局部暂存中累积，完全验证后再写回。无分配、全局可变状态、OS调用或宿主生产实现；模块不导出C符号。\n\n## 解码与错误优先级（固定契约）\n\n每字节低7位为载荷，bit7为继续位；扫描最多10字节，首个终止字节之后的input内容忽略。描述符INVALID最先处理。\n\n1. 前9字节按低位在前累积载荷；终止字节的bit6决定符号扩展。不得对有符号数执行会溢出的累加/左移，也不得出现移位>=64。可先以u64暂存低位，最终按二进制补码解释i64。\n2. 若读到第10字节，其继续位必须0且载荷必须为0或127；否则OVERFLOW，优先于最短性判定。第10字节只决定64位结果的bit63，不可用移位70或先截断再判断范围。\n3. 最短性：终止长度大于1时，若末载荷为0且前一字节bit6=0，或末载荷为127且前一字节bit6=1，则NONCANONICAL。此规则适用于第2～10个字节；长度1的00/7F分别是规范的0/-1。第10字节仍先应用上述OVERFLOW规则。\n4. 在不足10字节且尚未遇终止时input耗尽返回TRUNCATED；空input亦TRUNCATED。第10字节仍继续时一律OVERFLOW，即使input恰好10字节。成功consumed是1..10，value是精确i64值。\n\n已知向量（hex）：00→0；01→1；3F→63；C0 00→64；7F→-1；40→-64；BF 7F→-65；80 7F→-128；FF 00→127；80 01→128。\nFF×9 00→i64最大9223372036854775807；80×9 7F→i64最小-9223372036854775808。\n80 00、FF 7F、80×9 00、FF×9 7F均NONCANONICAL。\n80×9 01、FF×9 7E、80×10、FF×10均OVERFLOW。\n空、80、FF、80×9、FF×9均TRUNCATED。\n00后接任意字节仍成功0/consumed1；7F后接任意字节仍成功-1/consumed1，但完整input描述符/别名仍先检查。\n\n## 有限、独立、真实的验证\n\n编写本人test_sleb128_decode.py，实际编译/链接并执行Dong debug/release，NASM ELF64/COFF组装。C/Python/NASM仅作观察器。用Python任意精度整数解释编码符号并独立重编码检查最短性，不复制生产移位分支作为唯一oracle；以上固定向量明确写出期望。覆盖每个7位分组的有符号边界、正负/零、i64两端、尾随字节、非最短、截断和第10字节错误优先级，固定种子少量随机（不超过200个额外案例），不扩大为大矩阵。\n\n继承D19 R1的教训：使用明确8对齐的C存储、合法可成功解码的00或7F输入，初始化全部数据后才快照。分别验证value/consumed与输入有效前缀、完整声明尾部重叠的4种情况；两个输出相互分离，端点合法，不能同时存在未对齐、坏编码或其它错误遮蔽别名拒绝。正确实现必须逐例INVALID且整块存储不变；前缀合法时尾部重叠也不得接受。输出互相重叠、NULL/未对齐/端点溢出、只读input和成功/失败guard亦覆盖。预检数必须是实际执行数，不伪造计数。\n\n至少3类实际坏Dong副本必须成功编译/链接/原生执行，再被指定断言拒绝：\n- 第10字节溢出/符号扩展错误，以对应值或状态断言拒绝；\n- 截断等失败前提前写value或consumed，以全文原子性断言拒绝；\n- 漏input-output重叠或只检有效前缀，以前缀/尾部别名的指定status/原子性断言拒绝。必须分别实际观察value与consumed、前缀与尾部4种路径；不要在首个失败后退出、却宣称4种都验证。可用选择性坏源码或逐案例进程。\n构建失败、崩溃、超时、无关前置拒绝都不算负控成功。好实现在同一夹具上先真实运行。不要为了测试通过放宽断言或修改生产契约。\n\n## 归属与交付\n\n通过自己的coordination worker MCP读取最新rev、完整任务书/审查说明和依赖；claim成功后才修改，只写声明的4个本人works文件。测试临时wrapper/好坏源码与构建产物仅在deepseek-works/build/D20/<唯一目录>/，独立暂存本组件，不引入其它历史同名模块；可只读code/lang的编译器/已集成组件作为工具，不修改主线。只运行本任务定向测试，不运行全回归、性能基准、OS/VM、定时器、关机、提交或推送，不启动其它AI CLI。\n\n写deepseek-works/deliveries/D20.md，记录实现/测试SHA256、真实命令/tests/skip/模式/格式、证据目录、每种负控的实际路径和拒绝原因、剩余限制；未运行明确未运行。落盘后通过MCP submit_task，等待Codex独立复验与集成，不自行accept/integrate。补交时保留历史。当前DeepSeek只分配这一项，避免抢占Cursor CR8～CR11、Claude预留模块或Codex语义主线。\n",
+  "document": "deepseek-works/tasks/D20-board.md",
+  "document_status": "todo",
+  "historical": false,
+  "id": "deepseek:D20",
+  "integration_note": "用户授权Codex接手并完成D20 R1。按验收hash真实集成lang/bootstrap/sleb128_decode.dg/.md及永久test_bootstrap_sleb128_decode.py；正式4项与主线同4项分别0skip通过、来源稳定，四路径各两模式8次别名漏检实测精准拒绝。原生产算法字节未变，接手前改动/首交历史保留，详见2026-10-18-D20-Codex-CR11-R1.md。",
+  "legacy_hash": "b5621e2343ad9b962eb713b13119941aaed1d93ad12f770911287f7224eceb08",
+  "number": "D20",
+  "owner": "deepseek",
+  "rev": 14,
+  "review_note": "用户授权Codex接手D20 R1，保留已有未提交改动的有效部分；生产Dong源码未变，独立任意精度符号解释/重编码oracle及4路径各2模式共8次精确别名负控已补齐，本地4项、协调器正式4项均0skip通过，正式来源稳定，准备真实主线集成。",
+  "state_reconciliation": {
+    "at": "2026-10-19T11:42:09+00:00",
+    "audit_sha256": "5daf98a663cd249783a8432a5fcbed3ec4e96275b1910fa54b7903c084fe9ebc",
+    "note": "协调已有历史事实；保留原事件/作业；历史复验未重跑，未新增验收或集成，不启动模型。",
+    "previous_data_sha256": "d28701caa2b5580e45e57c5240b4726cbe2c1a6b2ce8c012f8937a2326383c66",
+    "previous_rev": 12,
+    "project": "dongos",
+    "snapshot_generated_at": "2026-10-19T09:04:28+00:00",
+    "snapshot_rev": 13,
+    "snapshot_sha256": "a40cf9aabcbb43779b5c60414d7142cab791f85888022c84625568dbb579ac96",
+    "verification_reexecuted": false
+  },
+  "state_recovery": {
+    "at": "2026-10-19T04:43:01+00:00",
+    "audit_sha256": "3ea0db756d56092976092ed0d1216118e145a8e34aa02c5060cb913d088d553e",
+    "note": "恢复已有验收/集成/返修事实；原复验为历史记录，未声称本次重跑；不恢复丢失作业或启动模型。",
+    "snapshot_rev": 12,
+    "snapshot_sha256": "f3ab929e33419f40dfc417217d588acf8b1b26cbac50724a51942a11e438c171"
+  },
+  "status": "integrated",
+  "title": "有界最短SLEB128 i64解码",
+  "updated_at": "2026-10-19T11:42:09+00:00",
+  "verification": {
+    "checks": [
+      {
+        "cancelled": false,
+        "elapsed_seconds": 9.328,
+        "passed": true,
+        "returncode": 0,
+        "skips": 0,
+        "spec": "discover:deepseek-works/tests:test_sleb128_decode.py",
+        "tests": 4,
+        "timed_out": false
+      }
+    ],
+    "fingerprint": {
+      "deepseek-works/deliveries/D20.md": "e5a6e93670e9518318881495c2aae6de0fc0cea10cb3a258075274cbc190df21",
+      "deepseek-works/src/bootstrap/sleb128_decode.dg": "48e192357370eeb17e4145a61aaec4253a0f8d971ba3ddf0bd8ba5eb656ed4b2",
+      "deepseek-works/src/bootstrap/sleb128_decode.md": "a43959f615733fc4dd6d575f61dd53ed93567b41f82c1e4eddb41b4a90d599a7",
+      "deepseek-works/tests/test_sleb128_decode.py": "2b793cfd56011c55fcdd77ae8a28e81984160feb4a248ed009de024290dbb9f0"
+    },
+    "finished_at": "2026-10-18T13:24:44+00:00",
+    "job": "741f3d2d770d4bf68287e91c592060f2",
+    "passed": true,
+    "source_stable": true,
+    "summary": "定向复验通过，等待源码/契约审查"
+  },
+  "write_paths": [
+    "deepseek-works/src/bootstrap/sleb128_decode.dg",
+    "deepseek-works/src/bootstrap/sleb128_decode.md",
+    "deepseek-works/tests/test_sleb128_decode.py",
+    "deepseek-works/deliveries/D20.md"
+  ]
+}

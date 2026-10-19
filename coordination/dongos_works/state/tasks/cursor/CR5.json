@@ -1,0 +1,79 @@
+{
+  "auto_dispatch": false,
+  "auto_verify": false,
+  "candidate": null,
+  "checks": [
+    "discover:cursor-works/tests:test_nasm_bss.py"
+  ],
+  "claimed_at": "2026-10-18T11:41:14+00:00",
+  "claimed_by": "cursor-worker-1",
+  "complexity": "standard",
+  "created_at": "2026-10-18T11:00:41+00:00",
+  "delivery": "cursor-works/deliveries/CR5.md",
+  "depends_on": [
+    "cursor:CR4"
+  ],
+  "description": "module bootstrap.nasm_bss。\n只读依赖 CR4 的 bootstrap.decimal_integer；在 CR4 accepted/integrated 后领取。可只读 cursor-works/src/bootstrap/decimal_integer.dg（或 Codex 已集成主线同名文件），不修改依赖。必须调用 CR4 编码数字，禁止再实现一套十进制算法。\n固定接口 pub unsafe fn emit(label:[]const u8, byte_count:usize, alignment:usize, out:[]u8, written:*usize)u64；OK=0、INVALID=1、CAPACITY=2。\nlabel 长度 8..128，前缀恰为 ASCII \"__dong_\"，非空后缀只含 A-Z/a-z/0-9/_。alignment 只能为 1..4096 的二次幂，byte_count 可 0..u64最大值。严格输出 b\"alignb \"+规范无符号 alignment 十进制+b\"\\n\"+label+b\": resb \"+规范无符号 byte_count 十进制+b\"\\n\"，其中换行是真实单字节 0A，不是反斜杠与字母 n；不含 section、global、额外空格或 NUL。byte_count=0 仍输出 resb 0。\n先检查 label/out/written 所有描述符、别名与字段、总文本长度和容量，再写出，避免子调用失败留下半成品；label 只读，完整 out 与 written 彼此及与 label 分离，written 自然对齐。语义错误先于容量，非 OK 全部不变。byte_count 不需要在宿主分配相应 BSS，格式检查必须覆盖 u64 最大值而不试图生成巨型对象。\n有限小 byte_count 的董实际输出放入 section .bss，在前置 resb 1 后真实 NASM ELF64/COFF 组装，独立读对象符号值和 BSS 节逻辑大小，检查声明标签对齐及保留大小；零和大边界只按适当范围验证，不巨大分配/链接。用 Python 独立格式字节验证，正常成功、非法 label/alignment、容量原子性和别名均覆盖。负控至少是漏/错 alignb 或大小文本，以及写标签后才报 CAPACITY，必须被对应断言拒绝。\n\n## 工作与交付约定\n\n这是独立组件，不代表完整 L3 后端或自举完成。Cursor 继续由用户在客户端手动发起；通过自己的 coordination MCP 查看最新 rev、完整任务书并领取后再修改。不要调用 AI CLI 自动执行，不抢占 DeepSeek 已领取的 D14～D18，不改 Claude/DeepSeek/LM Studio 文件、code/lang/、编译器、活动内核或协调器。依赖只有在 accepted/integrated 后才能领取；需要额外归属时在交付中说明，不擅自扩范围。\n\n生产实现必须是 Dong，模块自身不导出 C 符号；Python/C/NASM 仅作独立测试观察器。unsafe 调用方保证实际可用内存；先验证所有描述符、自然对齐、长度乘法和地址端点，再读取输入或写入。完整声明区间校验，不只检查有效前缀。INVALID 优先于 CAPACITY；所有失败必须立即确认输出及计数对象全文不变，成功只改指定前缀/字段，真实双端 guard、输入与输出尾部立即检查。无分配、全局可变状态、OS 调用或宿主生产实现。\n\n编写自己的同名 Python 定向测试：实际编译/链接并执行 Dong debug/release，确认 ELF64/COFF 均能组装；有限固定边界加小规模确定性随机，以独立 Python/C 期望核对。至少两个真实错误 Dong 副本必须成功编译并原生执行，被指定语义/原子性断言拒绝；构建失败、崩溃、超时、无关前置正例拒绝均不算负控成功。不得放宽断言或伪造预检次数。对照输入必须满足所考察规则以外的其它条件，避免非法标签/未对齐/坏图遮蔽目标缺陷。不要求新大矩阵。\n\n只运行本任务定向测试，所有产物在 cursor-works/build/CR5/<唯一目录>/。测试组装源码根时仅暂存当前组件及任务声明的只读依赖，再加 code/lang，避免历史 CR1 副本与主线同名模块冲突；临时包装器和坏实现只写自己的产物目录。除额外声明依赖外，各组件可独立实现。不运行 OS/VM、全回归、性能基准、定时器、关机、提交或推送。\n\n完成后写 cursor-works/deliveries/CR5.md，列出源码/测试 SHA256、真实命令/结果/模式/skip、证据路径、坏实现命中和拒绝原因、剩余限制。未运行的命令必须明确未运行。通过 MCP submit_task 提交，等待 Codex 独立审查/复验；不得自行 accept/integrate。\n",
+  "document": "cursor-works/tasks/CR5-board.md",
+  "historical": false,
+  "id": "cursor:CR5",
+  "integration_note": "已实际复制nasm_bss.dg/.md到code/lang/bootstrap并适配永久测试test_bootstrap_nasm_bss.py。主线3项通过0skip，生产hash与验收一致，依赖及语义核心/字节编码器未变。见reviews/2026-10-18-CR5-integration.md。",
+  "legacy_hash": "0317c03543f571e733a16d89b32b62adbfc374dcc8004a8619c0c7ecc2e49e21",
+  "number": "CR5",
+  "owner": "cursor",
+  "rev": 8,
+  "review_note": "已审查源码、契约和测试有效性；独立定向3项通过0skip、源指纹稳定、两种原生错误实现均被对应断言拒绝。见reviews/2026-10-18-CR5-integration.md。集成另验。",
+  "state_reconciliation": {
+    "at": "2026-10-19T11:42:09+00:00",
+    "audit_sha256": "5daf98a663cd249783a8432a5fcbed3ec4e96275b1910fa54b7903c084fe9ebc",
+    "note": "协调已有历史事实；保留原事件/作业；历史复验未重跑，未新增验收或集成，不启动模型。",
+    "previous_data_sha256": "062ed3b9e92253d8729a313290dbcb125c511b5ae60f55f62567911bf65c6890",
+    "previous_rev": 6,
+    "project": "dongos",
+    "snapshot_generated_at": "2026-10-19T09:04:28+00:00",
+    "snapshot_rev": 7,
+    "snapshot_sha256": "a40cf9aabcbb43779b5c60414d7142cab791f85888022c84625568dbb579ac96",
+    "verification_reexecuted": false
+  },
+  "state_recovery": {
+    "at": "2026-10-19T04:43:01+00:00",
+    "audit_sha256": "3ea0db756d56092976092ed0d1216118e145a8e34aa02c5060cb913d088d553e",
+    "note": "恢复已有验收/集成/返修事实；原复验为历史记录，未声称本次重跑；不恢复丢失作业或启动模型。",
+    "snapshot_rev": 6,
+    "snapshot_sha256": "f3ab929e33419f40dfc417217d588acf8b1b26cbac50724a51942a11e438c171"
+  },
+  "status": "integrated",
+  "title": "复用十进制组件的NASM BSS声明",
+  "updated_at": "2026-10-19T11:42:09+00:00",
+  "verification": {
+    "checks": [
+      {
+        "cancelled": false,
+        "elapsed_seconds": 5.516,
+        "passed": true,
+        "returncode": 0,
+        "skips": 0,
+        "spec": "discover:cursor-works/tests:test_nasm_bss.py",
+        "tests": 3,
+        "timed_out": false
+      }
+    ],
+    "fingerprint": {
+      "cursor-works/deliveries/CR5.md": "436c00c7c90a3f8c6b0d9968a44bcd4d6ab08d31c06756fddf991c3789af65d0",
+      "cursor-works/src/bootstrap/nasm_bss.dg": "09813b4a07631fe4042c40dea5ec95074fc0f46007c14c67c78bb40ea5452cd7",
+      "cursor-works/src/bootstrap/nasm_bss.md": "370e26298817c848e09087902b906667b9c6ed340bdc5255de8da958a30e3105",
+      "cursor-works/tests/test_nasm_bss.py": "d33690046b038cf5c766c24f2f51ae921e855b517956064a614d61031ca9bf3a"
+    },
+    "finished_at": "2026-10-18T11:56:48+00:00",
+    "job": "782ad4c750624f8388244533659050e2",
+    "passed": true,
+    "source_stable": true,
+    "summary": "定向复验通过，等待源码/契约审查"
+  },
+  "write_paths": [
+    "cursor-works/src/bootstrap/nasm_bss.dg",
+    "cursor-works/src/bootstrap/nasm_bss.md",
+    "cursor-works/tests/test_nasm_bss.py",
+    "cursor-works/deliveries/CR5.md"
+  ]
+}

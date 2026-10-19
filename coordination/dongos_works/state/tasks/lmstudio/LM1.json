@@ -1,0 +1,72 @@
+{
+  "auto_dispatch": false,
+  "auto_verify": false,
+  "candidate": "009ce270248c44aaae4f464945b2a3f0",
+  "checks": [
+    "discover:lmstudio-works/tests:test_task_text.py"
+  ],
+  "complexity": "simple",
+  "created_at": "2026-10-18T06:15:25+00:00",
+  "delivery": "lmstudio-works/deliveries/LM1.md",
+  "depends_on": [],
+  "description": "实现纯Python函数 collapse_whitespace(text: str) -> str，位于lmstudio-works/src/task_text.py。将任意连续Unicode空白替换成单个ASCII空格，去除首尾空白；保留其它字符与顺序。空字符串/全空白返回空串；非str抛TypeError。不要截断、不要添加依赖、I/O、网络或副作用。推荐仅使用str.split与join和显式类型检查。只做这个函数，不扩展接口。交付说明写lmstudio-works/deliveries/LM1.md，说明实现、限制、待协调器执行的测试，不能声称已经跑测试。测试由Codex编写且禁止修改。",
+  "document": "lmstudio-works/tasks/LM1-board.md",
+  "historical": false,
+  "id": "lmstudio:LM1",
+  "integration_note": "仅将已验收的函数和交付复制到当前项目lmstudio-works，逐文件SHA256与验收指纹一致；未改动DongOS编译器/内核或协调器业务逻辑。",
+  "last_run_note": "交付已收集，尚未验收",
+  "legacy_hash": "291888559b6b56b059f6555d18a22a3caf29468095753d68dce873181c038b5a",
+  "number": "LM1",
+  "owner": "lmstudio",
+  "rev": 10,
+  "review_note": "Codex已独立审阅5行纯函数实现与交付契约；显式str检查，split/join满足Unicode空白折叠并保留其它字符，无依赖/I/O。Codex编写的4项unittest独立通过、0skip，含200个固定种子案例。交付中pytest仅为未执行建议，实际验收使用登记的unittest。首次兼容接口超时保留为失败历史，切换原生接口reasoning=off后的交付才参与验收。",
+  "state_reconciliation": {
+    "at": "2026-10-19T11:42:09+00:00",
+    "audit_sha256": "5daf98a663cd249783a8432a5fcbed3ec4e96275b1910fa54b7903c084fe9ebc",
+    "note": "协调已有历史事实；保留原事件/作业；历史复验未重跑，未新增验收或集成，不启动模型。",
+    "previous_data_sha256": "c108294e852b0be740a8e1a7939d15c92965323fe91b064c334263256968bfb1",
+    "previous_rev": 8,
+    "project": "dongos",
+    "snapshot_generated_at": "2026-10-19T09:04:28+00:00",
+    "snapshot_rev": 9,
+    "snapshot_sha256": "a40cf9aabcbb43779b5c60414d7142cab791f85888022c84625568dbb579ac96",
+    "verification_reexecuted": false
+  },
+  "state_recovery": {
+    "at": "2026-10-19T04:43:01+00:00",
+    "audit_sha256": "3ea0db756d56092976092ed0d1216118e145a8e34aa02c5060cb913d088d553e",
+    "note": "恢复已有验收/集成/返修事实；原复验为历史记录，未声称本次重跑；不恢复丢失作业或启动模型。",
+    "snapshot_rev": 8,
+    "snapshot_sha256": "f3ab929e33419f40dfc417217d588acf8b1b26cbac50724a51942a11e438c171"
+  },
+  "status": "integrated",
+  "title": "单函数：任务标签空白规范化",
+  "updated_at": "2026-10-19T11:42:09+00:00",
+  "verification": {
+    "checks": [
+      {
+        "cancelled": false,
+        "elapsed_seconds": 0.203,
+        "passed": true,
+        "returncode": 0,
+        "skips": 0,
+        "spec": "discover:lmstudio-works/tests:test_task_text.py",
+        "tests": 4,
+        "timed_out": false
+      }
+    ],
+    "fingerprint": {
+      "lmstudio-works/deliveries/LM1.md": "692401ae3fb1f357ab858ff1c2da779b2557f4bae577df312b45e6bcc9b36641",
+      "lmstudio-works/src/task_text.py": "f494c43693a63b0578830f6be34bede7bd6b2a6c09cf2efcb80420ae3b0ca6cd"
+    },
+    "finished_at": "2026-10-18T06:23:58+00:00",
+    "job": "a88efabf80cc4d2394f2950e5f5bbb82",
+    "passed": true,
+    "source_stable": true,
+    "summary": "定向复验通过，等待源码/契约审查"
+  },
+  "write_paths": [
+    "lmstudio-works/src/task_text.py",
+    "lmstudio-works/deliveries/LM1.md"
+  ]
+}

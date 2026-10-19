@@ -1,0 +1,78 @@
+{
+  "auto_dispatch": false,
+  "auto_verify": false,
+  "candidate": null,
+  "checks": [
+    "discover:deepseek-works/tests:test_rel32_patch.py"
+  ],
+  "claimed_at": "2026-10-18T10:55:09+00:00",
+  "claimed_by": "deepseek-mcp-d829431107ed41e7",
+  "complexity": "standard",
+  "created_at": "2026-10-18T10:50:07+00:00",
+  "delivery": "deepseek-works/deliveries/D14.md",
+  "depends_on": [],
+  "description": "接续原claude:C16，用户因Claude额度不足明确转交DeepSeek。原实物/历史保留，当前源文件和测试已迁到deepseek-works同名位置，只适配目录和build编号，尚未修复。不得修改claude-works原件。\n\n## 本次必须完成的有限修复\n\n原C16生产源码未发现算法缺陷；原测试case(b'\\xa5'*16,[(4,0)],status=INVALID)期望错误，合法位移为0-(4+4)=-8。只将该既有案例修为OK，验证[4:8]恰为f8 ff ff ff且其它字节不变，保留全部原案例和三类负控，不通过删除/换无效输入绕过。原3项测试必须零skip通过。原R1及Codex私有修正57个边界案例两模式证据见claude-works/reviews/2026-10-18-C16-R1.md。\n\n## 原完整功能契约（适配新目录）\n\n模块bootstrap.rel32_patch。Patch{at:usize,target:usize}，二者都是同一code缓冲区内偏移。固定接口pub unsafe fn apply(code:[]u8,patches:[]const Patch,applied:*usize)u64。每项写code[at..at+4)为target-(at+4)的有符号i32小端补码；target允许0..code.len（含末端标签），at+4须<=len且不能溢出，位移必须在[-2147483648,2147483647]。任意两项四字节区间重叠（含重复at）均INVALID，输入顺序可任意。不生成指令、不处理文件或真实地址重定位。先完整验证描述符、每项及所有区间冲突，再原位写四字节；失败code全文与applied不变，成功applied=patches.len，所有非补丁字节不变。时间可O(patches.len²)，不可按code.len无意义扫描或分配巨型缓冲。测试真实小缓冲前/后向及零位移、乱序/重复/部分重叠；i32溢出用数值合法、与真实元数据不别名的高位伪code区间，仅验证必拒绝路径且不解引用。负控至少位移基准错用at或遇到后续非法项前已经写入。\n本批仅实现独立的纯Dong工具，不修改已验收组件、lang/编译器/内核或Codex活动集成。只写本任务声明的同名源码、接口说明、定向测试和交付。不得自行验收、提交或推送，不运行OS/VM/完整回归。新源码先留在deepseek-works/src/bootstrap/。\n公共契约：OK=0、INVALID=1、CAPACITY=2。借用非空指针、自然对齐、元素乘法及区间端点先验检查；空切片可NULL，有效结果对象仍必需。读输入前检查完整声明区间：只读输入可互相重叠，可写对象彼此及与所有输入不得重叠。数据INVALID检查完成后才检查CAPACITY。非OK不改整个输出与结果对象；成功只改有效前缀及明确字段，尾部/输入/双端保护不变。所有需要长度/偏移计算检查溢出，不以debug panic代替返回。unsafe调用方保证通过数值预检后实际访问的内存可访问。无分配、全局可变状态、OS调用；只做明确子集。\n验收测试：独立Python期望，至少100个固定种子的小案例及边界；真实Dong→NASM→C/SysV，debug/release原生运行、ELF64/COFF组装、零skip。C每次调用检查输入全文、输出尾部、结果对象和真实双端guard，接口有只读输入参数时至少一组真实只读输入；C13仅有标量输入，无此项。至少两类错误Dong私有副本成功编译链接运行，并被预先指定的状态/字节/原子性断言拒绝；编译失败、崩溃和超时不算拒绝。伪地址仅走应拒绝的数值预检，须排除更早别名/对齐遮蔽，不做巨大分配。产物写deepseek-works/build/<任务号>/<唯一目录>/。交付写实际命令、数量/skip、hash、证据和限制；不能虚构未运行结果。CLI没有命令工具时只提交实现和可执行测试，明确未运行，由协调器执行，不绕过权限。\n\n\n## 接续操作\n\n只用DeepSeek MCP身份领取本任务，领取成功后再修改。源码在deepseek-works/src/bootstrap/、测试在deepseek-works/tests/；产物放deepseek-works/build/D14/唯一目录。原任务书/交付只读副本在deepseek-works/handoffs/D14/，来源指纹见provenance.json。保留历史说明，真实完成后写deepseek-works/deliveries/D14.md并通过MCP提交；未运行的命令必须明确未运行，不自行验收/集成/提交/推送，不跑OS/VM或全回归。Codex负责独立复验与后续集成。",
+  "document": "deepseek-works/tasks/D14-board.md",
+  "historical": false,
+  "id": "deepseek:D14",
+  "integration_note": "按验收hash真实集成到主线模块/固定数据，永久测试及原生组合共24项零skip、指纹稳定。仅适配测试路径和只读依赖隔离；见reviews/2026-10-18-CR2-CR7-D14-D18-LM7-integration.md。不是完整L3自举。",
+  "legacy_hash": "78e161938b61be1dd2597fb900b766ba15664e48c245b3b8b59ccc28dbeb9106",
+  "number": "D14",
+  "owner": "deepseek",
+  "rev": 8,
+  "review_note": "已审查源码/完整契约/交接差异/独立期望与真实负控，正式3项零skip且指纹稳定，原有限返修已关闭；见deepseek-works/reviews/2026-10-18-D14-D18-review.md。仅独立组件验收，尚未集成主线。",
+  "state_reconciliation": {
+    "at": "2026-10-19T11:42:09+00:00",
+    "audit_sha256": "5daf98a663cd249783a8432a5fcbed3ec4e96275b1910fa54b7903c084fe9ebc",
+    "note": "协调已有历史事实；保留原事件/作业；历史复验未重跑，未新增验收或集成，不启动模型。",
+    "previous_data_sha256": "9520b8b9001efe80e5596dd29cd539b3714fa0d1cf1e2f169d0ea8fed6053ddb",
+    "previous_rev": 6,
+    "project": "dongos",
+    "snapshot_generated_at": "2026-10-19T09:04:28+00:00",
+    "snapshot_rev": 7,
+    "snapshot_sha256": "a40cf9aabcbb43779b5c60414d7142cab791f85888022c84625568dbb579ac96",
+    "verification_reexecuted": false
+  },
+  "state_recovery": {
+    "at": "2026-10-19T04:43:01+00:00",
+    "audit_sha256": "3ea0db756d56092976092ed0d1216118e145a8e34aa02c5060cb913d088d553e",
+    "note": "恢复已有验收/集成/返修事实；原复验为历史记录，未声称本次重跑；不恢复丢失作业或启动模型。",
+    "snapshot_rev": 6,
+    "snapshot_sha256": "f3ab929e33419f40dfc417217d588acf8b1b26cbac50724a51942a11e438c171"
+  },
+  "status": "integrated",
+  "title": "接续C16：修正rel32向后跳转测试",
+  "updated_at": "2026-10-19T11:42:09+00:00",
+  "verification": {
+    "checks": [
+      {
+        "cancelled": false,
+        "elapsed_seconds": 8.312,
+        "passed": true,
+        "returncode": 0,
+        "skips": 0,
+        "spec": "discover:deepseek-works/tests:test_rel32_patch.py",
+        "tests": 3,
+        "timed_out": false
+      }
+    ],
+    "fingerprint": {
+      "deepseek-works/deliveries/D14.md": "afaa3e766a6d65c215c7ef1d8f59bd501d3eb857c71e000c0cd693071493542a",
+      "deepseek-works/src/bootstrap/rel32_patch.dg": "956f021bb6d81e3ff95814c23f20931b31f138e9ff0cad2d2b8c91fbe547b501",
+      "deepseek-works/src/bootstrap/rel32_patch.md": "60ee933b3b3239eef68016be8c2f703a0e1f196a81e6e5fcf4641f7759cd7b50",
+      "deepseek-works/tests/test_rel32_patch.py": "cbbcb7a104fd193d45ed7849d3f890c70a7f787acc906583c5405ecf67bd574c"
+    },
+    "finished_at": "2026-10-18T11:07:41+00:00",
+    "job": "111a0824e66c43d2890176d6e217cc3d",
+    "passed": true,
+    "source_stable": true,
+    "summary": "定向复验通过，等待源码/契约审查"
+  },
+  "write_paths": [
+    "deepseek-works/src/bootstrap/rel32_patch.dg",
+    "deepseek-works/src/bootstrap/rel32_patch.md",
+    "deepseek-works/tests/test_rel32_patch.py",
+    "deepseek-works/tests/rel32_patch_probe*",
+    "deepseek-works/deliveries/D14.md"
+  ]
+}

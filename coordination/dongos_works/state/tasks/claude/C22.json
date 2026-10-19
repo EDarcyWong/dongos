@@ -1,0 +1,80 @@
+{
+  "auto_dispatch": false,
+  "auto_verify": false,
+  "candidate": null,
+  "checks": [
+    "discover:claude-works/tests:test_nasm_compare_emit.py"
+  ],
+  "claimed_at": "2026-10-18T13:48:38+00:00",
+  "claimed_by": "claude-mcp-c338b58c099f4f05",
+  "complexity": "standard",
+  "created_at": "2026-10-18T13:32:22+00:00",
+  "delivery": "claude-works/deliveries/C22.md",
+  "depends_on": [
+    "cursor:CR6"
+  ],
+  "description": "module bootstrap.nasm_compare_emit。\npub unsafe fn emit(condition:u64,left:u64,right:u64,out:[]u8,written:*usize)u64。\ncondition固定0..9沿用已集成CR6：EQ/NE/ULT/ULE/UGT/UGE/SLT/SLE/SGT/SGE；其它INVALID。严格三行`cmp <left64>, <right64>\n<setcc> al\nmovzx rax, al\n`，setcc依次sete/setne/setb/setbe/seta/setae/setl/setle/setg/setge。先cmp后覆盖AL，左右为RAX也正确。结果RAX严格0/1，只允许RAX与flags改变；其它寄存器保留。仅64位整数寄存器，无内存/浮点/窄值。CR6仅为谓词契约只读依赖，可引用常量但不得重写其源码。\n原生执行全部谓词、相等/不等、有符号高位和无符号两端，Python任意精度按二进制补码独立期望；覆盖RAX作为输入和RAX初始高位非零。只用安全寄存器有限组合。两类真实坏Dong分别破坏signed谓词及setcc后高位清零，均必须由原生完整64位结果断言拒绝；另正常容量失败全文原子性覆盖，不把组装失败或仅文本差异当负控。\n\n## 共用固定契约与归属\n\n这是L3真实后端所需的独立Dong文本发射组件，不能代替完整代码生成/语言溢出检查/自举。源码必须Dong，不导出C符号，不用Python/C宿主实现代替生产逻辑；无分配、全局可变状态或OS调用。仅修改本人本任务4个授权文件，依赖只读，绝不改code/lang、活动编译器、内核、协调器、CR11或Codex语义主线。\n\n寄存器编号0..15固定rax,rcx,rdx,rbx,rsp,rbp,rsi,rdi,r8,r9,r10,r11,r12,r13,r14,r15；其它编号INVALID。32位名eax,ecx,edx,ebx,esp,ebp,esi,edi,r8d..r15d；16位ax,cx,dx,bx,sp,bp,si,di,r8w..r15w；低8位al,cl,dl,bl,spl,bpl,sil,dil,r8b..r15b，不支持ah等高8位。严格ASCII和单字节LF，不含section/global/标签/注释/空白多行/NUL；本任务规定几行就精确几行，成功尾部不变。\n\nunsafe调用方保证对象真实可访问。仍必须在任何读写前检查written非空、8对齐、完整8字节端点不溢出；out完整描述符端点/非空非NULL；written完整8字节与完整声明out不重叠（包括输出未使用尾部）。空out可NULL。OK=0、INVALID=1、CAPACITY=2，所有参数/枚举/位移/描述符INVALID优先CAPACITY；失败out和written全文不变。先验证/计算，在局部暂存调用只读组件，最后一次写用户out；不得通过只看已用前缀逃过完整别名。长度加法不溢出。\n\n测试要让每个目标预检独立可达：其它字段合法，真实guard/快照初始化后再取。written端点溢出使用8对齐UINT64_MAX-7和合法空out，正确INVALID，漏检坏实现返回CAPACITY，不能非法解引用；NULL/奇地址、out端点、对齐前缀/尾部别名、参数INVALID且out容量0亦独立覆盖。失败全文/双端guard、成功精确文本/计数/剩余尾部立即检查。C观察器对齐存储明确声明，不能用另一个非法字段掩盖目标。\n\n测试实际编译、链接、原生执行Dong debug/release，NASM ELF64/COFF都组装。只暂存本组件和声明的已集成依赖，含坏源码时不引入整个lang根遮蔽临时模块。独立Python/C期望；有限固定边界优先、无需随机堆矩阵。文本/组装覆盖全部16个寄存器（可旋转配对，不要求全笛卡尔积）；受控原生仅用安全调用者保存寄存器的少量组合（每模式不超过24个主要向量），保留宿主ABI/栈，rsp/rbp写目标只组装。COFF组装不等于Win64 ABI可调用，原生C桥显式SysV。\n\n至少两类真实坏Dong成功编译/链接/原生执行，再由指定数值/原子性断言拒绝；同一夹具先跑好实现。至少一类是原生实际结果错误，另一类容量失败提前写输出/计数，以全文/guard立即拒绝；若任务另定两类语义负控，则另保留一次原子性验证。构建失败、崩溃、超时、文本不同或无关预检错误不得冒充指定原生负控。坏源码执行的目标输入必须合法且不导致非法内存/栈访问。\n\n先通过自己的worker MCP get_task/read_document读取最新rev、完整契约、依赖和归属，claim后执行。只运行本任务声明的定向测试，产物放本人works/build/编号/<唯一目录>/；无OS/VM/全回归/性能基准/定时器/关机/提交/推送，不启动模型CLI。客户端手动执行；完成后落盘原编号交付并通过MCP submit，不能自行accept/integrate。交付列真实命令、tests/skip、模式/对象格式、生产/测试SHA256、产物目录、每种负控实际观察/拒绝原因和未运行/剩余限制。依赖或归属问题先报告，不擅自扩大范围。\n",
+  "document": "claude-works/tasks/C22-board.md",
+  "document_status": "todo",
+  "historical": false,
+  "id": "claude:C22",
+  "integration_note": "已按验收hash真实复制源码/说明至lang/bootstrap，永久test_bootstrap_nasm_*.py只适配路径/产物目录，私有依赖根保留。三项正式共12项0skip通过；主线同12项加1项真实Dong片段组合原生测试共13项0skip通过、来源稳定。组合含wrapping加法到bool比较/有符号与无符号checked减法，每模式12向量，ELF64/COFF组装；完整后端及L3自举仍未完成。见2026-10-18-C22-C24-mainline-integration.md。",
+  "legacy_hash": "17ca00c7e443b92cdacff99d972d9df43f0b27770abaa9100395d30664445a29",
+  "number": "C22",
+  "owner": "claude",
+  "rev": 9,
+  "review_note": "已审查生产源码/完整契约/独立期望与真实原生观察，正式4项通过0skip且来源稳定。完整out/written端点/别名/原子性及全部16寄存器双格式组装有效；24个有限原生向量覆盖别名/高位/实际结果或溢出分支，真实坏Dong语义和提前写负控有效。接受独立组件，主线复制及组合复验另行登记。",
+  "state_reconciliation": {
+    "at": "2026-10-19T11:42:09+00:00",
+    "audit_sha256": "5daf98a663cd249783a8432a5fcbed3ec4e96275b1910fa54b7903c084fe9ebc",
+    "note": "协调已有历史事实；保留原事件/作业；历史复验未重跑，未新增验收或集成，不启动模型。",
+    "previous_data_sha256": "972e8b933518d4c9e44558f356127f22fe593d0dec34e70e858f555ff4e4a58d",
+    "previous_rev": 7,
+    "project": "dongos",
+    "snapshot_generated_at": "2026-10-19T09:04:28+00:00",
+    "snapshot_rev": 8,
+    "snapshot_sha256": "a40cf9aabcbb43779b5c60414d7142cab791f85888022c84625568dbb579ac96",
+    "verification_reexecuted": false
+  },
+  "state_recovery": {
+    "at": "2026-10-19T04:43:01+00:00",
+    "audit_sha256": "3ea0db756d56092976092ed0d1216118e145a8e34aa02c5060cb913d088d553e",
+    "note": "恢复已有验收/集成/返修事实；原复验为历史记录，未声称本次重跑；不恢复丢失作业或启动模型。",
+    "snapshot_rev": 7,
+    "snapshot_sha256": "f3ab929e33419f40dfc417217d588acf8b1b26cbac50724a51942a11e438c171"
+  },
+  "status": "integrated",
+  "title": "64位NASM比较生成规范bool",
+  "updated_at": "2026-10-19T11:42:09+00:00",
+  "verification": {
+    "checks": [
+      {
+        "cancelled": false,
+        "elapsed_seconds": 8.703,
+        "passed": true,
+        "returncode": 0,
+        "skips": 0,
+        "spec": "discover:claude-works/tests:test_nasm_compare_emit.py",
+        "tests": 4,
+        "timed_out": false
+      }
+    ],
+    "fingerprint": {
+      "claude-works/deliveries/C22.md": "086a10cf9d26ba2495c6128cdcaa143abbd51fc536f2d39d4f4218c1c8777d3c",
+      "claude-works/src/bootstrap/nasm_compare_emit.dg": "44b041b343859c6b49a4d13ee87262f1b5685c8e7f4c0b589f48eadee9a15eea",
+      "claude-works/src/bootstrap/nasm_compare_emit.md": "42914a983df09ace144b121864871860a61b3a6f69d9a8a477396b9d956cff05",
+      "claude-works/tests/test_nasm_compare_emit.py": "7777ad6c558d8b53f18e35e572e64f2a7842188a5495d24578c47bd0694bdf8f"
+    },
+    "finished_at": "2026-10-18T13:57:04+00:00",
+    "job": "6ee702f2ea14480b82722435bd3a5540",
+    "passed": true,
+    "source_stable": true,
+    "summary": "定向复验通过，等待源码/契约审查"
+  },
+  "write_paths": [
+    "claude-works/src/bootstrap/nasm_compare_emit.dg",
+    "claude-works/src/bootstrap/nasm_compare_emit.md",
+    "claude-works/tests/test_nasm_compare_emit.py",
+    "claude-works/deliveries/C22.md"
+  ]
+}

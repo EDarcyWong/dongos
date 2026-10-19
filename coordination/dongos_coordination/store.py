@@ -110,18 +110,31 @@ def checks(values):
 
 
 class Store:
-    def __init__(self, root, local=None, works_root=None, project_name=None, *, allow_state_recovery=False):
+    def __init__(self, root, local=None, works_root=None, project_name=None, *, allow_state_recovery=False, sync_state=None):
         self.root = Path(root).resolve()
         self.project_name = project_name or self.root.name
         self.works_root = Path(works_root or self.root).resolve()
         self.local = Path(local or self.root.parent / 'coordination/.local').resolve()
         self.local.mkdir(parents=True, exist_ok=True)
         self.db = self.local / 'tasks.sqlite3'
+        # The committed per-task snapshot (state/) is the portable record; a legacy index.json alone still blocks a silent
+        # re-import from task books, and an unreadable (e.g. merge-conflicted) index.json never stops the service.
+        self.state = None
+        if sync_state is None:
+            sync_state = not allow_state_recovery   # explicit recovery tooling works on audited snapshots, not on state/
+        if sync_state:
+            from .statesync import StateSync
+            self.state = StateSync(self)
         index = self.local.parent / 'index.json'
         has_snapshot = False
         if index.is_file():
-            snapshot = json.loads(index.read_text(encoding='utf-8-sig'))
-            has_snapshot = bool(snapshot.get('tasks') or snapshot.get('archived_tasks'))
+            try:
+                snapshot = json.loads(index.read_text(encoding='utf-8-sig'))
+                has_snapshot = bool(snapshot.get('tasks') or snapshot.get('archived_tasks'))
+            except (ValueError, AttributeError, RecursionError):
+                has_snapshot = False
+        if self.state and self.state.has_snapshot():
+            has_snapshot = False
         if has_snapshot and not self.db.exists() and not allow_state_recovery:
             raise StateRecoveryRequired('状态库缺失但任务快照存在；已阻止重导入及覆盖。请使用 recover-state 核对证据后恢复。')
         with self.connect() as c:
@@ -134,6 +147,8 @@ class Store:
             ''')
             if has_snapshot and not allow_state_recovery and not c.execute('SELECT 1 FROM tasks LIMIT 1').fetchone():
                 raise StateRecoveryRequired('状态库为空但任务快照存在；已阻止重导入及覆盖。请使用 recover-state 核对证据后恢复。')
+        if self.state:
+            self.state.sync_quietly()
 
     def backup(self):
         """Consistent SQLite backup, including events/jobs/settings (not a task import)."""
@@ -167,7 +182,7 @@ class Store:
         return c
 
     @contextmanager
-    def transaction(self):
+    def transaction(self, *, persist=True):
         c = self.connect()
         try:
             c.execute('BEGIN IMMEDIATE')
@@ -178,6 +193,9 @@ class Store:
             raise
         finally:
             c.close()
+        # Only reached after a successful commit: write the change back to the committed snapshot.
+        if persist and self.state:
+            self.state.sync_quietly()
 
     def event(self, c, task, kind, data):
         c.execute('INSERT INTO events(at,task_id,kind,data) VALUES(?,?,?,?)',
@@ -536,6 +554,8 @@ class Store:
             for other in tasks[i + 1:]:
                 if other['status'] == 'in_progress' and overlap(task['write_paths'], other['write_paths']):
                     issues.append({'task': task['id'], 'message': '与 ' + other['id'] + ' 文件归属冲突'})
+        if self.state:
+            issues.extend(self.state.issues())
         return issues
 
     def export(self):
@@ -550,14 +570,14 @@ class Store:
 
     def recent_events(self):
         with self.connect() as c:
-            return [dict(r) | {'data': json.loads(r['data'])} for r in c.execute('SELECT * FROM events ORDER BY seq DESC LIMIT 60')]
+            return [dict(r) | {'data': json.loads(r['data'])} for r in c.execute('SELECT * FROM events ORDER BY at DESC, seq DESC LIMIT 60')]
 
     def timing(self, task):
         """All task events, not the dashboard's truncated recent event feed."""
         from .timing import summarize, seconds
         with self.connect() as c:
             events = [dict(r) | {'data': json.loads(r['data'])} for r in c.execute(
-                'SELECT * FROM events WHERE task_id=? ORDER BY seq', (task['id'],))]
+                'SELECT * FROM events WHERE task_id=? ORDER BY at, seq', (task['id'],))]
             jobs = [dict(r) for r in c.execute(
                 "SELECT id,status,created,updated,data FROM jobs WHERE task_id=? AND kind='verify' ORDER BY created,rowid",
                 (task['id'],))]

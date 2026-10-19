@@ -1,0 +1,437 @@
+{
+  "authorization": "用户明确选择直接完成代码实现和测试",
+  "scope": "Cursor进行中CR38和待领取CR39-CR42",
+  "main_source_modified": false,
+  "tasks_kept_under_original_ids": true,
+  "local_tests": {
+    "tests": 20,
+    "skips": 0,
+    "elapsed_seconds": {
+      "CR38": 174.498,
+      "CR39": 199.304,
+      "CR40": 141.968,
+      "CR41": 208.201,
+      "CR42": 224.692
+    }
+  },
+  "independent_raw_numerical_audit": [
+    {
+      "task": "cursor:CR38",
+      "summary": "D:\\projects\\2026\\dongos\\coordination\\dongos_works\\cursor-works\\build\\CR38\\run-7a31042aa6b7498c92df7a723048016c\\summary.json",
+      "stable": true,
+      "primary_vectors_per_mode": 22,
+      "rbx_independent_evidence": [
+        {
+          "native": "rbx-bad-debug-0",
+          "vector": 0,
+          "rbx_before": 845282253045697467,
+          "rbx_after": 845282253045697475,
+          "normal_exit": true
+        },
+        {
+          "native": "rbx-bad-debug-1",
+          "vector": 0,
+          "rbx_before": 845282253045697467,
+          "rbx_after": 845282253045697475,
+          "normal_exit": true
+        },
+        {
+          "native": "rbx-bad-release-0",
+          "vector": 0,
+          "rbx_before": 845282253045697467,
+          "rbx_after": 845282253045697475,
+          "normal_exit": true
+        },
+        {
+          "native": "rbx-bad-release-1",
+          "vector": 0,
+          "rbx_before": 845282253045697467,
+          "rbx_after": 845282253045697475,
+          "normal_exit": true
+        }
+      ]
+    },
+    {
+      "task": "cursor:CR39",
+      "summary": "D:\\projects\\2026\\dongos\\coordination\\dongos_works\\cursor-works\\build\\CR39\\codex-8922c438b8624881971f163fe0f0727a\\summary.json",
+      "stable": true,
+      "primary_vectors_per_mode": 14,
+      "rbx_independent_evidence": [
+        {
+          "native": "rbx-bad-debug-0",
+          "vector": 0,
+          "rbx_before": 845282253045697467,
+          "rbx_after": 845282253045697475,
+          "normal_exit": true
+        },
+        {
+          "native": "rbx-bad-debug-1",
+          "vector": 0,
+          "rbx_before": 845282253045697467,
+          "rbx_after": 845282253045697475,
+          "normal_exit": true
+        },
+        {
+          "native": "rbx-bad-release-0",
+          "vector": 0,
+          "rbx_before": 845282253045697467,
+          "rbx_after": 845282253045697475,
+          "normal_exit": true
+        },
+        {
+          "native": "rbx-bad-release-1",
+          "vector": 0,
+          "rbx_before": 845282253045697467,
+          "rbx_after": 845282253045697475,
+          "normal_exit": true
+        }
+      ]
+    },
+    {
+      "task": "cursor:CR40",
+      "summary": "D:\\projects\\2026\\dongos\\coordination\\dongos_works\\cursor-works\\build\\CR40\\codex-88b01a2adb7745299c865e3868635e39\\summary.json",
+      "stable": true,
+      "primary_vectors_per_mode": 8,
+      "rbx_independent_evidence": [
+        {
+          "native": "rbx-bad-debug-0",
+          "vector": 0,
+          "rbx_before": 845282253045697467,
+          "rbx_after": 845282253045697475,
+          "normal_exit": true
+        },
+        {
+          "native": "rbx-bad-release-0",
+          "vector": 0,
+          "rbx_before": 845282253045697467,
+          "rbx_after": 845282253045697475,
+          "normal_exit": true
+        }
+      ]
+    },
+    {
+      "task": "cursor:CR41",
+      "summary": "D:\\projects\\2026\\dongos\\coordination\\dongos_works\\cursor-works\\build\\CR41\\codex-a664ea3c50de4edfb334b89b01482199\\summary.json",
+      "stable": true,
+      "primary_vectors_per_mode": 20,
+      "rbx_independent_evidence": [
+        {
+          "native": "rbx-bad-debug-0",
+          "vector": 0,
+          "rbx_before": 845282253045697467,
+          "rbx_after": 845282253045697475,
+          "normal_exit": true
+        },
+        {
+          "native": "rbx-bad-debug-1",
+          "vector": 0,
+          "rbx_before": 845282253045697467,
+          "rbx_after": 845282253045697475,
+          "normal_exit": true
+        },
+        {
+          "native": "rbx-bad-release-0",
+          "vector": 0,
+          "rbx_before": 845282253045697467,
+          "rbx_after": 845282253045697475,
+          "normal_exit": true
+        },
+        {
+          "native": "rbx-bad-release-1",
+          "vector": 0,
+          "rbx_before": 845282253045697467,
+          "rbx_after": 845282253045697475,
+          "normal_exit": true
+        }
+      ]
+    },
+    {
+      "task": "cursor:CR42",
+      "summary": "D:\\projects\\2026\\dongos\\coordination\\dongos_works\\cursor-works\\build\\CR42\\codex-8c502d501fd8470f8063b18142468286\\summary.json",
+      "stable": true,
+      "primary_vectors_per_mode": 22,
+      "rbx_independent_evidence": [
+        {
+          "native": "rbx-bad-debug-0",
+          "vector": 0,
+          "rbx_before": 845282253045697467,
+          "rbx_after": 845282253045697475,
+          "normal_exit": true
+        },
+        {
+          "native": "rbx-bad-debug-1",
+          "vector": 0,
+          "rbx_before": 845282253045697467,
+          "rbx_after": 845282253045697475,
+          "normal_exit": true
+        },
+        {
+          "native": "rbx-bad-release-0",
+          "vector": 0,
+          "rbx_before": 845282253045697467,
+          "rbx_after": 845282253045697475,
+          "normal_exit": true
+        },
+        {
+          "native": "rbx-bad-release-1",
+          "vector": 0,
+          "rbx_before": 845282253045697467,
+          "rbx_after": 845282253045697475,
+          "normal_exit": true
+        }
+      ]
+    }
+  ],
+  "final_files": [
+    {
+      "path": "cursor-works/src/bootstrap/nasm_checked_u64_function.dg",
+      "sha256": "353a5e59cdcbd55335f83f633791c4f7954c98f7d3e6326c2540166266d24f0a"
+    },
+    {
+      "path": "cursor-works/src/bootstrap/nasm_checked_u64_function.md",
+      "sha256": "4ad7dba32f574850bba47966ba210a7742f2ff833324ca0e3ea0b2577b8708ca"
+    },
+    {
+      "path": "cursor-works/tests/test_nasm_checked_u64_function.py",
+      "sha256": "6d3b5c34a0f6a124767d19a0f0ea93111ec769fb9d6897403b48d3ee80b5ae3d"
+    },
+    {
+      "path": "cursor-works/deliveries/CR38.md",
+      "sha256": "b366e5ee9f3400641065812db8e4ced437f12ade81e470998498518e443632bb"
+    },
+    {
+      "path": "cursor-works/src/bootstrap/nasm_short_circuit_function.dg",
+      "sha256": "6aa0f6f5cdb3815b5d8d5701dc736e4e2ae89cbb4f1bdfdee0702b98e6dd1fe1"
+    },
+    {
+      "path": "cursor-works/src/bootstrap/nasm_short_circuit_function.md",
+      "sha256": "1a3bcdfd53c5e4b0f5fa1b74c8d33bd1ca66049bc0da2f4bf43c57b55b234a84"
+    },
+    {
+      "path": "cursor-works/tests/test_nasm_short_circuit_function.py",
+      "sha256": "b9eb25ba9a1a14f9b0a250d7c4be66a63fa4d9394db21b180d2390426004c8a8"
+    },
+    {
+      "path": "cursor-works/deliveries/CR39.md",
+      "sha256": "3912de3da005cf567f7f1490038512be0c2b6e367ad423f3b75872ff753eac90"
+    },
+    {
+      "path": "cursor-works/src/bootstrap/nasm_pair_cleanup_function.dg",
+      "sha256": "22522c485b9650f59d05a6ae3a7237f706a06e3ac6199e55782e1d67b24f6e8e"
+    },
+    {
+      "path": "cursor-works/src/bootstrap/nasm_pair_cleanup_function.md",
+      "sha256": "65d09a2ca8c5970277b1a4ae3e9d10df77d73e900d84e09d55eb606468ce56e4"
+    },
+    {
+      "path": "cursor-works/tests/test_nasm_pair_cleanup_function.py",
+      "sha256": "2145159da40db85d4348c5b437bb8f2fbcac1a887c25e8ef7895f5a71255175e"
+    },
+    {
+      "path": "cursor-works/deliveries/CR40.md",
+      "sha256": "e7562486a13f6fec505e0ed68a3bc2266dc383cc58e88fdff39f1e3533a1bf5c"
+    },
+    {
+      "path": "cursor-works/src/bootstrap/nasm_narrow_arithmetic_function.dg",
+      "sha256": "32e6df437cfbe805e4955b2a53e3e83c2eaa3618743d97bd4dab874b04ff1fb2"
+    },
+    {
+      "path": "cursor-works/src/bootstrap/nasm_narrow_arithmetic_function.md",
+      "sha256": "445d3bd2f620c51d9868a6a98363c9c2a851e373f194aae6a85bcb0e50c6d3ec"
+    },
+    {
+      "path": "cursor-works/tests/test_nasm_narrow_arithmetic_function.py",
+      "sha256": "20f99bd42d08dd300a3be72324c60faf99f837e9aa28ebc85af5ad2e78fb61a9"
+    },
+    {
+      "path": "cursor-works/deliveries/CR41.md",
+      "sha256": "782828fcd9e22c41b75677f28590a8ab4123a96511a0c943dbb6cc4c4d9f66df"
+    },
+    {
+      "path": "cursor-works/src/bootstrap/nasm_slice_view_function.dg",
+      "sha256": "b7aedf372d00abdc6f9425547a00a06e6b7c87a786c7992b26b37c486a63999b"
+    },
+    {
+      "path": "cursor-works/src/bootstrap/nasm_slice_view_function.md",
+      "sha256": "2b4667e618f835ab410e92e3856aa23b8d0e8216ccc051e6afcc1e99835e279e"
+    },
+    {
+      "path": "cursor-works/tests/test_nasm_slice_view_function.py",
+      "sha256": "075351008e3cc8c05752e01650594f42bccd31ce46a1a9e135250fe07d4e5505"
+    },
+    {
+      "path": "cursor-works/deliveries/CR42.md",
+      "sha256": "097503883d8510077d5a7153f10b21408327b2e9c096559685cfdf322861801a"
+    }
+  ],
+  "formal_verification": "all_passed",
+  "snapshot_retry": {
+    "task": "cursor:CR40",
+    "job": "74bea77dd0594b8196b86f728a116faa",
+    "reason": "复制期间源文件发生变化，0测试，未将其视为通过",
+    "replacement_job": "e6f48b0a8d164861928746aa044d439e",
+    "final_job": "a848152c07fc46b687edd4b6971c65fa"
+  },
+  "formal_results": {
+    "CR38": {
+      "status": "accepted",
+      "rev": 9,
+      "verification": {
+        "passed": true,
+        "checks": [
+          {
+            "spec": "discover:cursor-works/tests:test_nasm_checked_u64_function.py",
+            "passed": true,
+            "tests": 4,
+            "skips": 0,
+            "returncode": 0,
+            "cancelled": false,
+            "timed_out": false,
+            "elapsed_seconds": 155.687
+          }
+        ],
+        "source_stable": true,
+        "fingerprint": {
+          "cursor-works/src/bootstrap/nasm_checked_u64_function.dg": "353a5e59cdcbd55335f83f633791c4f7954c98f7d3e6326c2540166266d24f0a",
+          "cursor-works/src/bootstrap/nasm_checked_u64_function.md": "4ad7dba32f574850bba47966ba210a7742f2ff833324ca0e3ea0b2577b8708ca",
+          "cursor-works/tests/test_nasm_checked_u64_function.py": "6d3b5c34a0f6a124767d19a0f0ea93111ec769fb9d6897403b48d3ee80b5ae3d",
+          "cursor-works/deliveries/CR38.md": "b366e5ee9f3400641065812db8e4ced437f12ade81e470998498518e443632bb"
+        },
+        "summary": "定向复验通过，等待源码/契约审查",
+        "finished_at": "2026-10-19T15:46:20+00:00",
+        "job": "db3dca103e964000bc18efde6e723b67"
+      }
+    },
+    "CR39": {
+      "status": "accepted",
+      "rev": 7,
+      "verification": {
+        "passed": true,
+        "checks": [
+          {
+            "spec": "discover:cursor-works/tests:test_nasm_short_circuit_function.py",
+            "passed": true,
+            "tests": 4,
+            "skips": 0,
+            "returncode": 0,
+            "cancelled": false,
+            "timed_out": false,
+            "elapsed_seconds": 188.828
+          }
+        ],
+        "source_stable": true,
+        "fingerprint": {
+          "cursor-works/src/bootstrap/nasm_short_circuit_function.dg": "6aa0f6f5cdb3815b5d8d5701dc736e4e2ae89cbb4f1bdfdee0702b98e6dd1fe1",
+          "cursor-works/src/bootstrap/nasm_short_circuit_function.md": "1a3bcdfd53c5e4b0f5fa1b74c8d33bd1ca66049bc0da2f4bf43c57b55b234a84",
+          "cursor-works/tests/test_nasm_short_circuit_function.py": "b9eb25ba9a1a14f9b0a250d7c4be66a63fa4d9394db21b180d2390426004c8a8",
+          "cursor-works/deliveries/CR39.md": "3912de3da005cf567f7f1490038512be0c2b6e367ad423f3b75872ff753eac90"
+        },
+        "summary": "定向复验通过，等待源码/契约审查",
+        "finished_at": "2026-10-19T15:49:36+00:00",
+        "job": "fb380dd0e1f043e5990c072e71ff1582"
+      }
+    },
+    "CR41": {
+      "status": "accepted",
+      "rev": 7,
+      "verification": {
+        "passed": true,
+        "checks": [
+          {
+            "spec": "discover:cursor-works/tests:test_nasm_narrow_arithmetic_function.py",
+            "passed": true,
+            "tests": 4,
+            "skips": 0,
+            "returncode": 0,
+            "cancelled": false,
+            "timed_out": false,
+            "elapsed_seconds": 182.453
+          }
+        ],
+        "source_stable": true,
+        "fingerprint": {
+          "cursor-works/src/bootstrap/nasm_narrow_arithmetic_function.dg": "32e6df437cfbe805e4955b2a53e3e83c2eaa3618743d97bd4dab874b04ff1fb2",
+          "cursor-works/src/bootstrap/nasm_narrow_arithmetic_function.md": "445d3bd2f620c51d9868a6a98363c9c2a851e373f194aae6a85bcb0e50c6d3ec",
+          "cursor-works/tests/test_nasm_narrow_arithmetic_function.py": "20f99bd42d08dd300a3be72324c60faf99f837e9aa28ebc85af5ad2e78fb61a9",
+          "cursor-works/deliveries/CR41.md": "782828fcd9e22c41b75677f28590a8ab4123a96511a0c943dbb6cc4c4d9f66df"
+        },
+        "summary": "定向复验通过，等待源码/契约审查",
+        "finished_at": "2026-10-19T15:52:46+00:00",
+        "job": "bae9fbad760043bbb6a01859442cadab"
+      }
+    },
+    "CR40": {
+      "status": "accepted",
+      "rev": 13,
+      "verification": {
+        "passed": true,
+        "checks": [
+          {
+            "spec": "discover:cursor-works/tests:test_nasm_pair_cleanup_function.py",
+            "passed": true,
+            "tests": 4,
+            "skips": 0,
+            "returncode": 0,
+            "cancelled": false,
+            "timed_out": false,
+            "elapsed_seconds": 124.406
+          }
+        ],
+        "source_stable": true,
+        "fingerprint": {
+          "cursor-works/src/bootstrap/nasm_pair_cleanup_function.dg": "22522c485b9650f59d05a6ae3a7237f706a06e3ac6199e55782e1d67b24f6e8e",
+          "cursor-works/src/bootstrap/nasm_pair_cleanup_function.md": "65d09a2ca8c5970277b1a4ae3e9d10df77d73e900d84e09d55eb606468ce56e4",
+          "cursor-works/tests/test_nasm_pair_cleanup_function.py": "2145159da40db85d4348c5b437bb8f2fbcac1a887c25e8ef7895f5a71255175e",
+          "cursor-works/deliveries/CR40.md": "e7562486a13f6fec505e0ed68a3bc2266dc383cc58e88fdff39f1e3533a1bf5c"
+        },
+        "summary": "定向复验通过，等待源码/契约审查",
+        "finished_at": "2026-10-19T15:58:29+00:00",
+        "job": "a848152c07fc46b687edd4b6971c65fa"
+      }
+    },
+    "CR42": {
+      "status": "accepted",
+      "rev": 7,
+      "verification": {
+        "passed": true,
+        "checks": [
+          {
+            "spec": "discover:cursor-works/tests:test_nasm_slice_view_function.py",
+            "passed": true,
+            "tests": 4,
+            "skips": 0,
+            "returncode": 0,
+            "cancelled": false,
+            "timed_out": false,
+            "elapsed_seconds": 202.969
+          }
+        ],
+        "source_stable": true,
+        "fingerprint": {
+          "cursor-works/src/bootstrap/nasm_slice_view_function.dg": "b7aedf372d00abdc6f9425547a00a06e6b7c87a786c7992b26b37c486a63999b",
+          "cursor-works/src/bootstrap/nasm_slice_view_function.md": "2b4667e618f835ab410e92e3856aa23b8d0e8216ccc051e6afcc1e99835e279e",
+          "cursor-works/tests/test_nasm_slice_view_function.py": "075351008e3cc8c05752e01650594f42bccd31ce46a1a9e135250fe07d4e5505",
+          "cursor-works/deliveries/CR42.md": "097503883d8510077d5a7153f10b21408327b2e9c096559685cfdf322861801a"
+        },
+        "summary": "定向复验通过，等待源码/契约审查",
+        "finished_at": "2026-10-19T15:56:17+00:00",
+        "job": "3d115eec048d4b97bb0d207f8c670b2d"
+      }
+    }
+  },
+  "local_supplement": {
+    "CR40": "最终独立可达总count超限夹具：test_contract 1项0skip，23.583秒"
+  },
+  "superseded_queued_job": {
+    "job": "e6f48b0a8d164861928746aa044d439e",
+    "reason": "未启动，取消后仅补强独立可达非法输入夹具，生产不变"
+  },
+  "formal_totals": {
+    "tests": 20,
+    "skips": 0,
+    "source_stable": true,
+    "accepted_tasks": 5,
+    "integrated_tasks": 0
+  },
+  "source_review": "completed; actual runtime/ABI/mutation observations independently audited"
+}

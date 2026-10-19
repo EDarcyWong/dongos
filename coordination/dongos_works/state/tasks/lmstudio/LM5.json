@@ -1,0 +1,72 @@
+{
+  "auto_dispatch": false,
+  "auto_verify": false,
+  "candidate": "7c5c1e82553544f0b9d22e1ef572e41a",
+  "checks": [
+    "discover:lmstudio-works/tests:test_utf8_boundary_cases.py"
+  ],
+  "complexity": "simple",
+  "created_at": "2026-10-18T09:33:41+00:00",
+  "delivery": "lmstudio-works/deliveries/LM5.md",
+  "depends_on": [],
+  "description": "只生成一个小型UTF-8测试数据JSON，不写实现代码，不修改测试。文件lmstudio-works/fixtures/utf8-boundary-cases.json，顶层只有version/cases，version为整数1，cases恰好12项，每项只有id/hex/valid/scalar_count。\n严格按下面顺序填写（hex为不含空格的小写十六进制，ASCII的41保留数字，不加0x）：empty:\"\"；nul:00；ascii:41；han:e6b189；emoji:f09f9880；max:f48fbfbf；overlong:c0af；continuation:80；surrogate:eda080；too_high:f4908080；truncated:e282；bad_continuation:e228a1。\n前六项valid为JSON布尔true：empty的scalar_count为整数0，其余五项为整数1。后六项valid为JSON布尔false，scalar_count为JSON null。这些是给定分类数据，不要新增案例、Unicode规范化或字符串转义字段，不把true/false/null写成字符串。不能声称已运行测试。\n另在固定LM5交付里说明两个文件、实际未运行测试及限制。只有JSON和交付两个授权文件；结构及严格UTF-8校验由Codex提供，模型不得改测试。不自行验收、不提交推送，不运行OS/VM或业务命令。",
+  "document": "lmstudio-works/tasks/LM5-board.md",
+  "historical": false,
+  "id": "lmstudio:LM5",
+  "integration_note": "按验收hash回写，C13–C15主线模块/永久测试及真实组合10项通过，LM5数据按hash集成；见reviews/2026-10-18-C13-C15-LM5-integration.md。L3未完成。",
+  "last_run_note": "交付已收集，尚未验收",
+  "legacy_hash": "e59ae075a02f5cb1df18cc0d9e7977ef24a33216a6a29eec52b8530e19cf233b",
+  "number": "LM5",
+  "owner": "lmstudio",
+  "rev": 8,
+  "review_note": "Codex已审查源码/契约及测试有效性，独立定向零skip且指纹稳定；详见lmstudio-works/reviews/2026-10-18-LM5-acceptance.md。",
+  "state_reconciliation": {
+    "at": "2026-10-19T11:42:09+00:00",
+    "audit_sha256": "5daf98a663cd249783a8432a5fcbed3ec4e96275b1910fa54b7903c084fe9ebc",
+    "note": "协调已有历史事实；保留原事件/作业；历史复验未重跑，未新增验收或集成，不启动模型。",
+    "previous_data_sha256": "fc42bed5c1dd7d03456a578361e66303e405752aa5d577436b7a7ec86c8b51c8",
+    "previous_rev": 6,
+    "project": "dongos",
+    "snapshot_generated_at": "2026-10-19T09:04:28+00:00",
+    "snapshot_rev": 7,
+    "snapshot_sha256": "a40cf9aabcbb43779b5c60414d7142cab791f85888022c84625568dbb579ac96",
+    "verification_reexecuted": false
+  },
+  "state_recovery": {
+    "at": "2026-10-19T04:43:01+00:00",
+    "audit_sha256": "3ea0db756d56092976092ed0d1216118e145a8e34aa02c5060cb913d088d553e",
+    "note": "恢复已有验收/集成/返修事实；原复验为历史记录，未声称本次重跑；不恢复丢失作业或启动模型。",
+    "snapshot_rev": 6,
+    "snapshot_sha256": "f3ab929e33419f40dfc417217d588acf8b1b26cbac50724a51942a11e438c171"
+  },
+  "status": "integrated",
+  "title": "简单数据：12条UTF-8边界测试夹具",
+  "updated_at": "2026-10-19T11:42:09+00:00",
+  "verification": {
+    "checks": [
+      {
+        "cancelled": false,
+        "elapsed_seconds": 0.203,
+        "passed": true,
+        "returncode": 0,
+        "skips": 0,
+        "spec": "discover:lmstudio-works/tests:test_utf8_boundary_cases.py",
+        "tests": 1,
+        "timed_out": false
+      }
+    ],
+    "fingerprint": {
+      "lmstudio-works/deliveries/LM5.md": "8e4292bdb088861e2ca9b0cee88f707ba1e3e9c18958cb00114b4afb6830b5d8",
+      "lmstudio-works/fixtures/utf8-boundary-cases.json": "06ba419178f932e55502f1f22992feb7f9f6cce3a31388c3a836bfea7519f8fb"
+    },
+    "finished_at": "2026-10-18T09:38:52+00:00",
+    "job": "e919847aa7374549b50a6bc2e789d9d6",
+    "passed": true,
+    "source_stable": true,
+    "summary": "定向复验通过，等待源码/契约审查"
+  },
+  "write_paths": [
+    "lmstudio-works/fixtures/utf8-boundary-cases.json",
+    "lmstudio-works/deliveries/LM5.md"
+  ]
+}

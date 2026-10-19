@@ -1,0 +1,83 @@
+{
+  "archive_note": "用户要求清理已转交完成的暂停任务；替代任务deepseek:D17已独立验收并集成。原任务/交付/审查保留，仅从默认活动列表归档隐藏，不重复执行，不改变验收事实。",
+  "archived": true,
+  "archived_at": "2026-10-18T14:18:15+00:00",
+  "auto_dispatch": false,
+  "auto_verify": false,
+  "candidate": "26617f0192664292a870cbfa4593e368",
+  "checks": [
+    "discover:claude-works/tests:test_cfg_postorder.py"
+  ],
+  "complexity": "standard",
+  "created_at": "2026-10-18T09:46:43+00:00",
+  "delivery": "claude-works/deliveries/C19.md",
+  "depends_on": [
+    "claude:C7"
+  ],
+  "description": "模块bootstrap.cfg_postorder，只读导入主线bootstrap.cfg_reachability的Node类型。Frame{node:usize,next:usize}。固定接口pub unsafe fn order(nodes:[]const cfg.Node,edges:[]const usize,entry:usize,out:[]usize,marks:[]u8,work:[]Frame,used:*usize)u64。\nnodes非空且entry有效；验证所有节点first/count范围和每条被引用边（含不可达部分），未引用edges尾部无需解释，允许自环/重复边。以输入edges顺序做DFS，首次发现节点立即标记，所有子节点处理后才输出该节点；每个可达节点输出一次，不输出不可达节点。无递归。out须至少nodes.len（固定门槛）否则CAPACITY；marks及work各至少nodes.len否则WORKSPACE。所有描述符、图、容量检查通过后才写任何可写对象；非OK marks/work也不变。成功marks前n项不可达为0、可达为2；marks尾部不变，work前n项内部值不作要求、尾部不变，used为后序输出数。用显式栈避免深图宿主栈溢出，复杂度按实际引用边说明。Python独立DFS对照，覆盖后序与前序区别、回边/环、重复边、不同边顺序、不可达坏边和工作区不足；坏实现至少输出前序或错误把在栈回边再次递归。\n仅维护本任务列出的claude-works源码、接口说明、定向测试与交付，不改code/lang、已验收组件、协调器或其它助手文件。依赖主线模块只读，用明确源码根导入，不复制旧组件制造重复模块。\n公共契约：OK=0、INVALID=1、CAPACITY=2，需工作区时WORKSPACE=3。访问前校验完整声明区间、非空指针、自然对齐、元素乘法/地址端点；空切片可NULL，结果对象仍必需。只读输入可互相重叠，可写对象与彼此及所有输入完整区间分离。全部数据INVALID优先于CAPACITY，再WORKSPACE（需要时）。非OK out及结果对象全文不变；成功仅改明确前缀/字段，保留输入、尾部与双端guard。所有算术先验溢出；unsafe调用方保证实际访问有效，无分配/全局可变状态/OS调用。任务具体规则优先。\n测试独立Python期望，至少100固定种子小案例及边界；真实Dong→NASM→C/SysV，debug/release原生、ELF64/COFF组装、零skip，逐调用检查输入、输出、结果对象及实际双端，含真实只读输入；至少两个真实坏董私有副本两模式编译链接执行后被指定断言拒绝，编译失败/崩溃/超时不算。别名预检夹具先保证其它条件合法，避免非法数据/未对齐遮住目标检查；伪地址只走必拒绝的数值路径。产物放claude-works/build/<编号>/<唯一运行目录>。CLI无命令工具时不绕权，只提交可执行测试并明确未编译/未运行，交付不虚构hash或结果，由协调器执行。保持待复验，不自行验收，不提交/推送，不运行OS/VM或全回归。\n",
+  "document": "claude-works/tasks/C19-board.md",
+  "document_status": "todo",
+  "historical": false,
+  "id": "claude:C19",
+  "last_run_note": "交付已收集，尚未验收",
+  "legacy_hash": "e563a922e25ed9bfbf8e9e35c64db3bbe09deff13d25b9593453bcf8bba632a2",
+  "number": "C19",
+  "owner": "claude",
+  "resume_status": "rework",
+  "rev": 9,
+  "review_note": "",
+  "state_reconciliation": {
+    "at": "2026-10-19T11:42:09+00:00",
+    "audit_sha256": "5daf98a663cd249783a8432a5fcbed3ec4e96275b1910fa54b7903c084fe9ebc",
+    "note": "协调已有历史事实；保留原事件/作业；历史复验未重跑，未新增验收或集成，不启动模型。",
+    "previous_data_sha256": "cacced8c9d433ee3ed4228a3bfb6440636a6eaafafbc313bbd4071d405d75b12",
+    "previous_rev": 7,
+    "project": "dongos",
+    "snapshot_generated_at": "2026-10-19T09:04:28+00:00",
+    "snapshot_rev": 8,
+    "snapshot_sha256": "a40cf9aabcbb43779b5c60414d7142cab791f85888022c84625568dbb579ac96",
+    "verification_reexecuted": false
+  },
+  "state_recovery": {
+    "at": "2026-10-19T04:43:01+00:00",
+    "audit_sha256": "3ea0db756d56092976092ed0d1216118e145a8e34aa02c5060cb913d088d553e",
+    "note": "恢复已有验收/集成/返修事实；原复验为历史记录，未声称本次重跑；不恢复丢失作业或启动模型。",
+    "snapshot_rev": 7,
+    "snapshot_sha256": "f3ab929e33419f40dfc417217d588acf8b1b26cbac50724a51942a11e438c171"
+  },
+  "status": "paused",
+  "title": "控制流图的确定性迭代DFS后序",
+  "updated_at": "2026-10-19T11:42:09+00:00",
+  "verification": {
+    "checks": [
+      {
+        "cancelled": false,
+        "elapsed_seconds": 3.843,
+        "passed": false,
+        "returncode": 1,
+        "skips": 0,
+        "spec": "discover:claude-works/tests:test_cfg_postorder.py",
+        "tests": 3,
+        "timed_out": false
+      }
+    ],
+    "fingerprint": {
+      "claude-works/deliveries/C19.md": "6423d54ccce651f21771f0e35057041a40e10f536add056f6f30bcc30ee6705b",
+      "claude-works/src/bootstrap/cfg_postorder.dg": "59cdad508a9d3609f94416ba7fd79f9f6602fc7f487af0554974dd456763a598",
+      "claude-works/src/bootstrap/cfg_postorder.md": "e897ba2ac8825694c20d6f74e7d4987d89bee39fdb7d80526ad8b3599d81008f",
+      "claude-works/tests/test_cfg_postorder.py": "f83d67149206952e46267685ce90c12658138745d78164286511cd124701780e"
+    },
+    "finished_at": "2026-10-18T10:42:32+00:00",
+    "job": "88a7c837e2d342e49efbeb301dbb0b87",
+    "passed": false,
+    "source_stable": true,
+    "summary": "定向复验失败或受测源码发生变化"
+  },
+  "write_paths": [
+    "claude-works/src/bootstrap/cfg_postorder.dg",
+    "claude-works/src/bootstrap/cfg_postorder.md",
+    "claude-works/tests/test_cfg_postorder.py",
+    "claude-works/tests/cfg_postorder_probe*",
+    "claude-works/deliveries/C19.md"
+  ]
+}

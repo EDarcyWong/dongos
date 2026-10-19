@@ -1,0 +1,92 @@
+{
+  "auto_dispatch": false,
+  "auto_verify": false,
+  "candidate": null,
+  "checks": [
+    "module:lang.tests.test_bss_compatibility",
+    "module:lang.tests.test_globals_native",
+    "module:lang.tests.test_alignment_native"
+  ],
+  "claimed_at": "2026-10-19T07:54:40+00:00",
+  "claimed_by": "codex-bss-compatibility",
+  "complexity": "standard",
+  "created_at": "2026-10-19T07:54:38+00:00",
+  "delivery": "codex-works/deliveries/CX5.md",
+  "depends_on": [
+    "codex:CX3"
+  ],
+  "description": "Actual shell native test fails before execution because installed NASM2.16.03 alignb macro expands unsupported [warning push/pop] under Wall/Werror. Emit explicit section-relative BSS padding and correct section base alignment instead of that macro; preserve full global alignment/zero fill. Test published ELF/COFF section alignment and native64-aligned globals plus existing global/alignment suites. Do not disable unknown-warning or other warnings. No OS/VM.",
+  "document": "codex-works/tasks/CX5-board.md",
+  "historical": false,
+  "id": "codex:CX5",
+  "integration_note": "已审查BSS节相对padding和最大节基址对齐；正式6项0skip来源稳定，主线6项0skip；独立ELF/COFF节头64字节对齐及原生debug/release零填充/写入验证通过。已实际在主线修改相应源码和永久测试，保留Wall/Werror。",
+  "legacy_hash": "be4ba37101da2fcc789c348b88bdd96fb29099276f6aa32601b46a75f018da90",
+  "number": "CX5",
+  "owner": "codex",
+  "rev": 7,
+  "review_note": "已审查BSS节相对padding和最大节基址对齐；正式6项0skip来源稳定，主线6项0skip；独立ELF/COFF节头64字节对齐及原生debug/release零填充/写入验证通过。已实际在主线修改相应源码和永久测试，保留Wall/Werror。",
+  "state_reconciliation": {
+    "at": "2026-10-19T11:42:09+00:00",
+    "audit_sha256": "5daf98a663cd249783a8432a5fcbed3ec4e96275b1910fa54b7903c084fe9ebc",
+    "note": "协调已有历史事实；保留原事件/作业；历史复验未重跑，未新增验收或集成，不启动模型。",
+    "previous_data_sha256": "7b2e1020e2a5944848dfe0fb45cfa214bdb1cce3cfadbe16212870b9aff0e5e5",
+    "previous_rev": 1,
+    "project": "dongos",
+    "snapshot_generated_at": "2026-10-19T09:04:28+00:00",
+    "snapshot_rev": 6,
+    "snapshot_sha256": "a40cf9aabcbb43779b5c60414d7142cab791f85888022c84625568dbb579ac96",
+    "verification_reexecuted": false
+  },
+  "status": "integrated",
+  "title": "消除NASM vendor alignb宏警告栈不兼容并保持BSS对齐",
+  "updated_at": "2026-10-19T11:42:09+00:00",
+  "verification": {
+    "checks": [
+      {
+        "cancelled": false,
+        "elapsed_seconds": 1.857,
+        "passed": true,
+        "returncode": 0,
+        "skips": 0,
+        "spec": "module:lang.tests.test_bss_compatibility",
+        "tests": 1,
+        "timed_out": false
+      },
+      {
+        "cancelled": false,
+        "elapsed_seconds": 2.269,
+        "passed": true,
+        "returncode": 0,
+        "skips": 0,
+        "spec": "module:lang.tests.test_globals_native",
+        "tests": 3,
+        "timed_out": false
+      },
+      {
+        "cancelled": false,
+        "elapsed_seconds": 1.85,
+        "passed": true,
+        "returncode": 0,
+        "skips": 0,
+        "spec": "module:lang.tests.test_alignment_native",
+        "tests": 2,
+        "timed_out": false
+      }
+    ],
+    "fingerprint": {
+      "codex-works/deliveries/CX5.md": "3dd0567bf5729538716f3953a95281415161028d16560287d169436cc4d56fe7",
+      "lang/dongc/emitter.py": "89f60d81701269a38e0865aa281ac18e1e056e62ccfd495a566c44d4708164d5",
+      "lang/tests/test_bss_compatibility.py": "aa93801117dd73cd33f66c19114b63d2d4ed0fbb9fc13144fc2f97a2423a6d91"
+    },
+    "finished_at": "2026-10-19T08:04:40+00:00",
+    "job": "84bc452304474cd7b8d5a9b0fe914ef2",
+    "passed": true,
+    "source_stable": true,
+    "summary": "定向复验通过，等待源码/契约审查"
+  },
+  "write_paths": [
+    "lang/dongc/emitter.py",
+    "lang/tests/test_bss_compatibility.py",
+    "codex-works/deliveries/CX5.md"
+  ]
+}

@@ -1,0 +1,155 @@
+// Lower a real bootstrap.expression tree of the restricted u64 subset (INTEGER, NAME, BINARY + - * & | ^)
+// into bootstrap.nasm_u64_function.Instruction records. Everything is checked first (descriptors, the token
+// stream, every node index, the parameter table, UNSUPPORTED constructs, the exact tree shape, literals through
+// bootstrap.bigint.parse, names). Only then is the capacity compared and the instructions written to out in
+// post-order; out and *result are touched once, at the very end, and not at all on any failure.
+module bootstrap.u64_expression_ir;
+import bootstrap.lexer as lex;
+import bootstrap.expression as ast;
+import bootstrap.bigint as bi;
+import bootstrap.nasm_u64_function as f;
+pub const OK:u64=0;pub const INVALID:u64=1;pub const CAPACITY:u64=2;pub const UNSUPPORTED:u64=3;
+pub const MAX_SOURCE:usize=4096;pub const MAX_TOKENS:usize=256;pub const MAX_NODES:usize=24;
+pub const MAX_PARAMETERS:usize=6;pub const MAX_LITERAL:usize=256;
+pub struct Result{pub instruction_count:usize,pub slot_count:usize,pub return_slot:usize}
+const MAX:u64=0xffff_ffff_ffff_ffff;
+const NONE:usize=0xffff_ffff_ffff_ffff;
+const NO_OPERATION:u64=99;
+// Local frame (dongc limits a function's worst-case frame to 4096 bytes): values 24*8, slot_of 24*8,
+// visited/stack/state 24*(1+8+1) in tree_ok, 2 limbs, 32 work limbs, one bigint Result: about 1 KiB of arrays.
+fn span(p:u64,n:u64)bool{return n==0||(p!=0&&n<=MAX-p);}
+fn overlap(a:u64,n:u64,b:u64,m:u64)bool{return n!=0&&m!=0&&a<b+m&&b<a+n;}
+// Explicit mapping from the lexer operator kind to the C48 operation; never derived arithmetically.
+fn operation(kind:u64)u64{
+ if kind==1067{return f.ADD;}if kind==1069{return f.SUB;}if kind==1066{return f.IMUL;}
+ if kind==1062{return f.AND;}if kind==1148{return f.OR;}if kind==1118{return f.XOR;}
+ return NO_OPERATION;
+}
+fn same(source:[]const u8,tokens:[]const lex.Token,i:usize,j:usize)bool{
+ let a=tokens[i];let b=tokens[j];
+ if a.end-a.start!=b.end-b.start{return false;}
+ var k:usize=0;while k<a.end-a.start{if source[a.start+k]!=source[b.start+k]{return false;}k+=1;}
+ return true;
+}
+// Every node visited exactly once from the root: rejects cycles, shared children, multiple parents and
+// unreachable nodes without unbounded recursion (explicit stack, at most 24 entries).
+fn tree_ok(nodes:[]const ast.Node,root:usize)bool{
+ var visited:[24]u8=[0;24];var stack:[24]usize=[0;24];var state:[24]u8=[0;24];
+ var sp:usize=1;var count:usize=1;stack[0]=root;visited[root]=1;
+ while sp!=0{
+  let id=stack[sp-1];let n=nodes[id];let st=state[sp-1];
+  if n.kind==ast.BINARY&&st<2{
+   state[sp-1]=st+1;var child=n.a;if st==1{child=n.b;}
+   if visited[child]!=0{return false;}
+   visited[child]=1;count+=1;stack[sp]=child;state[sp]=0;sp+=1;
+  }else{sp-=1;}
+ }
+ return count==nodes.len;
+}
+pub unsafe fn lower(source:[]const u8,tokens:[]const lex.Token,nodes:[]const ast.Node,root:usize,parameter_tokens:[]const usize,
+ out:[]f.Instruction,result:*Result)u64{unsafe{
+ let rp=result as u64;let sp=source.ptr as u64;let tp=tokens.ptr as u64;let np=nodes.ptr as u64;
+ let pp=parameter_tokens.ptr as u64;let op=out.ptr as u64;
+ if result==null||(rp&7)!=0||!span(rp,sizeof(Result)){return INVALID;}
+ if source.len>MAX_SOURCE||tokens.len==0||tokens.len>MAX_TOKENS||nodes.len==0||nodes.len>MAX_NODES
+  ||parameter_tokens.len>MAX_PARAMETERS||out.len>MAX/sizeof(f.Instruction){return INVALID;}
+ let sn=source.len as u64;let tn=tokens.len as u64*sizeof(lex.Token);let nn=nodes.len as u64*sizeof(ast.Node);
+ let pn=parameter_tokens.len as u64*8;let on=out.len as u64*sizeof(f.Instruction);
+ if !span(sp,sn)||!span(tp,tn)||!span(np,nn)||!span(pp,pn)||!span(op,on){return INVALID;}
+ if (tp&7)!=0||(np&7)!=0||(pn!=0&&(pp&7)!=0)||(on!=0&&(op&7)!=0){return INVALID;}
+ // Inputs may overlap each other; out and *result are disjoint from every whole input and from each other.
+ if overlap(rp,sizeof(Result),op,on)||overlap(rp,sizeof(Result),sp,sn)||overlap(rp,sizeof(Result),tp,tn)
+  ||overlap(rp,sizeof(Result),np,nn)||overlap(rp,sizeof(Result),pp,pn){return INVALID;}
+ if overlap(op,on,sp,sn)||overlap(op,on,tp,tn)||overlap(op,on,np,nn)||overlap(op,on,pp,pn){return INVALID;}
+ if root>=nodes.len{return INVALID;}
+ // Token stream: ranges inside source, monotonic and disjoint, EOF last and only last.
+ var i:usize=0;
+ while i<tokens.len{
+  let t=tokens[i];
+  if t.start>t.end||t.end>source.len{return INVALID;}
+  if i!=0&&t.start<tokens[i-1].end{return INVALID;}
+  if (t.kind==lex.EOF)!=(i==tokens.len-1){return INVALID;}
+  i+=1;
+ }
+ // Every node's token and every parameter token index is in range before any token is read through it.
+ i=0;while i<nodes.len{if nodes[i].token>=tokens.len{return INVALID;}i+=1;}
+ i=0;
+ while i<parameter_tokens.len{
+  let t=parameter_tokens[i];
+  if t>=tokens.len{return INVALID;}
+  let tok=tokens[t];
+  if tok.kind!=lex.IDENTIFIER||tok.end==tok.start{return INVALID;}
+  var j:usize=0;while j<i{if same(source,tokens,t,parameter_tokens[j]){return INVALID;}j+=1;}
+  i+=1;
+ }
+ // UNSUPPORTED: any node kind other than INTEGER/NAME/BINARY, or a BINARY operator outside + - * & | ^.
+ // Decided here, after the safe descriptor/index checks and before any shape check; nothing is written.
+ i=0;
+ while i<nodes.len{
+  let n=nodes[i];
+  if n.kind==ast.INTEGER||n.kind==ast.NAME{}
+  else if n.kind==ast.BINARY{if operation(n.op)==NO_OPERATION{return UNSUPPORTED;}}
+  else{return UNSUPPORTED;}
+  i+=1;
+ }
+ // Exact shape of the three supported node kinds; literals through bigint.parse; names against the parameters.
+ var values:[24]u64=[0;24];var slot_of:[24]usize=[0;24];
+ var limbs:[2]u32=[0;2];var work:[32]u32=[0;32];
+ var count:usize=0;
+ i=0;
+ while i<nodes.len{
+  let n=nodes[i];let tok=tokens[n.token];
+  if n.next!=NONE||n.flags>1{return INVALID;}
+  if n.kind==ast.INTEGER{
+   if n.op!=0||n.a!=NONE||n.b!=NONE||n.c!=NONE{return INVALID;}
+   let length=tok.end-tok.start;
+   if tok.kind!=lex.INTEGER||length==0||length>MAX_LITERAL{return INVALID;}
+   var parsed=bi.Result{negative:false,used:0};
+   let text=slice_from_raw_parts(&source[tok.start],length);
+   if bi.parse(text,slice_from_raw_parts(&limbs[0],2),slice_from_raw_parts(&work[0],32),&parsed)!=bi.OK{return INVALID;}
+   var value:u64=0;
+   if parsed.used>=1{value=limbs[0]as u64;}
+   if parsed.used==2{value=value|((limbs[1]as u64)<<32);}
+   values[i]=value;count+=1;
+  }else if n.kind==ast.NAME{
+   if n.op!=0||n.a!=NONE||n.b!=NONE||n.c!=NONE||tok.kind!=lex.IDENTIFIER{return INVALID;}
+   var found=false;var j:usize=0;
+   while j<parameter_tokens.len&&!found{
+    if same(source,tokens,n.token,parameter_tokens[j]){found=true;slot_of[i]=j;}
+    j+=1;
+   }
+   if !found{return INVALID;}
+  }else{
+   if n.a>=nodes.len||n.b>=nodes.len||n.c!=NONE{return INVALID;}
+   if tok.kind!=n.op||tok.end-tok.start!=1||(source[tok.start]as u64)+1024!=n.op{return INVALID;}
+   count+=1;
+  }
+  i+=1;
+ }
+ if !tree_ok(nodes,root){return INVALID;}
+ if out.len<count{return CAPACITY;}
+ // Post-order, left subtree then right subtree then parent; NAME emits nothing; fresh slots start at p.
+ let parameters=parameter_tokens.len;var next=parameters;var written:usize=0;
+ var stack:[24]usize=[0;24];var state:[24]u8=[0;24];var sp2:usize=1;stack[0]=root;
+ while sp2!=0{
+  let id=stack[sp2-1];let n=nodes[id];let st=state[sp2-1];
+  if n.kind==ast.BINARY&&st<2{
+   state[sp2-1]=st+1;var child=n.a;if st==1{child=n.b;}
+   stack[sp2]=child;state[sp2]=0;sp2+=1;
+  }else{
+   sp2-=1;
+   if n.kind==ast.INTEGER{
+    slot_of[id]=next;
+    out[written]=f.Instruction{operation:f.CONST,destination:next,left:0,right:0,immediate:values[id]};
+    written+=1;next+=1;
+   }else if n.kind==ast.BINARY{
+    slot_of[id]=next;
+    out[written]=f.Instruction{operation:operation(n.op),destination:next,left:slot_of[n.a],right:slot_of[n.b],immediate:0};
+    written+=1;next+=1;
+   }
+  }
+ }
+ var slots=parameters+written;if slots==0{slots=1;}
+ *result=Result{instruction_count:written,slot_count:slots,return_slot:slot_of[root]};
+ return OK;
+}}

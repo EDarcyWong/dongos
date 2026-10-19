@@ -26,6 +26,8 @@ def inventory(root, *, source_filter=False, works_root=None):
     for directory, dirs, files in os.walk(root):
         base = Path(directory)
         dirs[:] = [d for d in dirs if d not in EXCLUDE and (not source_filter or not d.startswith('.'))]
+        if base == root and 'state' in dirs and (base / 'state' / 'tasks').is_dir() and (base / 'state' / '.gitattributes').is_file():
+            dirs.remove('state')   # the coordinator's own task-state snapshot (works root == project root layout)
         dirs[:] = [d for d in dirs if not (base / d).is_symlink() and not (base / d).is_junction()]
         for name in files:
             if source_filter and name.startswith('.'):

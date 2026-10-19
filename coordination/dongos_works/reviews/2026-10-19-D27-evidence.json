@@ -1,0 +1,2625 @@
+{
+  "task": "deepseek:D27",
+  "submission_rev": 3,
+  "formal_job": "5830ef22792f4e57ab60d920f30bb0ec",
+  "formal": {
+    "passed": true,
+    "checks": [
+      {
+        "spec": "discover:deepseek-works/tests:test_nasm_indexed_memory_function.py",
+        "passed": true,
+        "tests": 3,
+        "skips": 0,
+        "returncode": 0,
+        "cancelled": false,
+        "timed_out": false,
+        "elapsed_seconds": 160.703
+      }
+    ],
+    "source_stable": true,
+    "fingerprint": {
+      "deepseek-works/src/bootstrap/nasm_indexed_memory_function.dg": "2d040bfe6e59b522fdafcfee8155af791fa44937698233b1e6acee5d3b3a6194",
+      "deepseek-works/src/bootstrap/nasm_indexed_memory_function.md": "59630b8a197f7c169eeb1cf325e32ee688e1df16152ef07a96bb7f584fd6a6b3",
+      "deepseek-works/tests/test_nasm_indexed_memory_function.py": "a32ca13a4a643beb9d93a1cf01a9e6894f8b16b6a6f63c0cf5f557493df1b07f",
+      "deepseek-works/deliveries/D27.md": "aaedfaed97333d28a227daf9b11289207dab18725002a9ccdca09f6dce8663da"
+    },
+    "summary": "定向复验通过，等待源码/契约审查",
+    "finished_at": "2026-10-19T15:38:18+00:00"
+  },
+  "run": "D:\\projects\\2026\\dongos\\coordination\\dongos_works\\.local\\runs\\5830ef22792f4e57ab60d920f30bb0ec\\workspace\\deepseek-works\\build\\D27\\run-6eb24ba1a22d42d0b9c08fcf65a2f8ac",
+  "input_sha256": {
+    "nasm_indexed_memory_function.dg": "2d040bfe6e59b522fdafcfee8155af791fa44937698233b1e6acee5d3b3a6194",
+    "nasm_indexed_memory_function.md": "59630b8a197f7c169eeb1cf325e32ee688e1df16152ef07a96bb7f584fd6a6b3",
+    "test_nasm_indexed_memory_function.py": "a32ca13a4a643beb9d93a1cf01a9e6894f8b16b6a6f63c0cf5f557493df1b07f",
+    "nasm_symbol.dg": "25675ec83d79c6f2b34bebfdd837e75d80dc384e900939be0c75d06a7bde4c06",
+    "decimal_integer.dg": "58a4e4d746393d0e5944656aeb4c6f2aff96acca047afd455c60a47464ce0b76",
+    "nasm_sysv_function_entry.dg": "cdc1d25188ddb08f8605c68e9b38dc5889e3fd65c5c7f7ae278369767153ba44",
+    "nasm_function_frame.dg": "08580fdf8ebbd75dc27812bb63f4e425a18e66b285fd5ccd7805d1d6dc55e9ff",
+    "nasm_sysv_incoming_args.dg": "bbaf9d38f0b7993e0d9da3ff86e8c0d86ecc0bbdca09e7617a878b57c3e3f714",
+    "sysv_integer_args.dg": "75c4ab5fd07d586684eb753958654e6e6658ff90e4d77f2a1ea96cb110573204",
+    "nasm_memory_operand.dg": "e3d072a3ea1314975427bb0e24426da2adaf3de692101f3e3e8d6768697f1d24",
+    "nasm_integer_load.dg": "5249d76698c8b5d91e78048652271ac8ab83b44f97caf8f2c479effe9485d017",
+    "nasm_integer_memory_load.dg": "88624e98077d19615117f2a0f9ac6c67e80993ce222609c376288da3e45d3fec",
+    "nasm_integer_memory_store.dg": "bab7c97377a90eb581ff25b681e7462fb4ab97bd082de1c203bca5b3587b0b24",
+    "nasm_block_emit.dg": "261cb03c7f7d34b395e1154351aad4844ab7d0096122790d39959fe275b447a6",
+    "nasm_bounds_guard.dg": "e0d615e3a5320fa533dc6d9e7fe6784bfd5d6582ee160ae6b9749c9100e8a78e",
+    "nasm_indexed_operand.dg": "52dd694c4bef859fc482b10c0fa7ebdf3332f03d623015fd81d07ae4fd144bc2",
+    "nasm_integer_cast.dg": "47459f6c70a82c4011890015e4d2cf20db6d16dad7be2799afb4cf6d2d6a2d0f",
+    "nasm_sysv_function_exit.dg": "9dffc7415ea414310cb68e81457fb1b0c04040fc52d01c4bb1a2643af9fd29f2",
+    "nasm_sysv_return_values.dg": "7a3760f6ef81dbc3f436541a2de3fb746aff723fa72dc4ba851c293d2a064b32",
+    "sysv_return_plan.dg": "f880c0e387e9561f00a51b87713fcdd7af24a065dd0be407325b3290e6a0c08e"
+  },
+  "artifact_hashes_checked": 407,
+  "native_observations": [
+    {
+      "label": "native-debug",
+      "vectors": 21,
+      "mutant": null,
+      "all_abi_and_guards_checked": true,
+      "raw_sha256": "17390f998a1fc7fc8c21030599247ce156f082e587d3e775a0319fecbe3b6cd5",
+      "records": [
+        {
+          "index": 0,
+          "actual_pair": [
+            129,
+            0
+          ],
+          "good_pair": [
+            129,
+            0
+          ],
+          "pair_differs_from_good": false,
+          "memory_differs_from_good": false,
+          "changed_offsets_vs_good": [],
+          "memory_sha256": "accf96a60b4951c2f795a6d6035313ad3d86d449930302e37bede5c6e1b258fa"
+        },
+        {
+          "index": 1,
+          "actual_pair": [
+            18446744073709551562,
+            0
+          ],
+          "good_pair": [
+            18446744073709551562,
+            0
+          ],
+          "pair_differs_from_good": false,
+          "memory_differs_from_good": false,
+          "changed_offsets_vs_good": [],
+          "memory_sha256": "accf96a60b4951c2f795a6d6035313ad3d86d449930302e37bede5c6e1b258fa"
+        },
+        {
+          "index": 2,
+          "actual_pair": [
+            32823,
+            0
+          ],
+          "good_pair": [
+            32823,
+            0
+          ],
+          "pair_differs_from_good": false,
+          "memory_differs_from_good": false,
+          "changed_offsets_vs_good": [],
+          "memory_sha256": "accf96a60b4951c2f795a6d6035313ad3d86d449930302e37bede5c6e1b258fa"
+        },
+        {
+          "index": 3,
+          "actual_pair": [
+            18446744073709537921,
+            0
+          ],
+          "good_pair": [
+            18446744073709537921,
+            0
+          ],
+          "pair_differs_from_good": false,
+          "memory_differs_from_good": false,
+          "changed_offsets_vs_good": [],
+          "memory_sha256": "accf96a60b4951c2f795a6d6035313ad3d86d449930302e37bede5c6e1b258fa"
+        },
+        {
+          "index": 4,
+          "actual_pair": [
+            3363780333,
+            0
+          ],
+          "good_pair": [
+            3363780333,
+            0
+          ],
+          "pair_differs_from_good": false,
+          "memory_differs_from_good": false,
+          "changed_offsets_vs_good": [],
+          "memory_sha256": "accf96a60b4951c2f795a6d6035313ad3d86d449930302e37bede5c6e1b258fa"
+        },
+        {
+          "index": 5,
+          "actual_pair": [
+            18446744072778364653,
+            0
+          ],
+          "good_pair": [
+            18446744072778364653,
+            0
+          ],
+          "pair_differs_from_good": false,
+          "memory_differs_from_good": false,
+          "changed_offsets_vs_good": [],
+          "memory_sha256": "accf96a60b4951c2f795a6d6035313ad3d86d449930302e37bede5c6e1b258fa"
+        },
+        {
+          "index": 6,
+          "actual_pair": [
+            9239115554555677313,
+            0
+          ],
+          "good_pair": [
+            9239115554555677313,
+            0
+          ],
+          "pair_differs_from_good": false,
+          "memory_differs_from_good": false,
+          "changed_offsets_vs_good": [],
+          "memory_sha256": "accf96a60b4951c2f795a6d6035313ad3d86d449930302e37bede5c6e1b258fa"
+        },
+        {
+          "index": 7,
+          "actual_pair": [
+            129,
+            0
+          ],
+          "good_pair": [
+            129,
+            0
+          ],
+          "pair_differs_from_good": false,
+          "memory_differs_from_good": false,
+          "changed_offsets_vs_good": [],
+          "memory_sha256": "4125ade3ad553f80876931193c57202f13b3b337cb372ddab0cb2c581e0d394a"
+        },
+        {
+          "index": 8,
+          "actual_pair": [
+            12929,
+            0
+          ],
+          "good_pair": [
+            12929,
+            0
+          ],
+          "pair_differs_from_good": false,
+          "memory_differs_from_good": false,
+          "changed_offsets_vs_good": [],
+          "memory_sha256": "9fd5a454a90476e4e8c3039da821e577f303ebd1bf1df35296e0ff0d7e52c820"
+        },
+        {
+          "index": 9,
+          "actual_pair": [
+            1985229441,
+            0
+          ],
+          "good_pair": [
+            1985229441,
+            0
+          ],
+          "pair_differs_from_good": false,
+          "memory_differs_from_good": false,
+          "changed_offsets_vs_good": [],
+          "memory_sha256": "e83b93c98f34ed9157caaf21d68b9beaf993b41a8e74da2e20f9b994ae16e233"
+        },
+        {
+          "index": 10,
+          "actual_pair": [
+            18364758544493064833,
+            0
+          ],
+          "good_pair": [
+            18364758544493064833,
+            0
+          ],
+          "pair_differs_from_good": false,
+          "memory_differs_from_good": false,
+          "changed_offsets_vs_good": [],
+          "memory_sha256": "43997d676062b90add6984151b9334456ebe7c0584817313c5b7bcf91fa9a1d6"
+        },
+        {
+          "index": 11,
+          "actual_pair": [
+            129,
+            0
+          ],
+          "good_pair": [
+            129,
+            0
+          ],
+          "pair_differs_from_good": false,
+          "memory_differs_from_good": false,
+          "changed_offsets_vs_good": [],
+          "memory_sha256": "accf96a60b4951c2f795a6d6035313ad3d86d449930302e37bede5c6e1b258fa"
+        },
+        {
+          "index": 12,
+          "actual_pair": [
+            0,
+            1
+          ],
+          "good_pair": [
+            0,
+            1
+          ],
+          "pair_differs_from_good": false,
+          "memory_differs_from_good": false,
+          "changed_offsets_vs_good": [],
+          "memory_sha256": "accf96a60b4951c2f795a6d6035313ad3d86d449930302e37bede5c6e1b258fa"
+        },
+        {
+          "index": 13,
+          "actual_pair": [
+            0,
+            1
+          ],
+          "good_pair": [
+            0,
+            1
+          ],
+          "pair_differs_from_good": false,
+          "memory_differs_from_good": false,
+          "changed_offsets_vs_good": [],
+          "memory_sha256": "accf96a60b4951c2f795a6d6035313ad3d86d449930302e37bede5c6e1b258fa"
+        },
+        {
+          "index": 14,
+          "actual_pair": [
+            0,
+            1
+          ],
+          "good_pair": [
+            0,
+            1
+          ],
+          "pair_differs_from_good": false,
+          "memory_differs_from_good": false,
+          "changed_offsets_vs_good": [],
+          "memory_sha256": "accf96a60b4951c2f795a6d6035313ad3d86d449930302e37bede5c6e1b258fa"
+        },
+        {
+          "index": 15,
+          "actual_pair": [
+            0,
+            1
+          ],
+          "good_pair": [
+            0,
+            1
+          ],
+          "pair_differs_from_good": false,
+          "memory_differs_from_good": false,
+          "changed_offsets_vs_good": [],
+          "memory_sha256": "accf96a60b4951c2f795a6d6035313ad3d86d449930302e37bede5c6e1b258fa"
+        },
+        {
+          "index": 16,
+          "actual_pair": [
+            0,
+            1
+          ],
+          "good_pair": [
+            0,
+            1
+          ],
+          "pair_differs_from_good": false,
+          "memory_differs_from_good": false,
+          "changed_offsets_vs_good": [],
+          "memory_sha256": "accf96a60b4951c2f795a6d6035313ad3d86d449930302e37bede5c6e1b258fa"
+        },
+        {
+          "index": 17,
+          "actual_pair": [
+            0,
+            1
+          ],
+          "good_pair": [
+            0,
+            1
+          ],
+          "pair_differs_from_good": false,
+          "memory_differs_from_good": false,
+          "changed_offsets_vs_good": [],
+          "memory_sha256": "accf96a60b4951c2f795a6d6035313ad3d86d449930302e37bede5c6e1b258fa"
+        },
+        {
+          "index": 18,
+          "actual_pair": [
+            0,
+            1
+          ],
+          "good_pair": [
+            0,
+            1
+          ],
+          "pair_differs_from_good": false,
+          "memory_differs_from_good": false,
+          "changed_offsets_vs_good": [],
+          "memory_sha256": "accf96a60b4951c2f795a6d6035313ad3d86d449930302e37bede5c6e1b258fa"
+        },
+        {
+          "index": 19,
+          "actual_pair": [
+            0,
+            1
+          ],
+          "good_pair": [
+            0,
+            1
+          ],
+          "pair_differs_from_good": false,
+          "memory_differs_from_good": false,
+          "changed_offsets_vs_good": [],
+          "memory_sha256": "accf96a60b4951c2f795a6d6035313ad3d86d449930302e37bede5c6e1b258fa"
+        },
+        {
+          "index": 20,
+          "actual_pair": [
+            0,
+            1
+          ],
+          "good_pair": [
+            0,
+            1
+          ],
+          "pair_differs_from_good": false,
+          "memory_differs_from_good": false,
+          "changed_offsets_vs_good": [],
+          "memory_sha256": "accf96a60b4951c2f795a6d6035313ad3d86d449930302e37bede5c6e1b258fa"
+        }
+      ]
+    },
+    {
+      "label": "bad-scale-good-debug-fixture0",
+      "vectors": 1,
+      "mutant": null,
+      "all_abi_and_guards_checked": true,
+      "raw_sha256": "fe4aa8100320c8c251188dab97114fed8f7b905d8f8ab3b2d0fc6acc41f227a9",
+      "records": [
+        {
+          "index": 0,
+          "actual_pair": [
+            32823,
+            0
+          ],
+          "good_pair": [
+            32823,
+            0
+          ],
+          "pair_differs_from_good": false,
+          "memory_differs_from_good": false,
+          "changed_offsets_vs_good": [],
+          "memory_sha256": "accf96a60b4951c2f795a6d6035313ad3d86d449930302e37bede5c6e1b258fa"
+        }
+      ]
+    },
+    {
+      "label": "bad-scale-debug-fixture0",
+      "vectors": 1,
+      "mutant": "scale",
+      "all_abi_and_guards_checked": true,
+      "raw_sha256": "21c16bc563697f9e17e0827e0aa42d43ced31ae3fb8fd2149a318961192b515f",
+      "records": [
+        {
+          "index": 0,
+          "actual_pair": [
+            14061,
+            0
+          ],
+          "good_pair": [
+            32823,
+            0
+          ],
+          "pair_differs_from_good": true,
+          "memory_differs_from_good": false,
+          "changed_offsets_vs_good": [],
+          "memory_sha256": "accf96a60b4951c2f795a6d6035313ad3d86d449930302e37bede5c6e1b258fa"
+        }
+      ]
+    },
+    {
+      "label": "bad-scale-good-debug-fixture1",
+      "vectors": 1,
+      "mutant": null,
+      "all_abi_and_guards_checked": true,
+      "raw_sha256": "648b58a482680900edf8116a03ed6581ed413586bf000051d4bcadcde9aaaffb",
+      "records": [
+        {
+          "index": 0,
+          "actual_pair": [
+            1985229441,
+            0
+          ],
+          "good_pair": [
+            1985229441,
+            0
+          ],
+          "pair_differs_from_good": false,
+          "memory_differs_from_good": false,
+          "changed_offsets_vs_good": [],
+          "memory_sha256": "cb7ba4dde7a48d1214e904c75d5fcb80211172bf8f4f8beabe4b500e475f14fd"
+        }
+      ]
+    },
+    {
+      "label": "bad-scale-debug-fixture1",
+      "vectors": 1,
+      "mutant": "scale",
+      "all_abi_and_guards_checked": true,
+      "raw_sha256": "db31bc5f52a3b662e05a7d283611cc8366c6850f685c3fc22692c9493bb7f8a6",
+      "records": [
+        {
+          "index": 0,
+          "actual_pair": [
+            1985229441,
+            0
+          ],
+          "good_pair": [
+            1985229441,
+            0
+          ],
+          "pair_differs_from_good": false,
+          "memory_differs_from_good": true,
+          "changed_offsets_vs_good": [
+            38,
+            39,
+            40,
+            41,
+            44,
+            45,
+            46,
+            47
+          ],
+          "memory_sha256": "2e8842d7dc2a2e31894ae366152cc26b0c87aa3cfd6d491ad2066dd07c8ce1d5"
+        }
+      ]
+    },
+    {
+      "label": "bad-bounds-index-good-debug-fixture0",
+      "vectors": 1,
+      "mutant": null,
+      "all_abi_and_guards_checked": true,
+      "raw_sha256": "0c426ed19a85876ead532015764c7c43e35de5fdff5742daa6d7897a9e88954a",
+      "records": [
+        {
+          "index": 0,
+          "actual_pair": [
+            0,
+            1
+          ],
+          "good_pair": [
+            0,
+            1
+          ],
+          "pair_differs_from_good": false,
+          "memory_differs_from_good": false,
+          "changed_offsets_vs_good": [],
+          "memory_sha256": "accf96a60b4951c2f795a6d6035313ad3d86d449930302e37bede5c6e1b258fa"
+        }
+      ]
+    },
+    {
+      "label": "bad-bounds-index-debug-fixture0",
+      "vectors": 1,
+      "mutant": "bounds",
+      "all_abi_and_guards_checked": true,
+      "raw_sha256": "1530ee6c9c27b0dba594862bafd36819f390568eb76bf6299293fb333283f678",
+      "records": [
+        {
+          "index": 0,
+          "actual_pair": [
+            61093,
+            0
+          ],
+          "good_pair": [
+            0,
+            1
+          ],
+          "pair_differs_from_good": true,
+          "memory_differs_from_good": false,
+          "changed_offsets_vs_good": [],
+          "memory_sha256": "accf96a60b4951c2f795a6d6035313ad3d86d449930302e37bede5c6e1b258fa"
+        }
+      ]
+    },
+    {
+      "label": "bad-bounds-index-good-debug-fixture1",
+      "vectors": 1,
+      "mutant": null,
+      "all_abi_and_guards_checked": true,
+      "raw_sha256": "0c426ed19a85876ead532015764c7c43e35de5fdff5742daa6d7897a9e88954a",
+      "records": [
+        {
+          "index": 0,
+          "actual_pair": [
+            0,
+            1
+          ],
+          "good_pair": [
+            0,
+            1
+          ],
+          "pair_differs_from_good": false,
+          "memory_differs_from_good": false,
+          "changed_offsets_vs_good": [],
+          "memory_sha256": "accf96a60b4951c2f795a6d6035313ad3d86d449930302e37bede5c6e1b258fa"
+        }
+      ]
+    },
+    {
+      "label": "bad-bounds-index-debug-fixture1",
+      "vectors": 1,
+      "mutant": "bounds",
+      "all_abi_and_guards_checked": true,
+      "raw_sha256": "9aab6bc98f4c3843ba2eba3cb1e65031978997720b70be5188300f23d697b7e0",
+      "records": [
+        {
+          "index": 0,
+          "actual_pair": [
+            18446744073709551615,
+            0
+          ],
+          "good_pair": [
+            0,
+            1
+          ],
+          "pair_differs_from_good": true,
+          "memory_differs_from_good": true,
+          "changed_offsets_vs_good": [
+            48,
+            49,
+            50,
+            51,
+            52,
+            53,
+            54,
+            55
+          ],
+          "memory_sha256": "4083b093ab5e7c483ef6f0449b2642c613512fbb28b35ff82d0514967914b267"
+        }
+      ]
+    },
+    {
+      "label": "bad-early-header-good-debug",
+      "vectors": 1,
+      "mutant": null,
+      "all_abi_and_guards_checked": true,
+      "raw_sha256": "b0d03f5b560578f3b121b758cc2126700c7d6b4319745fa566f64d0d5e89a2e4",
+      "records": [
+        {
+          "index": 0,
+          "actual_pair": [
+            129,
+            0
+          ],
+          "good_pair": [
+            129,
+            0
+          ],
+          "pair_differs_from_good": false,
+          "memory_differs_from_good": false,
+          "changed_offsets_vs_good": [],
+          "memory_sha256": "accf96a60b4951c2f795a6d6035313ad3d86d449930302e37bede5c6e1b258fa"
+        }
+      ]
+    },
+    {
+      "label": "native-release",
+      "vectors": 21,
+      "mutant": null,
+      "all_abi_and_guards_checked": true,
+      "raw_sha256": "17390f998a1fc7fc8c21030599247ce156f082e587d3e775a0319fecbe3b6cd5",
+      "records": [
+        {
+          "index": 0,
+          "actual_pair": [
+            129,
+            0
+          ],
+          "good_pair": [
+            129,
+            0
+          ],
+          "pair_differs_from_good": false,
+          "memory_differs_from_good": false,
+          "changed_offsets_vs_good": [],
+          "memory_sha256": "accf96a60b4951c2f795a6d6035313ad3d86d449930302e37bede5c6e1b258fa"
+        },
+        {
+          "index": 1,
+          "actual_pair": [
+            18446744073709551562,
+            0
+          ],
+          "good_pair": [
+            18446744073709551562,
+            0
+          ],
+          "pair_differs_from_good": false,
+          "memory_differs_from_good": false,
+          "changed_offsets_vs_good": [],
+          "memory_sha256": "accf96a60b4951c2f795a6d6035313ad3d86d449930302e37bede5c6e1b258fa"
+        },
+        {
+          "index": 2,
+          "actual_pair": [
+            32823,
+            0
+          ],
+          "good_pair": [
+            32823,
+            0
+          ],
+          "pair_differs_from_good": false,
+          "memory_differs_from_good": false,
+          "changed_offsets_vs_good": [],
+          "memory_sha256": "accf96a60b4951c2f795a6d6035313ad3d86d449930302e37bede5c6e1b258fa"
+        },
+        {
+          "index": 3,
+          "actual_pair": [
+            18446744073709537921,
+            0
+          ],
+          "good_pair": [
+            18446744073709537921,
+            0
+          ],
+          "pair_differs_from_good": false,
+          "memory_differs_from_good": false,
+          "changed_offsets_vs_good": [],
+          "memory_sha256": "accf96a60b4951c2f795a6d6035313ad3d86d449930302e37bede5c6e1b258fa"
+        },
+        {
+          "index": 4,
+          "actual_pair": [
+            3363780333,
+            0
+          ],
+          "good_pair": [
+            3363780333,
+            0
+          ],
+          "pair_differs_from_good": false,
+          "memory_differs_from_good": false,
+          "changed_offsets_vs_good": [],
+          "memory_sha256": "accf96a60b4951c2f795a6d6035313ad3d86d449930302e37bede5c6e1b258fa"
+        },
+        {
+          "index": 5,
+          "actual_pair": [
+            18446744072778364653,
+            0
+          ],
+          "good_pair": [
+            18446744072778364653,
+            0
+          ],
+          "pair_differs_from_good": false,
+          "memory_differs_from_good": false,
+          "changed_offsets_vs_good": [],
+          "memory_sha256": "accf96a60b4951c2f795a6d6035313ad3d86d449930302e37bede5c6e1b258fa"
+        },
+        {
+          "index": 6,
+          "actual_pair": [
+            9239115554555677313,
+            0
+          ],
+          "good_pair": [
+            9239115554555677313,
+            0
+          ],
+          "pair_differs_from_good": false,
+          "memory_differs_from_good": false,
+          "changed_offsets_vs_good": [],
+          "memory_sha256": "accf96a60b4951c2f795a6d6035313ad3d86d449930302e37bede5c6e1b258fa"
+        },
+        {
+          "index": 7,
+          "actual_pair": [
+            129,
+            0
+          ],
+          "good_pair": [
+            129,
+            0
+          ],
+          "pair_differs_from_good": false,
+          "memory_differs_from_good": false,
+          "changed_offsets_vs_good": [],
+          "memory_sha256": "4125ade3ad553f80876931193c57202f13b3b337cb372ddab0cb2c581e0d394a"
+        },
+        {
+          "index": 8,
+          "actual_pair": [
+            12929,
+            0
+          ],
+          "good_pair": [
+            12929,
+            0
+          ],
+          "pair_differs_from_good": false,
+          "memory_differs_from_good": false,
+          "changed_offsets_vs_good": [],
+          "memory_sha256": "9fd5a454a90476e4e8c3039da821e577f303ebd1bf1df35296e0ff0d7e52c820"
+        },
+        {
+          "index": 9,
+          "actual_pair": [
+            1985229441,
+            0
+          ],
+          "good_pair": [
+            1985229441,
+            0
+          ],
+          "pair_differs_from_good": false,
+          "memory_differs_from_good": false,
+          "changed_offsets_vs_good": [],
+          "memory_sha256": "e83b93c98f34ed9157caaf21d68b9beaf993b41a8e74da2e20f9b994ae16e233"
+        },
+        {
+          "index": 10,
+          "actual_pair": [
+            18364758544493064833,
+            0
+          ],
+          "good_pair": [
+            18364758544493064833,
+            0
+          ],
+          "pair_differs_from_good": false,
+          "memory_differs_from_good": false,
+          "changed_offsets_vs_good": [],
+          "memory_sha256": "43997d676062b90add6984151b9334456ebe7c0584817313c5b7bcf91fa9a1d6"
+        },
+        {
+          "index": 11,
+          "actual_pair": [
+            129,
+            0
+          ],
+          "good_pair": [
+            129,
+            0
+          ],
+          "pair_differs_from_good": false,
+          "memory_differs_from_good": false,
+          "changed_offsets_vs_good": [],
+          "memory_sha256": "accf96a60b4951c2f795a6d6035313ad3d86d449930302e37bede5c6e1b258fa"
+        },
+        {
+          "index": 12,
+          "actual_pair": [
+            0,
+            1
+          ],
+          "good_pair": [
+            0,
+            1
+          ],
+          "pair_differs_from_good": false,
+          "memory_differs_from_good": false,
+          "changed_offsets_vs_good": [],
+          "memory_sha256": "accf96a60b4951c2f795a6d6035313ad3d86d449930302e37bede5c6e1b258fa"
+        },
+        {
+          "index": 13,
+          "actual_pair": [
+            0,
+            1
+          ],
+          "good_pair": [
+            0,
+            1
+          ],
+          "pair_differs_from_good": false,
+          "memory_differs_from_good": false,
+          "changed_offsets_vs_good": [],
+          "memory_sha256": "accf96a60b4951c2f795a6d6035313ad3d86d449930302e37bede5c6e1b258fa"
+        },
+        {
+          "index": 14,
+          "actual_pair": [
+            0,
+            1
+          ],
+          "good_pair": [
+            0,
+            1
+          ],
+          "pair_differs_from_good": false,
+          "memory_differs_from_good": false,
+          "changed_offsets_vs_good": [],
+          "memory_sha256": "accf96a60b4951c2f795a6d6035313ad3d86d449930302e37bede5c6e1b258fa"
+        },
+        {
+          "index": 15,
+          "actual_pair": [
+            0,
+            1
+          ],
+          "good_pair": [
+            0,
+            1
+          ],
+          "pair_differs_from_good": false,
+          "memory_differs_from_good": false,
+          "changed_offsets_vs_good": [],
+          "memory_sha256": "accf96a60b4951c2f795a6d6035313ad3d86d449930302e37bede5c6e1b258fa"
+        },
+        {
+          "index": 16,
+          "actual_pair": [
+            0,
+            1
+          ],
+          "good_pair": [
+            0,
+            1
+          ],
+          "pair_differs_from_good": false,
+          "memory_differs_from_good": false,
+          "changed_offsets_vs_good": [],
+          "memory_sha256": "accf96a60b4951c2f795a6d6035313ad3d86d449930302e37bede5c6e1b258fa"
+        },
+        {
+          "index": 17,
+          "actual_pair": [
+            0,
+            1
+          ],
+          "good_pair": [
+            0,
+            1
+          ],
+          "pair_differs_from_good": false,
+          "memory_differs_from_good": false,
+          "changed_offsets_vs_good": [],
+          "memory_sha256": "accf96a60b4951c2f795a6d6035313ad3d86d449930302e37bede5c6e1b258fa"
+        },
+        {
+          "index": 18,
+          "actual_pair": [
+            0,
+            1
+          ],
+          "good_pair": [
+            0,
+            1
+          ],
+          "pair_differs_from_good": false,
+          "memory_differs_from_good": false,
+          "changed_offsets_vs_good": [],
+          "memory_sha256": "accf96a60b4951c2f795a6d6035313ad3d86d449930302e37bede5c6e1b258fa"
+        },
+        {
+          "index": 19,
+          "actual_pair": [
+            0,
+            1
+          ],
+          "good_pair": [
+            0,
+            1
+          ],
+          "pair_differs_from_good": false,
+          "memory_differs_from_good": false,
+          "changed_offsets_vs_good": [],
+          "memory_sha256": "accf96a60b4951c2f795a6d6035313ad3d86d449930302e37bede5c6e1b258fa"
+        },
+        {
+          "index": 20,
+          "actual_pair": [
+            0,
+            1
+          ],
+          "good_pair": [
+            0,
+            1
+          ],
+          "pair_differs_from_good": false,
+          "memory_differs_from_good": false,
+          "changed_offsets_vs_good": [],
+          "memory_sha256": "accf96a60b4951c2f795a6d6035313ad3d86d449930302e37bede5c6e1b258fa"
+        }
+      ]
+    },
+    {
+      "label": "bad-scale-good-release-fixture0",
+      "vectors": 1,
+      "mutant": null,
+      "all_abi_and_guards_checked": true,
+      "raw_sha256": "fe4aa8100320c8c251188dab97114fed8f7b905d8f8ab3b2d0fc6acc41f227a9",
+      "records": [
+        {
+          "index": 0,
+          "actual_pair": [
+            32823,
+            0
+          ],
+          "good_pair": [
+            32823,
+            0
+          ],
+          "pair_differs_from_good": false,
+          "memory_differs_from_good": false,
+          "changed_offsets_vs_good": [],
+          "memory_sha256": "accf96a60b4951c2f795a6d6035313ad3d86d449930302e37bede5c6e1b258fa"
+        }
+      ]
+    },
+    {
+      "label": "bad-scale-release-fixture0",
+      "vectors": 1,
+      "mutant": "scale",
+      "all_abi_and_guards_checked": true,
+      "raw_sha256": "21c16bc563697f9e17e0827e0aa42d43ced31ae3fb8fd2149a318961192b515f",
+      "records": [
+        {
+          "index": 0,
+          "actual_pair": [
+            14061,
+            0
+          ],
+          "good_pair": [
+            32823,
+            0
+          ],
+          "pair_differs_from_good": true,
+          "memory_differs_from_good": false,
+          "changed_offsets_vs_good": [],
+          "memory_sha256": "accf96a60b4951c2f795a6d6035313ad3d86d449930302e37bede5c6e1b258fa"
+        }
+      ]
+    },
+    {
+      "label": "bad-scale-good-release-fixture1",
+      "vectors": 1,
+      "mutant": null,
+      "all_abi_and_guards_checked": true,
+      "raw_sha256": "648b58a482680900edf8116a03ed6581ed413586bf000051d4bcadcde9aaaffb",
+      "records": [
+        {
+          "index": 0,
+          "actual_pair": [
+            1985229441,
+            0
+          ],
+          "good_pair": [
+            1985229441,
+            0
+          ],
+          "pair_differs_from_good": false,
+          "memory_differs_from_good": false,
+          "changed_offsets_vs_good": [],
+          "memory_sha256": "cb7ba4dde7a48d1214e904c75d5fcb80211172bf8f4f8beabe4b500e475f14fd"
+        }
+      ]
+    },
+    {
+      "label": "bad-scale-release-fixture1",
+      "vectors": 1,
+      "mutant": "scale",
+      "all_abi_and_guards_checked": true,
+      "raw_sha256": "db31bc5f52a3b662e05a7d283611cc8366c6850f685c3fc22692c9493bb7f8a6",
+      "records": [
+        {
+          "index": 0,
+          "actual_pair": [
+            1985229441,
+            0
+          ],
+          "good_pair": [
+            1985229441,
+            0
+          ],
+          "pair_differs_from_good": false,
+          "memory_differs_from_good": true,
+          "changed_offsets_vs_good": [
+            38,
+            39,
+            40,
+            41,
+            44,
+            45,
+            46,
+            47
+          ],
+          "memory_sha256": "2e8842d7dc2a2e31894ae366152cc26b0c87aa3cfd6d491ad2066dd07c8ce1d5"
+        }
+      ]
+    },
+    {
+      "label": "bad-bounds-index-good-release-fixture0",
+      "vectors": 1,
+      "mutant": null,
+      "all_abi_and_guards_checked": true,
+      "raw_sha256": "0c426ed19a85876ead532015764c7c43e35de5fdff5742daa6d7897a9e88954a",
+      "records": [
+        {
+          "index": 0,
+          "actual_pair": [
+            0,
+            1
+          ],
+          "good_pair": [
+            0,
+            1
+          ],
+          "pair_differs_from_good": false,
+          "memory_differs_from_good": false,
+          "changed_offsets_vs_good": [],
+          "memory_sha256": "accf96a60b4951c2f795a6d6035313ad3d86d449930302e37bede5c6e1b258fa"
+        }
+      ]
+    },
+    {
+      "label": "bad-bounds-index-release-fixture0",
+      "vectors": 1,
+      "mutant": "bounds",
+      "all_abi_and_guards_checked": true,
+      "raw_sha256": "1530ee6c9c27b0dba594862bafd36819f390568eb76bf6299293fb333283f678",
+      "records": [
+        {
+          "index": 0,
+          "actual_pair": [
+            61093,
+            0
+          ],
+          "good_pair": [
+            0,
+            1
+          ],
+          "pair_differs_from_good": true,
+          "memory_differs_from_good": false,
+          "changed_offsets_vs_good": [],
+          "memory_sha256": "accf96a60b4951c2f795a6d6035313ad3d86d449930302e37bede5c6e1b258fa"
+        }
+      ]
+    },
+    {
+      "label": "bad-bounds-index-good-release-fixture1",
+      "vectors": 1,
+      "mutant": null,
+      "all_abi_and_guards_checked": true,
+      "raw_sha256": "0c426ed19a85876ead532015764c7c43e35de5fdff5742daa6d7897a9e88954a",
+      "records": [
+        {
+          "index": 0,
+          "actual_pair": [
+            0,
+            1
+          ],
+          "good_pair": [
+            0,
+            1
+          ],
+          "pair_differs_from_good": false,
+          "memory_differs_from_good": false,
+          "changed_offsets_vs_good": [],
+          "memory_sha256": "accf96a60b4951c2f795a6d6035313ad3d86d449930302e37bede5c6e1b258fa"
+        }
+      ]
+    },
+    {
+      "label": "bad-bounds-index-release-fixture1",
+      "vectors": 1,
+      "mutant": "bounds",
+      "all_abi_and_guards_checked": true,
+      "raw_sha256": "9aab6bc98f4c3843ba2eba3cb1e65031978997720b70be5188300f23d697b7e0",
+      "records": [
+        {
+          "index": 0,
+          "actual_pair": [
+            18446744073709551615,
+            0
+          ],
+          "good_pair": [
+            0,
+            1
+          ],
+          "pair_differs_from_good": true,
+          "memory_differs_from_good": true,
+          "changed_offsets_vs_good": [
+            48,
+            49,
+            50,
+            51,
+            52,
+            53,
+            54,
+            55
+          ],
+          "memory_sha256": "4083b093ab5e7c483ef6f0449b2642c613512fbb28b35ff82d0514967914b267"
+        }
+      ]
+    },
+    {
+      "label": "bad-early-header-good-release",
+      "vectors": 1,
+      "mutant": null,
+      "all_abi_and_guards_checked": true,
+      "raw_sha256": "b0d03f5b560578f3b121b758cc2126700c7d6b4319745fa566f64d0d5e89a2e4",
+      "records": [
+        {
+          "index": 0,
+          "actual_pair": [
+            129,
+            0
+          ],
+          "good_pair": [
+            129,
+            0
+          ],
+          "pair_differs_from_good": false,
+          "memory_differs_from_good": false,
+          "changed_offsets_vs_good": [],
+          "memory_sha256": "accf96a60b4951c2f795a6d6035313ad3d86d449930302e37bede5c6e1b258fa"
+        }
+      ]
+    }
+  ],
+  "test_records": [
+    {
+      "test": "exact-text-capacity-invalid-readonly",
+      "cases_per_mode": 86,
+      "preflights_per_process": 31,
+      "passed": true
+    },
+    {
+      "native": "native-debug",
+      "normal_exit": true,
+      "observations": [
+        [
+          129,
+          0,
+          6683504,
+          6683504,
+          845282253045697467,
+          845282253045697467,
+          795741901218843403,
+          1302123111085380114,
+          1374463283923456787,
+          1446803456761533460,
+          1519143629599610133,
+          6674804268309651740,
+          0
+        ],
+        [
+          18446744073709551562,
+          0,
+          6683504,
+          6683504,
+          845282253045697467,
+          845282253045697467,
+          795741901218843403,
+          1302123111085380114,
+          1374463283923456787,
+          1446803456761533460,
+          1519143629599610133,
+          6674804268309651740,
+          0
+        ],
+        [
+          32823,
+          0,
+          6683504,
+          6683504,
+          845282253045697467,
+          845282253045697467,
+          795741901218843403,
+          1302123111085380114,
+          1374463283923456787,
+          1446803456761533460,
+          1519143629599610133,
+          6674804268309651740,
+          0
+        ],
+        [
+          18446744073709537921,
+          0,
+          6683504,
+          6683504,
+          845282253045697467,
+          845282253045697467,
+          795741901218843403,
+          1302123111085380114,
+          1374463283923456787,
+          1446803456761533460,
+          1519143629599610133,
+          6674804268309651740,
+          0
+        ],
+        [
+          3363780333,
+          0,
+          6683504,
+          6683504,
+          845282253045697467,
+          845282253045697467,
+          795741901218843403,
+          1302123111085380114,
+          1374463283923456787,
+          1446803456761533460,
+          1519143629599610133,
+          6674804268309651740,
+          0
+        ],
+        [
+          18446744072778364653,
+          0,
+          6683504,
+          6683504,
+          845282253045697467,
+          845282253045697467,
+          795741901218843403,
+          1302123111085380114,
+          1374463283923456787,
+          1446803456761533460,
+          1519143629599610133,
+          6674804268309651740,
+          0
+        ],
+        [
+          9239115554555677313,
+          0,
+          6683504,
+          6683504,
+          845282253045697467,
+          845282253045697467,
+          795741901218843403,
+          1302123111085380114,
+          1374463283923456787,
+          1446803456761533460,
+          1519143629599610133,
+          6674804268309651740,
+          0
+        ],
+        [
+          129,
+          0,
+          6683504,
+          6683504,
+          845282253045697467,
+          845282253045697467,
+          795741901218843403,
+          1302123111085380114,
+          1374463283923456787,
+          1446803456761533460,
+          1519143629599610133,
+          6674804268309651740,
+          0
+        ],
+        [
+          12929,
+          0,
+          6683504,
+          6683504,
+          845282253045697467,
+          845282253045697467,
+          795741901218843403,
+          1302123111085380114,
+          1374463283923456787,
+          1446803456761533460,
+          1519143629599610133,
+          6674804268309651740,
+          0
+        ],
+        [
+          1985229441,
+          0,
+          6683504,
+          6683504,
+          845282253045697467,
+          845282253045697467,
+          795741901218843403,
+          1302123111085380114,
+          1374463283923456787,
+          1446803456761533460,
+          1519143629599610133,
+          6674804268309651740,
+          0
+        ],
+        [
+          18364758544493064833,
+          0,
+          6683504,
+          6683504,
+          845282253045697467,
+          845282253045697467,
+          795741901218843403,
+          1302123111085380114,
+          1374463283923456787,
+          1446803456761533460,
+          1519143629599610133,
+          6674804268309651740,
+          0
+        ],
+        [
+          129,
+          0,
+          6683504,
+          6683504,
+          845282253045697467,
+          845282253045697467,
+          795741901218843403,
+          1302123111085380114,
+          1374463283923456787,
+          1446803456761533460,
+          1519143629599610133,
+          6674804268309651740,
+          0
+        ],
+        [
+          0,
+          1,
+          6683504,
+          6683504,
+          845282253045697467,
+          845282253045697467,
+          795741901218843403,
+          1302123111085380114,
+          1374463283923456787,
+          1446803456761533460,
+          1519143629599610133,
+          6674804268309651740,
+          0
+        ],
+        [
+          0,
+          1,
+          6683504,
+          6683504,
+          845282253045697467,
+          845282253045697467,
+          795741901218843403,
+          1302123111085380114,
+          1374463283923456787,
+          1446803456761533460,
+          1519143629599610133,
+          6674804268309651740,
+          0
+        ],
+        [
+          0,
+          1,
+          6683504,
+          6683504,
+          845282253045697467,
+          845282253045697467,
+          795741901218843403,
+          1302123111085380114,
+          1374463283923456787,
+          1446803456761533460,
+          1519143629599610133,
+          6674804268309651740,
+          0
+        ],
+        [
+          0,
+          1,
+          6683504,
+          6683504,
+          845282253045697467,
+          845282253045697467,
+          795741901218843403,
+          1302123111085380114,
+          1374463283923456787,
+          1446803456761533460,
+          1519143629599610133,
+          6674804268309651740,
+          0
+        ],
+        [
+          0,
+          1,
+          6683504,
+          6683504,
+          845282253045697467,
+          845282253045697467,
+          795741901218843403,
+          1302123111085380114,
+          1374463283923456787,
+          1446803456761533460,
+          1519143629599610133,
+          6674804268309651740,
+          0
+        ],
+        [
+          0,
+          1,
+          6683504,
+          6683504,
+          845282253045697467,
+          845282253045697467,
+          795741901218843403,
+          1302123111085380114,
+          1374463283923456787,
+          1446803456761533460,
+          1519143629599610133,
+          6674804268309651740,
+          0
+        ],
+        [
+          0,
+          1,
+          6683504,
+          6683504,
+          845282253045697467,
+          845282253045697467,
+          795741901218843403,
+          1302123111085380114,
+          1374463283923456787,
+          1446803456761533460,
+          1519143629599610133,
+          6674804268309651740,
+          0
+        ],
+        [
+          0,
+          1,
+          6683504,
+          6683504,
+          845282253045697467,
+          845282253045697467,
+          795741901218843403,
+          1302123111085380114,
+          1374463283923456787,
+          1446803456761533460,
+          1519143629599610133,
+          6674804268309651740,
+          0
+        ],
+        [
+          0,
+          1,
+          6683504,
+          6683504,
+          845282253045697467,
+          845282253045697467,
+          795741901218843403,
+          1302123111085380114,
+          1374463283923456787,
+          1446803456761533460,
+          1519143629599610133,
+          6674804268309651740,
+          0
+        ]
+      ],
+      "expected_pair": [
+        [
+          129,
+          0
+        ],
+        [
+          18446744073709551562,
+          0
+        ],
+        [
+          32823,
+          0
+        ],
+        [
+          18446744073709537921,
+          0
+        ],
+        [
+          3363780333,
+          0
+        ],
+        [
+          18446744072778364653,
+          0
+        ],
+        [
+          9239115554555677313,
+          0
+        ],
+        [
+          129,
+          0
+        ],
+        [
+          12929,
+          0
+        ],
+        [
+          1985229441,
+          0
+        ],
+        [
+          18364758544493064833,
+          0
+        ],
+        [
+          129,
+          0
+        ],
+        [
+          0,
+          1
+        ],
+        [
+          0,
+          1
+        ],
+        [
+          0,
+          1
+        ],
+        [
+          0,
+          1
+        ],
+        [
+          0,
+          1
+        ],
+        [
+          0,
+          1
+        ],
+        [
+          0,
+          1
+        ],
+        [
+          0,
+          1
+        ],
+        [
+          0,
+          1
+        ]
+      ],
+      "memory_sha256": [
+        "accf96a60b4951c2f795a6d6035313ad3d86d449930302e37bede5c6e1b258fa",
+        "accf96a60b4951c2f795a6d6035313ad3d86d449930302e37bede5c6e1b258fa",
+        "accf96a60b4951c2f795a6d6035313ad3d86d449930302e37bede5c6e1b258fa",
+        "accf96a60b4951c2f795a6d6035313ad3d86d449930302e37bede5c6e1b258fa",
+        "accf96a60b4951c2f795a6d6035313ad3d86d449930302e37bede5c6e1b258fa",
+        "accf96a60b4951c2f795a6d6035313ad3d86d449930302e37bede5c6e1b258fa",
+        "accf96a60b4951c2f795a6d6035313ad3d86d449930302e37bede5c6e1b258fa",
+        "4125ade3ad553f80876931193c57202f13b3b337cb372ddab0cb2c581e0d394a",
+        "9fd5a454a90476e4e8c3039da821e577f303ebd1bf1df35296e0ff0d7e52c820",
+        "e83b93c98f34ed9157caaf21d68b9beaf993b41a8e74da2e20f9b994ae16e233",
+        "43997d676062b90add6984151b9334456ebe7c0584817313c5b7bcf91fa9a1d6",
+        "accf96a60b4951c2f795a6d6035313ad3d86d449930302e37bede5c6e1b258fa",
+        "accf96a60b4951c2f795a6d6035313ad3d86d449930302e37bede5c6e1b258fa",
+        "accf96a60b4951c2f795a6d6035313ad3d86d449930302e37bede5c6e1b258fa",
+        "accf96a60b4951c2f795a6d6035313ad3d86d449930302e37bede5c6e1b258fa",
+        "accf96a60b4951c2f795a6d6035313ad3d86d449930302e37bede5c6e1b258fa",
+        "accf96a60b4951c2f795a6d6035313ad3d86d449930302e37bede5c6e1b258fa",
+        "accf96a60b4951c2f795a6d6035313ad3d86d449930302e37bede5c6e1b258fa",
+        "accf96a60b4951c2f795a6d6035313ad3d86d449930302e37bede5c6e1b258fa",
+        "accf96a60b4951c2f795a6d6035313ad3d86d449930302e37bede5c6e1b258fa",
+        "accf96a60b4951c2f795a6d6035313ad3d86d449930302e37bede5c6e1b258fa"
+      ]
+    },
+    {
+      "native": "native-release",
+      "normal_exit": true,
+      "observations": [
+        [
+          129,
+          0,
+          6683504,
+          6683504,
+          845282253045697467,
+          845282253045697467,
+          795741901218843403,
+          1302123111085380114,
+          1374463283923456787,
+          1446803456761533460,
+          1519143629599610133,
+          6674804268309651740,
+          0
+        ],
+        [
+          18446744073709551562,
+          0,
+          6683504,
+          6683504,
+          845282253045697467,
+          845282253045697467,
+          795741901218843403,
+          1302123111085380114,
+          1374463283923456787,
+          1446803456761533460,
+          1519143629599610133,
+          6674804268309651740,
+          0
+        ],
+        [
+          32823,
+          0,
+          6683504,
+          6683504,
+          845282253045697467,
+          845282253045697467,
+          795741901218843403,
+          1302123111085380114,
+          1374463283923456787,
+          1446803456761533460,
+          1519143629599610133,
+          6674804268309651740,
+          0
+        ],
+        [
+          18446744073709537921,
+          0,
+          6683504,
+          6683504,
+          845282253045697467,
+          845282253045697467,
+          795741901218843403,
+          1302123111085380114,
+          1374463283923456787,
+          1446803456761533460,
+          1519143629599610133,
+          6674804268309651740,
+          0
+        ],
+        [
+          3363780333,
+          0,
+          6683504,
+          6683504,
+          845282253045697467,
+          845282253045697467,
+          795741901218843403,
+          1302123111085380114,
+          1374463283923456787,
+          1446803456761533460,
+          1519143629599610133,
+          6674804268309651740,
+          0
+        ],
+        [
+          18446744072778364653,
+          0,
+          6683504,
+          6683504,
+          845282253045697467,
+          845282253045697467,
+          795741901218843403,
+          1302123111085380114,
+          1374463283923456787,
+          1446803456761533460,
+          1519143629599610133,
+          6674804268309651740,
+          0
+        ],
+        [
+          9239115554555677313,
+          0,
+          6683504,
+          6683504,
+          845282253045697467,
+          845282253045697467,
+          795741901218843403,
+          1302123111085380114,
+          1374463283923456787,
+          1446803456761533460,
+          1519143629599610133,
+          6674804268309651740,
+          0
+        ],
+        [
+          129,
+          0,
+          6683504,
+          6683504,
+          845282253045697467,
+          845282253045697467,
+          795741901218843403,
+          1302123111085380114,
+          1374463283923456787,
+          1446803456761533460,
+          1519143629599610133,
+          6674804268309651740,
+          0
+        ],
+        [
+          12929,
+          0,
+          6683504,
+          6683504,
+          845282253045697467,
+          845282253045697467,
+          795741901218843403,
+          1302123111085380114,
+          1374463283923456787,
+          1446803456761533460,
+          1519143629599610133,
+          6674804268309651740,
+          0
+        ],
+        [
+          1985229441,
+          0,
+          6683504,
+          6683504,
+          845282253045697467,
+          845282253045697467,
+          795741901218843403,
+          1302123111085380114,
+          1374463283923456787,
+          1446803456761533460,
+          1519143629599610133,
+          6674804268309651740,
+          0
+        ],
+        [
+          18364758544493064833,
+          0,
+          6683504,
+          6683504,
+          845282253045697467,
+          845282253045697467,
+          795741901218843403,
+          1302123111085380114,
+          1374463283923456787,
+          1446803456761533460,
+          1519143629599610133,
+          6674804268309651740,
+          0
+        ],
+        [
+          129,
+          0,
+          6683504,
+          6683504,
+          845282253045697467,
+          845282253045697467,
+          795741901218843403,
+          1302123111085380114,
+          1374463283923456787,
+          1446803456761533460,
+          1519143629599610133,
+          6674804268309651740,
+          0
+        ],
+        [
+          0,
+          1,
+          6683504,
+          6683504,
+          845282253045697467,
+          845282253045697467,
+          795741901218843403,
+          1302123111085380114,
+          1374463283923456787,
+          1446803456761533460,
+          1519143629599610133,
+          6674804268309651740,
+          0
+        ],
+        [
+          0,
+          1,
+          6683504,
+          6683504,
+          845282253045697467,
+          845282253045697467,
+          795741901218843403,
+          1302123111085380114,
+          1374463283923456787,
+          1446803456761533460,
+          1519143629599610133,
+          6674804268309651740,
+          0
+        ],
+        [
+          0,
+          1,
+          6683504,
+          6683504,
+          845282253045697467,
+          845282253045697467,
+          795741901218843403,
+          1302123111085380114,
+          1374463283923456787,
+          1446803456761533460,
+          1519143629599610133,
+          6674804268309651740,
+          0
+        ],
+        [
+          0,
+          1,
+          6683504,
+          6683504,
+          845282253045697467,
+          845282253045697467,
+          795741901218843403,
+          1302123111085380114,
+          1374463283923456787,
+          1446803456761533460,
+          1519143629599610133,
+          6674804268309651740,
+          0
+        ],
+        [
+          0,
+          1,
+          6683504,
+          6683504,
+          845282253045697467,
+          845282253045697467,
+          795741901218843403,
+          1302123111085380114,
+          1374463283923456787,
+          1446803456761533460,
+          1519143629599610133,
+          6674804268309651740,
+          0
+        ],
+        [
+          0,
+          1,
+          6683504,
+          6683504,
+          845282253045697467,
+          845282253045697467,
+          795741901218843403,
+          1302123111085380114,
+          1374463283923456787,
+          1446803456761533460,
+          1519143629599610133,
+          6674804268309651740,
+          0
+        ],
+        [
+          0,
+          1,
+          6683504,
+          6683504,
+          845282253045697467,
+          845282253045697467,
+          795741901218843403,
+          1302123111085380114,
+          1374463283923456787,
+          1446803456761533460,
+          1519143629599610133,
+          6674804268309651740,
+          0
+        ],
+        [
+          0,
+          1,
+          6683504,
+          6683504,
+          845282253045697467,
+          845282253045697467,
+          795741901218843403,
+          1302123111085380114,
+          1374463283923456787,
+          1446803456761533460,
+          1519143629599610133,
+          6674804268309651740,
+          0
+        ],
+        [
+          0,
+          1,
+          6683504,
+          6683504,
+          845282253045697467,
+          845282253045697467,
+          795741901218843403,
+          1302123111085380114,
+          1374463283923456787,
+          1446803456761533460,
+          1519143629599610133,
+          6674804268309651740,
+          0
+        ]
+      ],
+      "expected_pair": [
+        [
+          129,
+          0
+        ],
+        [
+          18446744073709551562,
+          0
+        ],
+        [
+          32823,
+          0
+        ],
+        [
+          18446744073709537921,
+          0
+        ],
+        [
+          3363780333,
+          0
+        ],
+        [
+          18446744072778364653,
+          0
+        ],
+        [
+          9239115554555677313,
+          0
+        ],
+        [
+          129,
+          0
+        ],
+        [
+          12929,
+          0
+        ],
+        [
+          1985229441,
+          0
+        ],
+        [
+          18364758544493064833,
+          0
+        ],
+        [
+          129,
+          0
+        ],
+        [
+          0,
+          1
+        ],
+        [
+          0,
+          1
+        ],
+        [
+          0,
+          1
+        ],
+        [
+          0,
+          1
+        ],
+        [
+          0,
+          1
+        ],
+        [
+          0,
+          1
+        ],
+        [
+          0,
+          1
+        ],
+        [
+          0,
+          1
+        ],
+        [
+          0,
+          1
+        ]
+      ],
+      "memory_sha256": [
+        "accf96a60b4951c2f795a6d6035313ad3d86d449930302e37bede5c6e1b258fa",
+        "accf96a60b4951c2f795a6d6035313ad3d86d449930302e37bede5c6e1b258fa",
+        "accf96a60b4951c2f795a6d6035313ad3d86d449930302e37bede5c6e1b258fa",
+        "accf96a60b4951c2f795a6d6035313ad3d86d449930302e37bede5c6e1b258fa",
+        "accf96a60b4951c2f795a6d6035313ad3d86d449930302e37bede5c6e1b258fa",
+        "accf96a60b4951c2f795a6d6035313ad3d86d449930302e37bede5c6e1b258fa",
+        "accf96a60b4951c2f795a6d6035313ad3d86d449930302e37bede5c6e1b258fa",
+        "4125ade3ad553f80876931193c57202f13b3b337cb372ddab0cb2c581e0d394a",
+        "9fd5a454a90476e4e8c3039da821e577f303ebd1bf1df35296e0ff0d7e52c820",
+        "e83b93c98f34ed9157caaf21d68b9beaf993b41a8e74da2e20f9b994ae16e233",
+        "43997d676062b90add6984151b9334456ebe7c0584817313c5b7bcf91fa9a1d6",
+        "accf96a60b4951c2f795a6d6035313ad3d86d449930302e37bede5c6e1b258fa",
+        "accf96a60b4951c2f795a6d6035313ad3d86d449930302e37bede5c6e1b258fa",
+        "accf96a60b4951c2f795a6d6035313ad3d86d449930302e37bede5c6e1b258fa",
+        "accf96a60b4951c2f795a6d6035313ad3d86d449930302e37bede5c6e1b258fa",
+        "accf96a60b4951c2f795a6d6035313ad3d86d449930302e37bede5c6e1b258fa",
+        "accf96a60b4951c2f795a6d6035313ad3d86d449930302e37bede5c6e1b258fa",
+        "accf96a60b4951c2f795a6d6035313ad3d86d449930302e37bede5c6e1b258fa",
+        "accf96a60b4951c2f795a6d6035313ad3d86d449930302e37bede5c6e1b258fa",
+        "accf96a60b4951c2f795a6d6035313ad3d86d449930302e37bede5c6e1b258fa",
+        "accf96a60b4951c2f795a6d6035313ad3d86d449930302e37bede5c6e1b258fa"
+      ]
+    },
+    {
+      "test": "native-pair-memory",
+      "vectors_per_mode": 21,
+      "passed": true
+    },
+    {
+      "native": "bad-scale-good-debug-fixture0",
+      "normal_exit": true,
+      "observations": [
+        [
+          32823,
+          0,
+          6683536,
+          6683536,
+          845282253045697467,
+          845282253045697467,
+          795741901218843403,
+          1302123111085380114,
+          1374463283923456787,
+          1446803456761533460,
+          1519143629599610133,
+          6674804268309651740,
+          0
+        ]
+      ],
+      "expected_pair": [
+        [
+          32823,
+          0
+        ]
+      ],
+      "memory_sha256": [
+        "accf96a60b4951c2f795a6d6035313ad3d86d449930302e37bede5c6e1b258fa"
+      ]
+    },
+    {
+      "native": "bad-scale-good-debug-fixture1",
+      "normal_exit": true,
+      "observations": [
+        [
+          1985229441,
+          0,
+          6683536,
+          6683536,
+          845282253045697467,
+          845282253045697467,
+          795741901218843403,
+          1302123111085380114,
+          1374463283923456787,
+          1446803456761533460,
+          1519143629599610133,
+          6674804268309651740,
+          0
+        ]
+      ],
+      "expected_pair": [
+        [
+          1985229441,
+          0
+        ]
+      ],
+      "memory_sha256": [
+        "cb7ba4dde7a48d1214e904c75d5fcb80211172bf8f4f8beabe4b500e475f14fd"
+      ]
+    },
+    {
+      "native": "bad-scale-good-release-fixture0",
+      "normal_exit": true,
+      "observations": [
+        [
+          32823,
+          0,
+          6683536,
+          6683536,
+          845282253045697467,
+          845282253045697467,
+          795741901218843403,
+          1302123111085380114,
+          1374463283923456787,
+          1446803456761533460,
+          1519143629599610133,
+          6674804268309651740,
+          0
+        ]
+      ],
+      "expected_pair": [
+        [
+          32823,
+          0
+        ]
+      ],
+      "memory_sha256": [
+        "accf96a60b4951c2f795a6d6035313ad3d86d449930302e37bede5c6e1b258fa"
+      ]
+    },
+    {
+      "native": "bad-scale-good-release-fixture1",
+      "normal_exit": true,
+      "observations": [
+        [
+          1985229441,
+          0,
+          6683536,
+          6683536,
+          845282253045697467,
+          845282253045697467,
+          795741901218843403,
+          1302123111085380114,
+          1374463283923456787,
+          1446803456761533460,
+          1519143629599610133,
+          6674804268309651740,
+          0
+        ]
+      ],
+      "expected_pair": [
+        [
+          1985229441,
+          0
+        ]
+      ],
+      "memory_sha256": [
+        "cb7ba4dde7a48d1214e904c75d5fcb80211172bf8f4f8beabe4b500e475f14fd"
+      ]
+    },
+    {
+      "native": "bad-scale-debug-fixture0",
+      "normal_exit": true,
+      "observations": [
+        [
+          14061,
+          0,
+          6683536,
+          6683536,
+          845282253045697467,
+          845282253045697467,
+          795741901218843403,
+          1302123111085380114,
+          1374463283923456787,
+          1446803456761533460,
+          1519143629599610133,
+          6674804268309651740,
+          0
+        ]
+      ],
+      "expected_pair": [
+        [
+          32823,
+          0
+        ]
+      ],
+      "memory_sha256": [
+        "accf96a60b4951c2f795a6d6035313ad3d86d449930302e37bede5c6e1b258fa"
+      ]
+    },
+    {
+      "native": "bad-scale-debug-fixture1",
+      "normal_exit": true,
+      "observations": [
+        [
+          1985229441,
+          0,
+          6683536,
+          6683536,
+          845282253045697467,
+          845282253045697467,
+          795741901218843403,
+          1302123111085380114,
+          1374463283923456787,
+          1446803456761533460,
+          1519143629599610133,
+          6674804268309651740,
+          0
+        ]
+      ],
+      "expected_pair": [
+        [
+          1985229441,
+          0
+        ]
+      ],
+      "memory_sha256": [
+        "2e8842d7dc2a2e31894ae366152cc26b0c87aa3cfd6d491ad2066dd07c8ce1d5"
+      ]
+    },
+    {
+      "native": "bad-scale-release-fixture0",
+      "normal_exit": true,
+      "observations": [
+        [
+          14061,
+          0,
+          6683536,
+          6683536,
+          845282253045697467,
+          845282253045697467,
+          795741901218843403,
+          1302123111085380114,
+          1374463283923456787,
+          1446803456761533460,
+          1519143629599610133,
+          6674804268309651740,
+          0
+        ]
+      ],
+      "expected_pair": [
+        [
+          32823,
+          0
+        ]
+      ],
+      "memory_sha256": [
+        "accf96a60b4951c2f795a6d6035313ad3d86d449930302e37bede5c6e1b258fa"
+      ]
+    },
+    {
+      "native": "bad-scale-release-fixture1",
+      "normal_exit": true,
+      "observations": [
+        [
+          1985229441,
+          0,
+          6683536,
+          6683536,
+          845282253045697467,
+          845282253045697467,
+          795741901218843403,
+          1302123111085380114,
+          1374463283923456787,
+          1446803456761533460,
+          1519143629599610133,
+          6674804268309651740,
+          0
+        ]
+      ],
+      "expected_pair": [
+        [
+          1985229441,
+          0
+        ]
+      ],
+      "memory_sha256": [
+        "2e8842d7dc2a2e31894ae366152cc26b0c87aa3cfd6d491ad2066dd07c8ce1d5"
+      ]
+    },
+    {
+      "test": "bad-scale",
+      "compiled": true,
+      "linked": true,
+      "normal_native_exit": true,
+      "modes": 2,
+      "rejected_by": [
+        "native pair",
+        "native whole memory"
+      ],
+      "each_fixture_independently_rejected": true,
+      "all_ABI_and_guards_checked_before_semantics": true,
+      "safe_physical_target": 256
+    },
+    {
+      "native": "bad-bounds-index-good-debug-fixture0",
+      "normal_exit": true,
+      "observations": [
+        [
+          0,
+          1,
+          6683536,
+          6683536,
+          845282253045697467,
+          845282253045697467,
+          795741901218843403,
+          1302123111085380114,
+          1374463283923456787,
+          1446803456761533460,
+          1519143629599610133,
+          6674804268309651740,
+          0
+        ]
+      ],
+      "expected_pair": [
+        [
+          0,
+          1
+        ]
+      ],
+      "memory_sha256": [
+        "accf96a60b4951c2f795a6d6035313ad3d86d449930302e37bede5c6e1b258fa"
+      ]
+    },
+    {
+      "native": "bad-bounds-index-good-debug-fixture1",
+      "normal_exit": true,
+      "observations": [
+        [
+          0,
+          1,
+          6683536,
+          6683536,
+          845282253045697467,
+          845282253045697467,
+          795741901218843403,
+          1302123111085380114,
+          1374463283923456787,
+          1446803456761533460,
+          1519143629599610133,
+          6674804268309651740,
+          0
+        ]
+      ],
+      "expected_pair": [
+        [
+          0,
+          1
+        ]
+      ],
+      "memory_sha256": [
+        "accf96a60b4951c2f795a6d6035313ad3d86d449930302e37bede5c6e1b258fa"
+      ]
+    },
+    {
+      "native": "bad-bounds-index-good-release-fixture0",
+      "normal_exit": true,
+      "observations": [
+        [
+          0,
+          1,
+          6683536,
+          6683536,
+          845282253045697467,
+          845282253045697467,
+          795741901218843403,
+          1302123111085380114,
+          1374463283923456787,
+          1446803456761533460,
+          1519143629599610133,
+          6674804268309651740,
+          0
+        ]
+      ],
+      "expected_pair": [
+        [
+          0,
+          1
+        ]
+      ],
+      "memory_sha256": [
+        "accf96a60b4951c2f795a6d6035313ad3d86d449930302e37bede5c6e1b258fa"
+      ]
+    },
+    {
+      "native": "bad-bounds-index-good-release-fixture1",
+      "normal_exit": true,
+      "observations": [
+        [
+          0,
+          1,
+          6683536,
+          6683536,
+          845282253045697467,
+          845282253045697467,
+          795741901218843403,
+          1302123111085380114,
+          1374463283923456787,
+          1446803456761533460,
+          1519143629599610133,
+          6674804268309651740,
+          0
+        ]
+      ],
+      "expected_pair": [
+        [
+          0,
+          1
+        ]
+      ],
+      "memory_sha256": [
+        "accf96a60b4951c2f795a6d6035313ad3d86d449930302e37bede5c6e1b258fa"
+      ]
+    },
+    {
+      "native": "bad-bounds-index-debug-fixture0",
+      "normal_exit": true,
+      "observations": [
+        [
+          61093,
+          0,
+          6683536,
+          6683536,
+          845282253045697467,
+          845282253045697467,
+          795741901218843403,
+          1302123111085380114,
+          1374463283923456787,
+          1446803456761533460,
+          1519143629599610133,
+          6674804268309651740,
+          0
+        ]
+      ],
+      "expected_pair": [
+        [
+          0,
+          1
+        ]
+      ],
+      "memory_sha256": [
+        "accf96a60b4951c2f795a6d6035313ad3d86d449930302e37bede5c6e1b258fa"
+      ]
+    },
+    {
+      "native": "bad-bounds-index-debug-fixture1",
+      "normal_exit": true,
+      "observations": [
+        [
+          18446744073709551615,
+          0,
+          6683536,
+          6683536,
+          845282253045697467,
+          845282253045697467,
+          795741901218843403,
+          1302123111085380114,
+          1374463283923456787,
+          1446803456761533460,
+          1519143629599610133,
+          6674804268309651740,
+          0
+        ]
+      ],
+      "expected_pair": [
+        [
+          0,
+          1
+        ]
+      ],
+      "memory_sha256": [
+        "4083b093ab5e7c483ef6f0449b2642c613512fbb28b35ff82d0514967914b267"
+      ]
+    },
+    {
+      "native": "bad-bounds-index-release-fixture0",
+      "normal_exit": true,
+      "observations": [
+        [
+          61093,
+          0,
+          6683536,
+          6683536,
+          845282253045697467,
+          845282253045697467,
+          795741901218843403,
+          1302123111085380114,
+          1374463283923456787,
+          1446803456761533460,
+          1519143629599610133,
+          6674804268309651740,
+          0
+        ]
+      ],
+      "expected_pair": [
+        [
+          0,
+          1
+        ]
+      ],
+      "memory_sha256": [
+        "accf96a60b4951c2f795a6d6035313ad3d86d449930302e37bede5c6e1b258fa"
+      ]
+    },
+    {
+      "native": "bad-bounds-index-release-fixture1",
+      "normal_exit": true,
+      "observations": [
+        [
+          18446744073709551615,
+          0,
+          6683536,
+          6683536,
+          845282253045697467,
+          845282253045697467,
+          795741901218843403,
+          1302123111085380114,
+          1374463283923456787,
+          1446803456761533460,
+          1519143629599610133,
+          6674804268309651740,
+          0
+        ]
+      ],
+      "expected_pair": [
+        [
+          0,
+          1
+        ]
+      ],
+      "memory_sha256": [
+        "4083b093ab5e7c483ef6f0449b2642c613512fbb28b35ff82d0514967914b267"
+      ]
+    },
+    {
+      "test": "bad-bounds-index",
+      "compiled": true,
+      "linked": true,
+      "normal_native_exit": true,
+      "modes": 2,
+      "rejected_by": [
+        "native (pair|whole memory)",
+        "native (pair|whole memory)"
+      ],
+      "each_fixture_independently_rejected": true,
+      "all_ABI_and_guards_checked_before_semantics": true,
+      "safe_physical_target": 256
+    },
+    {
+      "native": "bad-early-header-good-debug",
+      "normal_exit": true,
+      "observations": [
+        [
+          129,
+          0,
+          6683536,
+          6683536,
+          845282253045697467,
+          845282253045697467,
+          795741901218843403,
+          1302123111085380114,
+          1374463283923456787,
+          1446803456761533460,
+          1519143629599610133,
+          6674804268309651740,
+          0
+        ]
+      ],
+      "expected_pair": [
+        [
+          129,
+          0
+        ]
+      ],
+      "memory_sha256": [
+        "accf96a60b4951c2f795a6d6035313ad3d86d449930302e37bede5c6e1b258fa"
+      ]
+    },
+    {
+      "native": "bad-early-header-good-release",
+      "normal_exit": true,
+      "observations": [
+        [
+          129,
+          0,
+          6683536,
+          6683536,
+          845282253045697467,
+          845282253045697467,
+          795741901218843403,
+          1302123111085380114,
+          1374463283923456787,
+          1446803456761533460,
+          1519143629599610133,
+          6674804268309651740,
+          0
+        ]
+      ],
+      "expected_pair": [
+        [
+          129,
+          0
+        ]
+      ],
+      "memory_sha256": [
+        "accf96a60b4951c2f795a6d6035313ad3d86d449930302e37bede5c6e1b258fa"
+      ]
+    },
+    {
+      "test": "bad-early-header",
+      "compiled": true,
+      "linked": true,
+      "modes": 2,
+      "rejected_by": "guard/atomicity",
+      "good_native_same_input_first": true,
+      "bad_incomplete_function_executed": false
+    }
+  ],
+  "source_unchanged_since_formal": true,
+  "audit_script_sha256": "36d53132a6eddbe40d026dc81fcf51f47818b459f349d2ff32327d7d51e31464",
+  "integrated": false,
+  "review_decision": "acceptance_eligible"
+}

@@ -1,0 +1,55 @@
+{
+  "auto_dispatch": false,
+  "auto_verify": false,
+  "candidate": null,
+  "checks": [
+    "module:lang.tests.test_std_int"
+  ],
+  "created_at": "2026-10-18T05:54:12+00:00",
+  "delivery": "deepseek-works/deliveries/D2.md",
+  "depends_on": [],
+  "description": "从现有任务书导入，历史内容保留。",
+  "document": "deepseek-works/deepseek-work-list.md",
+  "document_status": "todo",
+  "evidence": [
+    "deepseek-works/README.md"
+  ],
+  "historical": true,
+  "id": "deepseek:D2",
+  "legacy_hash": "869ebc4dbba9b8221f0f6de715d69e405cde638351837f98c85a99b1246067cf",
+  "legacy_schema": 2,
+  "number": "D2",
+  "owner": "deepseek",
+  "rev": 12,
+  "review_note": "",
+  "state_reconciliation": {
+    "at": "2026-10-19T11:42:09+00:00",
+    "audit_sha256": "5daf98a663cd249783a8432a5fcbed3ec4e96275b1910fa54b7903c084fe9ebc",
+    "note": "协调已有历史事实；保留原事件/作业；历史复验未重跑，未新增验收或集成，不启动模型。",
+    "previous_data_sha256": "e17de0e23f19071c45e6edc71b5292bc1bea22614aa92008e8aa63fa062034bc",
+    "previous_rev": 10,
+    "project": "dongos",
+    "snapshot_generated_at": "2026-10-19T09:04:28+00:00",
+    "snapshot_rev": 11,
+    "snapshot_sha256": "a40cf9aabcbb43779b5c60414d7142cab791f85888022c84625568dbb579ac96",
+    "verification_reexecuted": false
+  },
+  "state_recovery": {
+    "at": "2026-10-19T04:43:01+00:00",
+    "audit_sha256": "3ea0db756d56092976092ed0d1216118e145a8e34aa02c5060cb913d088d553e",
+    "note": "恢复已有验收/集成/返修事实；原复验为历史记录，未声称本次重跑；不恢复丢失作业或启动模型。",
+    "snapshot_rev": 9,
+    "snapshot_sha256": "f3ab929e33419f40dfc417217d588acf8b1b26cbac50724a51942a11e438c171"
+  },
+  "status": "accepted",
+  "title": "usize检查算术与对齐",
+  "updated_at": "2026-10-19T11:42:09+00:00",
+  "verification": null,
+  "write_paths": [
+    "lang/std/core/int.dg",
+    "lang/std/core/int.md",
+    "lang/tests/test_std_int.py",
+    "lang/tests/std_int_probe*",
+    "deepseek-works/deliveries/D2.md"
+  ]
+}

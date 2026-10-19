@@ -1,0 +1,78 @@
+{
+  "auto_dispatch": false,
+  "auto_verify": false,
+  "candidate": "67993bf658d8464097f799533e44c4bd",
+  "checks": [
+    "discover:claude-works/tests:test_line_index.py"
+  ],
+  "complexity": "standard",
+  "created_at": "2026-10-18T09:17:34+00:00",
+  "delivery": "claude-works/deliveries/C17.md",
+  "depends_on": [],
+  "description": "模块bootstrap.line_index。Position{line:usize,byte_column:usize}。固定接口pub unsafe fn build(source:[]const u8,starts:[]usize,used:*usize)u64；pub unsafe fn locate(starts:[]const usize,source_len:usize,offset:usize,result:*Position)u64。build输出[0]以及每个LF(0A)之后的偏移，含末尾LF产生的source.len；空源仍输出[0]。仅按原始LF字节分行，CR作为普通字节，不做UTF-8或Unicode列计算（不同于source_position的代码点语义），内嵌NUL普通处理。先计数/检查溢出和容量后写。locate要求非空starts、starts[0]=0、后续严格递增且<=source_len，offset<=source_len；使用最后一个<=offset的起点返回1基line与1基字节列，EOF及尾LF行为按此定义。输入索引完整数值校验后可二分查找，不要求凭空验证LF真实性；字节列+1溢出返回INVALID。结果对象不变/别名等遵守公共契约。Python独立split-LF/二分期望，覆盖CRLF、连续/尾LF、UTF-8多字节按字节计列、错误索引与EOF；坏实现至少漏末尾空行、错误选择相等offset的前一行。\n本批仅实现独立的纯Dong工具，不修改已验收组件、lang/编译器/内核或Codex活动集成。只写本任务声明的同名源码、接口说明、定向测试和交付。不得自行验收、提交或推送，不运行OS/VM/完整回归。新源码先留在claude-works/src/bootstrap/。\n公共契约：OK=0、INVALID=1、CAPACITY=2。借用非空指针、自然对齐、元素乘法及区间端点先验检查；空切片可NULL，有效结果对象仍必需。读输入前检查完整声明区间：只读输入可互相重叠，可写对象彼此及与所有输入不得重叠。数据INVALID检查完成后才检查CAPACITY。非OK不改整个输出与结果对象；成功只改有效前缀及明确字段，尾部/输入/双端保护不变。所有需要长度/偏移计算检查溢出，不以debug panic代替返回。unsafe调用方保证通过数值预检后实际访问的内存可访问。无分配、全局可变状态、OS调用；只做明确子集。\n验收测试：独立Python期望，至少100个固定种子的小案例及边界；真实Dong→NASM→C/SysV，debug/release原生运行、ELF64/COFF组装、零skip。C每次调用检查输入全文、输出尾部、结果对象和真实双端guard，接口有只读输入参数时至少一组真实只读输入；C13仅有标量输入，无此项。至少两类错误Dong私有副本成功编译链接运行，并被预先指定的状态/字节/原子性断言拒绝；编译失败、崩溃和超时不算拒绝。伪地址仅走应拒绝的数值预检，须排除更早别名/对齐遮蔽，不做巨大分配。产物写claude-works/build/<任务号>/<唯一目录>/。交付写实际命令、数量/skip、hash、证据和限制；不能虚构未运行结果。CLI没有命令工具时只提交实现和可执行测试，明确未运行，由协调器执行，不绕过权限。\n",
+  "document": "claude-works/tasks/C17-board.md",
+  "document_status": "todo",
+  "historical": false,
+  "id": "claude:C17",
+  "integration_note": "line_index源码/文档按验收hash入主线、原交付保留，永久3项测试通过零skip且hash稳定；见reviews/2026-10-18-C16-C18-review.md。",
+  "last_run_note": "交付已收集，尚未验收",
+  "legacy_hash": "74aabd22f019a26d1759b1beb8613574d9a0abb90c7f5e910e20ab47afdf2187",
+  "number": "C17",
+  "owner": "claude",
+  "rev": 10,
+  "review_note": "源码/契约及测试有效性审查通过；正式3项零skip+3868次小输入穷举原生调用通过，见claude-works/reviews/2026-10-18-C17-acceptance.md。",
+  "state_reconciliation": {
+    "at": "2026-10-19T11:42:09+00:00",
+    "audit_sha256": "5daf98a663cd249783a8432a5fcbed3ec4e96275b1910fa54b7903c084fe9ebc",
+    "note": "协调已有历史事实；保留原事件/作业；历史复验未重跑，未新增验收或集成，不启动模型。",
+    "previous_data_sha256": "9cbc79f91284b5f89bac2daeb53da360d84eea17705dc969c8dbe13246f38da6",
+    "previous_rev": 8,
+    "project": "dongos",
+    "snapshot_generated_at": "2026-10-19T09:04:28+00:00",
+    "snapshot_rev": 9,
+    "snapshot_sha256": "a40cf9aabcbb43779b5c60414d7142cab791f85888022c84625568dbb579ac96",
+    "verification_reexecuted": false
+  },
+  "state_recovery": {
+    "at": "2026-10-19T04:43:01+00:00",
+    "audit_sha256": "3ea0db756d56092976092ed0d1216118e145a8e34aa02c5060cb913d088d553e",
+    "note": "恢复已有验收/集成/返修事实；原复验为历史记录，未声称本次重跑；不恢复丢失作业或启动模型。",
+    "snapshot_rev": 8,
+    "snapshot_sha256": "f3ab929e33419f40dfc417217d588acf8b1b26cbac50724a51942a11e438c171"
+  },
+  "status": "integrated",
+  "title": "LF源码字节行索引与有界查找",
+  "updated_at": "2026-10-19T11:42:09+00:00",
+  "verification": {
+    "checks": [
+      {
+        "cancelled": false,
+        "elapsed_seconds": 6.469,
+        "passed": true,
+        "returncode": 0,
+        "skips": 0,
+        "spec": "discover:claude-works/tests:test_line_index.py",
+        "tests": 3,
+        "timed_out": false
+      }
+    ],
+    "fingerprint": {
+      "claude-works/deliveries/C17.md": "8c6437ced4be7a71ffd992757aa409094d8ae2809c75f5246cb2a9f8aec1d677",
+      "claude-works/src/bootstrap/line_index.dg": "a7f892406f8090284d19be029c31a366bdc4bf5e81f72eb5795bea2cc57ab337",
+      "claude-works/src/bootstrap/line_index.md": "40f99c513a3c12a2d08b06ca3044cb50a28d0d4e38d0dac9cb35449b63231f60",
+      "claude-works/tests/test_line_index.py": "926c8424477436948ec254f1f7e509440d4ba59316a1a1d9a2dc5f0d54575cce"
+    },
+    "finished_at": "2026-10-18T09:49:19+00:00",
+    "job": "12953c8312334594929d26baed5afec6",
+    "passed": true,
+    "source_stable": true,
+    "summary": "定向复验通过，等待源码/契约审查"
+  },
+  "write_paths": [
+    "claude-works/src/bootstrap/line_index.dg",
+    "claude-works/src/bootstrap/line_index.md",
+    "claude-works/tests/test_line_index.py",
+    "claude-works/tests/line_index_probe*",
+    "claude-works/deliveries/C17.md"
+  ]
+}

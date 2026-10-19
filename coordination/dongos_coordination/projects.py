@@ -62,4 +62,4 @@ class Registry:
     def store(self, ident, *, allow_state_recovery=False):
         project = self.get(ident)
         return Store(project['source_root'], Path(project['works_root']) / '.local', project['works_root'], project['name'],
-                     allow_state_recovery=allow_state_recovery)
+                     allow_state_recovery=allow_state_recovery, sync_state=not allow_state_recovery)

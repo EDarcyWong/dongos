@@ -1,0 +1,146 @@
+// A whole SysV function from a restricted straight-line u64 IR: CR3 symbol + ":\n", CR11 prologue,
+// C37 capture of the parameters into slots 0..p-1, every instruction in order (CONST via CR4 digits
+// and CR13 store; COPY via CR12 load + CR13 store; binary via CR12 rax/rcx loads, C23, CR13 store),
+// then C42 return of the return slot with its epilogue and ret. Slot s is [rbp-8*(s+1)],
+// frame = align_up(8*slot_count,16), no saved registers.
+// The whole IR is checked first (fields, bounds, initialized-before-read). Then every piece is
+// produced for real into a bounded local piece buffer and only its length is summed; out is not
+// touched until that pass has succeeded and the total is known to fit. The second pass replays the
+// same deterministic pieces straight into out, then *written is set.
+module bootstrap.nasm_u64_function;
+import bootstrap.nasm_symbol as sym;
+import bootstrap.decimal_integer as dec;
+import bootstrap.nasm_function_frame as ff;
+import bootstrap.nasm_sysv_incoming_args as inc;
+import bootstrap.nasm_integer_memory_load as load;
+import bootstrap.nasm_integer_memory_store as store;
+import bootstrap.nasm_integer_binary as bin;
+import bootstrap.nasm_sysv_function_exit as ex;
+pub const OK:u64=0;pub const INVALID:u64=1;pub const CAPACITY:u64=2;
+pub const CONST:u64=0;pub const COPY:u64=1;pub const ADD:u64=2;pub const SUB:u64=3;pub const AND:u64=4;
+pub const OR:u64=5;pub const XOR:u64=6;pub const IMUL:u64=7;
+pub const NAME_LIMIT:usize=64;pub const MAX_PARAMETERS:usize=6;pub const MAX_SLOTS:usize=32;pub const MAX_INSTRUCTIONS:usize=64;
+pub struct Instruction{pub operation:u64,pub destination:usize,pub left:usize,pub right:usize,pub immediate:u64}
+const MAX:u64=0xffff_ffff_ffff_ffff;
+const RAX:u64=0;const RCX:u64=1;const RBP:u64=5;const U64_KIND:u64=8;
+const INSTRUCTION_BYTES:usize=40;
+// Conservative per-piece bounds (slot offsets are at most 8*32 = 256, frame at most 256):
+//   header      symbol <= 10 + 2*(64+64) = 266, + ":\n"                           = 268
+//   prologue    "push rbp\nmov rbp, rsp\n" (22) + "sub rsp, 256\n" (13)           = 35
+//   capture     6 lines, each <= "mov qword [rbp - 48], rsi\n" (26)               = 156
+//   CONST       "mov rax, " (9) + 20 digits + LF + "mov qword [rbp - 256], rax\n" (27) = 57
+//   COPY        "mov rax, qword [rbp - 256]\n" (27) + store (27)                    = 54
+//   binary      two loads (27 + 27) + "imul rax, rcx\n" (14) + store (27)           = 95
+//   exit        "mov rax, qword [rbp - 256]\n" (27) + "add rsp, 256\n" (13) + "pop rbp\nret\n" (12) = 52
+// So the whole text is at most 268 + 35 + 156 + 64*95 + 52 = 6591 bytes and every piece fits PIECE.
+// Inside a piece each component gets its own fixed segment (LINE = 64 per load/store/op/digits line,
+// the header gets 266 + 2, the prologue/capture/exit get CHUNK = 192), all well inside PIECE.
+// The piece buffer is small on purpose: dongc limits a function's worst-case frame to 4096 bytes.
+const PIECE:usize=512;const LINE:usize=64;const CHUNK:usize=192;const SYMBOL:usize=266;
+fn span(p:u64,n:u64)bool{return n==0||(p!=0&&n<=MAX-p);}
+fn overlap(a:u64,n:u64,b:u64,m:u64)bool{return n!=0&&m!=0&&a<b+m&&b<a+n;}
+fn offset(slot:usize)i64{return -((8*(slot+1))as i64);}
+unsafe fn put(out:[]u8,at:*usize,text:[]const u8)void{unsafe{
+ var i:usize=0;while i<text.len{out[*at+i]=text[i];i+=1;}*at+=text.len;
+}}
+// "mov rax, qword [rbp - 8*(slot+1)]\n" or with rcx, through CR12.
+unsafe fn load_slot(piece:[]u8,at:*usize,register:u64,slot:usize)bool{unsafe{
+ var n:usize=0;
+ if load.emit(register,RBP,offset(slot),64,false,slice_from_raw_parts(&piece[*at],LINE),&n)!=load.OK{return false;}
+ *at+=n;return true;
+}}
+// "mov qword [rbp - 8*(slot+1)], rax\n" through CR13.
+unsafe fn store_slot(piece:[]u8,at:*usize,slot:usize)bool{unsafe{
+ var n:usize=0;
+ if store.emit(RAX,RBP,offset(slot),64,slice_from_raw_parts(&piece[*at],LINE),&n)!=store.OK{return false;}
+ *at+=n;return true;
+}}
+// Piece index: 0 header, 1 prologue, 2 capture, 3..3+k-1 instructions, 3+k exit.
+unsafe fn piece(index:usize,module_name:[]const u8,item_name:[]const u8,parameter_count:usize,frame:usize,
+ instructions:[]const Instruction,return_slot:usize,buffer:[]u8,length:*usize)bool{unsafe{
+ var at:usize=0;var n:usize=0;
+ if index==0{
+  if sym.encode(module_name,item_name,slice_from_raw_parts(&buffer[0],SYMBOL),&n)!=sym.OK{return false;}
+  at=n;put(buffer,&at,":\n");
+ }else if index==1{
+  if ff.prologue(frame,0,slice_from_raw_parts(&buffer[0],CHUNK),&n)!=ff.OK{return false;}
+  at=n;
+ }else if index==2{
+  var kinds:[6]u8=[0;6];var offsets:[6]usize=[0;6];
+  var i:usize=0;while i<parameter_count{offsets[i]=8*(i+1);i+=1;}
+  if inc.emit(slice_from_raw_parts(&kinds[0],parameter_count),slice_from_raw_parts(&offsets[0],parameter_count),frame,
+   slice_from_raw_parts(&buffer[0],CHUNK),&n)!=inc.OK{return false;}
+  at=n;
+ }else if index<3+instructions.len{
+  let x=instructions[index-3];
+  if x.operation==CONST{
+   put(buffer,&at,"mov rax, ");
+   if dec.encode(x.immediate,64,false,slice_from_raw_parts(&buffer[at],LINE),&n)!=dec.OK{return false;}
+   at+=n;put(buffer,&at,"\n");
+  }else if x.operation==COPY{
+   if !load_slot(buffer,&at,RAX,x.left){return false;}
+  }else{
+   if !load_slot(buffer,&at,RAX,x.left)||!load_slot(buffer,&at,RCX,x.right){return false;}
+   if bin.emit(x.operation-2,RAX,RCX,slice_from_raw_parts(&buffer[at],LINE),&n)!=bin.OK{return false;}
+   at+=n;
+  }
+  if !store_slot(buffer,&at,x.destination){return false;}
+ }else{
+  if ex.emit(U64_KIND,frame,0,8*(return_slot+1),0,slice_from_raw_parts(&buffer[0],CHUNK),&n)!=ex.OK{return false;}
+  at=n;
+ }
+ *length=at;return true;
+}}
+pub unsafe fn emit(module_name:[]const u8,item_name:[]const u8,parameter_count:usize,slot_count:usize,
+ instructions:[]const Instruction,return_slot:usize,out:[]u8,written:*usize)u64{unsafe{
+ let wp=written as u64;let mp=module_name.ptr as u64;let ip=item_name.ptr as u64;let xp=instructions.ptr as u64;let op=out.ptr as u64;
+ if written==null||(wp&7)!=0||!span(wp,8){return INVALID;}
+ if instructions.len>MAX/INSTRUCTION_BYTES{return INVALID;}
+ let mn=module_name.len;let inn=item_name.len;let xn=instructions.len*INSTRUCTION_BYTES;let on=out.len;
+ if !span(mp,mn)||!span(ip,inn)||!span(xp,xn)||(xn!=0&&(xp&7)!=0)||!span(op,on){return INVALID;}
+ // Inputs may overlap each other; out and written are disjoint from every whole input and from each other.
+ if overlap(wp,8,op,on){return INVALID;}
+ if overlap(wp,8,mp,mn)||overlap(wp,8,ip,inn)||overlap(wp,8,xp,xn)||overlap(op,on,mp,mn)||overlap(op,on,ip,inn)||overlap(op,on,xp,xn){return INVALID;}
+ if mn==0||mn>NAME_LIMIT||inn==0||inn>NAME_LIMIT{return INVALID;}
+ if parameter_count>MAX_PARAMETERS||slot_count==0||slot_count>MAX_SLOTS||slot_count<parameter_count{return INVALID;}
+ if instructions.len>MAX_INSTRUCTIONS||return_slot>=slot_count{return INVALID;}
+ // Whole-IR check: fields and slot bounds, and every read of a slot already initialized before
+ // this instruction (only parameters start initialized; an instruction's own write comes after its reads).
+ var ready:[32]u8=[0;32];var i:usize=0;
+ while i<parameter_count{ready[i]=1;i+=1;}
+ var k:usize=0;
+ while k<instructions.len{
+  let x=instructions[k];
+  if x.destination>=slot_count{return INVALID;}
+  if x.operation==CONST{
+   if x.left!=0||x.right!=0{return INVALID;}
+  }else if x.operation==COPY{
+   if x.left>=slot_count||x.right!=0||x.immediate!=0{return INVALID;}
+   if ready[x.left]==0{return INVALID;}
+  }else if x.operation>=ADD&&x.operation<=IMUL{
+   if x.left>=slot_count||x.right>=slot_count||x.immediate!=0{return INVALID;}
+   if ready[x.left]==0||ready[x.right]==0{return INVALID;}
+  }else{return INVALID;}
+  ready[x.destination]=1;
+  k+=1;
+ }
+ if ready[return_slot]==0{return INVALID;}
+ let frame=(8*slot_count+15)/16*16;
+ // Pass 1: produce every piece for real and sum the lengths; out is untouched. At most 68 pieces of
+ // at most PIECE bytes each, so the sum cannot overflow.
+ var buffer:[512]u8=[0;512];let scratch=slice_from_raw_parts(&buffer[0],PIECE);
+ let pieces=4+instructions.len;var total:usize=0;var n:usize=0;var p:usize=0;
+ while p<pieces{
+  if !piece(p,module_name,item_name,parameter_count,frame,instructions,return_slot,scratch,&n){return INVALID;}
+  total+=n;p+=1;
+ }
+ if total>on{return CAPACITY;}
+ // Pass 2: the same deterministic pieces, copied into out in order; then the length.
+ var at:usize=0;p=0;
+ while p<pieces{
+  if !piece(p,module_name,item_name,parameter_count,frame,instructions,return_slot,scratch,&n){return INVALID;}
+  i=0;while i<n{out[at+i]=buffer[i];i+=1;}
+  at+=n;p+=1;
+ }
+ *written=at;return OK;
+}}

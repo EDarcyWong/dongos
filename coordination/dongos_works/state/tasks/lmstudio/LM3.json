@@ -1,0 +1,72 @@
+{
+  "auto_dispatch": false,
+  "auto_verify": false,
+  "candidate": "8a97b95ee5da48e5b34dd11b0ca58cdb",
+  "checks": [
+    "discover:lmstudio-works/tests:test_status_glossary.py"
+  ],
+  "complexity": "simple",
+  "created_at": "2026-10-18T09:17:34+00:00",
+  "delivery": "lmstudio-works/deliveries/LM3.md",
+  "depends_on": [],
+  "description": "只编写简短中文状态词典JSON，不改业务代码。文件lmstudio-works/docs/task-status.zh-CN.json：顶层只有version/items，version是整数1，items恰好7项，每项只有state/label/description。\n顺序和标签固定：todo/待领取，in_progress/进行中，submitted/待复验，rework/返修，accepted/已验收，integrated/已集成，paused/暂停。description为1～30个字符的简短中文；依次解释尚未领取、已领取正在执行、已提交等待独立复验、需要修复再交付、独立复验通过但尚未集成、已完成集成及相关检查、暂停等待恢复。不能把提交等同验收、把验收等同集成，不声称这些任务当前已经完成，不包含命令/模型配置。另写固定LM3交付说明，明确实际未运行测试。\n只能写JSON和LM3交付两个文件；测试由Codex提供，禁止修改。只做此简单文档任务，不能自行验收、提交推送或运行OS/VM。",
+  "document": "lmstudio-works/tasks/LM3-board.md",
+  "historical": false,
+  "id": "lmstudio:LM3",
+  "integration_note": "两份文档按验收hash回写lmstudio-works/docs及deliveries，指纹一致。见LM3验收记录。",
+  "last_run_note": "交付已收集，尚未验收",
+  "legacy_hash": "9101da7f12905a7e6a1aeec3431e17fb9ca867895fa753b62d3fa28612d22a38",
+  "number": "LM3",
+  "owner": "lmstudio",
+  "rev": 8,
+  "review_note": "独立结构测试1项零skip、指纹稳定；人工语义审查通过。见lmstudio-works/reviews/2026-10-18-LM3-acceptance.md。",
+  "state_reconciliation": {
+    "at": "2026-10-19T11:42:09+00:00",
+    "audit_sha256": "5daf98a663cd249783a8432a5fcbed3ec4e96275b1910fa54b7903c084fe9ebc",
+    "note": "协调已有历史事实；保留原事件/作业；历史复验未重跑，未新增验收或集成，不启动模型。",
+    "previous_data_sha256": "2b57bbc6e7c837cce8773a421cf8b4dc218a05ae3fa4511964c3f7bc0aba712d",
+    "previous_rev": 6,
+    "project": "dongos",
+    "snapshot_generated_at": "2026-10-19T09:04:28+00:00",
+    "snapshot_rev": 7,
+    "snapshot_sha256": "a40cf9aabcbb43779b5c60414d7142cab791f85888022c84625568dbb579ac96",
+    "verification_reexecuted": false
+  },
+  "state_recovery": {
+    "at": "2026-10-19T04:43:01+00:00",
+    "audit_sha256": "3ea0db756d56092976092ed0d1216118e145a8e34aa02c5060cb913d088d553e",
+    "note": "恢复已有验收/集成/返修事实；原复验为历史记录，未声称本次重跑；不恢复丢失作业或启动模型。",
+    "snapshot_rev": 6,
+    "snapshot_sha256": "f3ab929e33419f40dfc417217d588acf8b1b26cbac50724a51942a11e438c171"
+  },
+  "status": "integrated",
+  "title": "简单文档：七种任务状态中文词典",
+  "updated_at": "2026-10-19T11:42:09+00:00",
+  "verification": {
+    "checks": [
+      {
+        "cancelled": false,
+        "elapsed_seconds": 0.203,
+        "passed": true,
+        "returncode": 0,
+        "skips": 0,
+        "spec": "discover:lmstudio-works/tests:test_status_glossary.py",
+        "tests": 1,
+        "timed_out": false
+      }
+    ],
+    "fingerprint": {
+      "lmstudio-works/deliveries/LM3.md": "a086296c4515661eb15a5c23d8713ee893a8316ea6138526dc9a94899ba273a4",
+      "lmstudio-works/docs/task-status.zh-CN.json": "efab752d8c534e79c639c034d7e81831370e28822fffc86060438fed27a08b9c"
+    },
+    "finished_at": "2026-10-18T09:24:17+00:00",
+    "job": "02f88825307d4585908de5ddd1103c8d",
+    "passed": true,
+    "source_stable": true,
+    "summary": "定向复验通过，等待源码/契约审查"
+  },
+  "write_paths": [
+    "lmstudio-works/docs/task-status.zh-CN.json",
+    "lmstudio-works/deliveries/LM3.md"
+  ]
+}

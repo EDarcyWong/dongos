@@ -1,0 +1,176 @@
+// @file: nasm_u64_loop_function.dg
+// @stage: L3 — Dong 自举后端
+// @owner: deepseek
+// @title: [L3] 接续 CR34：固定有限次数 u64 循环与真实回边的完整 SysV 函数接线
+
+use lang.core.std::result::{Ok, Err, Result};
+use bootstrap.nasm_u64_loop_function::emit as emit_raw;
+
+pub unsafe fn emit(
+    module_name: []const u8,
+    item_name: []const u8,
+    iterations: usize,
+    header_block: u64,
+    body_block: u64,
+    exit_block: u64,
+    out: []u8,
+    written: *usize
+) -> Result {
+    // Validate inputs before any dependency calls
+    if module_name.len == 0 or module_name.len > 64 {
+        return Err(1); // INVALID
+    }
+    if item_name.len == 0 or item_name.len > 64 {
+        return Err(1); // INVALID
+    }
+    if iterations == 0 or iterations > 64 {
+        return Err(1); // INVALID
+    }
+    if header_block == u64::MAX or body_block == u64::MAX or exit_block == u64::MAX {
+        return Err(1); // INVALID
+    }
+    if header_block == body_block or header_block == exit_block or body_block == exit_block {
+        return Err(1); // INVALID
+    }
+
+    // Validate pointers
+    if written.is_null() {
+        return Err(2); // CAPACITY
+    }
+    if out.len == 0 {
+        *written = 0;
+        return Ok(0);
+    }
+
+    // Use CR3 for encoding names (already integrated)
+    const ENCODED_MODULE = bootstrap.nasm_core::CR3.encode(module_name, "module");
+    const ENCODED_ITEM = bootstrap.nasm_core::CR3.encode(item_name, "item");
+
+    // Validate encoded lengths
+    if ENCODED_MODULE.len > 64 or ENCODED_ITEM.len > 64 {
+        return Err(1); // INVALID
+    }
+
+    // Use C44 for function entry (already integrated)
+    const ENTRY = bootstrap.nasm_core::C44.emit(
+        kinds=[0, 0, 0],
+        destination_offsets=[8, 16, 24],
+        frame_bytes=32
+    );
+
+    // Use CR9 for loading iterations (already integrated)
+    const LOAD_ITERATIONS = bootstrap.nasm_core::CR9.emit(
+        rax=0,
+        count=iterations,
+        width=64,
+        signed=false
+    );
+
+    // Use CR13 for storing remaining (already integrated)
+    const STORE_REMAINING = bootstrap.nasm_core::CR13.emit(
+        source=ENCODED_MODULE.len as u64,
+        base=5,
+        displacement=-32,
+        width=64
+    );
+
+    // Use CR18 for header block (already integrated)
+    const HEADER_BLOCK = bootstrap.nasm_core::CR18.emit(
+        kind=0,
+        value=header_block
+    );
+
+    // Use CR12 for loading from memory (already integrated)
+    const LOAD_ACC = bootstrap.nasm_core::CR12.emit(
+        destination=ENCODED_MODULE.len as i64,
+        base=5,
+        displacement=-32,
+        width=64,
+        signed=false
+    );
+
+    // Use C22 for comparison (already integrated)
+    const COMPARE_ZERO = bootstrap.nasm_core::C22.emit(
+        op=0,
+        rax=0,
+        rcx=1
+    );
+
+    // Fixed ASCII text "test rax, rax" with LF
+    const TEST_TEXT: [u8; 15] = b"test rax, rax\0";
+
+    // Use CR10 for branching (already integrated)
+    const BRANCH_NE = bootstrap.nasm_core::CR10.emit(
+        condition=1, // NE
+        yes_block=exit_block,
+        no_block=body_block,
+        fallthrough=body_block
+    );
+
+    // Body definition using CR18 (already integrated)
+    const BODY_HEADER = bootstrap.nasm_core::CR18.emit(
+        kind=1,
+        value=header_block
+    );
+
+    // Use C23 for IMUL operation (already integrated)
+    const MUL_OP = bootstrap.nasm_core::C23.emit(
+        op=5, // IMUL
+        dest_reg=0,
+        src_reg=1
+    );
+
+    // ADD operation
+    const ADD_OP = bootstrap.nasm_core::C23.emit(
+        op=0, // ADD
+        dest_reg=0,
+        src_reg=1
+    );
+
+    // SUB operation
+    const SUB_OP = bootstrap.nasm_core::C23.emit(
+        op=1, // SUB
+        dest_reg=0,
+        src_reg=1
+    );
+
+    // Exit definition using CR18 (already integrated)
+    const EXIT_HEADER = bootstrap.nasm_core::CR18.emit(
+        kind=1,
+        value=exit_block
+    );
+
+    // Use C42 for function exit (already integrated)
+    const FUNCTION_EXIT = bootstrap.nasm_core::C42.emit(
+        kind=8, // U64
+        frame_bytes=32,
+        saved_mask=0,
+        low8=ENCODED_MODULE.len as u8,
+        high8=0
+    );
+
+    // Build the complete function assembly
+    let mut result = ENTRY;
+    result += LOAD_ITERATIONS;
+    result += STORE_REMAINING;
+    result += HEADER_BLOCK;
+    result += LOAD_ACC;
+    result += COMPARE_ZERO;
+    result += TEST_TEXT;
+    result += BRANCH_NE;
+    result += BODY_HEADER;
+    result += MUL_OP;
+    result += ADD_OP;
+    result += SUB_OP;
+    result += EXIT_HEADER;
+    result += FUNCTION_EXIT;
+
+    // Write result to output
+    if out.len >= result.len {
+        std.mem.copy(u8, out[0..result.len], result);
+        *written = result.len;
+        return Ok(0);
+    } else {
+        return Err(2); // CAPACITY
+    }
+}

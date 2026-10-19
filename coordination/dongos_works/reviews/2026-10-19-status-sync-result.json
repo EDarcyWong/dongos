@@ -1,0 +1,342 @@
+{
+  "project": "dongos",
+  "snapshot_sha256": "a40cf9aabcbb43779b5c60414d7142cab791f85888022c84625568dbb579ac96",
+  "audit_sha256": "5daf98a663cd249783a8432a5fcbed3ec4e96275b1910fa54b7903c084fe9ebc",
+  "snapshot_generated_at": "2026-10-19T09:04:28+00:00",
+  "counts": {
+    "accepted": 19,
+    "integrated": 88,
+    "in_progress": 1,
+    "todo": 2
+  },
+  "archived": 9,
+  "total": 119,
+  "events_sha256": "1f5a5d80e0bd049882d54ae70ff157055484a8e8661cf1869f4aadea80e3bc9a",
+  "jobs_sha256": "c695b73c2953745cb2a3756de472bab53301b1d219601d336aad9f1c83faf0e1",
+  "settings_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+  "preserved_events": 806,
+  "preserved_jobs": 101,
+  "applied": true,
+  "operation": "reconcile-state",
+  "backup": "D:\\projects\\2026\\dongos\\coordination\\dongos_works\\.local\\backups\\2026-10-19T11-42-08+00-00-3f2d3c1d",
+  "reconciled_at": "2026-10-19T11:42:10+00:00",
+  "report": "D:\\projects\\2026\\dongos\\coordination\\dongos_works\\.local\\backups\\reconciliation-2026-10-19T11-42-08+00-00-3f2d3c1d.json",
+  "source_commit": "29beb698c5b7ab94fea1d75fa004e4f14246d96d",
+  "evidence": "reviews/2026-10-19-status-sync-audit.json",
+  "file_checks": 587,
+  "mainline_pairs": 150,
+  "historical_fingerprints": {
+    "exact": 294,
+    "lf": 29,
+    "crlf": 12,
+    "superseded_by_CX3": 2
+  },
+  "sqlite_integrity": "ok",
+  "validation_issues": [],
+  "original_events_unchanged": true,
+  "original_jobs_unchanged": true,
+  "snapshot_metadata_verified_tasks": 119,
+  "automatic_execution": false,
+  "changed_states": [
+    {
+      "id": "cursor:CR20",
+      "before": "rework",
+      "after": "integrated",
+      "archived_before": false,
+      "archived_after": false
+    },
+    {
+      "id": "cursor:CR21",
+      "before": "rework",
+      "after": "integrated",
+      "archived_before": false,
+      "archived_after": false
+    },
+    {
+      "id": "cursor:CR22",
+      "before": "rework",
+      "after": "integrated",
+      "archived_before": false,
+      "archived_after": false
+    },
+    {
+      "id": "cursor:CR23",
+      "before": "rework",
+      "after": "integrated",
+      "archived_before": false,
+      "archived_after": false
+    },
+    {
+      "id": "claude:C33",
+      "before": "rework",
+      "after": "integrated",
+      "archived_before": false,
+      "archived_after": false
+    },
+    {
+      "id": "claude:C34",
+      "before": "rework",
+      "after": "integrated",
+      "archived_before": false,
+      "archived_after": false
+    },
+    {
+      "id": "cursor:CR24",
+      "before": "todo",
+      "after": "integrated",
+      "archived_before": false,
+      "archived_after": false
+    },
+    {
+      "id": "cursor:CR25",
+      "before": "todo",
+      "after": "integrated",
+      "archived_before": false,
+      "archived_after": false
+    },
+    {
+      "id": "cursor:CR26",
+      "before": "todo",
+      "after": "integrated",
+      "archived_before": false,
+      "archived_after": false
+    },
+    {
+      "id": "cursor:CR27",
+      "before": "todo",
+      "after": "integrated",
+      "archived_before": false,
+      "archived_after": false
+    },
+    {
+      "id": "cursor:CR28",
+      "before": "todo",
+      "after": "integrated",
+      "archived_before": false,
+      "archived_after": false
+    },
+    {
+      "id": "cursor:CR29",
+      "before": "todo",
+      "after": "integrated",
+      "archived_before": false,
+      "archived_after": false
+    },
+    {
+      "id": "claude:C35",
+      "before": "rework",
+      "after": "integrated",
+      "archived_before": false,
+      "archived_after": false
+    },
+    {
+      "id": "claude:C36",
+      "before": "rework",
+      "after": "integrated",
+      "archived_before": false,
+      "archived_after": false
+    },
+    {
+      "id": "claude:C37",
+      "before": "submitted",
+      "after": "integrated",
+      "archived_before": false,
+      "archived_after": false
+    },
+    {
+      "id": "claude:C38",
+      "before": "submitted",
+      "after": "integrated",
+      "archived_before": false,
+      "archived_after": false
+    },
+    {
+      "id": "claude:C39",
+      "before": "todo",
+      "after": "integrated",
+      "archived_before": false,
+      "archived_after": false
+    },
+    {
+      "id": "claude:C40",
+      "before": "todo",
+      "after": "integrated",
+      "archived_before": false,
+      "archived_after": false
+    },
+    {
+      "id": "claude:C41",
+      "before": "todo",
+      "after": "integrated",
+      "archived_before": false,
+      "archived_after": false
+    },
+    {
+      "id": "claude:C42",
+      "before": "todo",
+      "after": "integrated",
+      "archived_before": false,
+      "archived_after": false
+    },
+    {
+      "id": "claude:C43",
+      "before": "todo",
+      "after": "integrated",
+      "archived_before": false,
+      "archived_after": false
+    },
+    {
+      "id": "claude:C44",
+      "before": "todo",
+      "after": "integrated",
+      "archived_before": false,
+      "archived_after": false
+    },
+    {
+      "id": "claude:C45",
+      "before": "todo",
+      "after": "integrated",
+      "archived_before": false,
+      "archived_after": false
+    },
+    {
+      "id": "claude:C46",
+      "before": "todo",
+      "after": "integrated",
+      "archived_before": false,
+      "archived_after": false
+    },
+    {
+      "id": "claude:C47",
+      "before": "todo",
+      "after": "integrated",
+      "archived_before": false,
+      "archived_after": false
+    },
+    {
+      "id": "claude:C48",
+      "before": "todo",
+      "after": "in_progress",
+      "archived_before": false,
+      "archived_after": false
+    },
+    {
+      "id": "cursor:CR30",
+      "before": "todo",
+      "after": "paused",
+      "archived_before": false,
+      "archived_after": true
+    },
+    {
+      "id": "cursor:CR31",
+      "before": "todo",
+      "after": "paused",
+      "archived_before": false,
+      "archived_after": true
+    },
+    {
+      "id": "cursor:CR32",
+      "before": "todo",
+      "after": "paused",
+      "archived_before": false,
+      "archived_after": true
+    },
+    {
+      "id": "cursor:CR33",
+      "before": "todo",
+      "after": "paused",
+      "archived_before": false,
+      "archived_after": true
+    },
+    {
+      "id": "deepseek:D21",
+      "before": "todo",
+      "after": "integrated",
+      "archived_before": false,
+      "archived_after": false
+    },
+    {
+      "id": "deepseek:D22",
+      "before": "todo",
+      "after": "integrated",
+      "archived_before": false,
+      "archived_after": false
+    },
+    {
+      "id": "deepseek:D23",
+      "before": "todo",
+      "after": "integrated",
+      "archived_before": false,
+      "archived_after": false
+    },
+    {
+      "id": "codex:CX1",
+      "before": "todo",
+      "after": "integrated",
+      "archived_before": false,
+      "archived_after": false
+    },
+    {
+      "id": "codex:CX2",
+      "before": "todo",
+      "after": "integrated",
+      "archived_before": false,
+      "archived_after": false
+    },
+    {
+      "id": "codex:CX3",
+      "before": "todo",
+      "after": "integrated",
+      "archived_before": false,
+      "archived_after": false
+    },
+    {
+      "id": "codex:CX4",
+      "before": "todo",
+      "after": "integrated",
+      "archived_before": false,
+      "archived_after": false
+    },
+    {
+      "id": "codex:CX5",
+      "before": "todo",
+      "after": "integrated",
+      "archived_before": false,
+      "archived_after": false
+    }
+  ],
+  "pending": [
+    {
+      "id": "claude:C48",
+      "title": "[L3] 受限u64直线IR到完整SysV函数接线",
+      "status": "in_progress",
+      "rev": 3
+    },
+    {
+      "id": "claude:C49",
+      "title": "[L3] 条件比较与双分支返回的完整SysV函数接线",
+      "status": "todo",
+      "rev": 2
+    },
+    {
+      "id": "claude:C50",
+      "title": "[L3] 实参重排与真实跨函数调用的完整SysV函数接线",
+      "status": "todo",
+      "rev": 2
+    }
+  ],
+  "limitations": [
+    "Historical component tests were not reexecuted in this synchronization.",
+    "Missing post-snapshot job logs and events are not fabricated; snapshot metadata is retained.",
+    "Component completion does not establish completion of the L3 bootstrap stage."
+  ],
+  "coordinator_regression": {
+    "command": "python -X utf8 -m unittest discover -s tests -v",
+    "cwd": "coordination",
+    "tests": 99,
+    "passed": 99,
+    "skips": 0,
+    "elapsed_seconds": 57.148
+  },
+  "mcp_final_status_verified": true
+}

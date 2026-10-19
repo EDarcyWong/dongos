@@ -1,0 +1,9 @@
+{"at":"2026-10-18T10:50:10+00:00","data":{"rev":1,"status":"todo"},"kind":"created","task_id":"deepseek:D18"}
+{"at":"2026-10-18T10:55:09+00:00","data":{"rev":2,"status":"in_progress"},"kind":"claim","task_id":"deepseek:D18"}
+{"at":"2026-10-18T11:02:38+00:00","data":{"rev":3,"status":"submitted"},"kind":"submit","task_id":"deepseek:D18"}
+{"at":"2026-10-18T11:07:26+00:00","data":{"job":"4be885fe70824013b046ef553a777c76","kind":"verify","provider":"python"},"kind":"queued","task_id":"deepseek:D18"}
+{"at":"2026-10-18T11:08:52+00:00","data":{"rev":4,"status":"submitted"},"kind":"verified","task_id":"deepseek:D18"}
+{"at":"2026-10-18T11:08:52+00:00","data":{"job":"4be885fe70824013b046ef553a777c76","status":"completed"},"kind":"job_finished","task_id":"deepseek:D18"}
+{"at":"2026-10-18T11:10:49+00:00","data":{"rev":5,"status":"accepted"},"kind":"accept","task_id":"deepseek:D18"}
+{"at":"2026-10-18T11:38:12+00:00","data":{"rev":6,"status":"integrated"},"kind":"integrate","task_id":"deepseek:D18"}
+{"at":"2026-10-19T11:42:09+00:00","data":{"rev":8,"status":"integrated"},"kind":"state_reconciled","task_id":"deepseek:D18"}

@@ -1,0 +1,72 @@
+{
+  "auto_dispatch": false,
+  "auto_verify": false,
+  "candidate": "cc37ec9db7ce40f2a4eee3afdcd1c608",
+  "checks": [
+    "discover:lmstudio-works/tests:test_memory_operand_vectors.py"
+  ],
+  "complexity": "simple",
+  "created_at": "2026-10-18T12:03:59+00:00",
+  "delivery": "lmstudio-works/deliveries/LM8.md",
+  "depends_on": [],
+  "description": "只做最简单固定数据录入，写一个JSON及交付两个文件，不写实现或测试。文件lmstudio-works/fixtures/memory-operand-known-vectors.json。\n顶层恰好version/cases，version为整数1；cases恰好如下顺序8项，每项恰好id/base/disp/text。base是JSON整数；disp和text均是给定字符串，原样复制，不自行计算。\nid=rax_zero,base=0,disp=\"0\",text=\"[rax]\"\nid=rbp_minus8,base=5,disp=\"-8\",text=\"[rbp - 8]\"\nid=rsp_plus16,base=4,disp=\"16\",text=\"[rsp + 16]\"\nid=r8_plus1,base=8,disp=\"1\",text=\"[r8 + 1]\"\nid=r15_minus1,base=15,disp=\"-1\",text=\"[r15 - 1]\"\nid=rax_min,base=0,disp=\"-2147483648\",text=\"[rax - 2147483648]\"\nid=r10_max,base=10,disp=\"2147483647\",text=\"[r10 + 2147483647]\"\nid=rcx_zero,base=1,disp=\"0\",text=\"[rcx]\"\nUTF-8 JSON，不增删字段/项目，不把disp改成JSON数字。独立检查由Codex维护，不修改检查文件；不依赖Cursor任务，数据仅供后续可选补充。另写lmstudio-works/deliveries/LM8.md，说明固定数据录入，未运行测试明确未运行，禁止编造通过或自举完成。\n通过自己的worker MCP查看最新rev、领取、实际落盘后提交；没有文件工具则说明并释放，不能以聊天正文冒充文件。LM Studio同时仅一项最简单任务。不改主线/他人/索引，不运行OS/VM、AI CLI、全回归、提交推送或自行验收。\n",
+  "document": "lmstudio-works/tasks/LM8-board.md",
+  "historical": false,
+  "id": "lmstudio:LM8",
+  "integration_note": "已实际同步正式工作区，并复制uleb128_decode.dg/.md及永久原生测试、LM8 fixture及永久独立数据检查到code/lang。主线5项通过0skip，生产/数据hash与验收一致，见reviews/2026-10-18-D19-R1-LM8-integration.md。",
+  "last_run_note": "交付已收集，尚未验收",
+  "legacy_hash": "f4d53c4bd74ddb9e26a103873f5ca12be5ecac4a5b07cd2c3509d4817906f7f5",
+  "number": "LM8",
+  "owner": "lmstudio",
+  "rev": 8,
+  "review_note": "已审查契约/实物与有效测试；正式定向零skip通过、来源稳定。D19 R1另4种选择性坏Dong共8次原生执行准确命中前缀/尾部两输出角色；LM8八条固定数据和类型/交付均符合。见reviews/2026-10-18-D19-R1-LM8-integration.md；主线集成另验。",
+  "state_reconciliation": {
+    "at": "2026-10-19T11:42:09+00:00",
+    "audit_sha256": "5daf98a663cd249783a8432a5fcbed3ec4e96275b1910fa54b7903c084fe9ebc",
+    "note": "协调已有历史事实；保留原事件/作业；历史复验未重跑，未新增验收或集成，不启动模型。",
+    "previous_data_sha256": "27a49013a91046a34f99e4eda5dd9d2a5ac18fa4b1fb2e0f173bde1e55e4b75b",
+    "previous_rev": 6,
+    "project": "dongos",
+    "snapshot_generated_at": "2026-10-19T09:04:28+00:00",
+    "snapshot_rev": 7,
+    "snapshot_sha256": "a40cf9aabcbb43779b5c60414d7142cab791f85888022c84625568dbb579ac96",
+    "verification_reexecuted": false
+  },
+  "state_recovery": {
+    "at": "2026-10-19T04:43:01+00:00",
+    "audit_sha256": "3ea0db756d56092976092ed0d1216118e145a8e34aa02c5060cb913d088d553e",
+    "note": "恢复已有验收/集成/返修事实；原复验为历史记录，未声称本次重跑；不恢复丢失作业或启动模型。",
+    "snapshot_rev": 6,
+    "snapshot_sha256": "f3ab929e33419f40dfc417217d588acf8b1b26cbac50724a51942a11e438c171"
+  },
+  "status": "integrated",
+  "title": "最简单固定数据：8条NASM基址位移文本",
+  "updated_at": "2026-10-19T11:42:09+00:00",
+  "verification": {
+    "checks": [
+      {
+        "cancelled": false,
+        "elapsed_seconds": 0.203,
+        "passed": true,
+        "returncode": 0,
+        "skips": 0,
+        "spec": "discover:lmstudio-works/tests:test_memory_operand_vectors.py",
+        "tests": 1,
+        "timed_out": false
+      }
+    ],
+    "fingerprint": {
+      "lmstudio-works/deliveries/LM8.md": "f52a5baba61fa85a93a3aed4dd014ad9093df3c25175f674bab1b6dba8189ff3",
+      "lmstudio-works/fixtures/memory-operand-known-vectors.json": "ccae6c3c0d442969221d6bb5a592102f262269557378fd6163f0735bb7a737f8"
+    },
+    "finished_at": "2026-10-18T12:21:33+00:00",
+    "job": "8e7fb742b15d4014ae7bb61a9ce9cc34",
+    "passed": true,
+    "source_stable": true,
+    "summary": "定向复验通过，等待源码/契约审查"
+  },
+  "write_paths": [
+    "lmstudio-works/fixtures/memory-operand-known-vectors.json",
+    "lmstudio-works/deliveries/LM8.md"
+  ]
+}

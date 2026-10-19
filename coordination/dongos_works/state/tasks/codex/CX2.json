@@ -1,0 +1,70 @@
+{
+  "auto_dispatch": false,
+  "auto_verify": false,
+  "candidate": null,
+  "checks": [
+    "module:lang.tests.test_bootstrap_semantic_runtime"
+  ],
+  "claimed_at": "2026-10-19T08:03:24+00:00",
+  "claimed_by": "codex-l3-tagged-match",
+  "complexity": "standard",
+  "created_at": "2026-10-19T07:25:58+00:00",
+  "delivery": "codex-works/deliveries/CX2.md",
+  "depends_on": [],
+  "description": "Extend native semantic_types match beyond bool to optional/result null/some/ok/err payload typing, exhaustive/duplicate checks and known-tag definite-initialization intersections. Preserve workspace ABI and explicit unsupported enums/methods. Real native positive/error cases, host semantic comparison, actual bad Dong semantic controls, source stability and zero skips required. Remaining semantic gap only, not full L3 completion.",
+  "document": "codex-works/tasks/CX2-board.md",
+  "historical": false,
+  "id": "codex:CX2",
+  "integration_note": "生产semantic_types.dg/.md和永久native runtime测试已实际落在code/lang主线并经审查者读取/核对（本任务直接主线交付，无候选副本待复制）。新正式隔离10项0skip1209.695秒、前后源稳定；审查者独立19项两模式38次追加原生检查通过且当前主线三源文件与新正式隔离输入SHA一致。只登记这组真实主线语义实现和永久测试，不冒充独立再编译的主线全模块或完整L3。证据reviews/2026-10-19-C43-CX2-independent.md及.local/reviews/CX2-independent-20261019/58621310cc104b8a8ba3f9676f219106/review.json。",
+  "legacy_hash": "72c8e7703d4bbc60a26b857866d92651faab78295b47b4dbf5a15cfaa5ea2c47",
+  "number": "CX2",
+  "owner": "codex",
+  "rev": 13,
+  "review_note": "L3独立审查已实际阅读任务/交付及rt_match/rt_tag、payload种类、穷尽/重复/wildcard、已知标签活跃流与初始化交集、workspace ABI和永久测试。新正式作业58621310cc104b8a8ba3f9676f219106 10项0skip1209.695秒，源码稳定，所有坏Dong正常执行由语义断言拒绝。审查者追加19项两模式38次原生检查通过，当前生产/文档/新版测试与新正式隔离输入SHA一致。旧取消作业不计成功；新版构建优化未删用例或断言。详见reviews/2026-10-19-C43-CX2-independent.md。独立语义组件通过，不等同完整L3。",
+  "state_reconciliation": {
+    "at": "2026-10-19T11:42:09+00:00",
+    "audit_sha256": "5daf98a663cd249783a8432a5fcbed3ec4e96275b1910fa54b7903c084fe9ebc",
+    "note": "协调已有历史事实；保留原事件/作业；历史复验未重跑，未新增验收或集成，不启动模型。",
+    "previous_data_sha256": "ef712c4726465b39a82c99d2f0f612ea3dc5ab2da614f687f6a5360ab93c6bfc",
+    "previous_rev": 1,
+    "project": "dongos",
+    "snapshot_generated_at": "2026-10-19T09:04:28+00:00",
+    "snapshot_rev": 12,
+    "snapshot_sha256": "a40cf9aabcbb43779b5c60414d7142cab791f85888022c84625568dbb579ac96",
+    "verification_reexecuted": false
+  },
+  "status": "integrated",
+  "title": "补齐optional/result match类型与确定初始化语义",
+  "updated_at": "2026-10-19T11:42:09+00:00",
+  "verification": {
+    "checks": [
+      {
+        "cancelled": false,
+        "elapsed_seconds": 1209.695,
+        "passed": true,
+        "returncode": 0,
+        "skips": 0,
+        "spec": "module:lang.tests.test_bootstrap_semantic_runtime",
+        "tests": 10,
+        "timed_out": false
+      }
+    ],
+    "fingerprint": {
+      "codex-works/deliveries/CX2.md": "0dc300ce5c427a3554e1ad667f4c6fe04f1269d919dcaae7bc5553db5e9f36f7",
+      "lang/bootstrap/semantic_types.dg": "529c79c9dfeb997bca348ff27ae1c02008081f5cace2c0b33ff165bcac82d7ca",
+      "lang/bootstrap/semantic_types.md": "e8108683902f1f408b8bfbd211c7bcb20c82aa9fa2953eb135376a122ce13488",
+      "lang/tests/test_bootstrap_semantic_runtime.py": "f5b86d7a96f1800a4be6aa40341e39e5ba4463bf9a4e6644be71038e6eb92a2c"
+    },
+    "finished_at": "2026-10-19T08:25:50+00:00",
+    "job": "58621310cc104b8a8ba3f9676f219106",
+    "passed": true,
+    "source_stable": true,
+    "summary": "定向复验通过，等待源码/契约审查"
+  },
+  "write_paths": [
+    "lang/bootstrap/semantic_types.dg",
+    "lang/bootstrap/semantic_types.md",
+    "lang/tests/test_bootstrap_semantic_runtime.py",
+    "codex-works/deliveries/CX2.md"
+  ]
+}

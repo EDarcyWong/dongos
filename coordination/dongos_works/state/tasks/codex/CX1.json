@@ -1,0 +1,68 @@
+{
+  "auto_dispatch": false,
+  "auto_verify": false,
+  "candidate": null,
+  "checks": [
+    "module:lang.tests.test_nasm_compatibility"
+  ],
+  "claimed_at": "2026-10-19T05:48:31+00:00",
+  "claimed_by": "codex-host-toolchain",
+  "complexity": "standard",
+  "created_at": "2026-10-19T05:48:30+00:00",
+  "delivery": "codex-works/deliveries/CX1.md",
+  "depends_on": [],
+  "description": "本机NASM 2.16.03回移了reloc-rel-dword警告，当前仅按major>=3设置参数，C38独立复验在汇编前中断。仅修公共测试工具的能力检测，保留-Wall/-Werror及其它警告；为包含警告的新2.x与不支持警告的旧版本添加有意义回归，并实际复跑C37/C38定向测试。不得改组件生产/测试来掩盖失败，不运行OS/VM/全语言回归。",
+  "document": "codex-works/tasks/CX1-board.md",
+  "historical": false,
+  "id": "codex:CX1",
+  "integration_note": "两份授权测试文件已实际写入code/lang/tests，主目录指纹与独立复验实物一致；C37正式4项0skip通过，原快照失败与C38工具链失败均保留。仅公共原生测试工具修复，不修改Dong生产编译器或组件实现。",
+  "legacy_hash": "414f3902929cd43887e1bb063e21462146f3398d49db700cb0707cf6e4066f85",
+  "number": "CX1",
+  "owner": "codex",
+  "rev": 7,
+  "review_note": "源码审查：仅按nasm -h中完整警告类别检测已支持的reloc-rel-dword，保留-Wall/-Werror；不按版本猜测，不吞探测错误。3项独立定向测试通过0skip、来源稳定。实际NASM 2.16.03帮助及C37真实Dong两模式/ELF64/COFF编译运行已验证兼容。",
+  "state_reconciliation": {
+    "at": "2026-10-19T11:42:09+00:00",
+    "audit_sha256": "5daf98a663cd249783a8432a5fcbed3ec4e96275b1910fa54b7903c084fe9ebc",
+    "note": "协调已有历史事实；保留原事件/作业；历史复验未重跑，未新增验收或集成，不启动模型。",
+    "previous_data_sha256": "deae5810174eea71a811bb952e304518c087bc21a7a38033f9d9514c2dbf4fa0",
+    "previous_rev": 1,
+    "project": "dongos",
+    "snapshot_generated_at": "2026-10-19T09:04:28+00:00",
+    "snapshot_rev": 6,
+    "snapshot_sha256": "a40cf9aabcbb43779b5c60414d7142cab791f85888022c84625568dbb579ac96",
+    "verification_reexecuted": false
+  },
+  "status": "integrated",
+  "title": "按NASM实际警告能力检测原生测试兼容参数",
+  "updated_at": "2026-10-19T11:42:09+00:00",
+  "verification": {
+    "checks": [
+      {
+        "cancelled": false,
+        "elapsed_seconds": 0.614,
+        "passed": true,
+        "returncode": 0,
+        "skips": 0,
+        "spec": "module:lang.tests.test_nasm_compatibility",
+        "tests": 3,
+        "timed_out": false
+      }
+    ],
+    "fingerprint": {
+      "codex-works/deliveries/CX1.md": "a3a6b0d9b49ce071c250fce8ef4141efd8eb3ef4d29ff07f8f71c613c00b6222",
+      "lang/tests/test_dongc.py": "22963a04d63a8a36d97d8dcddaf7230c69a3960adf782a24874cec0d18d7bd21",
+      "lang/tests/test_nasm_compatibility.py": "73612ecdf3acbc7be01c7f70913d7ffdc1b5c7994ea25bd84a0ae7a2a6f14af1"
+    },
+    "finished_at": "2026-10-19T05:49:50+00:00",
+    "job": "70caaaf9c80c4f74b72255b5ef5abfef",
+    "passed": true,
+    "source_stable": true,
+    "summary": "定向复验通过，等待源码/契约审查"
+  },
+  "write_paths": [
+    "lang/tests/test_dongc.py",
+    "lang/tests/test_nasm_compatibility.py",
+    "codex-works/deliveries/CX1.md"
+  ]
+}

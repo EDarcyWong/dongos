@@ -64,6 +64,8 @@ class Console(ThreadingHTTPServer):
 
     def snapshot(self, store=None, runner=None):
         store, runner = store or self.store, runner or self.runner
+        if store.state:
+            store.state.refresh()   # files that arrived through git while serving
         probes = store.local / 'connection-probes.json'
         tasks = [t | {'timing': store.timing(t)} for t in store.tasks()]
         return dict(at=now(), tasks=tasks, jobs=store.jobs(),

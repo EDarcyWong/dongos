@@ -1,0 +1,78 @@
+{
+  "auto_dispatch": false,
+  "auto_verify": false,
+  "candidate": null,
+  "checks": [
+    "discover:claude-works/tests:test_sysv_integer_args.py"
+  ],
+  "claimed_at": "2026-10-18T08:24:02+00:00",
+  "claimed_by": "claude-worker-1",
+  "complexity": "standard",
+  "created_at": "2026-10-18T06:55:31+00:00",
+  "delivery": "claude-works/deliveries/C8.md",
+  "depends_on": [],
+  "description": "模块bootstrap.sysv_integer_args。只规划x86-64 SysV的INTEGER类：kinds[i]=0表示一个u64/i64/指针机器字，1表示含两个INTEGER机器字的聚合；其它值INVALID。不支持SSE/浮点/大聚合/返回值/varargs，不据此声称完整ABI。\nLocation{kind:u64,index:usize}：kind=0寄存器，index0..5分别RDI/RSI/RDX/RCX/R8/R9；kind=1栈，index是从首个栈参数槽开始的字节偏移。Result{used:usize,stack_bytes:usize}。\npub unsafe fn plan(kinds:[]const u8,out:[]Location,result:*Result)u64。\n按参数顺序输出展开后的每个机器字位置。双字聚合需同时有两个寄存器，否则整体上栈，且不占用剩余的单个寄存器，后续标量仍可用该寄存器；栈槽按参数/字顺序递增8字节。stack_bytes向上取整16。out容量按实际机器字总数，空输入成功used/stack_bytes=0。先检查全部kind和计数/栈大小再写任何输出。Python独立状态模型对照，尤其5个标量后双字聚合再标量的寄存器回退。\n本批是L3后端所需的独立纯Dong组件，不修改Codex活动语义/流程/后端，也不修改已验收C1～C6、D1～D13或Cursor CR1。仅写本任务列出的claude-works/src、tests和交付。新组件不放入lang/。不提交/推送，不运行OS/VM/全回归，不自行验收。\n公共契约：公开OK=0、INVALID=1、CAPACITY=2，需工作区时WORKSPACE=3。借用切片及结果对象先完整检查非空指针、自然对齐、元素乘法和端点溢出；读输入前完成描述符/完整声明区间别名预检。只读输入可互相重叠；可写输出/工作区/结果对象不得互相或与输入整段重叠。空切片可NULL，结果对象仍须有效独立。非OK保持整个输出及结果对象不变；work可在完成描述符预检后改变内部内容。成功只改有效输出前缀及明确字段，尾部/输入/实际双端保护不变。错误优先INVALID→CAPACITY→WORKSPACE（若需要），数据相关INVALID也不能让部分输出泄漏。所有算术先验溢出，debug/release不能以panic代替错误返回。unsafe调用方保证通过数值预检的区间真实可访问；无分配/全局可变状态/OS调用。\n验收：独立Python期望，至少100个固定种子的小规模案例及接口边界；实际Dong→NASM→C/SysV，debug/release执行、ELF64/COFF组装，零skip。正向和失败逐次检查返回值、完整结果/输出尾部、输入和真实双端；至少一组真实只读输入。至少两类真实坏董副本成功编译链接运行，并被指定断言拒绝；构建失败/崩溃/超时不算拒绝。只跑本任务定向测试，产物放claude-works/build/<编号>/<唯一运行目录>/。交付附命令、数量/skip、hash、证据和限制，保持待复验。当前契约及测试源码由本任务负责人维护，独立验收由Codex完成。\n",
+  "document": "claude-works/tasks/C8-board.md",
+  "historical": false,
+  "id": "claude:C8",
+  "integration_note": "按验收hash集成模块/文档/主线测试，定向及组合验证通过；映射和新回执见reviews/2026-10-18-batch3-integration.md。LM2为回写项目文档，七个Dong组件为lang/bootstrap集成；L3未完成。",
+  "legacy_hash": "60c3a366d1488eae68be37ddc4f017d70be019629f37147a62781ee215309567",
+  "number": "C8",
+  "owner": "claude",
+  "rev": 8,
+  "review_note": "Codex已审查源码/契约及测试有效性，独立定向复跑零skip且文件指纹稳定；详见 claude-works/reviews/2026-10-18-C7-C12-acceptance.md。独立验收，不代表主线集成或L3完成。",
+  "state_reconciliation": {
+    "at": "2026-10-19T11:42:09+00:00",
+    "audit_sha256": "5daf98a663cd249783a8432a5fcbed3ec4e96275b1910fa54b7903c084fe9ebc",
+    "note": "协调已有历史事实；保留原事件/作业；历史复验未重跑，未新增验收或集成，不启动模型。",
+    "previous_data_sha256": "499252bba167d35e6f3a35539ec9ad9d592015236f6b004b8f9e7866436573c9",
+    "previous_rev": 6,
+    "project": "dongos",
+    "snapshot_generated_at": "2026-10-19T09:04:28+00:00",
+    "snapshot_rev": 7,
+    "snapshot_sha256": "a40cf9aabcbb43779b5c60414d7142cab791f85888022c84625568dbb579ac96",
+    "verification_reexecuted": false
+  },
+  "state_recovery": {
+    "at": "2026-10-19T04:43:01+00:00",
+    "audit_sha256": "3ea0db756d56092976092ed0d1216118e145a8e34aa02c5060cb913d088d553e",
+    "note": "恢复已有验收/集成/返修事实；原复验为历史记录，未声称本次重跑；不恢复丢失作业或启动模型。",
+    "snapshot_rev": 6,
+    "snapshot_sha256": "f3ab929e33419f40dfc417217d588acf8b1b26cbac50724a51942a11e438c171"
+  },
+  "status": "integrated",
+  "title": "SysV整数参数位置规划组件",
+  "updated_at": "2026-10-19T11:42:09+00:00",
+  "verification": {
+    "checks": [
+      {
+        "cancelled": false,
+        "elapsed_seconds": 6.063,
+        "passed": true,
+        "returncode": 0,
+        "skips": 0,
+        "spec": "discover:claude-works/tests:test_sysv_integer_args.py",
+        "tests": 3,
+        "timed_out": false
+      }
+    ],
+    "fingerprint": {
+      "claude-works/deliveries/C8.md": "c49dd86f6ed3dabf8fcf61b55512d4d3c53d7f5139bd9542bd507e817ac71fe9",
+      "claude-works/src/bootstrap/sysv_integer_args.dg": "75c4ab5fd07d586684eb753958654e6e6658ff90e4d77f2a1ea96cb110573204",
+      "claude-works/src/bootstrap/sysv_integer_args.md": "e019998826a2007980a2b4e843b1e01cc546492c6a9fd0226de71a9a77ecf700",
+      "claude-works/tests/test_sysv_integer_args.py": "c1c889d9f312758970308bcabb3bc7df2f82532e7ce5743af7ab5484f3755e59"
+    },
+    "finished_at": "2026-10-18T09:04:37+00:00",
+    "job": "654bf2ea23da440c87fc74aa42a12c86",
+    "passed": true,
+    "source_stable": true,
+    "summary": "定向复验通过，等待源码/契约审查"
+  },
+  "write_paths": [
+    "claude-works/src/bootstrap/sysv_integer_args.dg",
+    "claude-works/src/bootstrap/sysv_integer_args.md",
+    "claude-works/tests/test_sysv_integer_args.py",
+    "claude-works/tests/sysv_integer_args_probe*",
+    "claude-works/deliveries/C8.md"
+  ]
+}

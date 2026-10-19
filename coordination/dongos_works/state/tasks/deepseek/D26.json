@@ -1,0 +1,46 @@
+{
+  "archive_note": "用户指定将D26转派Cursor，后继cursor:CR38。D26暂停归档并停止写入/提交；保留原任务书、发布时间和事件，原源码/说明/测试/交付均未落盘，不继承验收。历史cursor:CR36继续归档，不恢复。",
+  "archived": true,
+  "archived_at": "2026-10-19T15:00:26+00:00",
+  "auto_dispatch": false,
+  "auto_verify": false,
+  "candidate": null,
+  "checks": [
+    "discover:deepseek-works/tests:test_nasm_checked_u64_function.py"
+  ],
+  "complexity": "standard",
+  "created_at": "2026-10-19T12:12:15+00:00",
+  "delivery": "deepseek-works/deliveries/D26.md",
+  "depends_on": [
+    "cursor:CR3",
+    "claude:C44",
+    "cursor:CR12",
+    "cursor:CR13",
+    "claude:C24",
+    "cursor:CR22",
+    "cursor:CR23",
+    "cursor:CR9",
+    "claude:C42",
+    "cursor:CR18"
+  ],
+  "description": "所属阶段：L3：Dong自举后端。用户明确要求转派Cursor未完成任务，本项接续cursor:CR36。原任务已暂停归档，Cursor停止原编号写入和提交；原书、领取、审查和事件全部保留。\n来源任务书：cursor-works/tasks/CR36-board.md；SHA256=21b2e6d336c919f06ae6a1935d49c1443d2675ad4741f7d1080b5ca81ee49610。原发布时间=2026-10-19T12:00:17+00:00；转交前状态=todo rev1；原领取时间=未领取。\n迁移范围：完整保留原接口、依赖、失败原子性、定向测试和真实坏体验证要求，仅将本项可写文件与临时构建路径改为deepseek-works、本交付编号改为D26。转交检查时原四个实现/说明/测试/交付文件尚未落盘，无实现需要复制。若随后发现原稿，先核对转交证据再接续，不重复实现或恢复Cursor原任务。\n本项从待领取开始，不继承原领取、提交、测试通过、验收或集成；DeepSeek在本人客户端通过worker MCP读取最新rev及完整任务书，先处理本人已有领取/返修，再逐项claim与submit，不自动启动AI CLI。原文中的既有组件编号仍为只读依赖，不随归属改变。\n\n## 原任务契约（本人路径已映射）\n\n所属阶段：L3：Dong自举后端 → 整函数checked算术接线。模块bootstrap.nasm_checked_u64_function。实际复用已集成checked原语与入口/返回组件生成完整SysV函数，与C48显式wrapping直线IR、C49条件选择、C50转调独立；不宣称完整AST/IR、自举或客体门禁完成。\n\npub const OK:u64=0; pub const INVALID:u64=1; pub const CAPACITY:u64=2;\npub const ADD:u64=0; pub const SUB:u64=1; pub const MUL:u64=2; pub const NEG:u64=3;\npub unsafe fn emit(module_name:[]const u8,item_name:[]const u8,operation:u64,signed:bool,error_block:u64,out:[]u8,written:*usize)u64\n\nmodule/item各1..64原始字节，符号完全复用CR3。operation0..3；NEG仅signed=true，unsigned NEG为INVALID，即使out容量0仍先拒绝；error_block为0..MAX-1，MAX=NONE非法。error_block由上游保证与同汇编单元其它函数块唯一。接口返回的是发射状态，不是生成函数的运行状态。\n\n生成真正SysV函数Pair f(u64 a,u64 b)，Pair恰两个INTEGER机器字：RAX=value、RDX=status。signed=false把a/b按u64解释，signed=true把原位模式按i64解释。ADD/SUB/MUL精确数学结果在相应64位范围内则返回{结果位模式,0}；溢出返回{0,1}。NEG忽略b，a==i64::MIN返回{0,1}，其它返回{-a位模式,0}。所有路径正常ret；这里的错误块是可观察返回适配，不发panic、不触发硬件异常。函数运行时只使用常规SysV调用前提，不访问外部目标内存。\n\n固定帧32字节、saved_mask=0；输入a/b槽8/16，value/status槽24/32。成功与错误路径均先写全两结果槽，再C42以kind11 INTEGER_PAIR、frame32、mask0、low24/high32返回。禁止把RDX当临时状态后直接ret（unsigned MUL改RDX），必须显式经结果槽与C42返回。\n\n严格生成顺序与实际复用：\n1. CR3.encode(module,item)后加冒号和真实单LF；C44.emit(kinds=[0,0],destination_offsets=[8,16],frame32)生成真实序言和捕获，不另写入口。\n2. ADD/SUB：CR12.load(rax,rbp,-8,64,false)、CR12.load(rcx,rbp,-16,64,false)，C24.emit(operation,signed,rax,rcx,error_block)，必须使用该组件的add/sub与紧邻jo/jc，不插指令破坏flags。\n3. MUL：CR12把槽8/16装入RDI/RSI，再CR22.emit(signed,error_block)；复用其固定寄存器、signed/unsigned实现，不把两种乘法统一成错误的IMUL。NEG：CR12把槽8装RAX，再CR23.emit(rax,error_block)。不发无用b装载。\n4. 落空成功：CR13.store(RAX,rbp,-24,64)，CR9.emit(RAX,0,64,false)+CR13.store到-32，C42.emit(11,32,0,24,32)。\n5. CR18.emit(kind0,error_block)定义错误标签；CR9/CR13分别写value=0和status=1，再同规格C42返回。成功ret后才出现错误标签，无需额外done块。\n\n除固定冒号LF外不自写依赖已负责的十进制、符号、内存操作数、算术、入口/尾声或返回kind逻辑。无bits/section/global/extern，测试包装可添加节/global和桥。\n\n先完整written、名字、out描述符/端点/完整别名与枚举/名长/块号预检；输入名字可互叠，只读并与完整out/written互斥。所有INVALID先于CAPACITY。依赖均在有证明上界的局部scratch调用，非OK或超子段界返回INVALID；任何失败用户完整out、written和输入不变。合法容量不足不得panic，不先发函数头再回滚；整函数最终一次发布。可用4096最终scratch，逐段保守充分预算：符号加冒号LF268；入口给1536；操作数装载最多2×128；checked段64（C24<=45、CR22<=59、CR23<=40）；成功结果写槽128+状态常量64+状态写槽128；成功出口192；错误标签64；错误结果常量/写槽2×(64+128)；错误出口192。合计3276<=4096，子调用切片也须在最终scratch内有足够预留；说明中证明每界，不以一次输出长度代替上界。\n\n有限语义向量建议20~24个，覆盖signed/unsigned ADD/SUB/MUL各成功及溢出、0/1/MAX/MIN/-1、unsigned借位、signed符号边界、MUL非零高半积且低半积似正常、signed MUL边界、NEG的0/-1/MIN/MAX、NEG用两个不同b证明忽略b。独立Python任意精度计算范围、value位模式与status；不得只验status或只验低积。覆盖错误标签20位、名长1/64、非ASCII/NUL名字的CR3编码、多函数同文件不同块号无冲突。\n\n至少三类真实坏Dong：其一只对unsigned MUL把给CR22的signed改true，使用MAX×2使坏体正常返回错误status/value；其二把成功C42的low/high参数24/32对调，用非0/1成功结果按真实RAX/RDX角色拒绝；其三容量不足提前发布函数头/计数，以完整原子性拒绝。可加ADD/SUB符号选择或NEG错误路由负控，但不扩大主要向量。注意MAX×2在unsigned应overflow，在signed按-1×2落空，两侧都正常运行且结果确定。\n\n仅运行本任务定向检查。实际Dong debug/release生成完整函数；NASM ELF64/COFF均组装，COFF组装不冒充Win64调用ABI。手写SysV桥真正call/ret，捕获RAX/RDX，检查RBX、RBP、R12~R15和调用前后RSP；先安全恢复宿主ABI再断言。输入与输出guard、成功精确文本/计数/完整未用尾部、INVALID优先CAPACITY、容量exact/短1/0/富余均覆盖。所有written/名字/out端点、对齐、NULL、完整尾部别名预检独立可达；真实只读输入页保护并检查保护成功。每模式主要原生函数向量合计<=24，不作全笛卡尔积；边界/容量/预检可采用独立有限发射器调用。记录全部源码、说明、测试及只读依赖前后SHA256，0skip才可验收。\n坏体必须成功构建、链接并正常返回，由指定返回值/状态/内存或完整原子性断言拒绝；同输入每个模式先用正式Dong实际生成并执行好侧。文本差异、构建失败、崩溃或无关预检不得冒充负控，不用Python汇编模板代替好侧。坏体全部访问在预留的真实安全内存内，不破坏宿主栈/ret。\n本人已有领取/返修优先。仅声明的四文件，已integrated依赖只读；不改主线、活动编译器、其它任务或协调器，不自行验收/集成、提交/推送、运行OS/VM/全回归/AI CLI。临时产物在deepseek-works/build/本编号/<唯一目录>。完成后交付列真实命令、tests/skips、模式/对象格式、全部输入SHA、每类坏体观察与拒绝依据、未运行限制，再worker MCP按最新rev submit。\n\n## 共用固定契约与执行归属\n\n本任务是L3 Dong自举后端的独立生产组件；仅四个声明文件，Dong实现，不导出C符号（临时测试wrapper可导出），无分配、全局可变状态、OS调用。不可改code/lang、活动编译器、内核、协调器、其它负责人、在途任务或已集成依赖；既有队列/返修优先。依赖只读，只用已integrated模块；不得以宿主Python/C算法替代Dong生产逻辑。\n\n统一OK=0、INVALID=1、CAPACITY=2；接口另有Result时按任务正文完整尺寸。written非NULL、8对齐、完整8字节端点不回绕；out完整声明区间端点不回绕，非空非NULL，空可NULL。written与完整out不重叠（包括成功未使用尾部）。有输入切片/结构/嵌套名字时，必须在任何读写前验证完整描述符、元素乘法、端点、所需对齐、非空非NULL和完整对象别名；输入彼此如正文无禁止可互叠，只读输入与完整out/结果不得重叠。所有数据/枚举/标签/尺寸INVALID优先CAPACITY。失败out、计数或完整Result、输入全文不变；成功只写精确前缀/结果，尾部保持。先全预检及正确求长，在充分且有证明上界的局部区调用只读依赖，再最后发布用户out；不允许内部scratch越界或对合法容量不足输入panic。\n\n文本严格ASCII，换行真实单LF，无NUL/注释/额外空行/隐式section/global/ret（任务另定声明除外）。涉及__dong_b<N>标签时N=0..MAX-1，MAX为NONE非法；数字复用已声明decimal_integer，不另写格式化。寄存器编号若有0..15参数，固定rax,rcx,rdx,rbx,rsp,rbp,rsi,rdi,r8..r15；固定寄存器任务按正文集合测试，不强凑16矩阵。\n\n测试只跑本任务checks：实际编译/链接/原生执行Dong debug与release，NASM ELF64/COFF都组装；原生C桥显式SysV，保护宿主栈/被调用者保存寄存器。COFF组装不冒充Win64调用ABI。只暂存本模块及已声明只读依赖的传递闭包，不引入整个lang根遮蔽坏源码。独立Python/C oracle，不用生产规划器输出当唯一期望。有限固定边界，每模式不超过24个主要原生向量（并发操作另按正文有限检查）；不做全笛卡尔积或性能基准。源码、说明、测试、只读依赖前后SHA256稳定，0skip才可验收。\n\n每个描述符/端点/别名预检要独立可达，其它字段合法。written端点溢出用8对齐UINT64_MAX-7且合法空out，漏检坏体应安全返回CAPACITY而非非法解引用。初始化guard后再取快照，立刻观察失败全文/计数/guard、成功精确文本/长度/未用尾部；输入真实只读保护须检查系统调用成功，不能只声称只读。\n\n至少保留两类真实坏Dong：一种完成构建、链接、正常原生执行后，由指定数值/内存/分支/链接后地址断言拒绝；一种容量不足提前写out或结果，由完整原子性断言拒绝。同夹具先跑好体。构建失败、崩溃、超时、文本不同、无关预检错误不能冒充指定语义负控；源码中缺锁/不同内存序等结构检查单列，不能假装单次正常运行证明并发语义。坏体所有内存访问在预留安全可访问区内，不破坏真实宿主栈/ret、不依靠越界或硬件异常拒绝。\n\n本人客户端先worker MCP get_task/read_document读取最新rev和完整契约/归属，claim成功才执行；先完成已有领取/返修。产物在本人works/build/<编号>/<唯一目录>/，完成原编号交付写真实命令、tests/skips、模式/对象格式、全部输入SHA256、每种坏体实际观察/拒绝依据、未跑与剩余限制，再MCP submit。不得自行accept/integrate、提交/推送、运行OS/VM/全回归、启动模型CLI/定时器/关机，不用管理工具自动启动客户端。任务发布不代表实现或通过，最后由Codex独立复验再验收集成。\n",
+  "document": "deepseek-works/tasks/D26-board.md",
+  "historical": false,
+  "id": "deepseek:D26",
+  "legacy_hash": "57dc0b4be3f823d1050518702755ac25f2f88c19b4fa16434d334ac2b5bdc69b",
+  "number": "D26",
+  "owner": "deepseek",
+  "resume_status": "todo",
+  "rev": 3,
+  "review_note": "",
+  "status": "paused",
+  "title": "[L3] 接续CR36：受检64位算术与错误返回的完整SysV函数接线",
+  "updated_at": "2026-10-19T15:00:26+00:00",
+  "verification": null,
+  "write_paths": [
+    "deepseek-works/src/bootstrap/nasm_checked_u64_function.dg",
+    "deepseek-works/src/bootstrap/nasm_checked_u64_function.md",
+    "deepseek-works/tests/test_nasm_checked_u64_function.py",
+    "deepseek-works/deliveries/D26.md"
+  ]
+}

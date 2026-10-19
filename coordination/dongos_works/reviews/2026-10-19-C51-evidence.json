@@ -1,0 +1,290 @@
+{
+  "task": "claude:C51",
+  "submission_rev": 3,
+  "formal_job": "f7289623842e4deba12e58db53c293a3",
+  "formal": {
+    "passed": true,
+    "checks": [
+      {
+        "spec": "discover:claude-works/tests:test_u64_expression_ir.py",
+        "passed": true,
+        "tests": 6,
+        "skips": 0,
+        "returncode": 0,
+        "cancelled": false,
+        "timed_out": false,
+        "elapsed_seconds": 458.734
+      }
+    ],
+    "source_stable": true,
+    "fingerprint": {
+      "claude-works/src/bootstrap/u64_expression_ir.dg": "4ec12810918b6f1bf9de88e89a46bf385a4e9b9bd686291dc4125344d21dbb9e",
+      "claude-works/src/bootstrap/u64_expression_ir.md": "097846cf72f23f6c3dbca6915cfc1af9e34aa1def0cf7e7ba095a5cd4ca22f76",
+      "claude-works/tests/test_u64_expression_ir.py": "2f89b00bfe476086c0d1eb29fe40e46d42b72dad6cdbf20115e34b50eceb8f08",
+      "claude-works/deliveries/C51.md": "05435afb08dbaa31b364614c1386973c334257f1a6d38dc5c5e0a38b21d2440f"
+    },
+    "summary": "定向复验通过，等待源码/契约审查",
+    "finished_at": "2026-10-19T15:11:13+00:00"
+  },
+  "run": "D:\\projects\\2026\\dongos\\coordination\\dongos_works\\.local\\runs\\f7289623842e4deba12e58db53c293a3\\workspace\\claude-works\\build\\C51\\run-4606a2cac13f",
+  "source_unchanged_since_formal": true,
+  "input_sha256": {
+    "u64_expression_ir.dg": "4ec12810918b6f1bf9de88e89a46bf385a4e9b9bd686291dc4125344d21dbb9e",
+    "u64_expression_ir.md": "097846cf72f23f6c3dbca6915cfc1af9e34aa1def0cf7e7ba095a5cd4ca22f76",
+    "test_u64_expression_ir.py": "2f89b00bfe476086c0d1eb29fe40e46d42b72dad6cdbf20115e34b50eceb8f08",
+    "lexer.dg": "4b30b6a24486610881d5246b3eb40bf5a14b7399c362ecabae17e951abfab2bc",
+    "unicode.dg": "93b79572d7b0505d643a89acac85207d5223ad24f43b7f92ba44a38c87f86450",
+    "expression.dg": "59ac6185285d82d4999053630b2f8b4dab2fb4111f5b882d187c35c395381596",
+    "bigint.dg": "6c63ed4b11051aff9477f04c643d0595184a881a6fbcc41284c3099ace257a3b",
+    "nasm_u64_function.dg": "26bd4c55ecfb5601c1c30ce573080409baff1f30acca8ce9e4f798634f489789",
+    "nasm_symbol.dg": "25675ec83d79c6f2b34bebfdd837e75d80dc384e900939be0c75d06a7bde4c06",
+    "decimal_integer.dg": "58a4e4d746393d0e5944656aeb4c6f2aff96acca047afd455c60a47464ce0b76",
+    "nasm_function_frame.dg": "08580fdf8ebbd75dc27812bb63f4e425a18e66b285fd5ccd7805d1d6dc55e9ff",
+    "nasm_sysv_incoming_args.dg": "bbaf9d38f0b7993e0d9da3ff86e8c0d86ecc0bbdca09e7617a878b57c3e3f714",
+    "sysv_integer_args.dg": "75c4ab5fd07d586684eb753958654e6e6658ff90e4d77f2a1ea96cb110573204",
+    "nasm_memory_operand.dg": "e3d072a3ea1314975427bb0e24426da2adaf3de692101f3e3e8d6768697f1d24",
+    "nasm_integer_memory_load.dg": "88624e98077d19615117f2a0f9ac6c67e80993ce222609c376288da3e45d3fec",
+    "nasm_integer_memory_store.dg": "bab7c97377a90eb581ff25b681e7462fb4ab97bd082de1c203bca5b3587b0b24",
+    "nasm_integer_binary.dg": "5fcddcad96268f20584022e89c9f17bf0ea827e7d09ae84b451d5aacfcd2f14b",
+    "nasm_sysv_function_exit.dg": "9dffc7415ea414310cb68e81457fb1b0c04040fc52d01c4bb1a2643af9fd29f2",
+    "nasm_sysv_return_values.dg": "7a3760f6ef81dbc3f436541a2de3fb746aff723fa72dc4ba851c293d2a064b32",
+    "sysv_return_plan.dg": "f880c0e387e9561f00a51b87713fcdd7af24a065dd0be407325b3290e6a0c08e"
+  },
+  "artifact_hashes_checked": 552,
+  "native_observations": [
+    {
+      "label": "native-debug",
+      "vectors": 20,
+      "raw_sha256": "467e823f8b559e62c929480f0652c44200f9f62624b2b97f905823848b1d0b6e",
+      "all_abi_guards_checked": true,
+      "rbx_delta": 0,
+      "rax_mismatches": []
+    },
+    {
+      "label": "bad-sub-good-debug",
+      "vectors": 7,
+      "raw_sha256": "3c14eec8921300d0a0f49e20cb467acf7bc5ea656647ad346d7211be91e0df64",
+      "all_abi_guards_checked": true,
+      "rbx_delta": 0,
+      "rax_mismatches": []
+    },
+    {
+      "label": "bad-sub-debug",
+      "vectors": 7,
+      "raw_sha256": "4b10165dfbb98e27483d9acb7452478ff5265238215b6d606d6c7919ffe9f6ec",
+      "all_abi_guards_checked": true,
+      "rbx_delta": 0,
+      "rax_mismatches": [
+        {
+          "index": 0,
+          "expected": 18446744073709551612,
+          "actual": 4
+        },
+        {
+          "index": 1,
+          "expected": 4,
+          "actual": 18446744073709551612
+        },
+        {
+          "index": 2,
+          "expected": 18446744073709551604,
+          "actual": 18446744073709551612
+        },
+        {
+          "index": 3,
+          "expected": 12297735558912427591,
+          "actual": 12297735558912429389
+        },
+        {
+          "index": 4,
+          "expected": 9223372036854775817,
+          "actual": 9223372036854776055
+        },
+        {
+          "index": 5,
+          "expected": 527,
+          "actual": 18446744073709551615
+        },
+        {
+          "index": 6,
+          "expected": 1,
+          "actual": 18446744073709551615
+        }
+      ]
+    },
+    {
+      "label": "bad-rbx-good-debug",
+      "vectors": 20,
+      "raw_sha256": "467e823f8b559e62c929480f0652c44200f9f62624b2b97f905823848b1d0b6e",
+      "all_abi_guards_checked": true,
+      "rbx_delta": 0,
+      "rax_mismatches": []
+    },
+    {
+      "label": "bad-rbx-debug",
+      "vectors": 20,
+      "raw_sha256": "1380da2d0914fd1f21ebe6bc34524cde77829b25ecdd33c7ac0519f6c335c6ef",
+      "all_abi_guards_checked": true,
+      "rbx_delta": 8,
+      "rax_mismatches": []
+    },
+    {
+      "label": "native-release",
+      "vectors": 20,
+      "raw_sha256": "467e823f8b559e62c929480f0652c44200f9f62624b2b97f905823848b1d0b6e",
+      "all_abi_guards_checked": true,
+      "rbx_delta": 0,
+      "rax_mismatches": []
+    },
+    {
+      "label": "bad-sub-good-release",
+      "vectors": 7,
+      "raw_sha256": "3c14eec8921300d0a0f49e20cb467acf7bc5ea656647ad346d7211be91e0df64",
+      "all_abi_guards_checked": true,
+      "rbx_delta": 0,
+      "rax_mismatches": []
+    },
+    {
+      "label": "bad-sub-release",
+      "vectors": 7,
+      "raw_sha256": "4b10165dfbb98e27483d9acb7452478ff5265238215b6d606d6c7919ffe9f6ec",
+      "all_abi_guards_checked": true,
+      "rbx_delta": 0,
+      "rax_mismatches": [
+        {
+          "index": 0,
+          "expected": 18446744073709551612,
+          "actual": 4
+        },
+        {
+          "index": 1,
+          "expected": 4,
+          "actual": 18446744073709551612
+        },
+        {
+          "index": 2,
+          "expected": 18446744073709551604,
+          "actual": 18446744073709551612
+        },
+        {
+          "index": 3,
+          "expected": 12297735558912427591,
+          "actual": 12297735558912429389
+        },
+        {
+          "index": 4,
+          "expected": 9223372036854775817,
+          "actual": 9223372036854776055
+        },
+        {
+          "index": 5,
+          "expected": 527,
+          "actual": 18446744073709551615
+        },
+        {
+          "index": 6,
+          "expected": 1,
+          "actual": 18446744073709551615
+        }
+      ]
+    },
+    {
+      "label": "bad-rbx-good-release",
+      "vectors": 20,
+      "raw_sha256": "467e823f8b559e62c929480f0652c44200f9f62624b2b97f905823848b1d0b6e",
+      "all_abi_guards_checked": true,
+      "rbx_delta": 0,
+      "rax_mismatches": []
+    },
+    {
+      "label": "bad-rbx-release",
+      "vectors": 20,
+      "raw_sha256": "1380da2d0914fd1f21ebe6bc34524cde77829b25ecdd33c7ac0519f6c335c6ef",
+      "all_abi_guards_checked": true,
+      "rbx_delta": 8,
+      "rax_mismatches": []
+    }
+  ],
+  "test_records": [
+    {
+      "test": "bad-sub-swapped",
+      "vectors": 7,
+      "compiled": true,
+      "linked": true,
+      "native_executed": true,
+      "modes": 2,
+      "rejected_by": "native rax"
+    },
+    {
+      "test": "bad-unknown-name-mapped",
+      "compiled": true,
+      "native_executed": true,
+      "modes": 2,
+      "rejected_by": "status (OK instead of INVALID)"
+    },
+    {
+      "test": "bad-early-ir",
+      "compiled": true,
+      "native_executed": true,
+      "modes": 2,
+      "rejected_by": "lower atomicity guards"
+    },
+    {
+      "test": "bad-early-result",
+      "compiled": true,
+      "native_executed": true,
+      "modes": 2,
+      "rejected_by": "lower atomicity guards"
+    },
+    {
+      "test": "bad-rbx-clobbered",
+      "vectors": 20,
+      "compiled": true,
+      "linked": true,
+      "native_executed": true,
+      "modes": 2,
+      "rejected_by": "native rbx preserved (rax and rsp assertions passed first)"
+    },
+    {
+      "test": "bad-no-alias",
+      "compiled": true,
+      "native_executed": true,
+      "modes": 2,
+      "rejected_by": "preflights 24..33"
+    },
+    {
+      "test": "hand-mutated-inputs",
+      "invalid": 31,
+      "unsupported": 4,
+      "modes": 2,
+      "passed": true
+    },
+    {
+      "test": "native-call-ret",
+      "vectors_per_mode": 20,
+      "modes": 2,
+      "formats": [
+        "elf64",
+        "win64"
+      ],
+      "passed": true
+    },
+    {
+      "test": "real-pipeline-ir-text-capacity",
+      "fixtures": 20,
+      "capacity_cases": 78,
+      "modes": 2,
+      "preflights_per_native": 34,
+      "passed": true
+    },
+    {
+      "test": "unsupported-invalid-real-parser",
+      "unsupported": 23,
+      "invalid": 8,
+      "modes": 2,
+      "passed": true
+    }
+  ],
+  "audit_script_sha256": "c299d31a21c760034cd634eeab13f29e761c884489f3ca456e4bb6cc8493d4b3",
+  "integrated": false
+}

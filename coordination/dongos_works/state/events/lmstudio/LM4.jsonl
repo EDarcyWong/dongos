@@ -1,0 +1,11 @@
+{"at":"2026-10-18T09:25:05+00:00","data":{"rev":1,"status":"todo"},"kind":"created","task_id":"lmstudio:LM4"}
+{"at":"2026-10-18T09:25:05+00:00","data":{"job":"f4f2033237184989a19a43cbbc16bc27","kind":"implement","provider":"lmstudio"},"kind":"queued","task_id":"lmstudio:LM4"}
+{"at":"2026-10-18T09:25:06+00:00","data":{"rev":2,"status":"in_progress"},"kind":"started","task_id":"lmstudio:LM4"}
+{"at":"2026-10-18T09:27:02+00:00","data":{"rev":3,"status":"submitted"},"kind":"implementation_finished","task_id":"lmstudio:LM4"}
+{"at":"2026-10-18T09:27:02+00:00","data":{"job":"f4f2033237184989a19a43cbbc16bc27","status":"completed"},"kind":"job_finished","task_id":"lmstudio:LM4"}
+{"at":"2026-10-18T09:32:58+00:00","data":{"job":"00dcdd5697ea47c092df22ba7a784857","kind":"verify","provider":"python"},"kind":"queued","task_id":"lmstudio:LM4"}
+{"at":"2026-10-18T09:33:02+00:00","data":{"rev":4,"status":"submitted"},"kind":"verified","task_id":"lmstudio:LM4"}
+{"at":"2026-10-18T09:33:02+00:00","data":{"job":"00dcdd5697ea47c092df22ba7a784857","status":"completed"},"kind":"job_finished","task_id":"lmstudio:LM4"}
+{"at":"2026-10-18T09:33:40+00:00","data":{"rev":5,"status":"accepted"},"kind":"accept","task_id":"lmstudio:LM4"}
+{"at":"2026-10-18T09:33:41+00:00","data":{"rev":6,"status":"integrated"},"kind":"integrate","task_id":"lmstudio:LM4"}
+{"at":"2026-10-19T11:42:09+00:00","data":{"rev":8,"status":"integrated"},"kind":"state_reconciled","task_id":"lmstudio:LM4"}

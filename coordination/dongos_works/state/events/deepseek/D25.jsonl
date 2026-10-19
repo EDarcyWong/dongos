@@ -1,0 +1,8 @@
+{"at":"2026-10-19T12:12:15+00:00","data":{"rev":1,"status":"todo"},"kind":"created","task_id":"deepseek:D25"}
+{"at":"2026-10-19T14:48:47+00:00","data":{"rev":2,"status":"in_progress"},"kind":"claim","task_id":"deepseek:D25"}
+{"at":"2026-10-19T15:04:52+00:00","data":{"rev":3,"status":"submitted"},"kind":"submit","task_id":"deepseek:D25"}
+{"at":"2026-10-19T15:27:59+00:00","data":{"job":"a54f3e5a53d845f897bf9d2a4cdae27c","kind":"verify","provider":"python"},"kind":"queued","task_id":"deepseek:D25"}
+{"at":"2026-10-19T15:30:37+00:00","data":{"job":"a54f3e5a53d845f897bf9d2a4cdae27c"},"kind":"verification_started","task_id":"deepseek:D25"}
+{"at":"2026-10-19T15:33:17+00:00","data":{"rev":4,"status":"submitted"},"kind":"verified","task_id":"deepseek:D25"}
+{"at":"2026-10-19T15:33:17+00:00","data":{"job":"a54f3e5a53d845f897bf9d2a4cdae27c","status":"completed"},"kind":"job_finished","task_id":"deepseek:D25"}
+{"at":"2026-10-19T15:33:47+00:00","data":{"rev":5,"status":"accepted"},"kind":"accept","task_id":"deepseek:D25"}

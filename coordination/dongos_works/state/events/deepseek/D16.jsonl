@@ -1,0 +1,16 @@
+{"at":"2026-10-18T10:50:09+00:00","data":{"rev":1,"status":"todo"},"kind":"created","task_id":"deepseek:D16"}
+{"at":"2026-10-18T10:55:09+00:00","data":{"rev":2,"status":"in_progress"},"kind":"claim","task_id":"deepseek:D16"}
+{"at":"2026-10-18T11:02:37+00:00","data":{"rev":3,"status":"submitted"},"kind":"submit","task_id":"deepseek:D16"}
+{"at":"2026-10-18T11:07:26+00:00","data":{"job":"32581272963e48c19c4ce3a3ec3601c4","kind":"verify","provider":"python"},"kind":"queued","task_id":"deepseek:D16"}
+{"at":"2026-10-18T11:08:16+00:00","data":{"rev":4,"status":"submitted"},"kind":"verified","task_id":"deepseek:D16"}
+{"at":"2026-10-18T11:08:16+00:00","data":{"job":"32581272963e48c19c4ce3a3ec3601c4","status":"completed"},"kind":"job_finished","task_id":"deepseek:D16"}
+{"at":"2026-10-18T11:10:48+00:00","data":{"rev":5,"status":"submitted"},"kind":"document_changed","task_id":"deepseek:D16"}
+{"at":"2026-10-18T11:10:49+00:00","data":{"rev":6,"status":"rework"},"kind":"rework","task_id":"deepseek:D16"}
+{"at":"2026-10-18T11:15:24+00:00","data":{"rev":7,"status":"in_progress"},"kind":"claim","task_id":"deepseek:D16"}
+{"at":"2026-10-18T11:15:28+00:00","data":{"rev":8,"status":"submitted"},"kind":"submit","task_id":"deepseek:D16"}
+{"at":"2026-10-18T11:18:20+00:00","data":{"job":"c958aa44304d48dcbf45b076e39bc81e","kind":"verify","provider":"python"},"kind":"queued","task_id":"deepseek:D16"}
+{"at":"2026-10-18T11:18:33+00:00","data":{"rev":9,"status":"submitted"},"kind":"verified","task_id":"deepseek:D16"}
+{"at":"2026-10-18T11:18:33+00:00","data":{"job":"c958aa44304d48dcbf45b076e39bc81e","status":"completed"},"kind":"job_finished","task_id":"deepseek:D16"}
+{"at":"2026-10-18T11:21:29+00:00","data":{"rev":10,"status":"accepted"},"kind":"accept","task_id":"deepseek:D16"}
+{"at":"2026-10-18T11:38:12+00:00","data":{"rev":11,"status":"integrated"},"kind":"integrate","task_id":"deepseek:D16"}
+{"at":"2026-10-19T11:42:09+00:00","data":{"rev":13,"status":"integrated"},"kind":"state_reconciled","task_id":"deepseek:D16"}

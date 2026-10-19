@@ -1,0 +1,89 @@
+{
+  "auto_dispatch": false,
+  "auto_verify": false,
+  "candidate": null,
+  "checks": [
+    "module:tests.test_shell_commands",
+    "module:tests.test_process_lifecycle_qemu"
+  ],
+  "claimed_at": "2026-10-19T07:51:20+00:00",
+  "claimed_by": "codex-l3-exec-capacity",
+  "complexity": "standard",
+  "created_at": "2026-10-19T07:51:19+00:00",
+  "delivery": "codex-works/deliveries/CX4.md",
+  "depends_on": [],
+  "description": "L3 native semantic executable is about1.47MiB, while shell and kernel EXEC paths are capped256KiB. Raise one shared process ABI limit to bounded2MiB, size shell read buffer and kernel allocated staging pages from that same limit; retain all range/permission/zero/oversize checks. Actual unchanged shell command execution with independent IPC/filesystem/process model must cover >old cap, exact new cap, cap+1 rejected before read/execute, chunking and close/error behavior. Retain lifecycle pure-control tests; no OS/VM or full L3 claim. Verify actual kernel service leaf code generation/assembly if feasible; guest lifecycle gate remains separate.",
+  "document": "codex-works/tasks/CX4-board.md",
+  "historical": false,
+  "id": "codex:CX4",
+  "integration_note": "已审查共享2MiB上限、内核512页分配及既有authority/range/zero检查；正式12项0skip来源稳定，主线12项0skip；真实shell执行覆盖262145/1048577/2097152字节及超限提前拒绝。内核服务叶编译及NASM ELF64 O0组装成功170.242秒，证据code/build/test/l3-exec-limit/assemble-O0-result.json；未运行OS/VM，guest持久化门禁仍未完成。源码和永久测试已实际在主线。",
+  "legacy_hash": "d4ddb940aca2da129ba87a97e500bc7aa6b3638f8621fade7f744da7f9e3f8bd",
+  "number": "CX4",
+  "owner": "codex",
+  "rev": 7,
+  "review_note": "已审查共享2MiB上限、内核512页分配及既有authority/range/zero检查；正式12项0skip来源稳定，主线12项0skip；真实shell执行覆盖262145/1048577/2097152字节及超限提前拒绝。内核服务叶编译及NASM ELF64 O0组装成功170.242秒，证据code/build/test/l3-exec-limit/assemble-O0-result.json；未运行OS/VM，guest持久化门禁仍未完成。源码和永久测试已实际在主线。",
+  "state_reconciliation": {
+    "at": "2026-10-19T11:42:09+00:00",
+    "audit_sha256": "5daf98a663cd249783a8432a5fcbed3ec4e96275b1910fa54b7903c084fe9ebc",
+    "note": "协调已有历史事实；保留原事件/作业；历史复验未重跑，未新增验收或集成，不启动模型。",
+    "previous_data_sha256": "c8145bb09ffd67ed37726c0184486426e45ddecebe8cc54b620cc5d731fd4341",
+    "previous_rev": 1,
+    "project": "dongos",
+    "snapshot_generated_at": "2026-10-19T09:04:28+00:00",
+    "snapshot_rev": 6,
+    "snapshot_sha256": "a40cf9aabcbb43779b5c60414d7142cab791f85888022c84625568dbb579ac96",
+    "verification_reexecuted": false
+  },
+  "status": "integrated",
+  "title": "同步扩展有界EXEC镜像读取与内核暂存容量至2MiB",
+  "updated_at": "2026-10-19T11:42:09+00:00",
+  "verification": {
+    "checks": [
+      {
+        "cancelled": false,
+        "elapsed_seconds": 35.753,
+        "passed": true,
+        "returncode": 0,
+        "skips": 0,
+        "spec": "module:tests.test_shell_commands",
+        "tests": 1,
+        "timed_out": false
+      },
+      {
+        "cancelled": false,
+        "elapsed_seconds": 2.076,
+        "passed": true,
+        "returncode": 0,
+        "skips": 0,
+        "spec": "module:tests.test_process_lifecycle_qemu",
+        "tests": 11,
+        "timed_out": false
+      }
+    ],
+    "fingerprint": {
+      "codex-works/deliveries/CX4.md": "c5de02adc3476fbb7a2cf81aa0180e7d1f5bbabe0d9a15ac1ebd23645351aa5f",
+      "kernel/user/services.dg": "35f8538a11b58e7e2eae284af1a9eaef66944eec7bb98368f9f887ee36fa75cd",
+      "services/lib/process_abi.dg": "0f2e3ef8bb6c3a4ac8374c2f611490fc509dc52e8035e2b81329658bf8da6568",
+      "services/shell/main.dg": "32c818b13ae3f8c840adf4a7b586fb9084ddfd15ef3bb5f6c0c43f3439e417ce",
+      "tests/run_process_lifecycle_qemu.py": "642c69b9eaf67c2df486f813e0165294a003629a86780c93d04cb52b7a5c870a",
+      "tests/shell_commands_probe.c": "bf58bd2089c050d6f4a34accaa5330f88f44dd8a41550bab75b371a8bc416310",
+      "tests/test_process_lifecycle_qemu.py": "b1a264ee16194782691f8606352a37faa3de8bc6ae4e5e7cff7cbfe33c1b8f76",
+      "tests/test_shell_commands.py": "ed9b68cf410e1c79d305c733efb771873f7ef29f1c3ef87f21f137e3972c7fe1"
+    },
+    "finished_at": "2026-10-19T08:05:29+00:00",
+    "job": "b7b3757bd49b420bb8fafd498af4b9ab",
+    "passed": true,
+    "source_stable": true,
+    "summary": "定向复验通过，等待源码/契约审查"
+  },
+  "write_paths": [
+    "services/lib/process_abi.dg",
+    "services/shell/main.dg",
+    "kernel/user/services.dg",
+    "tests/shell_commands_probe.c",
+    "tests/test_shell_commands.py",
+    "tests/run_process_lifecycle_qemu.py",
+    "tests/test_process_lifecycle_qemu.py",
+    "codex-works/deliveries/CX4.md"
+  ]
+}

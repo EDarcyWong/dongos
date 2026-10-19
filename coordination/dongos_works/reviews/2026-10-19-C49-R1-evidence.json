@@ -1,0 +1,93 @@
+{
+  "task": "claude:C49",
+  "submission_rev": 8,
+  "formal_job": "e60916643e6247918773e0f6206d8cd7",
+  "formal": {
+    "passed": true,
+    "checks": [
+      {
+        "spec": "discover:claude-works/tests:test_nasm_u64_select_function.py",
+        "passed": true,
+        "tests": 4,
+        "skips": 0,
+        "returncode": 0,
+        "cancelled": false,
+        "timed_out": false,
+        "elapsed_seconds": 125.0
+      }
+    ],
+    "source_stable": true,
+    "fingerprint": {
+      "claude-works/src/bootstrap/nasm_u64_select_function.dg": "9468a3e4ff93fe91a62a2e0e882e33336e33b1a3705ce4ce78aa36e06146eb65",
+      "claude-works/src/bootstrap/nasm_u64_select_function.md": "c8522fbeed8b3b90c46d358005675dae66eaa3b02ea5cc943d70f8561a8ec81e",
+      "claude-works/tests/test_nasm_u64_select_function.py": "5254dccc6576953709b9d1ca68d252b03e23bbce97b6e4f3baa90b4539fb6396",
+      "claude-works/deliveries/C49.md": "21c10d3a84f6f55d0a19d2b709da99c9f918cc6af69514be2924dc3eecb3536f"
+    },
+    "summary": "定向复验通过，等待源码/契约审查",
+    "finished_at": "2026-10-19T14:02:46+00:00"
+  },
+  "run": "D:\\projects\\2026\\dongos\\coordination\\dongos_works\\.local\\runs\\e60916643e6247918773e0f6206d8cd7\\workspace\\claude-works\\build\\C49\\run-469336ccbef3",
+  "input_sha256": {
+    "nasm_u64_select_function.dg": "9468a3e4ff93fe91a62a2e0e882e33336e33b1a3705ce4ce78aa36e06146eb65",
+    "nasm_u64_select_function.md": "c8522fbeed8b3b90c46d358005675dae66eaa3b02ea5cc943d70f8561a8ec81e",
+    "nasm_symbol.dg": "25675ec83d79c6f2b34bebfdd837e75d80dc384e900939be0c75d06a7bde4c06",
+    "nasm_function_frame.dg": "08580fdf8ebbd75dc27812bb63f4e425a18e66b285fd5ccd7805d1d6dc55e9ff",
+    "decimal_integer.dg": "58a4e4d746393d0e5944656aeb4c6f2aff96acca047afd455c60a47464ce0b76",
+    "nasm_sysv_incoming_args.dg": "bbaf9d38f0b7993e0d9da3ff86e8c0d86ecc0bbdca09e7617a878b57c3e3f714",
+    "sysv_integer_args.dg": "75c4ab5fd07d586684eb753958654e6e6658ff90e4d77f2a1ea96cb110573204",
+    "nasm_memory_operand.dg": "e3d072a3ea1314975427bb0e24426da2adaf3de692101f3e3e8d6768697f1d24",
+    "nasm_integer_memory_load.dg": "88624e98077d19615117f2a0f9ac6c67e80993ce222609c376288da3e45d3fec",
+    "nasm_compare_emit.dg": "44b041b343859c6b49a4d13ee87262f1b5685c8e7f4c0b589f48eadee9a15eea",
+    "branch_plan.dg": "d8bf14d305ea24557fc0a5713ae28fb60092f95ba1a558c94f293f25e36007b4",
+    "nasm_branch_emit.dg": "d46e5f18330bd256fc1ee9d1fe1251f248e70bf3119c1f4baa1d065eb0daeac8",
+    "nasm_block_emit.dg": "261cb03c7f7d34b395e1154351aad4844ab7d0096122790d39959fe275b447a6",
+    "nasm_sysv_function_exit.dg": "9dffc7415ea414310cb68e81457fb1b0c04040fc52d01c4bb1a2643af9fd29f2",
+    "nasm_sysv_return_values.dg": "7a3760f6ef81dbc3f436541a2de3fb746aff723fa72dc4ba851c293d2a064b32",
+    "sysv_return_plan.dg": "f880c0e387e9561f00a51b87713fcdd7af24a065dd0be407325b3290e6a0c08e",
+    "test_nasm_u64_select_function.py": "5254dccc6576953709b9d1ca68d252b03e23bbce97b6e4f3baa90b4539fb6396"
+  },
+  "records": [
+    {
+      "mode": "debug",
+      "vectors": 20,
+      "rax_correct": true,
+      "rsp_balanced": true,
+      "other_callee_saved_preserved": true,
+      "canary_intact": true,
+      "alignment_correct": true,
+      "rbx_good": 845282253045697467,
+      "rbx_bad": 845282253045697475,
+      "rbx_delta": 8,
+      "routes": {
+        "true": 10,
+        "false": 10
+      },
+      "callee_records_correct": null
+    },
+    {
+      "mode": "release",
+      "vectors": 20,
+      "rax_correct": true,
+      "rsp_balanced": true,
+      "other_callee_saved_preserved": true,
+      "canary_intact": true,
+      "alignment_correct": true,
+      "rbx_good": 845282253045697467,
+      "rbx_bad": 845282253045697475,
+      "rbx_delta": 8,
+      "routes": {
+        "true": 10,
+        "false": 10
+      },
+      "callee_records_correct": null
+    }
+  ],
+  "raw_sha256": {
+    "bad-rbx-good-debug.native.output": "96f6af1a20b550d785367ae6daf4d36a245408a60b6968840490cdb6f18bbfc7",
+    "bad-rbx-debug.native.output": "cd06c028d851e7dafe22acc9a78111f0ed5849a1d8d6204fda4a9206d7b4528e",
+    "bad-rbx-good-release.native.output": "96f6af1a20b550d785367ae6daf4d36a245408a60b6968840490cdb6f18bbfc7",
+    "bad-rbx-release.native.output": "cd06c028d851e7dafe22acc9a78111f0ed5849a1d8d6204fda4a9206d7b4528e"
+  },
+  "source_unchanged_since_formal": true,
+  "script_sha256": "9caae9332c801b92ecbf5a4d1f65fbbd5800c36bdb08c40c45fc047956aa7ac5"
+}

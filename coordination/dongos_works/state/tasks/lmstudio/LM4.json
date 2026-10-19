@@ -1,0 +1,72 @@
+{
+  "auto_dispatch": false,
+  "auto_verify": false,
+  "candidate": "f4f2033237184989a19a43cbbc16bc27",
+  "checks": [
+    "discover:lmstudio-works/tests:test_component_glossary.py"
+  ],
+  "complexity": "simple",
+  "created_at": "2026-10-18T09:25:05+00:00",
+  "delivery": "lmstudio-works/deliveries/LM4.md",
+  "depends_on": [],
+  "description": "只编写简短中文组件导航JSON，不写业务代码。文件lmstudio-works/docs/bootstrap-components.zh-CN.json：顶层只有version/items，version是整数1，items恰好7项，各只有module/title/summary/source。title为1～16字符中文，summary为1～48字符简短中文。\n模块固定顺序和能力：cfg_reachability（控制流图合法性与可达性）；sysv_integer_args（仅SysV INTEGER标量及双字参数的位置规划，不是完整ABI）；parallel_moves（将并行复制转换为含临时位置的顺序复制）；stack_slots（向下增长栈帧的槽位布局）；switch_cases（有符号分支值排序和重复检查）；cleanup_plan（作用域退出清理顺序，不执行清理体）；nasm_bytes（原始字节编码为NASM db文本，不是完整后端）。module字段为bootstrap.加上述名字；source字段为lang/bootstrap/加上述名字再加.dg，路径相对code。严格按七项列出，不增删模块。\n只按给定能力写导航说明，不声称完整后端、完整ABI、性能达标或L3自举完成，不含命令、模型配置或虚构测试通过声明。另写固定LM4交付说明，明确实际未运行测试。只允许JSON与交付两个文件；测试由Codex提供，禁止修改；不自行验收、不提交推送、不运行OS/VM。",
+  "document": "lmstudio-works/tasks/LM4-board.md",
+  "historical": false,
+  "id": "lmstudio:LM4",
+  "integration_note": "LM4两份文档按原验收hash回写项目docs/deliveries并复核，原候选保留。",
+  "last_run_note": "交付已收集，尚未验收",
+  "legacy_hash": "224be6e59f5742c1203cb4dcd35f94cf015c28e5e5964502c870b2e124e87d54",
+  "number": "LM4",
+  "owner": "lmstudio",
+  "rev": 8,
+  "review_note": "独立结构1项零skip且文件稳定，已人工核对七模块路径与能力限制；见lmstudio-works/reviews/2026-10-18-LM4-acceptance.md。",
+  "state_reconciliation": {
+    "at": "2026-10-19T11:42:09+00:00",
+    "audit_sha256": "5daf98a663cd249783a8432a5fcbed3ec4e96275b1910fa54b7903c084fe9ebc",
+    "note": "协调已有历史事实；保留原事件/作业；历史复验未重跑，未新增验收或集成，不启动模型。",
+    "previous_data_sha256": "061a63cc9e71f703eb781f0282065974c5ab5a596f5c4e4dac28ff630d221105",
+    "previous_rev": 6,
+    "project": "dongos",
+    "snapshot_generated_at": "2026-10-19T09:04:28+00:00",
+    "snapshot_rev": 7,
+    "snapshot_sha256": "a40cf9aabcbb43779b5c60414d7142cab791f85888022c84625568dbb579ac96",
+    "verification_reexecuted": false
+  },
+  "state_recovery": {
+    "at": "2026-10-19T04:43:01+00:00",
+    "audit_sha256": "3ea0db756d56092976092ed0d1216118e145a8e34aa02c5060cb913d088d553e",
+    "note": "恢复已有验收/集成/返修事实；原复验为历史记录，未声称本次重跑；不恢复丢失作业或启动模型。",
+    "snapshot_rev": 6,
+    "snapshot_sha256": "f3ab929e33419f40dfc417217d588acf8b1b26cbac50724a51942a11e438c171"
+  },
+  "status": "integrated",
+  "title": "简单文档：七个后端组件中文导航",
+  "updated_at": "2026-10-19T11:42:09+00:00",
+  "verification": {
+    "checks": [
+      {
+        "cancelled": false,
+        "elapsed_seconds": 0.203,
+        "passed": true,
+        "returncode": 0,
+        "skips": 0,
+        "spec": "discover:lmstudio-works/tests:test_component_glossary.py",
+        "tests": 1,
+        "timed_out": false
+      }
+    ],
+    "fingerprint": {
+      "lmstudio-works/deliveries/LM4.md": "8da7d9e812e5e1860cfaeccefcd31a945555c0ab12a35ef8b65275b3c8e48226",
+      "lmstudio-works/docs/bootstrap-components.zh-CN.json": "94aafe808f9e93bbf3eda30cf1f0e9f5b47f84e0f6fb9c48369d1cfde9bbaab9"
+    },
+    "finished_at": "2026-10-18T09:33:02+00:00",
+    "job": "00dcdd5697ea47c092df22ba7a784857",
+    "passed": true,
+    "source_stable": true,
+    "summary": "定向复验通过，等待源码/契约审查"
+  },
+  "write_paths": [
+    "lmstudio-works/docs/bootstrap-components.zh-CN.json",
+    "lmstudio-works/deliveries/LM4.md"
+  ]
+}

@@ -1,0 +1,12 @@
+{"at":"2026-10-18T09:46:43+00:00","data":{"rev":1,"status":"todo"},"kind":"created","task_id":"claude:C19"}
+{"at":"2026-10-18T09:46:44+00:00","data":{"job":"26617f0192664292a870cbfa4593e368","kind":"implement","provider":"claude"},"kind":"queued","task_id":"claude:C19"}
+{"at":"2026-10-18T09:46:44+00:00","data":{"rev":2,"status":"in_progress"},"kind":"started","task_id":"claude:C19"}
+{"at":"2026-10-18T09:55:21+00:00","data":{"rev":3,"status":"submitted"},"kind":"implementation_finished","task_id":"claude:C19"}
+{"at":"2026-10-18T09:55:21+00:00","data":{"job":"26617f0192664292a870cbfa4593e368","status":"completed"},"kind":"job_finished","task_id":"claude:C19"}
+{"at":"2026-10-18T10:42:24+00:00","data":{"job":"88a7c837e2d342e49efbeb301dbb0b87","kind":"verify","provider":"python"},"kind":"queued","task_id":"claude:C19"}
+{"at":"2026-10-18T10:42:32+00:00","data":{"rev":4,"status":"rework"},"kind":"verified","task_id":"claude:C19"}
+{"at":"2026-10-18T10:42:32+00:00","data":{"job":"88a7c837e2d342e49efbeb301dbb0b87","status":"failed"},"kind":"job_finished","task_id":"claude:C19"}
+{"at":"2026-10-18T10:50:09+00:00","data":{"rev":5,"status":"paused"},"kind":"pause","task_id":"claude:C19"}
+{"at":"2026-10-18T10:50:09+00:00","data":{"rev":6,"status":"paused"},"kind":"document_changed","task_id":"claude:C19"}
+{"at":"2026-10-18T14:18:15+00:00","data":{"rev":7,"status":"paused"},"kind":"archive","task_id":"claude:C19"}
+{"at":"2026-10-19T11:42:09+00:00","data":{"rev":9,"status":"paused"},"kind":"state_reconciled","task_id":"claude:C19"}

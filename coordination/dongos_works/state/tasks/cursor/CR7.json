@@ -1,0 +1,77 @@
+{
+  "auto_dispatch": false,
+  "auto_verify": false,
+  "candidate": null,
+  "checks": [
+    "discover:cursor-works/tests:test_sysv_return_plan.py"
+  ],
+  "claimed_at": "2026-10-18T11:03:14+00:00",
+  "claimed_by": "cursor-worker-1",
+  "complexity": "standard",
+  "created_at": "2026-10-18T11:00:41+00:00",
+  "delivery": "cursor-works/deliveries/CR7.md",
+  "depends_on": [],
+  "description": "module bootstrap.sysv_return_plan。\n仅规划 Dong x86-64 SysV INTEGER 类返回值，不支持浮点/SSE、大聚合、sret、Win64、可变参数；不冒充完整 ABI。固定 pub struct Plan { pub words:usize, pub width_bits:usize, pub extension:u64 }（24字节、8字节对齐）。pub unsafe fn plan(kind:u64,out:*Plan)u64；OK=0、INVALID=1，extension NONE=0、ZERO=1、SIGN=2。\nkind 枚举和精确结果：0 VOID→(0,0,NONE)；1 BOOL→(1,8,ZERO)；2 U8→(1,8,ZERO)；3 I8→(1,8,SIGN)；4 U16→(1,16,ZERO)；5 I16→(1,16,SIGN)；6 U32→(1,32,ZERO)；7 I32→(1,32,SIGN)；8 U64、9 I64、10 PTR 均→(1,64,NONE)；11 INTEGER_PAIR→(2,64,NONE)。单字用RAX，双字低/高用RAX/RDX；BOOL的输入在上游已为0/1，本组件不把任意字节当bool或读取值。这里的扩展是后端统一值表示约定，不宣称 SysV 标准要求所有窄返回高位。\nout 非空、8对齐、完整24字节地址端点有效；无效指针/枚举返回 INVALID 且全文不变。成功写全部字段。只做有限元数据规划，无分配、无寄存器发射、无输入数组。\n原生 Dong debug/release 独立 C 结构读取验证全12项、非法kind及失败不变。另用 Python 独立补码解释和临时 NASM 返回探针，根据实际 Dong 规划字段生成扩展指令，检查 i8/i16/i32 最小值、负一及无符号高位、双字返回；探针不替代生产组件。两个有限坏源码控制至少覆盖把有符号窄值标成 ZERO，以及 PAIR 漏第二字，必须原生执行后被字段/返回值断言拒绝。不要引入完整 ABI 分类器或改 C8 参数规划。\n\n## 工作与交付约定\n\n这是独立组件，不代表完整 L3 后端或自举完成。Cursor 继续由用户在客户端手动发起；通过自己的 coordination MCP 查看最新 rev、完整任务书并领取后再修改。不要调用 AI CLI 自动执行，不抢占 DeepSeek 已领取的 D14～D18，不改 Claude/DeepSeek/LM Studio 文件、code/lang/、编译器、活动内核或协调器。依赖只有在 accepted/integrated 后才能领取；需要额外归属时在交付中说明，不擅自扩范围。\n\n生产实现必须是 Dong，模块自身不导出 C 符号；Python/C/NASM 仅作独立测试观察器。unsafe 调用方保证实际可用内存；先验证所有描述符、自然对齐、长度乘法和地址端点，再读取输入或写入。完整声明区间校验，不只检查有效前缀。INVALID 优先于 CAPACITY；所有失败必须立即确认输出及计数对象全文不变，成功只改指定前缀/字段，真实双端 guard、输入与输出尾部立即检查。无分配、全局可变状态、OS 调用或宿主生产实现。\n\n编写自己的同名 Python 定向测试：实际编译/链接并执行 Dong debug/release，确认 ELF64/COFF 均能组装；有限固定边界加小规模确定性随机，以独立 Python/C 期望核对。至少两个真实错误 Dong 副本必须成功编译并原生执行，被指定语义/原子性断言拒绝；构建失败、崩溃、超时、无关前置正例拒绝均不算负控成功。不得放宽断言或伪造预检次数。对照输入必须满足所考察规则以外的其它条件，避免非法标签/未对齐/坏图遮蔽目标缺陷。不要求新大矩阵。\n\n只运行本任务定向测试，所有产物在 cursor-works/build/CR7/<唯一目录>/。测试组装源码根时仅暂存当前组件及任务声明的只读依赖，再加 code/lang，避免历史 CR1 副本与主线同名模块冲突；临时包装器和坏实现只写自己的产物目录。除额外声明依赖外，各组件可独立实现。不运行 OS/VM、全回归、性能基准、定时器、关机、提交或推送。\n\n完成后写 cursor-works/deliveries/CR7.md，列出源码/测试 SHA256、真实命令/结果/模式/skip、证据路径、坏实现命中和拒绝原因、剩余限制。未运行的命令必须明确未运行。通过 MCP submit_task 提交，等待 Codex 独立审查/复验；不得自行 accept/integrate。\n",
+  "document": "cursor-works/tasks/CR7-board.md",
+  "historical": false,
+  "id": "cursor:CR7",
+  "integration_note": "按验收hash真实集成到主线模块/固定数据，永久测试及原生组合共24项零skip、指纹稳定。仅适配测试路径和只读依赖隔离；见reviews/2026-10-18-CR2-CR7-D14-D18-LM7-integration.md。不是完整L3自举。",
+  "legacy_hash": "d613867b3f3ec320d4b084d154d1c0b99ea0b562de81d1d60ca7a217c900121f",
+  "number": "CR7",
+  "owner": "cursor",
+  "rev": 8,
+  "review_note": "源码/契约/测试有效性人工审查及正式零skip定向复验通过，指纹稳定；见cursor-works/reviews/2026-10-18-CR7-acceptance.md。仅验收，集成另行验证。",
+  "state_reconciliation": {
+    "at": "2026-10-19T11:42:09+00:00",
+    "audit_sha256": "5daf98a663cd249783a8432a5fcbed3ec4e96275b1910fa54b7903c084fe9ebc",
+    "note": "协调已有历史事实；保留原事件/作业；历史复验未重跑，未新增验收或集成，不启动模型。",
+    "previous_data_sha256": "6f49acfdccd95de2a9260c92996ac93289cb2b8ce0520e164e81e63c35afe2cd",
+    "previous_rev": 6,
+    "project": "dongos",
+    "snapshot_generated_at": "2026-10-19T09:04:28+00:00",
+    "snapshot_rev": 7,
+    "snapshot_sha256": "a40cf9aabcbb43779b5c60414d7142cab791f85888022c84625568dbb579ac96",
+    "verification_reexecuted": false
+  },
+  "state_recovery": {
+    "at": "2026-10-19T04:43:01+00:00",
+    "audit_sha256": "3ea0db756d56092976092ed0d1216118e145a8e34aa02c5060cb913d088d553e",
+    "note": "恢复已有验收/集成/返修事实；原复验为历史记录，未声称本次重跑；不恢复丢失作业或启动模型。",
+    "snapshot_rev": 6,
+    "snapshot_sha256": "f3ab929e33419f40dfc417217d588acf8b1b26cbac50724a51942a11e438c171"
+  },
+  "status": "integrated",
+  "title": "SysV整数返回值的窄值扩展规划",
+  "updated_at": "2026-10-19T11:42:09+00:00",
+  "verification": {
+    "checks": [
+      {
+        "cancelled": false,
+        "elapsed_seconds": 12.015,
+        "passed": true,
+        "returncode": 0,
+        "skips": 0,
+        "spec": "discover:cursor-works/tests:test_sysv_return_plan.py",
+        "tests": 3,
+        "timed_out": false
+      }
+    ],
+    "fingerprint": {
+      "cursor-works/deliveries/CR7.md": "781d079bead8b9d4d8547bf773600b9d56ef2495099837db3ec1c47ecca24bc1",
+      "cursor-works/src/bootstrap/sysv_return_plan.dg": "f880c0e387e9561f00a51b87713fcdd7af24a065dd0be407325b3290e6a0c08e",
+      "cursor-works/src/bootstrap/sysv_return_plan.md": "bd25046dcb51d6509802164502dc494294520dd1bf0a697be77ee0d6083b1230",
+      "cursor-works/tests/test_sysv_return_plan.py": "9ef3984579ea0dc618d5b6e4bb912d6e260e165e6d82cefd6b2f3ced3ab46c29"
+    },
+    "finished_at": "2026-10-18T11:30:25+00:00",
+    "job": "798d88c0ddcd4579b9e3f691ba07d4d8",
+    "passed": true,
+    "source_stable": true,
+    "summary": "定向复验通过，等待源码/契约审查"
+  },
+  "write_paths": [
+    "cursor-works/src/bootstrap/sysv_return_plan.dg",
+    "cursor-works/src/bootstrap/sysv_return_plan.md",
+    "cursor-works/tests/test_sysv_return_plan.py",
+    "cursor-works/deliveries/CR7.md"
+  ]
+}

@@ -1,0 +1,79 @@
+{
+  "auto_dispatch": false,
+  "auto_verify": false,
+  "candidate": null,
+  "checks": [
+    "discover:deepseek-works/tests:test_data_pool_layout.py"
+  ],
+  "claimed_at": "2026-10-18T11:15:24+00:00",
+  "claimed_by": "deepseek-mcp-d829431107ed41e7",
+  "complexity": "standard",
+  "created_at": "2026-10-18T10:50:09+00:00",
+  "delivery": "deepseek-works/deliveries/D16.md",
+  "depends_on": [],
+  "description": "接续原claude:C21，用户因Claude额度不足明确转交DeepSeek。原实物/历史保留，当前源文件和测试已迁到deepseek-works同名位置，只适配目录和build编号，尚未修复。不得修改claude-works原件。\n\n## 本次必须完成的有限修复\n\n原C21执行中因Claude额度429中断，已有源码、说明和语法完整的测试，缺正式交付，尚未验收。三个文件是未完成的接续起点，不把它们当正确实物；依照下方完整契约核对实现、运行定向测试和真实坏源码控制、修复实质问题后写D16交付。原C21未运行正式复验，不能虚构已通过。无需从零重写，不改其它任务/编译器/活动内核。\n\n## 原完整功能契约（适配新目录）\n\n模块bootstrap.data_pool_layout。Blob{first:usize,count:usize,alignment:usize}，Result{used:usize,bytes:usize}。固定接口pub unsafe fn build(blobs:[]const Blob,raw:[]const u8,offsets:[]usize,image:[]u8,result:*Result)u64。\n每个Blob范围在raw内（count可0，first可等于raw.len），alignment仅1/2/4/8/16。去重键严格为(alignment,原始字节内容)，相同字节但对齐不同不合并；相同键复用第一次出现的offset。新键按输入首次出现顺序分配：start=align_up(cursor,alignment)，offset=start，cursor=start+count；即使count=0也按该公式更新cursor；所有间隙填00。没有固定首字节、没有NUL终止或UTF-8规范化。成功used=blobs.len，bytes=最终cursor，offsets与输入一一对应；空输入成功0/0且image/offsets可NULL。先验证全部Blob并预跑去重后的布局/溢出，再检查offsets和image容量，最后写；无需额外工作区，允许O(n²乘比较字节)时间。只读blobs/raw可互相重叠，两个输出及Result必须与完整输入区间/彼此分离。Python独立字典和任意精度布局对照，检查偏移对齐、稳定去重、padding、尾部与失败原子性；覆盖空Blob、重复子串、相同内容不同alignment、非UTF8二进制及末项非法。坏实现至少忽略alignment去重、错误向下对齐或不清零间隙。\n仅维护本任务列出的deepseek-works源码、接口说明、定向测试与交付，不改code/lang、已验收组件、协调器或其它助手文件。依赖主线模块只读，用明确源码根导入，不复制旧组件制造重复模块。\n公共契约：OK=0、INVALID=1、CAPACITY=2，需工作区时WORKSPACE=3。访问前校验完整声明区间、非空指针、自然对齐、元素乘法/地址端点；空切片可NULL，结果对象仍必需。只读输入可互相重叠，可写对象与彼此及所有输入完整区间分离。全部数据INVALID优先于CAPACITY，再WORKSPACE（需要时）。非OK out及结果对象全文不变；成功仅改明确前缀/字段，保留输入、尾部与双端guard。所有算术先验溢出；unsafe调用方保证实际访问有效，无分配/全局可变状态/OS调用。任务具体规则优先。\n测试独立Python期望，至少100固定种子小案例及边界；真实Dong→NASM→C/SysV，debug/release原生、ELF64/COFF组装、零skip，逐调用检查输入、输出、结果对象及实际双端，含真实只读输入；至少两个真实坏董私有副本两模式编译链接执行后被指定断言拒绝，编译失败/崩溃/超时不算。别名预检夹具先保证其它条件合法，避免非法数据/未对齐遮住目标检查；伪地址只走必拒绝的数值路径。产物放deepseek-works/build/<编号>/<唯一运行目录>。CLI无命令工具时不绕权，只提交可执行测试并明确未编译/未运行，交付不虚构hash或结果，由协调器执行。保持待复验，不自行验收，不提交/推送，不运行OS/VM或全回归。\n\n\n## 接续操作\n\n只用DeepSeek MCP身份领取本任务，领取成功后再修改。源码在deepseek-works/src/bootstrap/、测试在deepseek-works/tests/；产物放deepseek-works/build/D16/唯一目录。原任务书/交付只读副本在deepseek-works/handoffs/D16/，来源指纹见provenance.json。保留历史说明，真实完成后写deepseek-works/deliveries/D16.md并通过MCP提交；未运行的命令必须明确未运行，不自行验收/集成/提交/推送，不跑OS/VM或全回归。Codex负责独立复验与后续集成。",
+  "document": "deepseek-works/tasks/D16-board.md",
+  "document_status": "todo",
+  "historical": false,
+  "id": "deepseek:D16",
+  "integration_note": "按验收hash真实集成到主线模块/固定数据，永久测试及原生组合共24项零skip、指纹稳定。仅适配测试路径和只读依赖隔离；见reviews/2026-10-18-CR2-CR7-D14-D18-LM7-integration.md。不是完整L3自举。",
+  "legacy_hash": "5c9d848d8552294cbe912b8c8c523726f43461dc72a9e00b60002044164cb25e",
+  "number": "D16",
+  "owner": "deepseek",
+  "rev": 13,
+  "review_note": "R1只修原case11合法Blob数据，源码未改、原22预检/四项/负控保留；正式4项零skip、指纹稳定。与原8次有限原生证明一致，交付具体证据已齐。见deepseek-works/reviews/2026-10-18-D16-R1-acceptance.md。独立组件验收，尚未集成。",
+  "state_reconciliation": {
+    "at": "2026-10-19T11:42:09+00:00",
+    "audit_sha256": "5daf98a663cd249783a8432a5fcbed3ec4e96275b1910fa54b7903c084fe9ebc",
+    "note": "协调已有历史事实；保留原事件/作业；历史复验未重跑，未新增验收或集成，不启动模型。",
+    "previous_data_sha256": "b59c43349db97d35c3fc7781909e90afd9d5487a591a1b900620bd19ed9124ac",
+    "previous_rev": 11,
+    "project": "dongos",
+    "snapshot_generated_at": "2026-10-19T09:04:28+00:00",
+    "snapshot_rev": 12,
+    "snapshot_sha256": "a40cf9aabcbb43779b5c60414d7142cab791f85888022c84625568dbb579ac96",
+    "verification_reexecuted": false
+  },
+  "state_recovery": {
+    "at": "2026-10-19T04:43:01+00:00",
+    "audit_sha256": "3ea0db756d56092976092ed0d1216118e145a8e34aa02c5060cb913d088d553e",
+    "note": "恢复已有验收/集成/返修事实；原复验为历史记录，未声称本次重跑；不恢复丢失作业或启动模型。",
+    "snapshot_rev": 11,
+    "snapshot_sha256": "f3ab929e33419f40dfc417217d588acf8b1b26cbac50724a51942a11e438c171"
+  },
+  "status": "integrated",
+  "title": "接续C21：完成对齐常量池及完整交付",
+  "updated_at": "2026-10-19T11:42:09+00:00",
+  "verification": {
+    "checks": [
+      {
+        "cancelled": false,
+        "elapsed_seconds": 9.547,
+        "passed": true,
+        "returncode": 0,
+        "skips": 0,
+        "spec": "discover:deepseek-works/tests:test_data_pool_layout.py",
+        "tests": 4,
+        "timed_out": false
+      }
+    ],
+    "fingerprint": {
+      "deepseek-works/deliveries/D16.md": "e2730f993b7ea002347e7e8e83331de8d60cfe04fcbec52e071f5116aa24a1f4",
+      "deepseek-works/src/bootstrap/data_pool_layout.dg": "d39905e8e794e1e883476147622cb8c8be5a3b50500ee0a0fd972fcfafa11085",
+      "deepseek-works/src/bootstrap/data_pool_layout.md": "316bcc6c6abdd20c30113b8ca775620f057674a3d92dde19ab4208e988091efc",
+      "deepseek-works/tests/test_data_pool_layout.py": "6119a3a000f109afabba54fb54136be9f5f09879c36de2b6f7be7261918def3e"
+    },
+    "finished_at": "2026-10-18T11:18:33+00:00",
+    "job": "c958aa44304d48dcbf45b076e39bc81e",
+    "passed": true,
+    "source_stable": true,
+    "summary": "定向复验通过，等待源码/契约审查"
+  },
+  "write_paths": [
+    "deepseek-works/src/bootstrap/data_pool_layout.dg",
+    "deepseek-works/src/bootstrap/data_pool_layout.md",
+    "deepseek-works/tests/test_data_pool_layout.py",
+    "deepseek-works/tests/data_pool_layout_probe*",
+    "deepseek-works/deliveries/D16.md"
+  ]
+}

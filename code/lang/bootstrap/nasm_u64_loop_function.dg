@@ -1,0 +1,179 @@
+// A whole SysV function for a fixed finite u64 loop with a real back edge:
+// symbol + ":\n", C44 entry (frame 32, three INTEGER arguments captured into
+// [rbp-8]/[rbp-16]/[rbp-24]), remaining = iterations, header test, body with a
+// real back edge to that same header, exit label and C42 exit. Semantics:
+// acc = seed, then iterations times acc = (acc*factor + increment) mod 2^64.
+// The same body and back edge are always emitted (iterations 0/1 is never
+// unrolled into a direct return) and only the function symbol, labels and
+// instructions are produced (no section/global/bits/extern).
+// Every piece is produced for real into a bounded local scratch first, then out
+// and *written are published once, after every check; a failure leaves both
+// untouched. INVALID precedes CAPACITY.
+module bootstrap.nasm_u64_loop_function;
+import bootstrap.nasm_symbol as sym;
+import bootstrap.nasm_sysv_function_entry as ent;
+import bootstrap.nasm_integer_load as ld;
+import bootstrap.nasm_integer_memory_load as mld;
+import bootstrap.nasm_integer_memory_store as mst;
+import bootstrap.nasm_block_emit as blk;
+import bootstrap.nasm_compare_emit as cmp;
+import bootstrap.nasm_branch_emit as br;
+import bootstrap.nasm_integer_binary as bin;
+import bootstrap.nasm_sysv_function_exit as ex;
+pub const OK:u64=0;pub const INVALID:u64=1;pub const CAPACITY:u64=2;
+const MAX:u64=0xffff_ffff_ffff_ffff;
+const NAME_LIMIT:usize=64;const MAX_ITERATIONS:usize=64;
+const RAX:u64=0;const RCX:u64=1;const RBP:u64=5;
+const U64_KIND:u64=8;const FRAME:usize=32;
+const EQ:u64=0;const NE:u64=1;const ADD:u64=0;const SUB:u64=1;const IMUL:u64=5;
+const LABEL_KIND:u64=0;const JUMP_KIND:u64=1;
+// The frame is the fixed 32 bytes and the slots are the fixed offsets
+// -8/-16/-24/-32 (acc/factor/increment/remaining), so no operand text can grow
+// with the inputs. Segment bounds, each the bound proved by the integrated
+// component it wraps (plus the decimal/digit slack of CR4):
+//   header   268 = prefix "__dong_m" 8 + separator "_n" 2 + 2*(64+64) + ":\n" 2
+//   entry    111 = fixed C44 prologue 34 + three C37 captures 25 + 26 + 26
+//   load      40 = "mov " 4 + register 3 + ", " 2 + 20 digits + LF 1
+//   memory    32 = "mov " 4 + "qword " 6 + "[rbp - 32]" 10 + ", " 2 + 3 + LF 1 = 26
+//   label     34 = "__dong_b" 8 + 20 digits + ":" 1 + LF 1 = 30
+//   jump      33 = "jmp " 4 + "__dong_b" 8 + 20 digits + LF 1
+//   compare   48 = "cmp rax, rcx\n" 13 + "sete al\n" 8 + "movzx rax, al\n" 14 = 35
+//   binary    16 = "imul rax, rcx\n" 14
+//   branch    66 = condition line 33 + unused jump line 33 (only one is emitted)
+//   exit     122 = C39 load 56 + CR11 epilogue 66
+// Piece bounds in emission order and their total. The whole text is at most
+// 1188 bytes using the tighter fixed-entry bound (the task's general bound is
+// 1993). All pieces fit together in 1536 bytes; the running sum cannot overflow.
+const B0:usize=268;const B1:usize=111;const B2:usize=72;const B3:usize=234;const B4:usize=347;const B5:usize=156;
+const TOTAL:usize=1188;const TEXT:usize=1536;
+const FIXED:[]const u8="test rax, rax\n";
+fn span(p:u64,n:u64)bool{return n==0||(p!=0&&n<=MAX-p);}
+fn overlap(a:u64,n:u64,b:u64,m:u64)bool{return n!=0&&m!=0&&a<b+m&&b<a+n;}
+fn room(out:[]u8,at:usize,size:usize)bool{return at<=out.len&&size<=out.len-at;}
+unsafe fn put(out:[]u8,at:*usize,text:[]const u8)bool{unsafe{
+ if !room(out,*at,text.len){return false;}
+ var i:usize=0;while i<text.len{out[*at+i]=text[i];i+=1;}*at+=text.len;return true;
+}}
+// "<op> <dest64>, <src64>\n" through C23 into a 16-byte segment.
+unsafe fn binary(piece:[]u8,at:*usize,operation:u64,destination:u64,source:u64)bool{unsafe{
+ if !room(piece,*at,16){return false;}
+ var n:usize=0;
+ if bin.emit(operation,destination,source,slice_from_raw_parts(&piece[*at],16),&n)!=bin.OK{return false;}
+ if !room(piece,*at,n){return false;}
+ *at+=n;return true;
+}}
+// "mov <register64>, <immediate>\n" through CR9 into a 40-byte segment.
+unsafe fn load_immediate(piece:[]u8,at:*usize,register:u64,value:u64)bool{unsafe{
+ if !room(piece,*at,40){return false;}
+ var n:usize=0;
+ if ld.emit(register,value,64,false,slice_from_raw_parts(&piece[*at],40),&n)!=ld.OK{return false;}
+ if !room(piece,*at,n){return false;}
+ *at+=n;return true;
+}}
+// "mov <register64>, qword [rbp - displacement]\n" through CR12.
+unsafe fn load_memory(piece:[]u8,at:*usize,register:u64,displacement:i64)bool{unsafe{
+ if !room(piece,*at,32){return false;}
+ var n:usize=0;
+ if mld.emit(register,RBP,displacement,64,false,slice_from_raw_parts(&piece[*at],32),&n)!=mld.OK{return false;}
+ if !room(piece,*at,n){return false;}
+ *at+=n;return true;
+}}
+// "mov qword [rbp - displacement], <source64>\n" through CR13.
+unsafe fn store_memory(piece:[]u8,at:*usize,source:u64,displacement:i64)bool{unsafe{
+ if !room(piece,*at,32){return false;}
+ var n:usize=0;
+ if mst.emit(source,RBP,displacement,64,slice_from_raw_parts(&piece[*at],32),&n)!=mst.OK{return false;}
+ if !room(piece,*at,n){return false;}
+ *at+=n;return true;
+}}
+// "__dong_b<block>:\n" (kind 0) or "jmp __dong_b<block>\n" (kind 1) through CR18.
+unsafe fn block(piece:[]u8,at:*usize,kind:u64,block_id:u64)bool{unsafe{
+ var size:usize=34;if kind==JUMP_KIND{size=33;}
+ if !room(piece,*at,size){return false;}
+ var n:usize=0;
+ if blk.emit(kind,block_id,slice_from_raw_parts(&piece[*at],size),&n)!=blk.OK{return false;}
+ if !room(piece,*at,n){return false;}
+ *at+=n;return true;
+}}
+// The C42 exit: C39 return-value load from the acc slot, then the CR11 epilogue and ret.
+unsafe fn exit(piece:[]u8,at:*usize)bool{unsafe{
+ if !room(piece,*at,122){return false;}
+ var n:usize=0;
+ if ex.emit(U64_KIND,FRAME,0,8,0,slice_from_raw_parts(&piece[*at],122),&n)!=ex.OK{return false;}
+ if !room(piece,*at,n){return false;}
+ *at+=n;return true;
+}}
+fn bound(index:usize)usize{
+ if index==0{return B0;}if index==1{return B1;}if index==2{return B2;}if index==3{return B3;}if index==4{return B4;}
+ return B5;
+}
+// Piece index: 0 symbol header, 1 C44 entry, 2 remaining = iterations,
+// 3 header test + real conditional branch, 4 body + real back edge, 5 exit.
+unsafe fn piece(index:usize,module_name:[]const u8,item_name:[]const u8,iterations:usize,
+ header_block:u64,body_block:u64,exit_block:u64,buffer:[]u8,length:*usize)bool{unsafe{
+ var at:usize=0;var n:usize=0;
+ if index==0{
+  if !room(buffer,0,268){return false;}
+  if sym.encode(module_name,item_name,slice_from_raw_parts(&buffer[0],266),&n)!=sym.OK{return false;}
+  at=n;if !put(buffer,&at,":\n"){return false;}
+ }else if index==1{
+  if !room(buffer,0,111){return false;}
+  var kinds:[3]u8=[0;3];var offsets:[3]usize=[0;3];
+  offsets[0]=8;offsets[1]=16;offsets[2]=24;
+  if ent.emit(slice_from_raw_parts(&kinds[0],3),slice_from_raw_parts(&offsets[0],3),FRAME,
+   slice_from_raw_parts(&buffer[0],111),&n)!=ent.OK{return false;}
+  at=n;
+ }else if index==2{
+  if !load_immediate(buffer,&at,RAX,iterations as u64)||!store_memory(buffer,&at,RAX,-32){return false;}
+ }else if index==3{
+  if !block(buffer,&at,LABEL_KIND,header_block)||!load_memory(buffer,&at,RAX,-32)||!load_immediate(buffer,&at,RCX,0){return false;}
+  if !room(buffer,at,48){return false;}
+  if cmp.emit(EQ,RAX,RCX,slice_from_raw_parts(&buffer[at],48),&n)!=cmp.OK{return false;}
+  if n>48{return false;}
+  at+=n;if !put(buffer,&at,FIXED){return false;}
+  if !room(buffer,at,66){return false;}
+  if br.emit(NE,exit_block,body_block,body_block,slice_from_raw_parts(&buffer[at],66),&n)!=br.OK{return false;}
+  if n>66{return false;}
+  at+=n;
+ }else if index==4{
+  if !block(buffer,&at,LABEL_KIND,body_block)
+   ||!load_memory(buffer,&at,RAX,-8)||!load_memory(buffer,&at,RCX,-16)||!binary(buffer,&at,IMUL,RAX,RCX)
+   ||!load_memory(buffer,&at,RCX,-24)||!binary(buffer,&at,ADD,RAX,RCX)||!store_memory(buffer,&at,RAX,-8)
+   ||!load_memory(buffer,&at,RAX,-32)||!load_immediate(buffer,&at,RCX,1)||!binary(buffer,&at,SUB,RAX,RCX)
+   ||!store_memory(buffer,&at,RAX,-32){return false;}
+  if !block(buffer,&at,JUMP_KIND,header_block){return false;}
+ }else{
+  if !block(buffer,&at,LABEL_KIND,exit_block)||!exit(buffer,&at){return false;}
+ }
+ *length=at;return true;
+}}
+pub unsafe fn emit(module_name:[]const u8,item_name:[]const u8,iterations:usize,
+ header_block:u64,body_block:u64,exit_block:u64,out:[]u8,written:*usize)u64{unsafe{
+ let wp=written as u64;let mp=module_name.ptr as u64;let ip=item_name.ptr as u64;let op=out.ptr as u64;
+ if written==null||(wp&7)!=0||!span(wp,8){return INVALID;}
+ let mn=module_name.len;let inn=item_name.len;let on=out.len;
+ if !span(mp,mn)||!span(ip,inn)||!span(op,on){return INVALID;}
+ // The two names may overlap each other; out and written are disjoint from every whole input and from each other.
+ if overlap(wp,8,op,on){return INVALID;}
+ if overlap(wp,8,mp,mn)||overlap(wp,8,ip,inn)||overlap(op,on,mp,mn)||overlap(op,on,ip,inn){return INVALID;}
+ if mn==0||mn>NAME_LIMIT||inn==0||inn>NAME_LIMIT{return INVALID;}
+ if iterations>MAX_ITERATIONS{return INVALID;}
+ if header_block==MAX||body_block==MAX||exit_block==MAX{return INVALID;}
+ if header_block==body_block||header_block==exit_block||body_block==exit_block{return INVALID;}
+ // Produce the complete text locally. Each reserved piece is checked before its
+ // slice is constructed; dependencies finish before any user output is published.
+ var buffer:[1536]u8=[0;1536];
+ var total:usize=0;var n:usize=0;var p:usize=0;
+ while p<6{
+  let size=bound(p);
+  if total>TEXT||size>TEXT-total{return INVALID;}
+  if !piece(p,module_name,item_name,iterations,header_block,body_block,exit_block,slice_from_raw_parts(&buffer[total],size),&n){return INVALID;}
+  if n>size{return INVALID;}
+  total+=n;p+=1;
+ }
+ if total>TOTAL{return INVALID;}
+ if total>on{return CAPACITY;}
+ // One publication phase: no dependency calls or failure paths after this point.
+ var i:usize=0;while i<total{out[i]=buffer[i];i+=1;}
+ *written=total;return OK;
+}}

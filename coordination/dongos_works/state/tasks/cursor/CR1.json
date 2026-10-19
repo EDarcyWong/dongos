@@ -1,0 +1,81 @@
+{
+  "auto_dispatch": false,
+  "auto_verify": false,
+  "candidate": null,
+  "checks": [
+    "discover:cursor-works/tests:test_nasm_bytes.py"
+  ],
+  "claimed_at": "2026-10-18T08:55:45+00:00",
+  "claimed_by": "cursor-worker-1",
+  "created_at": "2026-10-18T05:54:12+00:00",
+  "delivery": "cursor-works/deliveries/CR1.md",
+  "depends_on": [],
+  "description": "从现有任务书导入，历史内容保留。",
+  "document": "cursor-works/tasks/CR1-nasm-byte-literals.md",
+  "document_status": "submitted",
+  "evidence": [
+    "cursor-works/README.md"
+  ],
+  "historical": false,
+  "id": "cursor:CR1",
+  "integration_note": "按验收hash集成模块/文档/主线测试，定向及组合验证通过；映射和新回执见reviews/2026-10-18-batch3-integration.md。LM2为回写项目文档，七个Dong组件为lang/bootstrap集成；L3未完成。",
+  "legacy_hash": "c886f372be8956d0e2cd1ebd6355914b0e773c0a78b88f5646f5530563319648",
+  "number": "CR1",
+  "owner": "cursor",
+  "rev": 12,
+  "review_note": "Codex已审查源码/契约及测试有效性，独立定向复跑零skip且文件指纹稳定；详见 cursor-works/reviews/2026-10-18-CR1-R1-acceptance.md。独立验收，不代表主线集成或L3完成。",
+  "state_reconciliation": {
+    "at": "2026-10-19T11:42:09+00:00",
+    "audit_sha256": "5daf98a663cd249783a8432a5fcbed3ec4e96275b1910fa54b7903c084fe9ebc",
+    "note": "协调已有历史事实；保留原事件/作业；历史复验未重跑，未新增验收或集成，不启动模型。",
+    "previous_data_sha256": "2b69e607290654bf196eb716dafa4545aeee076903dfdf9f38978e66e79da693",
+    "previous_rev": 10,
+    "project": "dongos",
+    "snapshot_generated_at": "2026-10-19T09:04:28+00:00",
+    "snapshot_rev": 11,
+    "snapshot_sha256": "a40cf9aabcbb43779b5c60414d7142cab791f85888022c84625568dbb579ac96",
+    "verification_reexecuted": false
+  },
+  "state_recovery": {
+    "at": "2026-10-19T04:43:01+00:00",
+    "audit_sha256": "3ea0db756d56092976092ed0d1216118e145a8e34aa02c5060cb913d088d553e",
+    "note": "恢复已有验收/集成/返修事实；原复验为历史记录，未声称本次重跑；不恢复丢失作业或启动模型。",
+    "snapshot_rev": 10,
+    "snapshot_sha256": "f3ab929e33419f40dfc417217d588acf8b1b26cbac50724a51942a11e438c171"
+  },
+  "status": "integrated",
+  "title": "原生 NASM 字节常量编码器",
+  "updated_at": "2026-10-19T11:42:09+00:00",
+  "verification": {
+    "checks": [
+      {
+        "cancelled": false,
+        "elapsed_seconds": 12.328,
+        "passed": true,
+        "returncode": 0,
+        "skips": 0,
+        "spec": "discover:cursor-works/tests:test_nasm_bytes.py",
+        "tests": 4,
+        "timed_out": false
+      }
+    ],
+    "fingerprint": {
+      "cursor-works/deliveries/CR1.md": "961fe4ae3d95f3533b3c3bb8463ceb11f144c5d322030f66943deae4fbbe7ffe",
+      "cursor-works/src/bootstrap/nasm_bytes.dg": "1b3466b9520d1d8ba63088d7cb474e33bbe2e65d040ec145878f232c788f036f",
+      "cursor-works/src/bootstrap/nasm_bytes.md": "17fd383eba45e684406cd2478afa6f3818c39b83676b44be334b2ef4ffd91f76",
+      "cursor-works/tests/test_nasm_bytes.py": "318ffbdd9187ad985f461349733fb61a374dac9e75f8035a881714681f848526"
+    },
+    "finished_at": "2026-10-18T09:05:30+00:00",
+    "job": "edcbc704ec4e4abfaed752bce172a70c",
+    "passed": true,
+    "source_stable": true,
+    "summary": "定向复验通过，等待源码/契约审查"
+  },
+  "write_paths": [
+    "cursor-works/src/bootstrap/nasm_bytes.dg",
+    "cursor-works/src/bootstrap/nasm_bytes.md",
+    "cursor-works/tests/test_nasm_bytes.py",
+    "cursor-works/tests/nasm_bytes_probe*",
+    "cursor-works/deliveries/CR1.md"
+  ]
+}

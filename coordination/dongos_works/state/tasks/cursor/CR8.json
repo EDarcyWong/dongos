@@ -1,0 +1,79 @@
+{
+  "auto_dispatch": false,
+  "auto_verify": false,
+  "candidate": null,
+  "checks": [
+    "discover:cursor-works/tests:test_nasm_memory_operand.py"
+  ],
+  "claimed_at": "2026-10-18T12:05:00+00:00",
+  "claimed_by": "cursor-worker-1",
+  "complexity": "standard",
+  "created_at": "2026-10-18T12:03:58+00:00",
+  "delivery": "cursor-works/deliveries/CR8.md",
+  "depends_on": [
+    "cursor:CR4"
+  ],
+  "description": "module bootstrap.nasm_memory_operand。\npub unsafe fn encode(base:u64, displacement:i64, out:[]u8, written:*usize)u64。\n寄存器编号固定0..15依次为rax,rcx,rdx,rbx,rsp,rbp,rsi,rdi,r8,r9,r10,r11,r12,r13,r14,r15；其它编号INVALID。\ndisplacement只允许[-2147483648,2147483647]，越界INVALID不截断。严格文本：[<reg>]（零）；[<reg> + <正位移十进制>]；[<reg> - <负位移绝对值十进制>]。例如base=5,disp=-8输出b\"[rbp - 8]\"。没有大小前缀、LF或NUL；括号内部空格严格如此。只支持一个64位基址，不支持索引/比例/RIP/符号。必须复用已集成bootstrap.decimal_integer编码绝对值，先检查有界位移再安全求绝对值。\n用独立Python格式期望检查16个寄存器、0/±1/±8、两端点和越界、容量恰好/少一/多余、完整输出别名及计数对齐。实际Dong文本放入NASM lea目的寄存器,<文本>，两种对象格式组装；原生探针用有限输入基址及安全寄存器，观察lea计算结果等于64位模加法而不解引用。rsp/rbp等影响栈的基址仅作组装验证；临时执行探针必须保持宿主栈和ABI。两种坏源码至少覆盖漏负号/位移，以及容量不足先写输出。LM8只作可选给定数据补充，不能依赖它完成。\n\n## 实现、测试与交付\n\n这是L3生产后端的有界独立组件，完整代码生成器/自举尚未完成。实现必须是Dong，模块不导出C符号；C/Python/NASM仅作独立测试观察器，不用宿主实现替代Dong生产逻辑。无分配、全局可变状态或OS调用。仅修改声明的本人works文件，不改code/lang、活动编译器/内核、协调器或他人文件。Codex负责独立复验后集成。\n\nunsafe调用方保证实际可访问的对象；实现仍须在读写前验证完整描述符、地址端点无溢出、长度乘法、自然对齐和所有别名规则。除任务另定外，OK=0、INVALID=1、CAPACITY=2；written非空8对齐，完整8字节与完整out分离；空out可NULL，非空out不可NULL。INVALID优先CAPACITY，失败out与written全文不变；成功只写精确前缀/计数，尾部不变。不以未使用前缀代替完整声明区间检查。先预检再写，子组件在局部暂存中调用以保证原子性。\n\n只读依赖须已accepted/integrated且不修改。所有任务声明的依赖已集成；测试只暂存本组件和声明的只读依赖，避免当前主线同名模块遮蔽临时坏源码。测试实际编译并原生执行Dong debug/release，至少组装ELF64/COFF；有限固定边界与小规模确定性随机，Python/C独立期望，不堆大矩阵。双端guard、只读输入（如有）、输出尾部及失败全文立即核对。指针负例只触发预检，不非法解引用；其它前置条件必须合法，不能用另一非法字段遮蔽目标缺陷。\n\n至少两种真实错误Dong副本成功编译、链接、原生执行，再被指定语义/原子性断言拒绝；构建失败、崩溃、超时、无关前置断言不算负控成功。只运行本任务声明的定向测试，产物在cursor-works/build/CR8/<唯一目录>，不运行OS/VM、全回归、性能基准、定时器、关机、提交或推送。不启动任何模型CLI，Cursor保持客户端手动执行。\n\n先通过本人的worker MCP get_task/read_document查看最新rev、完整契约、归属与依赖，claim成功后才修改。完成后写cursor-works/deliveries/CR8.md，列出真实命令、tests/skip、模式/格式、源码测试SHA256、证据目录、负控拒绝原因和限制，未运行明确未运行；落盘后submit_task，不能自行accept/integrate。需要扩大归属时说明，不擅自扩范围。\n",
+  "document": "cursor-works/tasks/CR8-board.md",
+  "historical": false,
+  "id": "cursor:CR8",
+  "integration_note": "CR8已真实复制按验收hash的Dong源码/说明至lang/bootstrap/nasm_memory_operand.*，永久测试lang/tests/test_bootstrap_nasm_memory_operand.py仅适配路径和私有依赖根；本批主线同9项通过0skip、受测来源稳定。CR10另12次原生布局/真假路径观察通过。证据及限制见coordination/dongos_works/reviews/2026-10-18-Cursor-DeepSeek-review.md；完整L3后端/自举未完成。",
+  "legacy_hash": "fd6ab0171040158c43fc2b66e0e80982e0aff62a67158f6c6c58fd61503218f0",
+  "number": "CR8",
+  "owner": "cursor",
+  "rev": 8,
+  "review_note": "源码/契约/原生测试审查完成，正式3项0skip、source_stable；16寄存器和i32位移文本、双格式组装、实际LEA算术及真实错误源码负控通过。",
+  "state_reconciliation": {
+    "at": "2026-10-19T11:42:09+00:00",
+    "audit_sha256": "5daf98a663cd249783a8432a5fcbed3ec4e96275b1910fa54b7903c084fe9ebc",
+    "note": "协调已有历史事实；保留原事件/作业；历史复验未重跑，未新增验收或集成，不启动模型。",
+    "previous_data_sha256": "6e162c2c20e242b735fb8195124e7bbb071a8d74fb81bfa6dc6b7f2ec49e0687",
+    "previous_rev": 6,
+    "project": "dongos",
+    "snapshot_generated_at": "2026-10-19T09:04:28+00:00",
+    "snapshot_rev": 7,
+    "snapshot_sha256": "a40cf9aabcbb43779b5c60414d7142cab791f85888022c84625568dbb579ac96",
+    "verification_reexecuted": false
+  },
+  "state_recovery": {
+    "at": "2026-10-19T04:43:01+00:00",
+    "audit_sha256": "3ea0db756d56092976092ed0d1216118e145a8e34aa02c5060cb913d088d553e",
+    "note": "恢复已有验收/集成/返修事实；原复验为历史记录，未声称本次重跑；不恢复丢失作业或启动模型。",
+    "snapshot_rev": 6,
+    "snapshot_sha256": "f3ab929e33419f40dfc417217d588acf8b1b26cbac50724a51942a11e438c171"
+  },
+  "status": "integrated",
+  "title": "NASM基址加有符号位移操作数",
+  "updated_at": "2026-10-19T11:42:09+00:00",
+  "verification": {
+    "checks": [
+      {
+        "cancelled": false,
+        "elapsed_seconds": 92.687,
+        "passed": true,
+        "returncode": 0,
+        "skips": 0,
+        "spec": "discover:cursor-works/tests:test_nasm_memory_operand.py",
+        "tests": 3,
+        "timed_out": false
+      }
+    ],
+    "fingerprint": {
+      "cursor-works/deliveries/CR8.md": "d60b86e860722fce6671ab630abe0039551f3fa1696ced7eccde36f12c4aa574",
+      "cursor-works/src/bootstrap/nasm_memory_operand.dg": "e3d072a3ea1314975427bb0e24426da2adaf3de692101f3e3e8d6768697f1d24",
+      "cursor-works/src/bootstrap/nasm_memory_operand.md": "8d2ac0945f86d23dc4dbaedfeb36830be5d623d837f2cbbe914664f539f248d0",
+      "cursor-works/tests/test_nasm_memory_operand.py": "4c41368aa8f0ad62786eb2b2fd4e248f39dcf95711e687bc68070daac871610e"
+    },
+    "finished_at": "2026-10-18T13:04:14+00:00",
+    "job": "43eb8a9c135a4536be0d161f5029b9ec",
+    "passed": true,
+    "source_stable": true,
+    "summary": "定向复验通过，等待源码/契约审查"
+  },
+  "write_paths": [
+    "cursor-works/src/bootstrap/nasm_memory_operand.dg",
+    "cursor-works/src/bootstrap/nasm_memory_operand.md",
+    "cursor-works/tests/test_nasm_memory_operand.py",
+    "cursor-works/deliveries/CR8.md"
+  ]
+}

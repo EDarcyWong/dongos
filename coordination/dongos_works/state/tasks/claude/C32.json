@@ -1,0 +1,77 @@
+{
+  "auto_dispatch": false,
+  "auto_verify": false,
+  "candidate": null,
+  "checks": [
+    "discover:claude-works/tests:test_nasm_memory_intrinsic.py"
+  ],
+  "claimed_at": "2026-10-18T15:18:16+00:00",
+  "claimed_by": "claude-mcp-c338b58c099f4f05",
+  "complexity": "standard",
+  "created_at": "2026-10-18T15:11:21+00:00",
+  "delivery": "claude-works/deliveries/C32.md",
+  "depends_on": [],
+  "description": "module bootstrap.nasm_memory_intrinsic。\npub const COPY:u64=0;pub const ZERO:u64=1;\npub unsafe fn emit(operation:u64,out:[]u8,written:*usize)u64。\noperation仅0/1，其它INVALID且优先CAPACITY。COPY严格一行\"rep movsb\\n\"；ZERO严格两行\"xor eax, eax\\nrep stosb\\n\"。固定运行时输入RDI=目的指针、RCX=字节数，COPY另RSI=源指针；调用方保证DF=0、真实区间可访问，COPY源目的不重叠（不是memmove），对象边界/生命周期及语言检查由上游负责。\n执行后COPY将RCX归0、RDI/RSI各前移原count，RAX与其余寄存器和flags保持；ZERO将RCX归0、RDI前移count，RAX=0，RSI与其余寄存器保持，算术flags按xor允许改变，DF仍须0。count=0不访问源目的内存，COPY时指针保持、ZERO仍先清RAX。此为内存内建后端发射，不重写已验收D1标准库，也不修改当前活动编译器内建lowering。\n本项固定寄存器，无16寄存器矩阵。有限实际原生向量含count0/1/7/8/15/16/31/64/65的选定组合，≤24/模式；输入/输出前后guard及完整非目标字节核对，COPY源完整快照且实际只读保护成功，ZERO目的预填非零；捕获RCX/RSI/RDI/RAX及其它受控寄存器，对count0以NULL源/目的执行（不额外解引用）并检查无访问。独立字节数组期望。SysV桩建立DF=0并保留宿主callee-saved，返回时满足宿主ABI；ELF64/COFF均组装。\n真实坏Dong将COPY发成rep stosb，先给AL独立非匹配哨兵，目标区大小充足，必须正常执行后由复制字节不符拒绝；保留真实好体先在同一夹具通过。另文本out容量不足提前写的原子性负控；错误实现不能访问真实宿主栈、制造越界/只读写崩溃或用无关预检失败代替语义拒绝。\n\n## 共用固定契约与归属\n\n这是L3真实后端所需的独立Dong文本发射组件，不能代替完整代码生成/语言溢出检查/自举。源码必须Dong，不导出C符号，不用Python/C宿主实现代替生产逻辑；无分配、全局可变状态或OS调用。仅修改本人本任务4个授权文件，依赖只读，绝不改code/lang、活动编译器、内核、协调器、CR11或Codex语义主线。\n\n寄存器编号0..15固定rax,rcx,rdx,rbx,rsp,rbp,rsi,rdi,r8,r9,r10,r11,r12,r13,r14,r15；其它编号INVALID。32位名eax,ecx,edx,ebx,esp,ebp,esi,edi,r8d..r15d；16位ax,cx,dx,bx,sp,bp,si,di,r8w..r15w；低8位al,cl,dl,bl,spl,bpl,sil,dil,r8b..r15b，不支持ah等高8位。严格ASCII和单字节LF，除任务另定的块标签外，不含section/global/注释/额外空行/NUL；本任务规定几行就精确几行，成功尾部不变。\n\nunsafe调用方保证对象真实可访问。仍必须在任何读写前检查written非空、8对齐、完整8字节端点不溢出；out完整描述符端点/非空非NULL；written完整8字节与完整声明out不重叠（包括输出未使用尾部）。空out可NULL。OK=0、INVALID=1、CAPACITY=2，所有参数/枚举/位移/描述符INVALID优先CAPACITY；失败out和written全文不变。先验证/计算，在局部暂存调用只读组件，最后一次写用户out；不得通过只看已用前缀逃过完整别名。长度加法不溢出。\n\n测试要让每个目标预检独立可达：其它字段合法，真实guard/快照初始化后再取。written端点溢出使用8对齐UINT64_MAX-7和合法空out，正确INVALID，漏检坏实现返回CAPACITY，不能非法解引用；NULL/奇地址、out端点、对齐前缀/尾部别名、参数INVALID且out容量0亦独立覆盖。失败全文/双端guard、成功精确文本/计数/剩余尾部立即检查。C观察器对齐存储明确声明，不能用另一个非法字段掩盖目标。\n\n测试实际编译、链接、原生执行Dong debug/release，NASM ELF64/COFF都组装。只暂存本组件和声明的已集成依赖，含坏源码时不引入整个lang根遮蔽临时模块。独立Python/C期望；有限固定边界优先、无需随机堆矩阵。文本/组装覆盖全部16个寄存器（可旋转配对，不要求全笛卡尔积）；受控原生仅用安全调用者保存寄存器的少量组合（每模式不超过24个主要向量），保留宿主ABI/栈，rsp/rbp写目标只组装。COFF组装不等于Win64 ABI可调用，原生C桥显式SysV。\n\n至少两类真实坏Dong成功编译/链接/原生执行，再由指定数值/原子性断言拒绝；同一夹具先跑好实现。至少一类是原生实际结果错误，另一类容量失败提前写输出/计数，以全文/guard立即拒绝；若任务另定两类语义负控，则另保留一次原子性验证。构建失败、崩溃、超时、文本不同或无关预检错误不得冒充指定原生负控。坏源码执行的目标输入必须合法且不导致非法内存/栈访问。\n\n先通过自己的worker MCP get_task/read_document读取最新rev、完整契约、依赖和归属，claim后执行。只运行本任务声明的定向测试，产物放本人works/build/编号/<唯一目录>/；无OS/VM/全回归/性能基准/定时器/关机/提交/推送，不启动模型CLI。客户端手动执行；完成后落盘原编号交付并通过MCP submit，不能自行accept/integrate。交付列真实命令、tests/skip、模式/对象格式、生产/测试SHA256、产物目录、每种负控实际观察/拒绝原因和未运行/剩余限制。依赖或归属问题先报告，不擅自扩大范围。",
+  "document": "claude-works/tasks/C32-board.md",
+  "historical": false,
+  "id": "claude:C32",
+  "integration_note": "已完成真实文件集成：验收字节复制.dg/.md到code/lang/bootstrap，同名永久test_bootstrap_nasm_*.py仅适配主线/产物路径。实际从code运行两模块8项定向测试，通过0skip、0error，13.907秒，生产/测试/关联lang/dongc与decimal_integer前后SHA256稳定；ELF64/COFF组装、debug/release原生语义/guard/坏Dong断言保留。逐文件映射、完整log/result在coordination/dongos_works/.local/reviews/C30-C32-review/。C31因197>192缺陷单独退回R1，未集成；完整L3后端/CLI及自举未完成。",
+  "legacy_hash": "060ee92ce606963303a28abae8a44a08e4c7c9c3820cf1aa339d50370be5b204",
+  "number": "C32",
+  "owner": "claude",
+  "rev": 8,
+  "review_note": "独立审查生产Dong、完整C32任务契约和全部原生测试/坏Dong路径；正式job f0007b21fd7f4e5cae4f7472eaa2e976 实际4项通过0skip、source_stable=true。COPY/ZERO精确文本，全部预检在写用户out/written前完成；局部32足够，完整声明out尾部别名与8字节written端点独立可达。debug/release各18向量原生核对count0的NULL指针、count1..65、只读源保护实际成功、目的全文/guard、寄存器和flags；COPY改STOSB正常执行后按字节拒绝、提前写按原子性拒绝。ELF64/COFF组装通过。未发现阻塞缺陷；仅组件验收，DF/区间/不重叠由上游保证。",
+  "state_reconciliation": {
+    "at": "2026-10-19T11:42:09+00:00",
+    "audit_sha256": "5daf98a663cd249783a8432a5fcbed3ec4e96275b1910fa54b7903c084fe9ebc",
+    "note": "协调已有历史事实；保留原事件/作业；历史复验未重跑，未新增验收或集成，不启动模型。",
+    "previous_data_sha256": "b7213336506debd71951f61a3dc6f463b18028c93674472137d1d8ad02daf5d5",
+    "previous_rev": 6,
+    "project": "dongos",
+    "snapshot_generated_at": "2026-10-19T09:04:28+00:00",
+    "snapshot_rev": 7,
+    "snapshot_sha256": "a40cf9aabcbb43779b5c60414d7142cab791f85888022c84625568dbb579ac96",
+    "verification_reexecuted": false
+  },
+  "state_recovery": {
+    "at": "2026-10-19T04:43:01+00:00",
+    "audit_sha256": "3ea0db756d56092976092ed0d1216118e145a8e34aa02c5060cb913d088d553e",
+    "note": "恢复已有验收/集成/返修事实；原复验为历史记录，未声称本次重跑；不恢复丢失作业或启动模型。",
+    "snapshot_rev": 6,
+    "snapshot_sha256": "f3ab929e33419f40dfc417217d588acf8b1b26cbac50724a51942a11e438c171"
+  },
+  "status": "integrated",
+  "title": "固定寄存器字节复制与清零发射",
+  "updated_at": "2026-10-19T11:42:09+00:00",
+  "verification": {
+    "checks": [
+      {
+        "cancelled": false,
+        "elapsed_seconds": 7.407,
+        "passed": true,
+        "returncode": 0,
+        "skips": 0,
+        "spec": "discover:claude-works/tests:test_nasm_memory_intrinsic.py",
+        "tests": 4,
+        "timed_out": false
+      }
+    ],
+    "fingerprint": {
+      "claude-works/deliveries/C32.md": "fc0b8c24055dc222203e06a68295b76bbd40e89803b9585ab1996b8d977df1c3",
+      "claude-works/src/bootstrap/nasm_memory_intrinsic.dg": "d4c68b1faa86c10951e4b923d72e8d68e00250282009f5ad7df4e5d6f165a05f",
+      "claude-works/src/bootstrap/nasm_memory_intrinsic.md": "da15b4a1374d0d72ae2a4e31181b01d593538117f7792aa574b6113720cf83c2",
+      "claude-works/tests/test_nasm_memory_intrinsic.py": "4251ad8dbea0286e9696df0d6aa363c1c0533aaff53e01e1e8350e4290e58e14"
+    },
+    "finished_at": "2026-10-18T15:23:54+00:00",
+    "job": "f0007b21fd7f4e5cae4f7472eaa2e976",
+    "passed": true,
+    "source_stable": true,
+    "summary": "定向复验通过，等待源码/契约审查"
+  },
+  "write_paths": [
+    "claude-works/src/bootstrap/nasm_memory_intrinsic.dg",
+    "claude-works/src/bootstrap/nasm_memory_intrinsic.md",
+    "claude-works/tests/test_nasm_memory_intrinsic.py",
+    "claude-works/deliveries/C32.md"
+  ]
+}

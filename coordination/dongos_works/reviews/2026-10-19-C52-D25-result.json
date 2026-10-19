@@ -1,0 +1,104 @@
+{
+  "project": "dongos",
+  "request": "验收c52 d25",
+  "tasks": [
+    {
+      "id": "claude:C52",
+      "status": "rework",
+      "rev": 5,
+      "updated_at": "2026-10-19T15:32:30+00:00",
+      "review_note": "[P2] 源码/契约审查不通过，不能因现有5项测试全过而验收。nasm_u64_module.dg:41-46 的嵌套预检缺少名字1..64和IR<=64等数量限制，57行重复名字same()先读字节，66行后才交C48拒绝非法数量，违反先完整嵌套数量预检、非法数量不读正文的契约。直接链接正式未修改Dong对象的安全PAGE_GUARD读观察证明：debug/release，module/item 65字节单函数INVALID且0次读，双函数同为65字节名字却在INVALID前读1次；64字节单函数读观察正控为1且WORKSPACE，12个观察均正常返回，输出/written/表不变，无崩溃/超时/构建失败。正式作业64634c302d0c434bbf0216f94eb8f495为5tests/0skip/146.640秒/source_stable=true，16输入和672产物SHA一致，130组原生负控审查正常，但未覆盖本缺口。返修仅原四文件：任何名字/IR正文读取前先完成所有函数嵌套名字及IR数量/描述符预检，保留C48实际语义预检；增加能使当前实现因提前读取而失败的安全永久回归，覆盖module/item、多函数/位置，保留现有负控、优先级和原子性。更新说明与交付原编号重新submit；不改C48/他人实现。证据reviews/2026-10-19-C52-evidence.json、-C52-name-preflight.c，详审reviews/2026-10-19-C52-D25-reviewed.md。",
+      "verification": null
+    },
+    {
+      "id": "deepseek:D25",
+      "status": "accepted",
+      "rev": 5,
+      "updated_at": "2026-10-19T15:33:47+00:00",
+      "review_note": "已实际审查完整D25任务契约、四交付、生产源码/上界说明/永久测试。完整描述符、24字节乘法/对齐/端点/全区间别名及0..16arm/标签预检符合要求，真实复用C35/C11 signed排序与重复值拒绝，Case.value/block与原Arm顺序result绑定正确，各块独立C42 ret。prefix1585+17*136=3897界成立，三个同时存活局部帧1600/1088/1224避开单函数4096限制；全部依赖与容量判断后最终发布。正式独立作业a54f3e5a53d845f897bf9d2a4cdae27c：3tests/0skip/returncode0/150.891秒/source_stable=true，debug/release、ELF64/COFF和Windows显式SysV原生执行通过。21主要selector、35文本/容量/非法/只读用例和43独立基线预检有效；两个实际关联错配坏体及提前发布头部负控均由指定数值/失败原子性拒绝，同输入好侧先执行。额外只读产物审查核对19输入/依赖、303产物SHA及202组原生返回；全部保存寄存器/RSP/对齐/canary正确，两个关联错配坏体两模式共64组均正常返回后产生指定RAX差异。当前四文件仍匹配正式验收指纹，所有直接依赖integrated。证据reviews/2026-10-19-D25-evidence.json；审查reviews/2026-10-19-C52-D25-reviewed.md。无阻塞问题，登记受限组件验收；本轮未实际主线集成，不代表完整match/CFG/L3完成。",
+      "verification": {
+        "passed": true,
+        "checks": [
+          {
+            "spec": "discover:deepseek-works/tests:test_nasm_i64_switch_function.py",
+            "passed": true,
+            "tests": 3,
+            "skips": 0,
+            "returncode": 0,
+            "cancelled": false,
+            "timed_out": false,
+            "elapsed_seconds": 150.891
+          }
+        ],
+        "source_stable": true,
+        "fingerprint": {
+          "deepseek-works/src/bootstrap/nasm_i64_switch_function.dg": "71bbe445d7a36d4e72ccd539c8ccecba447a0155d9c00d6a879e08cc998cf0c4",
+          "deepseek-works/src/bootstrap/nasm_i64_switch_function.md": "81d42024d08bfabdf7082a6805a0cb7a94b799307dd45c6e185eabb9cfb695f5",
+          "deepseek-works/tests/test_nasm_i64_switch_function.py": "582dfbbedda46302df1cce7b8aa821718c83d13ac544f0ee1da543872a9fefd2",
+          "deepseek-works/deliveries/D25.md": "8e7b74ee64a9a9b7a727af0270f69c2618be141d23d50afca9f9d857a3cc1b58"
+        },
+        "summary": "定向复验通过，等待源码/契约审查",
+        "finished_at": "2026-10-19T15:33:16+00:00",
+        "job": "a54f3e5a53d845f897bf9d2a4cdae27c"
+      }
+    }
+  ],
+  "dependency_snapshot": [
+    {
+      "id": "claude:C48",
+      "status": "integrated",
+      "rev": 13
+    },
+    {
+      "id": "cursor:CR3",
+      "status": "integrated",
+      "rev": 8
+    },
+    {
+      "id": "cursor:CR9",
+      "status": "integrated",
+      "rev": 8
+    },
+    {
+      "id": "cursor:CR12",
+      "status": "integrated",
+      "rev": 14
+    },
+    {
+      "id": "cursor:CR13",
+      "status": "integrated",
+      "rev": 16
+    },
+    {
+      "id": "cursor:CR18",
+      "status": "integrated",
+      "rev": 8
+    },
+    {
+      "id": "claude:C11",
+      "status": "integrated",
+      "rev": 10
+    },
+    {
+      "id": "claude:C35",
+      "status": "integrated",
+      "rev": 12
+    },
+    {
+      "id": "claude:C42",
+      "status": "integrated",
+      "rev": 7
+    },
+    {
+      "id": "claude:C44",
+      "status": "integrated",
+      "rev": 7
+    }
+  ],
+  "integrated": false,
+  "review": "2026-10-19-C52-D25-reviewed.md",
+  "evidence": [
+    "2026-10-19-C52-evidence.json",
+    "2026-10-19-D25-evidence.json"
+  ]
+}

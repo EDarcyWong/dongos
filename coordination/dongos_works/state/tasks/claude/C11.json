@@ -1,0 +1,79 @@
+{
+  "auto_dispatch": false,
+  "auto_verify": false,
+  "candidate": null,
+  "checks": [
+    "discover:claude-works/tests:test_switch_cases.py"
+  ],
+  "claimed_at": "2026-10-18T08:31:04+00:00",
+  "claimed_by": "claude-worker-1",
+  "complexity": "standard",
+  "created_at": "2026-10-18T06:55:31+00:00",
+  "delivery": "claude-works/deliveries/C11.md",
+  "depends_on": [],
+  "description": "模块bootstrap.switch_cases。Case{value:i64,label:usize}；label为不解释的目标编号，所有usize均允许。本组件仅规划，不检查标签绑定、不生成实际分支，也不修改语义层。\npub unsafe fn order(input:[]const Case,out:[]Case,work:[]Case,used:*usize)u64。\n成功out前n项按有符号i64严格递增，label与原value配对保持，used=n。重复value为INVALID（即使label相同）；用work完成排序/重复检查后才能写out，失败out/used不变。out/work各至少input.len。使用非递归O(N log N)算法，禁止按键数值大小遍历。空输入used=0。独立Python sorted和set判重，覆盖MIN/MAX、正负零邻接、反序、重复值与任意标签。坏实现至少把i64当u64排序、只比较相邻输入而漏掉非相邻重复或破坏value-label配对。\n本批是L3后端所需的独立纯Dong组件，不修改Codex活动语义/流程/后端，也不修改已验收C1～C6、D1～D13或Cursor CR1。仅写本任务列出的claude-works/src、tests和交付。新组件不放入lang/。不提交/推送，不运行OS/VM/全回归，不自行验收。\n公共契约：公开OK=0、INVALID=1、CAPACITY=2，需工作区时WORKSPACE=3。借用切片及结果对象先完整检查非空指针、自然对齐、元素乘法和端点溢出；读输入前完成描述符/完整声明区间别名预检。只读输入可互相重叠；可写输出/工作区/结果对象不得互相或与输入整段重叠。空切片可NULL，结果对象仍须有效独立。非OK保持整个输出及结果对象不变；work可在完成描述符预检后改变内部内容。成功只改有效输出前缀及明确字段，尾部/输入/实际双端保护不变。错误优先INVALID→CAPACITY→WORKSPACE（若需要），数据相关INVALID也不能让部分输出泄漏。所有算术先验溢出，debug/release不能以panic代替错误返回。unsafe调用方保证通过数值预检的区间真实可访问；无分配/全局可变状态/OS调用。\n验收：独立Python期望，至少100个固定种子的小规模案例及接口边界；实际Dong→NASM→C/SysV，debug/release执行、ELF64/COFF组装，零skip。正向和失败逐次检查返回值、完整结果/输出尾部、输入和真实双端；至少一组真实只读输入。至少两类真实坏董副本成功编译链接运行，并被指定断言拒绝；构建失败/崩溃/超时不算拒绝。只跑本任务定向测试，产物放claude-works/build/<编号>/<唯一运行目录>/。交付附命令、数量/skip、hash、证据和限制，保持待复验。当前契约及测试源码由本任务负责人维护，独立验收由Codex完成。\n\n\n本任务错误优先补充（优先于批次笼统描述）：先做描述符/别名/可计算长度INVALID检查，再检查CAPACITY、WORKSPACE；拥有合法充足工作区后排序判重，重复值返回INVALID且out/used不变。不要求在缺少工作区时用O(N²)方式提前判重，保留整体O(N log N)要求。\n",
+  "document": "claude-works/tasks/C11-board.md",
+  "document_status": "todo",
+  "historical": false,
+  "id": "claude:C11",
+  "integration_note": "按验收hash集成模块/文档/主线测试，定向及组合验证通过；映射和新回执见reviews/2026-10-18-batch3-integration.md。LM2为回写项目文档，七个Dong组件为lang/bootstrap集成；L3未完成。",
+  "legacy_hash": "01e6df2125e8a37b664e16ba47ea83d9134913e995384ddd9a04e26c660d2cbe",
+  "number": "C11",
+  "owner": "claude",
+  "rev": 10,
+  "review_note": "Codex已审查源码/契约及测试有效性，独立定向复跑零skip且文件指纹稳定；详见 claude-works/reviews/2026-10-18-C7-C12-acceptance.md。独立验收，不代表主线集成或L3完成。",
+  "state_reconciliation": {
+    "at": "2026-10-19T11:42:09+00:00",
+    "audit_sha256": "5daf98a663cd249783a8432a5fcbed3ec4e96275b1910fa54b7903c084fe9ebc",
+    "note": "协调已有历史事实；保留原事件/作业；历史复验未重跑，未新增验收或集成，不启动模型。",
+    "previous_data_sha256": "f1ef6e9e3edbe43b217d19fa9a9911f4db538466a4af1d7bcc4288813a8ce8d9",
+    "previous_rev": 8,
+    "project": "dongos",
+    "snapshot_generated_at": "2026-10-19T09:04:28+00:00",
+    "snapshot_rev": 9,
+    "snapshot_sha256": "a40cf9aabcbb43779b5c60414d7142cab791f85888022c84625568dbb579ac96",
+    "verification_reexecuted": false
+  },
+  "state_recovery": {
+    "at": "2026-10-19T04:43:01+00:00",
+    "audit_sha256": "3ea0db756d56092976092ed0d1216118e145a8e34aa02c5060cb913d088d553e",
+    "note": "恢复已有验收/集成/返修事实；原复验为历史记录，未声称本次重跑；不恢复丢失作业或启动模型。",
+    "snapshot_rev": 8,
+    "snapshot_sha256": "f3ab929e33419f40dfc417217d588acf8b1b26cbac50724a51942a11e438c171"
+  },
+  "status": "integrated",
+  "title": "常量分支表排序与重复值检查组件",
+  "updated_at": "2026-10-19T11:42:09+00:00",
+  "verification": {
+    "checks": [
+      {
+        "cancelled": false,
+        "elapsed_seconds": 6.469,
+        "passed": true,
+        "returncode": 0,
+        "skips": 0,
+        "spec": "discover:claude-works/tests:test_switch_cases.py",
+        "tests": 3,
+        "timed_out": false
+      }
+    ],
+    "fingerprint": {
+      "claude-works/deliveries/C11.md": "03238f7e368e497f315a43a965a833347cfc8bbfab5647cd296634f6fe379091",
+      "claude-works/src/bootstrap/switch_cases.dg": "b7c37bc138c0eb1903167cb0df5a9e8b416e98bfa8de4ee22e8ff3234a738887",
+      "claude-works/src/bootstrap/switch_cases.md": "0a3533a0b2e31aafb0c2bb5ea9042976821dfba1f573da3ad246c6cbdb49e99f",
+      "claude-works/tests/test_switch_cases.py": "b26d569df81c5236db2871cacf68db35035fd6406b730018f7fdf17f14d5108a"
+    },
+    "finished_at": "2026-10-18T09:05:05+00:00",
+    "job": "22f1551bf04b41adb5efc1933bf7b4a3",
+    "passed": true,
+    "source_stable": true,
+    "summary": "定向复验通过，等待源码/契约审查"
+  },
+  "write_paths": [
+    "claude-works/src/bootstrap/switch_cases.dg",
+    "claude-works/src/bootstrap/switch_cases.md",
+    "claude-works/tests/test_switch_cases.py",
+    "claude-works/tests/switch_cases_probe*",
+    "claude-works/deliveries/C11.md"
+  ]
+}

@@ -1,0 +1,68 @@
+{
+  "auto_dispatch": false,
+  "auto_verify": false,
+  "candidate": null,
+  "checks": [
+    "discover:cursor-works/tests:test_nasm_short_circuit_function.py"
+  ],
+  "claimed_at": "2026-10-19T15:31:48+00:00",
+  "claimed_by": "codex-direct-cursor",
+  "complexity": "standard",
+  "created_at": "2026-10-19T15:04:33+00:00",
+  "delivery": "cursor-works/deliveries/CR39.md",
+  "depends_on": [
+    "cursor:CR3",
+    "cursor:CR11",
+    "cursor:CR9",
+    "cursor:CR10",
+    "cursor:CR12",
+    "cursor:CR13",
+    "cursor:CR18",
+    "claude:C22",
+    "claude:C41",
+    "claude:C42"
+  ],
+  "description": "所属阶段：L3：Dong自举后端 → 短路控制流与真实调用接线。新增bootstrap.nasm_short_circuit_function，补逻辑AND/OR的右侧条件求值，不重复C49的两数比较选择、C50直接转调或Claude C51算术AST降级。不依赖C49/C50/C51/C52，不改它们。\npub unsafe fn emit(module_name:[]const u8,item_name:[]const u8,left_module:[]const u8,left_item:[]const u8,right_module:[]const u8,right_item:[]const u8,operation:u64,eval_block:u64,done_block:u64,out:[]u8,written:*usize)u64\noperation=0 AND、1 OR，其它INVALID；eval/done合法且不同。六个名字均1..64字节；自身(module,item)与任一callee字节对相同INVALID（防受限包装器直接递归）；左右callee同名合法。所有六名字完整描述符与别名先验，不能只验自己的两名字。\n生成bool f()：left()/right()是正常返回任意u64的零参SysV目标，真值是完整64位非零，不只看AL。left恰调用1次；AND仅left非零时调用right，OR仅left为0时调用right；right被调用时恰1次并在left之后。结果必须规范0/1。callee可有副作用、可破坏所有caller-saved但遵守callee-saved/DF=0，测试独立目标提供实际符号，本模块不生成目标体。\n严格复用：CR3标签，CR11.prologue(16,0)；C41以空kinds/source_offsets、return_kind8、frame16实际调用left，结果先放槽8。CR12读取RAX，CR9装RCX=0，C22.NE把完整u64归一化，CR13存回槽8。固定test rax,rax后CR10：AND用NE、OR用EQ，yes=eval、no=done、fallthrough=eval。CR18 eval标签；C41真正调用right写槽16，再同样CR12/CR9/C22.NE归一化并CR13写槽8；C42(kind1 BOOL,frame16,mask0,low8,high0)真实返回。CR18 done标签后C42同规格返回槽8的left真值。两个出口都有真实ret。C39 BOOL只零扩展低字节、不做归一化，因此两个callee的原始值必须先C22处理，尤其0x100/高位非零。不能在分支前先调用right、用宿主条件决定生成体或以纯文本模拟副作用。\n片段上界按零参数C41的实际受限最大（call符号<=272+返回捕获<=26）等证明，不把C41内部1536作为每个外部接收段强行加进局部总缓冲。先全预检/完整组装再发布。\n永久测试<=24向量覆盖AND/OR、left真/假、right真/假，0/1/0x100/最高位/MAX，左右不同/相同符号、1/64字节名字、20位块ID，同文件至少两函数不冲突。独立C/汇编callee记录调用ID、次序、次数和入口rsp%16（每次8），并故意改变RAX/RCX/RDX/R8~R11及flags；独立oracle验证right恰按短路规则调用、结果0/1、完整保持/栈/guards。只测纯函数结果不够。\n真实坏Dong：交换AND/OR分支条件→正常执行后由调用轨迹/次数拒绝；把right的归一化删掉并把原值写入BOOL槽（用right=0x100且必须求值的安全输入）→正常返回后按RAX拒绝；容量不足提前写函数头→完整原子性拒绝。另按共用要求覆盖两出口RBX数值保持敏感性。\n\n## 共用执行与复验要求\n本项仅四个声明文件，生产为Dong，无隐式分配/全局可变生产缓存/OS调用，新模块不导出C符号（临时wrapper可导出）。不得修改code/lang、编译器、已集成依赖、协调器、其它负责人或本批其它任务。CR38继续原队列，本人已领取/返修优先；不恢复已转交归档任务。\n统一发射状态OK0/INVALID1/CAPACITY2。先完整检查written非NULL、8对齐、8字节端点；所有输入/嵌套数组和out完整区间非空非NULL、自然对齐、元素乘法、端点不回绕；空可NULL。written与整个out（包括未用尾部）及全部完整输入互斥；out亦与全部输入互斥，输入之间可重叠且只读。所有非法枚举/名称长度/块ID/结构内容先于容量拒绝，非法数量不读取正文。任何INVALID/CAPACITY均保持输入、out、written全文不变；成功只写精确前缀和written，尾部不变。\nmodule/item及被调用者名字均为1..64原始字节，CR3编码，不能裸拼标签。块ID不得NONE，多个块必须不同，上游保证全文件唯一。本模块不分配全局编号。文本严格ASCII/单LF，仅函数标签、必要块标签和指令，无bits/section/global/extern/注释/额外空行；测试包装可补节/global和独立桥。\n真实复用正文指定已集成组件及只读完整传递闭包，不复制既有规划/发射算法，不以Python/C模拟生产。每段给保守长度证明和完整缓冲/栈证明，不能拿一次输出实长代替上界；遵守dongc每函数4096 worst-case frame限制，不能直接堆无法编译的大局部数组。可在证明外部失败原子性、输入不变与依赖确定性的前提下使用有界片段完整预演后重放，必须说明第二遍失败为何不可达；或用充分且可编译的最终局部缓冲。不要改编译器/依赖逃避限制，不能先写用户out再回滚。\n只跑本项checks：真实Dong debug/release编译、ELF64/COFF组装、显式SysV桥链接并原生执行。单模式不同主要原生输入向量总数<=24，复用同输入的好/坏重放不新增向量；不做全笛卡尔积/全回归/性能基准。独立Python/C oracle，不用生产输出作为唯一oracle。全部返回路径捕获真实RAX（PAIR还RDX）、所有callee-saved及RSP，独立保存观察区/宿主栈锚，先独立捕获现场，再恢复宿主ABI后断言；不能让返回RBX承担观察指针或依赖返回RSP恢复宿主。\n除正文语义/原子性负控外，永久保留安全实际坏Dong的RBX保持数值负控（正文有两个出口则覆盖两个出口）：同输入正式好侧先实际生成并执行，坏侧正常编译/链接/原生返回后按指定RBX数值拒绝，不用错位/guard/对齐/崩溃代替。其它坏体也必须正常构建执行后按指定数值/状态/顺序/原子性拒绝，缺符号、组装失败、崩溃、超时、仅文本不同不算指定语义负控；所有访问和ret都在预留安全范围。\n有限覆盖exact/短1/0/富余容量、成功未用尾部、INVALID优先、完整描述符和尾部别名独立可达；written端点溢出使用8对齐UINT64_MAX-7+合法空out，避免漏检后非法解引用。输入真实只读保护须断言保护调用成功；源码、说明、测试、全部只读依赖/输入SHA前后稳定，0skip才可验收。\n仅用户在Cursor客户端手动通过worker MCP读最新rev/完整任务书/review_note/write_paths/依赖，claim成功后实现，交付真实命令、tests/skips、双模式/双格式、全部SHA、坏体实际观察和未执行限制，再原编号submit。临时产物cursor-works/build/<编号>/<唯一目录>。不启动Cursor CLI或任何AI CLI/自动化，不自行accept/integrate、提交/推送、运行OS/VM。最后由Codex独立复验、验收和真实集成；组件通过不等于完整语义/IR、stage1/stage2、客体自举或L3完成。",
+  "document": "cursor-works/tasks/CR39-board.md",
+  "historical": false,
+  "id": "cursor:CR39",
+  "legacy_hash": "7a021d95cacc47e23392e615e010edb67b6ff10f9dd5902126c02882313a07b2",
+  "number": "CR39",
+  "owner": "cursor",
+  "rev": 7,
+  "review_note": "用户授权Codex直接实现。审查六名字/完整尾部别名、自递归拒绝、不同公开块号、1536分段确定重放及容量发布；真实复用CR11/C41/C22/CR10/C42，完整u64先归一化再BOOL返回。正式隔离fb380dd0e1f043e5990c072e71ff1582为4项0skip，source_stable=true；14主要向量/模式，ELF64/COFF、debug/release。独立读取隔离原始观察：交换分支的8次观测确按调用轨迹/次数不同拒绝，删右侧归一化4次实际RAX不同且调用顺序正常；4次RBX坏体精确+8且真值/栈正确，两个出口均覆盖。验收；主线未集成。",
+  "status": "accepted",
+  "title": "[L3] 具有真实调用副作用的AND/OR短路完整SysV函数",
+  "updated_at": "2026-10-19T15:50:46+00:00",
+  "verification": {
+    "checks": [
+      {
+        "cancelled": false,
+        "elapsed_seconds": 188.828,
+        "passed": true,
+        "returncode": 0,
+        "skips": 0,
+        "spec": "discover:cursor-works/tests:test_nasm_short_circuit_function.py",
+        "tests": 4,
+        "timed_out": false
+      }
+    ],
+    "fingerprint": {
+      "cursor-works/deliveries/CR39.md": "3912de3da005cf567f7f1490038512be0c2b6e367ad423f3b75872ff753eac90",
+      "cursor-works/src/bootstrap/nasm_short_circuit_function.dg": "6aa0f6f5cdb3815b5d8d5701dc736e4e2ae89cbb4f1bdfdee0702b98e6dd1fe1",
+      "cursor-works/src/bootstrap/nasm_short_circuit_function.md": "1a3bcdfd53c5e4b0f5fa1b74c8d33bd1ca66049bc0da2f4bf43c57b55b234a84",
+      "cursor-works/tests/test_nasm_short_circuit_function.py": "b9eb25ba9a1a14f9b0a250d7c4be66a63fa4d9394db21b180d2390426004c8a8"
+    },
+    "finished_at": "2026-10-19T15:49:36+00:00",
+    "job": "fb380dd0e1f043e5990c072e71ff1582",
+    "passed": true,
+    "source_stable": true,
+    "summary": "定向复验通过，等待源码/契约审查"
+  },
+  "write_paths": [
+    "cursor-works/src/bootstrap/nasm_short_circuit_function.dg",
+    "cursor-works/src/bootstrap/nasm_short_circuit_function.md",
+    "cursor-works/tests/test_nasm_short_circuit_function.py",
+    "cursor-works/deliveries/CR39.md"
+  ]
+}

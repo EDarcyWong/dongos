@@ -1,0 +1,80 @@
+{
+  "auto_dispatch": false,
+  "auto_verify": false,
+  "candidate": null,
+  "checks": [
+    "discover:cursor-works/tests:test_nasm_function_frame.py"
+  ],
+  "claimed_at": "2026-10-18T14:02:49+00:00",
+  "claimed_by": "cursor-mcp-66c83e7eeb984112",
+  "complexity": "standard",
+  "created_at": "2026-10-18T12:03:58+00:00",
+  "delivery": "cursor-works/deliveries/CR11.md",
+  "depends_on": [
+    "cursor:CR4"
+  ],
+  "description": "module bootstrap.nasm_function_frame。\n两个接口 pub unsafe fn prologue(frame_bytes:usize,saved_mask:u64,out:[]u8,written:*usize)u64 与同签名epilogue。输出纯文本，不接入当前活动编译器。frame_bytes是局部区字节数，须0..4096且16的倍数；mask仅低5位允许，依次rbx,r12,r13,r14,r15。n=置位数，padding=n为奇数时8否则0，adjust=frame_bytes+padding；函数入口额外栈消耗total=8+8*n+adjust，total>4096 INVALID。这里是独立有界预算，不更换当前编译器栈布局/ABI约定。\n严格prologue为b\"push rbp\\nmov rbp, rsp\\n\"，随后按上述顺序逐个b\"push <reg>\\n\"，adjust>0时最后b\"sub rsp, <adjust十进制>\\n\"；epilogue先在adjust>0时b\"add rsp, <adjust>\\n\"，随后按逆序b\"pop <reg>\\n\"，最后b\"pop rbp\\nret\\n\"。所有\\n为真实单字节LF，没有section/global/标签/NUL；adjust=0不生成sub/add。复用CR4生成数字，两接口各自预检原子写。\n约定SysV入口rsp%16=8，上述序言后调用点rsp%16=0，rbp保留入口栈基准。只支持上述5个callee-saved整数寄存器，无Win64 shadow space/SEH、浮点、动态对齐、红区、栈参数搬运、unwind或大对象，不声称完整函数生成。独立Python逐行期望与算术预算验证全部32mask、有限frame0/16/64/4080/4096、非法mask/对齐/超预算和容量边界；实际Dong序言+受控函数体+尾声NASM双格式组装。原生探针由独立汇编调用者用互异哨兵检查rbp及所保存寄存器、栈平衡与嵌套调用的栈对齐；函数体确实改写所选寄存器，再验证恢复。不声明COFF意味着Windows ABI可调用。两种坏Dong分别破坏奇数mask的padding及恢复顺序，必须被实际原生栈对齐/哨兵断言拒绝，不以崩溃当负控通过。\n\n## 实现、测试与交付\n\n这是L3生产后端的有界独立组件，完整代码生成器/自举尚未完成。实现必须是Dong，模块不导出C符号；C/Python/NASM仅作独立测试观察器，不用宿主实现替代Dong生产逻辑。无分配、全局可变状态或OS调用。仅修改声明的本人works文件，不改code/lang、活动编译器/内核、协调器或他人文件。Codex负责独立复验后集成。\n\nunsafe调用方保证实际可访问的对象；实现仍须在读写前验证完整描述符、地址端点无溢出、长度乘法、自然对齐和所有别名规则。除任务另定外，OK=0、INVALID=1、CAPACITY=2；written非空8对齐，完整8字节与完整out分离；空out可NULL，非空out不可NULL。INVALID优先CAPACITY，失败out与written全文不变；成功只写精确前缀/计数，尾部不变。不以未使用前缀代替完整声明区间检查。先预检再写，子组件在局部暂存中调用以保证原子性。\n\n只读依赖须已accepted/integrated且不修改。所有任务声明的依赖已集成；测试只暂存本组件和声明的只读依赖，避免当前主线同名模块遮蔽临时坏源码。测试实际编译并原生执行Dong debug/release，至少组装ELF64/COFF；有限固定边界与小规模确定性随机，Python/C独立期望，不堆大矩阵。双端guard、只读输入（如有）、输出尾部及失败全文立即核对。指针负例只触发预检，不非法解引用；其它前置条件必须合法，不能用另一非法字段遮蔽目标缺陷。\n\n至少两种真实错误Dong副本成功编译、链接、原生执行，再被指定语义/原子性断言拒绝；构建失败、崩溃、超时、无关前置断言不算负控成功。只运行本任务声明的定向测试，产物在cursor-works/build/CR11/<唯一目录>，不运行OS/VM、全回归、性能基准、定时器、关机、提交或推送。不启动任何模型CLI，Cursor保持客户端手动执行。\n\n先通过本人的worker MCP get_task/read_document查看最新rev、完整契约、归属与依赖，claim成功后才修改。完成后写cursor-works/deliveries/CR11.md，列出真实命令、tests/skip、模式/格式、源码测试SHA256、证据目录、负控拒绝原因和限制，未运行明确未运行；落盘后submit_task，不能自行accept/integrate。需要扩大归属时说明，不擅自扩范围。\n",
+  "document": "cursor-works/tasks/CR11-board.md",
+  "document_status": "todo",
+  "historical": false,
+  "id": "cursor:CR11",
+  "integration_note": "按独立验收hash真实集成到code/lang/bootstrap的.dg/.md及路径适配永久测试；主线同15项0skip通过、124.500秒、生产/测试/编译器来源稳定。新增frame_memory_integration另1项0skip通过、debug/release各8向量实际组合五模块并验证内存guard/flags/输入寄存器/栈平衡与嵌套调用对齐。首轮连接中断未计通过，已取得重跑完整回执。见reviews/2026-10-18-CR11-CR16-review-integration.md；完整L3自举未完成。",
+  "legacy_hash": "4cc070a77eb74936fbdc89d9d9b5d486759745ce7f3ef29f271d40085afef033",
+  "number": "CR11",
+  "owner": "cursor",
+  "rev": 22,
+  "review_note": "独立审查生产源码、契约及全定向测试通过。R2两接口26预检（written端点/空out含独立坏Dong）有效，RBP/五保存寄存器哨兵、真实RSP基准、奇数pad和pop顺序原生拒绝有效。快照重提本次确实运行3项0skip稳定，闭合历史返修。正式3项通过0skip、debug/release原生及ELF64/COFF组装、来源稳定。先登记验收，随后真实集成与永久测试。",
+  "state_reconciliation": {
+    "at": "2026-10-19T11:42:09+00:00",
+    "audit_sha256": "5daf98a663cd249783a8432a5fcbed3ec4e96275b1910fa54b7903c084fe9ebc",
+    "note": "协调已有历史事实；保留原事件/作业；历史复验未重跑，未新增验收或集成，不启动模型。",
+    "previous_data_sha256": "a2af1e7b3afaeedd17b543140fee09867e1a5ab6bda234f983d6067c50299bb1",
+    "previous_rev": 20,
+    "project": "dongos",
+    "snapshot_generated_at": "2026-10-19T09:04:28+00:00",
+    "snapshot_rev": 21,
+    "snapshot_sha256": "a40cf9aabcbb43779b5c60414d7142cab791f85888022c84625568dbb579ac96",
+    "verification_reexecuted": false
+  },
+  "state_recovery": {
+    "at": "2026-10-19T04:43:01+00:00",
+    "audit_sha256": "3ea0db756d56092976092ed0d1216118e145a8e34aa02c5060cb913d088d553e",
+    "note": "恢复已有验收/集成/返修事实；原复验为历史记录，未声称本次重跑；不恢复丢失作业或启动模型。",
+    "snapshot_rev": 20,
+    "snapshot_sha256": "f3ab929e33419f40dfc417217d588acf8b1b26cbac50724a51942a11e438c171"
+  },
+  "status": "integrated",
+  "title": "受限SysV函数栈帧序言与尾声发射",
+  "updated_at": "2026-10-19T11:42:09+00:00",
+  "verification": {
+    "checks": [
+      {
+        "cancelled": false,
+        "elapsed_seconds": 20.656,
+        "passed": true,
+        "returncode": 0,
+        "skips": 0,
+        "spec": "discover:cursor-works/tests:test_nasm_function_frame.py",
+        "tests": 3,
+        "timed_out": false
+      }
+    ],
+    "fingerprint": {
+      "cursor-works/deliveries/CR11.md": "a01fde301c2f997b042544d02d3e3675f792af698ab80f5f0549d06fee8c1ffe",
+      "cursor-works/src/bootstrap/nasm_function_frame.dg": "08580fdf8ebbd75dc27812bb63f4e425a18e66b285fd5ccd7805d1d6dc55e9ff",
+      "cursor-works/src/bootstrap/nasm_function_frame.md": "56e9596fd45f77149e5949899ce0b248efc92e30cbf774d774c026e930e990d6",
+      "cursor-works/tests/test_nasm_function_frame.py": "369e82f15c33496cb7f945bdff38fffdf9bf276456c446351fcd163fdc466624"
+    },
+    "finished_at": "2026-10-18T14:42:58+00:00",
+    "job": "4e2f4cf1634444f5952d6b2caeac949a",
+    "passed": true,
+    "source_stable": true,
+    "summary": "定向复验通过，等待源码/契约审查"
+  },
+  "write_paths": [
+    "cursor-works/src/bootstrap/nasm_function_frame.dg",
+    "cursor-works/src/bootstrap/nasm_function_frame.md",
+    "cursor-works/tests/test_nasm_function_frame.py",
+    "cursor-works/deliveries/CR11.md"
+  ]
+}

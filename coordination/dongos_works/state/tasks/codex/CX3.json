@@ -1,0 +1,70 @@
+{
+  "auto_dispatch": false,
+  "auto_verify": false,
+  "candidate": null,
+  "checks": [
+    "module:lang.tests.test_nasm_compatibility"
+  ],
+  "claimed_at": "2026-10-19T07:29:20+00:00",
+  "claimed_by": "codex-nasm-static-relocation",
+  "complexity": "standard",
+  "created_at": "2026-10-19T07:29:19+00:00",
+  "delivery": "codex-works/deliveries/CX3.md",
+  "depends_on": [
+    "codex:CX1"
+  ],
+  "description": "NASM vendor 2.x supports reloc-abs-qword but compiler assembly warning guards use major>=3. Native semantic suite fails before executing on valid static Unicode.VERSION pointer dq. Extend existing warning capability probe to selectively permit supported absolute qword relocations, retain Wall/Werror and avoid unknown options; meaningful capability tests and actual native semantic rebuild prove it. No semantic failures may be counted as passing.",
+  "document": "codex-works/tasks/CX3-board.md",
+  "historical": false,
+  "id": "codex:CX3",
+  "integration_note": "Real mainline helper/test edit in code/lang/tests, four targeted mainline tests passed0skip and formal identical4 passed0skip; actual debug semantic objects produced in both formats after prior absolute-qword failure. Helper intentionally supports valid relocations; production language/algorithm not weakened.",
+  "legacy_hash": "db3fd54333048a7a685613853d42300980968bd78aa1932f31ca514efc78d47d",
+  "number": "CX3",
+  "owner": "codex",
+  "rev": 7,
+  "review_note": "Reviewed exact warning-capability matching for reloc-rel-dword and reloc-abs-qword; no broad warning disable and unknown flags avoided. Formal independent4 tests0skips source stable; mainline4 tests0skips. Real semantic debug assembly now succeeds in ELF64/COFF including prior failing valid Unicode.VERSION static-pointer relocation.",
+  "state_reconciliation": {
+    "at": "2026-10-19T11:42:09+00:00",
+    "audit_sha256": "5daf98a663cd249783a8432a5fcbed3ec4e96275b1910fa54b7903c084fe9ebc",
+    "note": "协调已有历史事实；保留原事件/作业；历史复验未重跑，未新增验收或集成，不启动模型。",
+    "previous_data_sha256": "c5b1ae5aa2771223e89f371d85991c40240b80e30f8a630083e30699ef23e365",
+    "previous_rev": 1,
+    "project": "dongos",
+    "snapshot_generated_at": "2026-10-19T09:04:28+00:00",
+    "snapshot_rev": 6,
+    "snapshot_sha256": "a40cf9aabcbb43779b5c60414d7142cab791f85888022c84625568dbb579ac96",
+    "verification_reexecuted": false
+  },
+  "status": "integrated",
+  "title": "按NASM实际能力允许合法64位静态指针重定位",
+  "updated_at": "2026-10-19T11:42:09+00:00",
+  "verification": {
+    "checks": [
+      {
+        "cancelled": false,
+        "elapsed_seconds": 0.614,
+        "passed": true,
+        "returncode": 0,
+        "skips": 0,
+        "spec": "module:lang.tests.test_nasm_compatibility",
+        "tests": 4,
+        "timed_out": false
+      }
+    ],
+    "fingerprint": {
+      "codex-works/deliveries/CX3.md": "dc4e3840f2080b06425fea4768c48d27a7cc8989fa6193c3f78ad4692f24f971",
+      "lang/tests/test_dongc.py": "ef5d474f082480a84147306960f7807128b99a51d4e2378c86517aacbedab70d",
+      "lang/tests/test_nasm_compatibility.py": "8c7f6d84a6fd78f184b37a481307ba85a22020aa0e2644d35f8734a719df3115"
+    },
+    "finished_at": "2026-10-19T07:30:23+00:00",
+    "job": "bdc5224387424c23967a14267ba91d47",
+    "passed": true,
+    "source_stable": true,
+    "summary": "定向复验通过，等待源码/契约审查"
+  },
+  "write_paths": [
+    "lang/tests/test_dongc.py",
+    "lang/tests/test_nasm_compatibility.py",
+    "codex-works/deliveries/CX3.md"
+  ]
+}

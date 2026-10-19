@@ -1,0 +1,249 @@
+[
+  {
+    "task": "claude:C49",
+    "job": "922a95d14f8247fd8616080fb93ff321",
+    "probe": {
+      "task": "claude:C49",
+      "formal_job": "922a95d14f8247fd8616080fb93ff321",
+      "official": "D:\\projects\\2026\\dongos\\coordination\\dongos_works\\.local\\runs\\922a95d14f8247fd8616080fb93ff321\\workspace\\claude-works\\build\\C49\\run-63524ed67d4b",
+      "inputs": {
+        "nasm_u64_select_function.dg": "9468a3e4ff93fe91a62a2e0e882e33336e33b1a3705ce4ce78aa36e06146eb65",
+        "nasm_u64_select_function.md": "61a1475a5d15a6720ca4681ffa65f45d5e7988783919f025031b610ac0cae8b5",
+        "nasm_symbol.dg": "25675ec83d79c6f2b34bebfdd837e75d80dc384e900939be0c75d06a7bde4c06",
+        "nasm_function_frame.dg": "08580fdf8ebbd75dc27812bb63f4e425a18e66b285fd5ccd7805d1d6dc55e9ff",
+        "decimal_integer.dg": "58a4e4d746393d0e5944656aeb4c6f2aff96acca047afd455c60a47464ce0b76",
+        "nasm_sysv_incoming_args.dg": "bbaf9d38f0b7993e0d9da3ff86e8c0d86ecc0bbdca09e7617a878b57c3e3f714",
+        "sysv_integer_args.dg": "75c4ab5fd07d586684eb753958654e6e6658ff90e4d77f2a1ea96cb110573204",
+        "nasm_memory_operand.dg": "e3d072a3ea1314975427bb0e24426da2adaf3de692101f3e3e8d6768697f1d24",
+        "nasm_integer_memory_load.dg": "88624e98077d19615117f2a0f9ac6c67e80993ce222609c376288da3e45d3fec",
+        "nasm_compare_emit.dg": "44b041b343859c6b49a4d13ee87262f1b5685c8e7f4c0b589f48eadee9a15eea",
+        "branch_plan.dg": "d8bf14d305ea24557fc0a5713ae28fb60092f95ba1a558c94f293f25e36007b4",
+        "nasm_branch_emit.dg": "d46e5f18330bd256fc1ee9d1fe1251f248e70bf3119c1f4baa1d065eb0daeac8",
+        "nasm_block_emit.dg": "261cb03c7f7d34b395e1154351aad4844ab7d0096122790d39959fe275b447a6",
+        "nasm_sysv_function_exit.dg": "9dffc7415ea414310cb68e81457fb1b0c04040fc52d01c4bb1a2643af9fd29f2",
+        "nasm_sysv_return_values.dg": "7a3760f6ef81dbc3f436541a2de3fb746aff723fa72dc4ba851c293d2a064b32",
+        "sysv_return_plan.dg": "f880c0e387e9561f00a51b87713fcdd7af24a065dd0be407325b3290e6a0c08e",
+        "test_nasm_u64_select_function.py": "e6a9755b3d3f32e6829a69ca6e2c0b6f430f5c0ecc7a15f08f3d85d385c063c2"
+      },
+      "stable": true,
+      "records": [
+        {
+          "mode": "debug",
+          "vector_index": 0,
+          "good": {
+            "returncode": 0,
+            "rax": 6477583639042326529,
+            "rbx_before": 4223048,
+            "rbx_after": 4223048,
+            "rbx_delta": 0,
+            "rsp_balanced": true,
+            "host_returned": true
+          },
+          "original_failure": "6674804268309651740 != 0 : ('original-bad-debug-0', 0, 'caller rsp aligned before call')",
+          "safe_bad": {
+            "returncode": 0,
+            "rax": 6477583639042326529,
+            "rbx_before": 4223048,
+            "rbx_after": 4223056,
+            "rbx_delta": 8,
+            "rsp_balanced": true,
+            "host_returned": true
+          }
+        },
+        {
+          "mode": "debug",
+          "vector_index": 1,
+          "good": {
+            "returncode": 0,
+            "rax": 13897545500111929602,
+            "rbx_before": 4223048,
+            "rbx_after": 4223048,
+            "rbx_delta": 0,
+            "rsp_balanced": true,
+            "host_returned": true
+          },
+          "original_failure": "6674804268309651740 != 0 : ('original-bad-debug-1', 0, 'caller rsp aligned before call')",
+          "safe_bad": {
+            "returncode": 0,
+            "rax": 13897545500111929602,
+            "rbx_before": 4223048,
+            "rbx_after": 4223056,
+            "rbx_delta": 8,
+            "rsp_balanced": true,
+            "host_returned": true
+          }
+        },
+        {
+          "mode": "release",
+          "vector_index": 0,
+          "good": {
+            "returncode": 0,
+            "rax": 6477583639042326529,
+            "rbx_before": 4223048,
+            "rbx_after": 4223048,
+            "rbx_delta": 0,
+            "rsp_balanced": true,
+            "host_returned": true
+          },
+          "original_failure": "6674804268309651740 != 0 : ('original-bad-release-0', 0, 'caller rsp aligned before call')",
+          "safe_bad": {
+            "returncode": 0,
+            "rax": 6477583639042326529,
+            "rbx_before": 4223048,
+            "rbx_after": 4223056,
+            "rbx_delta": 8,
+            "rsp_balanced": true,
+            "host_returned": true
+          }
+        },
+        {
+          "mode": "release",
+          "vector_index": 1,
+          "good": {
+            "returncode": 0,
+            "rax": 13897545500111929602,
+            "rbx_before": 4223048,
+            "rbx_after": 4223048,
+            "rbx_delta": 0,
+            "rsp_balanced": true,
+            "host_returned": true
+          },
+          "original_failure": "6674804268309651740 != 0 : ('original-bad-release-1', 0, 'caller rsp aligned before call')",
+          "safe_bad": {
+            "returncode": 0,
+            "rax": 13897545500111929602,
+            "rbx_before": 4223048,
+            "rbx_after": 4223056,
+            "rbx_delta": 8,
+            "rsp_balanced": true,
+            "host_returned": true
+          }
+        }
+      ]
+    },
+    "formal": {
+      "passed": true,
+      "checks": [
+        {
+          "spec": "discover:claude-works/tests:test_nasm_u64_select_function.py",
+          "passed": true,
+          "tests": 4,
+          "skips": 0,
+          "returncode": 0,
+          "cancelled": false,
+          "timed_out": false,
+          "elapsed_seconds": 87.547
+        }
+      ],
+      "source_stable": true,
+      "fingerprint": {
+        "claude-works/src/bootstrap/nasm_u64_select_function.dg": "9468a3e4ff93fe91a62a2e0e882e33336e33b1a3705ce4ce78aa36e06146eb65",
+        "claude-works/src/bootstrap/nasm_u64_select_function.md": "61a1475a5d15a6720ca4681ffa65f45d5e7988783919f025031b610ac0cae8b5",
+        "claude-works/tests/test_nasm_u64_select_function.py": "e6a9755b3d3f32e6829a69ca6e2c0b6f430f5c0ecc7a15f08f3d85d385c063c2",
+        "claude-works/deliveries/C49.md": "02c9c88fe60906f7d1543749265a606f465b7b9e3fdd6de02f2c976939b657d3"
+      },
+      "summary": "定向复验通过，等待源码/契约审查",
+      "finished_at": "2026-10-19T13:38:53+00:00"
+    }
+  },
+  {
+    "task": "claude:C50",
+    "job": "5f149631ee114d7ba816b16610f4d902",
+    "probe": {
+      "task": "claude:C50",
+      "formal_job": "5f149631ee114d7ba816b16610f4d902",
+      "official": "D:\\projects\\2026\\dongos\\coordination\\dongos_works\\.local\\runs\\5f149631ee114d7ba816b16610f4d902\\workspace\\claude-works\\build\\C50\\run-6c1cd3779693",
+      "inputs": {
+        "nasm_u64_forward_function.dg": "579df059d1737f64c1c8ffded8c4cab00b161118d92e015eda619e3875982857",
+        "nasm_u64_forward_function.md": "6d7aa24340ed0d1d666775ea57353b7fb6fcc69380e66aba9c953588224bd12a",
+        "nasm_symbol.dg": "25675ec83d79c6f2b34bebfdd837e75d80dc384e900939be0c75d06a7bde4c06",
+        "nasm_function_frame.dg": "08580fdf8ebbd75dc27812bb63f4e425a18e66b285fd5ccd7805d1d6dc55e9ff",
+        "decimal_integer.dg": "58a4e4d746393d0e5944656aeb4c6f2aff96acca047afd455c60a47464ce0b76",
+        "nasm_sysv_incoming_args.dg": "bbaf9d38f0b7993e0d9da3ff86e8c0d86ecc0bbdca09e7617a878b57c3e3f714",
+        "sysv_integer_args.dg": "75c4ab5fd07d586684eb753958654e6e6658ff90e4d77f2a1ea96cb110573204",
+        "nasm_memory_operand.dg": "e3d072a3ea1314975427bb0e24426da2adaf3de692101f3e3e8d6768697f1d24",
+        "nasm_sysv_direct_invoke.dg": "fda91aaa2409d06c0ab07cf5de8e733222cccc228455fbd6354b6b5fcf26dcfa",
+        "nasm_sysv_call_args.dg": "e7133a714593f4e352c075a403bbef0d6ee37639f800780d4aeccc7fd178e4b9",
+        "nasm_direct_call.dg": "e55dc3a5a645d2335d64c1259af569afd9b255cbc0cb546963ae16d136e68f30",
+        "nasm_sysv_capture_return.dg": "e7c5e236650e632dc26316bb84b05df255e00bcb20d15bb1932780bc4b834e31",
+        "sysv_return_plan.dg": "f880c0e387e9561f00a51b87713fcdd7af24a065dd0be407325b3290e6a0c08e",
+        "nasm_sysv_function_exit.dg": "9dffc7415ea414310cb68e81457fb1b0c04040fc52d01c4bb1a2643af9fd29f2",
+        "nasm_sysv_return_values.dg": "7a3760f6ef81dbc3f436541a2de3fb746aff723fa72dc4ba851c293d2a064b32",
+        "test_nasm_u64_forward_function.py": "4e42f05fad19eb8b7f2f552446bb20484fbaa1239c226552569968e1ae78210a"
+      },
+      "stable": true,
+      "records": [
+        {
+          "mode": "debug",
+          "vector_index": 0,
+          "good": {
+            "returncode": 0,
+            "rax": 15723061614180230438,
+            "rbx_before": 4227240,
+            "rbx_after": 4227240,
+            "rbx_delta": 0,
+            "rsp_balanced": true,
+            "host_returned": true
+          },
+          "original_failure": "6674804268309651740 != 0 : ('original-bad-debug-0', 0, 'caller rsp aligned before call')",
+          "safe_bad": {
+            "returncode": 0,
+            "rax": 15723061614180230438,
+            "rbx_before": 4227240,
+            "rbx_after": 4227248,
+            "rbx_delta": 8,
+            "rsp_balanced": true,
+            "host_returned": true
+          }
+        },
+        {
+          "mode": "release",
+          "vector_index": 0,
+          "good": {
+            "returncode": 0,
+            "rax": 15723061614180230438,
+            "rbx_before": 4227240,
+            "rbx_after": 4227240,
+            "rbx_delta": 0,
+            "rsp_balanced": true,
+            "host_returned": true
+          },
+          "original_failure": "6674804268309651740 != 0 : ('original-bad-release-0', 0, 'caller rsp aligned before call')",
+          "safe_bad": {
+            "returncode": 0,
+            "rax": 15723061614180230438,
+            "rbx_before": 4227240,
+            "rbx_after": 4227248,
+            "rbx_delta": 8,
+            "rsp_balanced": true,
+            "host_returned": true
+          }
+        }
+      ]
+    },
+    "formal": {
+      "passed": true,
+      "checks": [
+        {
+          "spec": "discover:claude-works/tests:test_nasm_u64_forward_function.py",
+          "passed": true,
+          "tests": 4,
+          "skips": 0,
+          "returncode": 0,
+          "cancelled": false,
+          "timed_out": false,
+          "elapsed_seconds": 91.375
+        }
+      ],
+      "source_stable": true,
+      "fingerprint": {
+        "claude-works/src/bootstrap/nasm_u64_forward_function.dg": "579df059d1737f64c1c8ffded8c4cab00b161118d92e015eda619e3875982857",
+        "claude-works/src/bootstrap/nasm_u64_forward_function.md": "6d7aa24340ed0d1d666775ea57353b7fb6fcc69380e66aba9c953588224bd12a",
+        "claude-works/tests/test_nasm_u64_forward_function.py": "4e42f05fad19eb8b7f2f552446bb20484fbaa1239c226552569968e1ae78210a",
+        "claude-works/deliveries/C50.md": "7586fc0665d4e6780bc089a9e8658d0bd13210aa1f1a1025f907c8d36dd4ea2b"
+      },
+      "summary": "定向复验通过，等待源码/契约审查",
+      "finished_at": "2026-10-19T13:40:32+00:00"
+    }
+  }
+]

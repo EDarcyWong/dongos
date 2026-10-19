@@ -1,0 +1,56 @@
+{
+  "auto_dispatch": false,
+  "auto_verify": false,
+  "candidate": null,
+  "checks": [
+    "module:tests.test_phys_buddy"
+  ],
+  "created_at": "2026-10-18T05:54:12+00:00",
+  "delivery": "deepseek-works/deliveries/D8.md",
+  "depends_on": [],
+  "description": "从现有任务书导入，历史内容保留。",
+  "document": "deepseek-works/tasks/D8-physical-buddy.md",
+  "document_status": "submitted",
+  "evidence": [
+    "deepseek-works/README.md"
+  ],
+  "historical": true,
+  "id": "deepseek:D8",
+  "legacy_hash": "58159ea1ec556e02bf0b3499a97eb7d7cc7e4879c43064752df5bd466240fe2b",
+  "legacy_schema": 2,
+  "number": "D8",
+  "owner": "deepseek",
+  "rev": 6,
+  "review_note": "",
+  "state_reconciliation": {
+    "at": "2026-10-19T11:42:09+00:00",
+    "audit_sha256": "5daf98a663cd249783a8432a5fcbed3ec4e96275b1910fa54b7903c084fe9ebc",
+    "note": "协调已有历史事实；保留原事件/作业；历史复验未重跑，未新增验收或集成，不启动模型。",
+    "previous_data_sha256": "44c8255001b4637d213191de4bae15e0d3cef0309bf44289cbee696bdee71400",
+    "previous_rev": 2,
+    "project": "dongos",
+    "snapshot_generated_at": "2026-10-19T09:04:28+00:00",
+    "snapshot_rev": 4,
+    "snapshot_sha256": "a40cf9aabcbb43779b5c60414d7142cab791f85888022c84625568dbb579ac96",
+    "verification_reexecuted": false
+  },
+  "state_recovery": {
+    "at": "2026-10-19T04:43:01+00:00",
+    "audit_sha256": "3ea0db756d56092976092ed0d1216118e145a8e34aa02c5060cb913d088d553e",
+    "note": "恢复已有验收/集成/返修事实；原复验为历史记录，未声称本次重跑；不恢复丢失作业或启动模型。",
+    "snapshot_rev": 2,
+    "snapshot_sha256": "f3ab929e33419f40dfc417217d588acf8b1b26cbac50724a51942a11e438c171"
+  },
+  "status": "accepted",
+  "title": "物理伙伴分配器",
+  "updated_at": "2026-10-19T11:42:10+00:00",
+  "verification": null,
+  "write_paths": [
+    "kernel/mm/phys_buddy.dg",
+    "kernel/mm/phys_buddy.md",
+    "tests/test_phys_buddy.py",
+    "tests/phys_buddy_probe*",
+    "kernel/mm/errors.dg",
+    "deepseek-works/deliveries/D8.md"
+  ]
+}

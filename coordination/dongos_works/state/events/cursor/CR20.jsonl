@@ -1,0 +1,8 @@
+{"at":"2026-10-18T15:28:00+00:00","data":{"rev":1,"status":"todo"},"kind":"created","task_id":"cursor:CR20"}
+{"at":"2026-10-18T15:28:50+00:00","data":{"rev":2,"status":"in_progress"},"kind":"claim","task_id":"cursor:CR20"}
+{"at":"2026-10-18T15:32:45+00:00","data":{"rev":3,"status":"submitted"},"kind":"submit","task_id":"cursor:CR20"}
+{"at":"2026-10-18T15:51:40+00:00","data":{"job":"661921dfc8e74011b113449581fbbbac","kind":"verify","provider":"python"},"kind":"queued","task_id":"cursor:CR20"}
+{"at":"2026-10-18T15:53:05+00:00","data":{"rev":4,"status":"submitted"},"kind":"verified","task_id":"cursor:CR20"}
+{"at":"2026-10-18T15:53:05+00:00","data":{"job":"661921dfc8e74011b113449581fbbbac","status":"completed"},"kind":"job_finished","task_id":"cursor:CR20"}
+{"at":"2026-10-18T15:55:47+00:00","data":{"rev":5,"status":"rework"},"kind":"rework","task_id":"cursor:CR20"}
+{"at":"2026-10-19T11:42:09+00:00","data":{"rev":12,"status":"integrated"},"kind":"state_reconciled","task_id":"cursor:CR20"}

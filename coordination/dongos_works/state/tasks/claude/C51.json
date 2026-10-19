@@ -1,0 +1,60 @@
+{
+  "auto_dispatch": false,
+  "auto_verify": false,
+  "candidate": null,
+  "checks": [
+    "discover:claude-works/tests:test_u64_expression_ir.py"
+  ],
+  "claimed_at": "2026-10-19T14:21:16+00:00",
+  "claimed_by": "claude-mcp-7375d33562084f6a",
+  "complexity": "standard",
+  "created_at": "2026-10-19T14:14:02+00:00",
+  "delivery": "claude-works/deliveries/C51.md",
+  "depends_on": [
+    "claude:C48"
+  ],
+  "description": "所属阶段：L3：Dong自举后端 → AST到已集成整函数IR的首次受限接线。不是再造词法/语法器或C48发射器；新增bootstrap.u64_expression_ir，把真正Dong lexer/expression输出的树转换成C48.Instruction。仅u64显式模2^64的测试后端子集，不冒充一般Dong源码的默认受检算术或完整类型检查。\n\nimport bootstrap.lexer as lex; import bootstrap.expression as ast; import bootstrap.bigint as bi; import bootstrap.nasm_u64_function as f;\npub struct Result{pub instruction_count:usize,pub slot_count:usize,pub return_slot:usize} // 24字节，8对齐\npub unsafe fn lower(source:[]const u8,tokens:[]const lex.Token,nodes:[]const ast.Node,root:usize,parameter_tokens:[]const usize,out:[]f.Instruction,result:*Result)u64\nOK=0 INVALID=1 CAPACITY=2 UNSUPPORTED=3。source<=4096字节，tokens1..256，nodes1..24，参数token索引0..6个，root<nodes.len。传入nodes仅是该表达式的已用树，所有索引均相对该切片；token指向原完整只读source/token流。parameter_tokens顺序定义参数槽0..p-1，每项指向IDENTIFIER token，拼写非空且各项字节名不同；它们可位于完整函数签名中，表达式parse可从return后的token开始，因此无需伪造AST或把参数表拼进表达式。\n\n核心只读基线：code/lang/bootstrap/{lexer,unicode,expression,bigint}.dg及实际存在的说明文档，它们是已存在的原生前端/整数核心，不是本次新任务；C48及其只读发射闭包来自integrated主线。不能修改这些基线或为它们虚构新协调任务。本项依赖C48 integrated后方可领取。\n\n先校验所有source/token/node/parameter_tokens/out/Result描述符、完整输出及输入别名和数量。tokens整流start<=end<=source.len、单调不交叠，最后且仅最后EOF；root、参数token索引及各node.token均在范围。调用者保证source/token对应成功lexer输出，本模块不重写lexer；节点与对应token种类/操作符仍须核对。参数表重复、无此参数的NAME、非法引用、环、共享孩子、多父或不可达垃圾节点均INVALID，不能无限递归或静默忽略。只对支持的三种node做完整形状预检：INTEGER/NAME的op=0且a/b/c=NONE；BINARY的a/b为孩子、c=NONE；所有next=NONE，flags仅允许括号位0。三类之外的kind或BINARY不支持的operator返回UNSUPPORTED，不声称验证其完整复杂子树；此判定在安全描述符/索引预检后且不写输出。对支持树要求全部nodes恰被root树访问一次。\n\n仅支持INTEGER、NAME、BINARY的+、-、*、&、|、^。BINARY.op须对应其token.kind且拼写是该单字符，不用Python解释器执行生产转换。无unary、call、cast、bool、比较、除法、移位、控制流或局部绑定；这些明确UNSUPPORTED，不常量折叠成受支持树。INTEGER拼写<=256字节，必须实际调用bi.parse，复用十进制/0x/0b及合法下划线规则，非负且最终<=UINT64_MAX；超范围/非法字面量INVALID，不截断。可用局部2个u32输出limb、32个u32解析work（最多256字节字面量够用）；零used=0解释为0，禁止自写第二套整数解析。\n\n确定性lowering：左子树后序→右子树后序→父，NAME直接引用其参数槽不发指令；每个INTEGER依次分配一个新槽并发CONST；每个BINARY在两个源已生成后分配新槽，映射C48.ADD/SUB/IMUL/AND/OR/XOR（不是按字符值推算opcode）。新槽从p开始，不重用、不折叠；每个CONST unused left/right=0，每个二元immediate=0。instruction_count为非NAME节点数<=24，slot_count=max(1,p+instruction_count)<=30，return_slot为root对应槽；可用本地24条Instruction先完成全部检查和lower，最后一次发布out精确前缀及整个Result。用户out不足才CAPACITY；INVALID/UNSUPPORTED优先；out和Result失败全文不变。\n\n永久测试必须真实Dong lexer→expression.parse→本lower→已集成C48.emit→汇编/真实call/ret，并用独立Python表达式求值/输入AST期望核对IR次序/槽/结果。禁止在Python直接构造生产IR代替lower，也不能仅检查生成文本。用完整函数源码夹具，真实lexer定位签名参数token与return表达式起点，真实parser生成nodes，再lower。覆盖0/1/6参数、单NAME/单常量、左右不交换的SUB、嵌套优先级/括号、重复参数读取、六运算、0/max/高位、乘加环绕、十/十六/二进制及下划线、最大合法树规模（支持的叶/二叉树节点数必为奇数，24上限内最大23）、精确IR容量/短1/0/富余尾部。全部正常向量<=24。负面包括未知/重复参数、超大字面量、节点/参数token越界、token/Node字段不匹配、未支持构造、环/共享/多父/不可达节点、完整尾部别名与只读保护；不得执行非法lower生成的机器码。\n\n至少：真实坏Dong交换SUB两个IR源→同输入正式好侧先lower并执行，坏侧正常函数返回后按RAX拒绝；删除未知NAME拒绝并错误映射到合法参数槽→只用有安全参数槽的夹具，按INVALID状态拒绝；输出容量不足提前写一条IR或Result→完整原子性拒绝。另保留共用要求的安全RBX数值保持敏感性。测试需对parser的工作区失败契约与本lower最终产物原子性分开观察，不能拿parser允许写scratch为理由放宽lower输出。临时产物claude-works/build/C51/<唯一目录>。\n\n## 执行、内存和复验共同要求\n只改声明的四文件，生产为Dong；不修改code/lang、编译器、既有组件、其它负责人或本批另一任务。本人领取/返修优先。没有隐式分配、全局可变生产状态或OS/I/O调用，新模块不导出C符号（临时wrapper可导出）。依赖仅从已integrated主线及明确列出的既有核心只读基线暂存完整传递闭包，不能复制整个lang掩盖坏源码。不得改旧任务/恢复归档项或用Python/C代替生产lowering。\n所有切片/结构/结果先检查完整声明区间：非空非NULL、元素乘法、自然对齐、端点不回绕；空切片可NULL。结果非NULL、自然8对齐、完整对象端点有效。输入彼此可重叠且只读；所有输出/Result及显式work按正文要求彼此并与全部完整输入（含嵌套名字/数组、未消费尾部）不重叠。在任何输入正文读取或输出写入前先完成可安全做的描述符检查，非法数量不读正文。正文限定的INVALID/UNSUPPORTED先于用户输出容量。除C52显式work外，失败所有输出、整个Result/计数、输入全文和guards不变；成功只写精确前缀及结果，未用尾部不变。\n局部栈以当前dongc的4096 worst-case frame限制设计；给出结构尺寸、临时片段、每段及总上界证明，实际debug/release均可编译。不要照搬无法编译的大局部最终数组，不改编译器来逃避限制。若正文给显式work，只能修改该调用方工作区，不影响最终产物失败原子性。\n只跑本任务checks，实际Dong debug/release编译、NASM ELF64/COFF组装及显式SysV桥链接/原生执行；COFF组装不冒充Win64调用ABI。单模式不同主要原生函数向量总量<=24，复用相同输入的好/坏重放不另算。独立Python/C oracle，不能用生产输出作为唯一oracle。观察真实RAX、所有callee-saved和RSP：独立保存观察区地址和宿主栈锚，返回后先从独立地址捕获现场，再恢复宿主栈及ABI，最后断言；不能用返回RBX作观察指针或信任返回RSP。永久保留安全真实坏Dong的RBX数值保持负控（同输入好侧先实际生成调用，坏侧正常返回后按指定数值拒绝）；不要重现C48~C50首交的桥缺口。\n覆盖完整描述符/端点/尾部别名的独立可达用例，written/Result端点溢出用8对齐UINT64_MAX-7或与Result尺寸匹配的安全参数，不能通过非法解引用拒绝；输入真实只读保护并断言保护调用成功，输入/依赖/生产/说明/测试SHA256前后稳定。有限边界，不跑笛卡尔积、全回归、OS/VM或性能基准。真实坏体必须正常构建/链接/执行后由指定语义/状态/原子性断言拒绝；构建失败、缺符号、崩溃、超时、仅文本不同不算指定语义负控，所有坏体访问和返回路径在预留安全范围内。\n本人客户端先worker MCP get_task/read_document读最新rev、完整契约、review_note、write_paths和依赖，claim成功后执行；不由协调器启动AI CLI。临时产物仅本人works/build/<编号>/<唯一目录>/。交付记录实际命令、tests/skips、模式/格式、全部输入SHA、各坏体实际拒绝依据及未执行限制，再原编号submit。不得自行accept/integrate、提交/推送或启动定时器。交付仍须Codex独立复验、验收和真实集成；本组件不代表完整IR/语义/CLI、stage1/stage2或整个L3完成。",
+  "document": "claude-works/tasks/C51-board.md",
+  "historical": false,
+  "id": "claude:C51",
+  "integration_note": "用户在C51/D24验收后授权继续。已将C51验收版本真实集成到 code/lang/bootstrap/u64_expression_ir.dg/.md 和 code/lang/tests/test_bootstrap_u64_expression_ir.py；生产/说明逐字节等于正式验收源，永久测试仅调整ROOT/SOURCE/DOC和临时构建路径，断言及真实坏体逻辑不变。在code/实际运行 python -m unittest lang.tests.test_bootstrap_u64_expression_ir -v，6项通过、0 skip、returncode0，428.531秒；真实Dong lexer→expression.parse→lower→C48.emit、debug/release、ELF64/COFF及显式SysV原生执行均通过；SUB交换、未知NAME、提前IR/Result、RBX破坏、删除别名检查的负控均由指定断言检出。37项主线源/说明/测试/依赖/编译器及共享测试文件前后SHA一致，552产物SHA通过；登记前再次核对当前全部SHA、四交付验收指纹及生产/说明逐字节一致。完整映射、前后SHA、实测结果 reviews/2026-10-19-C51-integration.json，日志 -C51-main-test.log。真实文件集成及主线验证后登记；未提交/推送或运行OS/VM。",
+  "legacy_hash": "6d973e7ac4ca693ced65891b93d788b3598c4a5c60052ab911f2fd3fb24560df",
+  "number": "C51",
+  "owner": "claude",
+  "rev": 6,
+  "review_note": "已实际审查完整任务书、四交付、u64_expression_ir.dg、说明与永久测试；支持节点/参数/token/完整区间及别名全预检、UNSUPPORTED优先、bigint解析、唯一可达树、后序槽分配与最终发布符合受限u64契约。直接依赖C48 integrated rev13。正式独立作业 f7289623842e4deba12e58db53c293a3：6 tests、0 skip、returncode0、458.734秒、source_stable=true，四文件指纹与交付一致；实际debug/release、ELF64/COFF、Windows显式SysV原生调用。额外只读产物审查 reviews/2026-10-19-C51-D24-audit.py C51：20项输入/依赖和552个产物SHA一致，逐条核对148组原生返回的全部寄存器/栈/canary；SUB坏体14组均正常返回并出现指定RAX差异，RBX坏体40组均RAX正确、RBX精确+8，其余ABI正常。未知NAME、提前IR/Result、别名负控及只读保护也通过。证据 reviews/2026-10-19-C51-evidence.json。无阻塞发现；登记组件验收，尚未实际主线集成，不代表完整语义/IR或L3完成。",
+  "status": "integrated",
+  "title": "[L3] 原生表达式AST降为C48的受限u64直线IR",
+  "updated_at": "2026-10-19T15:23:44+00:00",
+  "verification": {
+    "checks": [
+      {
+        "cancelled": false,
+        "elapsed_seconds": 458.734,
+        "passed": true,
+        "returncode": 0,
+        "skips": 0,
+        "spec": "discover:claude-works/tests:test_u64_expression_ir.py",
+        "tests": 6,
+        "timed_out": false
+      }
+    ],
+    "fingerprint": {
+      "claude-works/deliveries/C51.md": "05435afb08dbaa31b364614c1386973c334257f1a6d38dc5c5e0a38b21d2440f",
+      "claude-works/src/bootstrap/u64_expression_ir.dg": "4ec12810918b6f1bf9de88e89a46bf385a4e9b9bd686291dc4125344d21dbb9e",
+      "claude-works/src/bootstrap/u64_expression_ir.md": "097846cf72f23f6c3dbca6915cfc1af9e34aa1def0cf7e7ba095a5cd4ca22f76",
+      "claude-works/tests/test_u64_expression_ir.py": "2f89b00bfe476086c0d1eb29fe40e46d42b72dad6cdbf20115e34b50eceb8f08"
+    },
+    "finished_at": "2026-10-19T15:11:13+00:00",
+    "job": "f7289623842e4deba12e58db53c293a3",
+    "passed": true,
+    "source_stable": true,
+    "summary": "定向复验通过，等待源码/契约审查"
+  },
+  "write_paths": [
+    "claude-works/src/bootstrap/u64_expression_ir.dg",
+    "claude-works/src/bootstrap/u64_expression_ir.md",
+    "claude-works/tests/test_u64_expression_ir.py",
+    "claude-works/deliveries/C51.md"
+  ]
+}

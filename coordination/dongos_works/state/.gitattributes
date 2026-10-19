@@ -1,0 +1,3 @@
+# Written by the coordinator. LF everywhere; event logs are append-only, so concurrent additions merge by union.
+* text eol=lf
+events/**/*.jsonl merge=union

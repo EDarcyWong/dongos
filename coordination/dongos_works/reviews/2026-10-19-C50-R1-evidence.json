@@ -1,0 +1,86 @@
+{
+  "task": "claude:C50",
+  "submission_rev": 8,
+  "formal_job": "563c3a6bab364e49b5d794a4511832d6",
+  "formal": {
+    "passed": true,
+    "checks": [
+      {
+        "spec": "discover:claude-works/tests:test_nasm_u64_forward_function.py",
+        "passed": true,
+        "tests": 4,
+        "skips": 0,
+        "returncode": 0,
+        "cancelled": false,
+        "timed_out": false,
+        "elapsed_seconds": 146.438
+      }
+    ],
+    "source_stable": true,
+    "fingerprint": {
+      "claude-works/src/bootstrap/nasm_u64_forward_function.dg": "579df059d1737f64c1c8ffded8c4cab00b161118d92e015eda619e3875982857",
+      "claude-works/src/bootstrap/nasm_u64_forward_function.md": "73f125a3cc96a360843ffa7027b5a4aecb9d1bac6040c1b3aac44844ff63c4b6",
+      "claude-works/tests/test_nasm_u64_forward_function.py": "f50f71e43671d509c95fc4f18da0cb50262cf36726a7b828cee9c61d41b0b2fa",
+      "claude-works/deliveries/C50.md": "51fa125d27be78161fee09f0a82e7ea7d63357ae86927becbb5f29696272853c"
+    },
+    "summary": "定向复验通过，等待源码/契约审查",
+    "finished_at": "2026-10-19T14:05:23+00:00"
+  },
+  "run": "D:\\projects\\2026\\dongos\\coordination\\dongos_works\\.local\\runs\\563c3a6bab364e49b5d794a4511832d6\\workspace\\claude-works\\build\\C50\\run-7dc77b7519a1",
+  "input_sha256": {
+    "nasm_u64_forward_function.dg": "579df059d1737f64c1c8ffded8c4cab00b161118d92e015eda619e3875982857",
+    "nasm_u64_forward_function.md": "73f125a3cc96a360843ffa7027b5a4aecb9d1bac6040c1b3aac44844ff63c4b6",
+    "nasm_symbol.dg": "25675ec83d79c6f2b34bebfdd837e75d80dc384e900939be0c75d06a7bde4c06",
+    "nasm_function_frame.dg": "08580fdf8ebbd75dc27812bb63f4e425a18e66b285fd5ccd7805d1d6dc55e9ff",
+    "decimal_integer.dg": "58a4e4d746393d0e5944656aeb4c6f2aff96acca047afd455c60a47464ce0b76",
+    "nasm_sysv_incoming_args.dg": "bbaf9d38f0b7993e0d9da3ff86e8c0d86ecc0bbdca09e7617a878b57c3e3f714",
+    "sysv_integer_args.dg": "75c4ab5fd07d586684eb753958654e6e6658ff90e4d77f2a1ea96cb110573204",
+    "nasm_memory_operand.dg": "e3d072a3ea1314975427bb0e24426da2adaf3de692101f3e3e8d6768697f1d24",
+    "nasm_sysv_direct_invoke.dg": "fda91aaa2409d06c0ab07cf5de8e733222cccc228455fbd6354b6b5fcf26dcfa",
+    "nasm_sysv_call_args.dg": "e7133a714593f4e352c075a403bbef0d6ee37639f800780d4aeccc7fd178e4b9",
+    "nasm_direct_call.dg": "e55dc3a5a645d2335d64c1259af569afd9b255cbc0cb546963ae16d136e68f30",
+    "nasm_sysv_capture_return.dg": "e7c5e236650e632dc26316bb84b05df255e00bcb20d15bb1932780bc4b834e31",
+    "sysv_return_plan.dg": "f880c0e387e9561f00a51b87713fcdd7af24a065dd0be407325b3290e6a0c08e",
+    "nasm_sysv_function_exit.dg": "9dffc7415ea414310cb68e81457fb1b0c04040fc52d01c4bb1a2643af9fd29f2",
+    "nasm_sysv_return_values.dg": "7a3760f6ef81dbc3f436541a2de3fb746aff723fa72dc4ba851c293d2a064b32",
+    "test_nasm_u64_forward_function.py": "f50f71e43671d509c95fc4f18da0cb50262cf36726a7b828cee9c61d41b0b2fa"
+  },
+  "records": [
+    {
+      "mode": "debug",
+      "vectors": 16,
+      "rax_correct": true,
+      "rsp_balanced": true,
+      "other_callee_saved_preserved": true,
+      "canary_intact": true,
+      "alignment_correct": true,
+      "rbx_good": 845282253045697467,
+      "rbx_bad": 845282253045697475,
+      "rbx_delta": 8,
+      "routes": null,
+      "callee_records_correct": true
+    },
+    {
+      "mode": "release",
+      "vectors": 16,
+      "rax_correct": true,
+      "rsp_balanced": true,
+      "other_callee_saved_preserved": true,
+      "canary_intact": true,
+      "alignment_correct": true,
+      "rbx_good": 845282253045697467,
+      "rbx_bad": 845282253045697475,
+      "rbx_delta": 8,
+      "routes": null,
+      "callee_records_correct": true
+    }
+  ],
+  "raw_sha256": {
+    "bad-rbx-good-debug.native.output": "a65fffed32e271f9f207f38558eeb207c5a2b5d8accfea558345dcdaa9808d61",
+    "bad-rbx-debug.native.output": "4e3eab39ae52a05e27acc6dfd051f0a4eabadd82d0cf80079c846c8816051732",
+    "bad-rbx-good-release.native.output": "a65fffed32e271f9f207f38558eeb207c5a2b5d8accfea558345dcdaa9808d61",
+    "bad-rbx-release.native.output": "4e3eab39ae52a05e27acc6dfd051f0a4eabadd82d0cf80079c846c8816051732"
+  },
+  "source_unchanged_since_formal": true,
+  "script_sha256": "9caae9332c801b92ecbf5a4d1f65fbbd5800c36bdb08c40c45fc047956aa7ac5"
+}

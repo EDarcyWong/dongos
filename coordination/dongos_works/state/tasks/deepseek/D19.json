@@ -1,0 +1,78 @@
+{
+  "auto_dispatch": false,
+  "auto_verify": false,
+  "candidate": null,
+  "checks": [
+    "discover:deepseek-works/tests:test_uleb128_decode.py"
+  ],
+  "claimed_at": "2026-10-18T12:19:38+00:00",
+  "claimed_by": "deepseek-mcp-d829431107ed41e7",
+  "complexity": "standard",
+  "created_at": "2026-10-18T12:03:58+00:00",
+  "delivery": "deepseek-works/deliveries/D19.md",
+  "depends_on": [],
+  "description": "module bootstrap.uleb128_decode。\npub unsafe fn decode(input:[]const u8,value:*u64,consumed:*usize)u64；OK=0、INVALID=1、TRUNCATED=2、OVERFLOW=3、NONCANONICAL=4。只解码最短ULEB128 u64，不负责SLEB/文件/调试节。独立于已有编码模块，不重复编码任务。\n先验证input完整描述符/端点（空可NULL）、两个输出均非空8对齐/各8字节有效，完整input与输出两两分离；input不能因只读取前缀而允许尾部别名。描述符不合法一律INVALID且不读取输入。扫描最多10字节，低7位为载荷、bit7为继续。前9字节任意；若到第10字节，该字节payload>1或继续位=1返回OVERFLOW（优先该字节的终止/规范检查）。遇终止字节时，若不是第一字节且其payload=0返回NONCANONICAL，否则成功；成功value为无符号组合，consumed为1..10，忽略剩余输入。未遇终止且输入耗尽（不足10字节）返回TRUNCATED；空input亦TRUNCATED。例如00→0/1；80 01→128/2；80 00→NONCANONICAL；FF×9 01→u64最大/10；80×9 02、80×10均OVERFLOW；80×9为TRUNCATED。禁止移位>=64或溢出移位后才检查。\n任意非OK两个输出全文不变，input只读；成功只改两个输出字段，无CAPACITY码。循环最多10次，无分配/OS。上述定义覆盖状态优先级，不能把第10字节继续错误当缺输入，也不能解码后才检查输出别名。\n独立Python任意精度解码/最短再编码期望，固定各7位边界、最大、尾随字节、非最短、截断、溢出与少量固定随机。真实Dong debug/release原生执行，ELF64/COFF组装；只读input、完整input尾别名、坏指针预检、双端guard及失败字段全文不变。坏Dong至少覆盖第10字节溢出被接受，及截断前提前写value；两者实际编译运行并被对应状态/原子性断言拒绝。\n\n## 实现、测试与交付\n\n这是L3生产后端的有界独立组件，完整代码生成器/自举尚未完成。实现必须是Dong，模块不导出C符号；C/Python/NASM仅作独立测试观察器，不用宿主实现替代Dong生产逻辑。无分配、全局可变状态或OS调用。仅修改声明的本人works文件，不改code/lang、活动编译器/内核、协调器或他人文件。Codex负责独立复验后集成。\n\nunsafe调用方保证实际可访问的对象；实现仍须在读写前验证完整描述符、地址端点无溢出、长度乘法、自然对齐和所有别名规则。除任务另定外，OK=0、INVALID=1、CAPACITY=2；written非空8对齐，完整8字节与完整out分离；空out可NULL，非空out不可NULL。INVALID优先CAPACITY，失败out与written全文不变；成功只写精确前缀/计数，尾部不变。不以未使用前缀代替完整声明区间检查。先预检再写，子组件在局部暂存中调用以保证原子性。\n\n只读依赖须已accepted/integrated且不修改。所有任务声明的依赖已集成；测试只暂存本组件和声明的只读依赖，避免当前主线同名模块遮蔽临时坏源码。测试实际编译并原生执行Dong debug/release，至少组装ELF64/COFF；有限固定边界与小规模确定性随机，Python/C独立期望，不堆大矩阵。双端guard、只读输入（如有）、输出尾部及失败全文立即核对。指针负例只触发预检，不非法解引用；其它前置条件必须合法，不能用另一非法字段遮蔽目标缺陷。\n\n至少两种真实错误Dong副本成功编译、链接、原生执行，再被指定语义/原子性断言拒绝；构建失败、崩溃、超时、无关前置断言不算负控成功。只运行本任务声明的定向测试，产物在deepseek-works/build/D19/<唯一目录>，不运行OS/VM、全回归、性能基准、定时器、关机、提交或推送。不启动任何模型CLI，Cursor保持客户端手动执行。\n\n先通过本人的worker MCP get_task/read_document查看最新rev、完整契约、归属与依赖，claim成功后才修改。完成后写deepseek-works/deliveries/D19.md，列出真实命令、tests/skip、模式/格式、源码测试SHA256、证据目录、负控拒绝原因和限制，未运行明确未运行；落盘后submit_task，不能自行accept/integrate。需要扩大归属时说明，不擅自扩范围。\n",
+  "document": "deepseek-works/tasks/D19-board.md",
+  "document_status": "todo",
+  "historical": false,
+  "id": "deepseek:D19",
+  "integration_note": "已实际同步正式工作区，并复制uleb128_decode.dg/.md及永久原生测试、LM8 fixture及永久独立数据检查到code/lang。主线5项通过0skip，生产/数据hash与验收一致，见reviews/2026-10-18-D19-R1-LM8-integration.md。",
+  "legacy_hash": "a8abb621b69ec14ffe9a871c81e558c6824851185d34b92867629f8d1f8a69bc",
+  "number": "D19",
+  "owner": "deepseek",
+  "rev": 13,
+  "review_note": "已审查契约/实物与有效测试；正式定向零skip通过、来源稳定。D19 R1另4种选择性坏Dong共8次原生执行准确命中前缀/尾部两输出角色；LM8八条固定数据和类型/交付均符合。见reviews/2026-10-18-D19-R1-LM8-integration.md；主线集成另验。",
+  "state_reconciliation": {
+    "at": "2026-10-19T11:42:09+00:00",
+    "audit_sha256": "5daf98a663cd249783a8432a5fcbed3ec4e96275b1910fa54b7903c084fe9ebc",
+    "note": "协调已有历史事实；保留原事件/作业；历史复验未重跑，未新增验收或集成，不启动模型。",
+    "previous_data_sha256": "aaa720f158650dc586a4463aacc038c9c0d0c565a2d13578fc541f7d24ccfc7c",
+    "previous_rev": 11,
+    "project": "dongos",
+    "snapshot_generated_at": "2026-10-19T09:04:28+00:00",
+    "snapshot_rev": 12,
+    "snapshot_sha256": "a40cf9aabcbb43779b5c60414d7142cab791f85888022c84625568dbb579ac96",
+    "verification_reexecuted": false
+  },
+  "state_recovery": {
+    "at": "2026-10-19T04:43:01+00:00",
+    "audit_sha256": "3ea0db756d56092976092ed0d1216118e145a8e34aa02c5060cb913d088d553e",
+    "note": "恢复已有验收/集成/返修事实；原复验为历史记录，未声称本次重跑；不恢复丢失作业或启动模型。",
+    "snapshot_rev": 11,
+    "snapshot_sha256": "f3ab929e33419f40dfc417217d588acf8b1b26cbac50724a51942a11e438c171"
+  },
+  "status": "integrated",
+  "title": "有界最短ULEB128 u64解码",
+  "updated_at": "2026-10-19T11:42:09+00:00",
+  "verification": {
+    "checks": [
+      {
+        "cancelled": false,
+        "elapsed_seconds": 6.094,
+        "passed": true,
+        "returncode": 0,
+        "skips": 0,
+        "spec": "discover:deepseek-works/tests:test_uleb128_decode.py",
+        "tests": 4,
+        "timed_out": false
+      }
+    ],
+    "fingerprint": {
+      "deepseek-works/deliveries/D19.md": "29cf5671ec47fa3e035da234afa7df81c8328e7fd92818b4743ccfd891667a34",
+      "deepseek-works/src/bootstrap/uleb128_decode.dg": "af79d3adfabe377f496220802a85ceff69380aa449450e596c2bae769b6f4821",
+      "deepseek-works/src/bootstrap/uleb128_decode.md": "3dc54d7c7c1799391c0ca2a8dc6e17fa1aea565bc94beb60bcee8fac08f4fa19",
+      "deepseek-works/tests/test_uleb128_decode.py": "5d5ce4b4ed202cb5d75e9e76500af3af3acca1976cf5b403fa702cf7102703fd"
+    },
+    "finished_at": "2026-10-18T12:21:28+00:00",
+    "job": "f71c604d372044d890fac964bd459457",
+    "passed": true,
+    "source_stable": true,
+    "summary": "定向复验通过，等待源码/契约审查"
+  },
+  "write_paths": [
+    "deepseek-works/src/bootstrap/uleb128_decode.dg",
+    "deepseek-works/src/bootstrap/uleb128_decode.md",
+    "deepseek-works/tests/test_uleb128_decode.py",
+    "deepseek-works/deliveries/D19.md"
+  ]
+}

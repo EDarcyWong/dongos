@@ -1,0 +1,303 @@
+{
+  "project": "dongos",
+  "authorization": "用户要求：给cursor分配任务",
+  "phase": "L3：Dong自举后端",
+  "existing_task_preserved": {
+    "id": "cursor:CR38",
+    "title": "[L3] 接续D26：受检64位算术与错误返回的完整SysV函数接线",
+    "status": "todo",
+    "rev": 1,
+    "write_paths": [
+      "cursor-works/src/bootstrap/nasm_checked_u64_function.dg",
+      "cursor-works/src/bootstrap/nasm_checked_u64_function.md",
+      "cursor-works/tests/test_nasm_checked_u64_function.py",
+      "cursor-works/deliveries/CR38.md"
+    ],
+    "depends_on": [
+      "cursor:CR3",
+      "claude:C44",
+      "cursor:CR12",
+      "cursor:CR13",
+      "claude:C24",
+      "cursor:CR22",
+      "cursor:CR23",
+      "cursor:CR9",
+      "claude:C42",
+      "cursor:CR18"
+    ]
+  },
+  "dependency_revisions": [
+    {
+      "id": "cursor:CR3",
+      "status": "integrated",
+      "rev": 8
+    },
+    {
+      "id": "cursor:CR9",
+      "status": "integrated",
+      "rev": 8
+    },
+    {
+      "id": "cursor:CR10",
+      "status": "integrated",
+      "rev": 8
+    },
+    {
+      "id": "cursor:CR11",
+      "status": "integrated",
+      "rev": 22
+    },
+    {
+      "id": "cursor:CR12",
+      "status": "integrated",
+      "rev": 14
+    },
+    {
+      "id": "cursor:CR13",
+      "status": "integrated",
+      "rev": 16
+    },
+    {
+      "id": "cursor:CR14",
+      "status": "integrated",
+      "rev": 9
+    },
+    {
+      "id": "cursor:CR17",
+      "status": "integrated",
+      "rev": 8
+    },
+    {
+      "id": "cursor:CR18",
+      "status": "integrated",
+      "rev": 8
+    },
+    {
+      "id": "cursor:CR20",
+      "status": "integrated",
+      "rev": 12
+    },
+    {
+      "id": "cursor:CR29",
+      "status": "integrated",
+      "rev": 10
+    },
+    {
+      "id": "claude:C12",
+      "status": "integrated",
+      "rev": 8
+    },
+    {
+      "id": "claude:C22",
+      "status": "integrated",
+      "rev": 9
+    },
+    {
+      "id": "claude:C23",
+      "status": "integrated",
+      "rev": 9
+    },
+    {
+      "id": "claude:C24",
+      "status": "integrated",
+      "rev": 8
+    },
+    {
+      "id": "claude:C36",
+      "status": "integrated",
+      "rev": 14
+    },
+    {
+      "id": "claude:C41",
+      "status": "integrated",
+      "rev": 7
+    },
+    {
+      "id": "claude:C42",
+      "status": "integrated",
+      "rev": 7
+    },
+    {
+      "id": "claude:C44",
+      "status": "integrated",
+      "rev": 7
+    },
+    {
+      "id": "deepseek:D21",
+      "status": "integrated",
+      "rev": 12
+    }
+  ],
+  "published": [
+    {
+      "id": "cursor:CR39",
+      "number": "CR39",
+      "owner": "cursor",
+      "title": "[L3] 具有真实调用副作用的AND/OR短路完整SysV函数",
+      "description": "所属阶段：L3：Dong自举后端 → 短路控制流与真实调用接线。新增bootstrap.nasm_short_circuit_function，补逻辑AND/OR的右侧条件求值，不重复C49的两数比较选择、C50直接转调或Claude C51算术AST降级。不依赖C49/C50/C51/C52，不改它们。\npub unsafe fn emit(module_name:[]const u8,item_name:[]const u8,left_module:[]const u8,left_item:[]const u8,right_module:[]const u8,right_item:[]const u8,operation:u64,eval_block:u64,done_block:u64,out:[]u8,written:*usize)u64\noperation=0 AND、1 OR，其它INVALID；eval/done合法且不同。六个名字均1..64字节；自身(module,item)与任一callee字节对相同INVALID（防受限包装器直接递归）；左右callee同名合法。所有六名字完整描述符与别名先验，不能只验自己的两名字。\n生成bool f()：left()/right()是正常返回任意u64的零参SysV目标，真值是完整64位非零，不只看AL。left恰调用1次；AND仅left非零时调用right，OR仅left为0时调用right；right被调用时恰1次并在left之后。结果必须规范0/1。callee可有副作用、可破坏所有caller-saved但遵守callee-saved/DF=0，测试独立目标提供实际符号，本模块不生成目标体。\n严格复用：CR3标签，CR11.prologue(16,0)；C41以空kinds/source_offsets、return_kind8、frame16实际调用left，结果先放槽8。CR12读取RAX，CR9装RCX=0，C22.NE把完整u64归一化，CR13存回槽8。固定test rax,rax后CR10：AND用NE、OR用EQ，yes=eval、no=done、fallthrough=eval。CR18 eval标签；C41真正调用right写槽16，再同样CR12/CR9/C22.NE归一化并CR13写槽8；C42(kind1 BOOL,frame16,mask0,low8,high0)真实返回。CR18 done标签后C42同规格返回槽8的left真值。两个出口都有真实ret。C39 BOOL只零扩展低字节、不做归一化，因此两个callee的原始值必须先C22处理，尤其0x100/高位非零。不能在分支前先调用right、用宿主条件决定生成体或以纯文本模拟副作用。\n片段上界按零参数C41的实际受限最大（call符号<=272+返回捕获<=26）等证明，不把C41内部1536作为每个外部接收段强行加进局部总缓冲。先全预检/完整组装再发布。\n永久测试<=24向量覆盖AND/OR、left真/假、right真/假，0/1/0x100/最高位/MAX，左右不同/相同符号、1/64字节名字、20位块ID，同文件至少两函数不冲突。独立C/汇编callee记录调用ID、次序、次数和入口rsp%16（每次8），并故意改变RAX/RCX/RDX/R8~R11及flags；独立oracle验证right恰按短路规则调用、结果0/1、完整保持/栈/guards。只测纯函数结果不够。\n真实坏Dong：交换AND/OR分支条件→正常执行后由调用轨迹/次数拒绝；把right的归一化删掉并把原值写入BOOL槽（用right=0x100且必须求值的安全输入）→正常返回后按RAX拒绝；容量不足提前写函数头→完整原子性拒绝。另按共用要求覆盖两出口RBX数值保持敏感性。\n\n## 共用执行与复验要求\n本项仅四个声明文件，生产为Dong，无隐式分配/全局可变生产缓存/OS调用，新模块不导出C符号（临时wrapper可导出）。不得修改code/lang、编译器、已集成依赖、协调器、其它负责人或本批其它任务。CR38继续原队列，本人已领取/返修优先；不恢复已转交归档任务。\n统一发射状态OK0/INVALID1/CAPACITY2。先完整检查written非NULL、8对齐、8字节端点；所有输入/嵌套数组和out完整区间非空非NULL、自然对齐、元素乘法、端点不回绕；空可NULL。written与整个out（包括未用尾部）及全部完整输入互斥；out亦与全部输入互斥，输入之间可重叠且只读。所有非法枚举/名称长度/块ID/结构内容先于容量拒绝，非法数量不读取正文。任何INVALID/CAPACITY均保持输入、out、written全文不变；成功只写精确前缀和written，尾部不变。\nmodule/item及被调用者名字均为1..64原始字节，CR3编码，不能裸拼标签。块ID不得NONE，多个块必须不同，上游保证全文件唯一。本模块不分配全局编号。文本严格ASCII/单LF，仅函数标签、必要块标签和指令，无bits/section/global/extern/注释/额外空行；测试包装可补节/global和独立桥。\n真实复用正文指定已集成组件及只读完整传递闭包，不复制既有规划/发射算法，不以Python/C模拟生产。每段给保守长度证明和完整缓冲/栈证明，不能拿一次输出实长代替上界；遵守dongc每函数4096 worst-case frame限制，不能直接堆无法编译的大局部数组。可在证明外部失败原子性、输入不变与依赖确定性的前提下使用有界片段完整预演后重放，必须说明第二遍失败为何不可达；或用充分且可编译的最终局部缓冲。不要改编译器/依赖逃避限制，不能先写用户out再回滚。\n只跑本项checks：真实Dong debug/release编译、ELF64/COFF组装、显式SysV桥链接并原生执行。单模式不同主要原生输入向量总数<=24，复用同输入的好/坏重放不新增向量；不做全笛卡尔积/全回归/性能基准。独立Python/C oracle，不用生产输出作为唯一oracle。全部返回路径捕获真实RAX（PAIR还RDX）、所有callee-saved及RSP，独立保存观察区/宿主栈锚，先独立捕获现场，再恢复宿主ABI后断言；不能让返回RBX承担观察指针或依赖返回RSP恢复宿主。\n除正文语义/原子性负控外，永久保留安全实际坏Dong的RBX保持数值负控（正文有两个出口则覆盖两个出口）：同输入正式好侧先实际生成并执行，坏侧正常编译/链接/原生返回后按指定RBX数值拒绝，不用错位/guard/对齐/崩溃代替。其它坏体也必须正常构建执行后按指定数值/状态/顺序/原子性拒绝，缺符号、组装失败、崩溃、超时、仅文本不同不算指定语义负控；所有访问和ret都在预留安全范围。\n有限覆盖exact/短1/0/富余容量、成功未用尾部、INVALID优先、完整描述符和尾部别名独立可达；written端点溢出使用8对齐UINT64_MAX-7+合法空out，避免漏检后非法解引用。输入真实只读保护须断言保护调用成功；源码、说明、测试、全部只读依赖/输入SHA前后稳定，0skip才可验收。\n仅用户在Cursor客户端手动通过worker MCP读最新rev/完整任务书/review_note/write_paths/依赖，claim成功后实现，交付真实命令、tests/skips、双模式/双格式、全部SHA、坏体实际观察和未执行限制，再原编号submit。临时产物cursor-works/build/<编号>/<唯一目录>。不启动Cursor CLI或任何AI CLI/自动化，不自行accept/integrate、提交/推送、运行OS/VM。最后由Codex独立复验、验收和真实集成；组件通过不等于完整语义/IR、stage1/stage2、客体自举或L3完成。",
+      "status": "todo",
+      "rev": 1,
+      "write_paths": [
+        "cursor-works/src/bootstrap/nasm_short_circuit_function.dg",
+        "cursor-works/src/bootstrap/nasm_short_circuit_function.md",
+        "cursor-works/tests/test_nasm_short_circuit_function.py",
+        "cursor-works/deliveries/CR39.md"
+      ],
+      "depends_on": [
+        "cursor:CR3",
+        "cursor:CR11",
+        "cursor:CR9",
+        "cursor:CR10",
+        "cursor:CR12",
+        "cursor:CR13",
+        "cursor:CR18",
+        "claude:C22",
+        "claude:C41",
+        "claude:C42"
+      ],
+      "checks": [
+        "discover:cursor-works/tests:test_nasm_short_circuit_function.py"
+      ],
+      "auto_dispatch": false,
+      "auto_verify": false,
+      "complexity": "standard",
+      "created_at": "2026-10-19T15:04:33+00:00",
+      "updated_at": "2026-10-19T15:04:33+00:00",
+      "historical": false,
+      "document": "cursor-works/tasks/CR39-board.md",
+      "delivery": "cursor-works/deliveries/CR39.md",
+      "candidate": null,
+      "verification": null,
+      "review_note": "",
+      "legacy_hash": "7a021d95cacc47e23392e615e010edb67b6ff10f9dd5902126c02882313a07b2"
+    },
+    {
+      "id": "cursor:CR40",
+      "number": "CR40",
+      "owner": "cursor",
+      "title": "[L3] 作用域清理后保持双字返回值的完整SysV函数",
+      "description": "所属阶段：L3：Dong自举后端 → return出口的defer清理与双字返回接线。新增bootstrap.nasm_pair_cleanup_function，不修改语义分析器，不声称完整捕获/defer/try/break/continue lowering。本项把已有清理规划/调用串接到可真实调用的函数退出路径。\nimport bootstrap.cleanup_plan as clean;\npub unsafe fn emit(module_name:[]const u8,item_name:[]const u8,scopes:[]const clean.Scope,cleanup_ids:[]const usize,from_scope:usize,out:[]u8,written:*usize)u64\nscopes、cleanup_ids、from_scope完整遵循已集成C36契约：scope数1..8，IDs<=16，全部scope.count之和<=16，ID!=NONE，全图父链/区间合法，退出target固定clean.ROOT_PARENT包含根。重复不透明ID是多次注册，允许并必须多次调用；不在路径的坏父环/坏ID也必须INVALID先于容量。\n生成Pair f(u64 low,u64 high)，PAIR真实RAX=low、RDX=high。frame32、saved_mask0，输入槽8/16，最终返回槽24/32。严格顺序：CR3标签→C44.emit(kinds=[0,0],offsets=[8,16],frame32)→CR12分别把输入槽装RAX/RDX→C36.emit(scopes,ids,from,ROOT_PARENT)实际生成清理序列→CR13把清理后的RAX/RDX分别写槽24/32→C42.emit(kind11,frame32,mask0,low24,high32)真实ret。禁止在清理后重新从输入槽8/16装回值掩盖C36的返回值保持，也不能只在Python跑plan或用自写调用顺序替代C36。\n零参void __dong_cleanup<ID>由上游定义，必须正常返回且守SysV。C36对非空清理串暂存RAX/RDX并恢复，此函数必须真实依赖这一行为；空计划不产生清理体。清理函数可改变caller-saved寄存器/flags，故不能假定返回值寄存器未被它们破坏；双字值先于清理已经求值。\n全部名字/scopes/IDs/out/written描述符与完整尾部别名预检，Scope24字节/8对齐、ID8字节/8对齐，输入之间可重叠只读。全图/顺序由真实C36→C12判断，不复制父链算法。充分段大小可按C36最大756、C44两个单字参数的实际界等证明，不要求把依赖的内部缓冲大小原样拼成无法编译的大栈。\n永久测试<=24向量覆盖0/1/16次清理、根退出/深链/兄弟不在路径、每层逆注册且由内向外、重复ID、全部20位ID、from根/最深、任意高位low/high、名字1/64字节。实际Dong生成整函数并真实call/ret，独立C/汇编清理目标逐次记录ID和入口rsp%16=8，并故意把RAX/RDX改成与原返回值不同的已知值，独立树遍历oracle核对顺序/次数，最终RAX/RDX仍精确等于输入。返回捕获和宿主恢复要独立；不能只检查C36文本或最终一字值。\n至少：真实坏Dong把清理后的RDX覆盖为安全常量再存槽32→正常返回后按RDX拒绝；在调用C36前安全改变输入注册顺序（仅合法有限夹具，例如本地两项交换且不改只读用户输入）→正常返回后按清理轨迹拒绝；容量不足提前发布函数头→完整原子性拒绝。另保留RBX保持数值敏感性。完整覆盖不可达环/非祖先形状/越界区间/总count超限/未使用坏ID/所有尾部别名，不能以清理后从原槽恢复掩盖负控。\n\n## 共用执行与复验要求\n本项仅四个声明文件，生产为Dong，无隐式分配/全局可变生产缓存/OS调用，新模块不导出C符号（临时wrapper可导出）。不得修改code/lang、编译器、已集成依赖、协调器、其它负责人或本批其它任务。CR38继续原队列，本人已领取/返修优先；不恢复已转交归档任务。\n统一发射状态OK0/INVALID1/CAPACITY2。先完整检查written非NULL、8对齐、8字节端点；所有输入/嵌套数组和out完整区间非空非NULL、自然对齐、元素乘法、端点不回绕；空可NULL。written与整个out（包括未用尾部）及全部完整输入互斥；out亦与全部输入互斥，输入之间可重叠且只读。所有非法枚举/名称长度/块ID/结构内容先于容量拒绝，非法数量不读取正文。任何INVALID/CAPACITY均保持输入、out、written全文不变；成功只写精确前缀和written，尾部不变。\nmodule/item及被调用者名字均为1..64原始字节，CR3编码，不能裸拼标签。块ID不得NONE，多个块必须不同，上游保证全文件唯一。本模块不分配全局编号。文本严格ASCII/单LF，仅函数标签、必要块标签和指令，无bits/section/global/extern/注释/额外空行；测试包装可补节/global和独立桥。\n真实复用正文指定已集成组件及只读完整传递闭包，不复制既有规划/发射算法，不以Python/C模拟生产。每段给保守长度证明和完整缓冲/栈证明，不能拿一次输出实长代替上界；遵守dongc每函数4096 worst-case frame限制，不能直接堆无法编译的大局部数组。可在证明外部失败原子性、输入不变与依赖确定性的前提下使用有界片段完整预演后重放，必须说明第二遍失败为何不可达；或用充分且可编译的最终局部缓冲。不要改编译器/依赖逃避限制，不能先写用户out再回滚。\n只跑本项checks：真实Dong debug/release编译、ELF64/COFF组装、显式SysV桥链接并原生执行。单模式不同主要原生输入向量总数<=24，复用同输入的好/坏重放不新增向量；不做全笛卡尔积/全回归/性能基准。独立Python/C oracle，不用生产输出作为唯一oracle。全部返回路径捕获真实RAX（PAIR还RDX）、所有callee-saved及RSP，独立保存观察区/宿主栈锚，先独立捕获现场，再恢复宿主ABI后断言；不能让返回RBX承担观察指针或依赖返回RSP恢复宿主。\n除正文语义/原子性负控外，永久保留安全实际坏Dong的RBX保持数值负控（正文有两个出口则覆盖两个出口）：同输入正式好侧先实际生成并执行，坏侧正常编译/链接/原生返回后按指定RBX数值拒绝，不用错位/guard/对齐/崩溃代替。其它坏体也必须正常构建执行后按指定数值/状态/顺序/原子性拒绝，缺符号、组装失败、崩溃、超时、仅文本不同不算指定语义负控；所有访问和ret都在预留安全范围。\n有限覆盖exact/短1/0/富余容量、成功未用尾部、INVALID优先、完整描述符和尾部别名独立可达；written端点溢出使用8对齐UINT64_MAX-7+合法空out，避免漏检后非法解引用。输入真实只读保护须断言保护调用成功；源码、说明、测试、全部只读依赖/输入SHA前后稳定，0skip才可验收。\n仅用户在Cursor客户端手动通过worker MCP读最新rev/完整任务书/review_note/write_paths/依赖，claim成功后实现，交付真实命令、tests/skips、双模式/双格式、全部SHA、坏体实际观察和未执行限制，再原编号submit。临时产物cursor-works/build/<编号>/<唯一目录>。不启动Cursor CLI或任何AI CLI/自动化，不自行accept/integrate、提交/推送、运行OS/VM。最后由Codex独立复验、验收和真实集成；组件通过不等于完整语义/IR、stage1/stage2、客体自举或L3完成。",
+      "status": "todo",
+      "rev": 1,
+      "write_paths": [
+        "cursor-works/src/bootstrap/nasm_pair_cleanup_function.dg",
+        "cursor-works/src/bootstrap/nasm_pair_cleanup_function.md",
+        "cursor-works/tests/test_nasm_pair_cleanup_function.py",
+        "cursor-works/deliveries/CR40.md"
+      ],
+      "depends_on": [
+        "cursor:CR3",
+        "cursor:CR12",
+        "cursor:CR13",
+        "claude:C12",
+        "claude:C36",
+        "claude:C42",
+        "claude:C44"
+      ],
+      "checks": [
+        "discover:cursor-works/tests:test_nasm_pair_cleanup_function.py"
+      ],
+      "auto_dispatch": false,
+      "auto_verify": false,
+      "complexity": "standard",
+      "created_at": "2026-10-19T15:04:33+00:00",
+      "updated_at": "2026-10-19T15:04:33+00:00",
+      "historical": false,
+      "document": "cursor-works/tasks/CR40-board.md",
+      "delivery": "cursor-works/deliveries/CR40.md",
+      "candidate": null,
+      "verification": null,
+      "review_note": "",
+      "legacy_hash": "bc440567c7d40d66d3078e612bd62067615dde47d896fcbbfd2884dd084f1fd3"
+    },
+    {
+      "id": "cursor:CR41",
+      "number": "CR41",
+      "owner": "cursor",
+      "title": "[L3] 8/16/32位窄算术的checked与wrapping完整函数",
+      "description": "所属阶段：L3：Dong自举后端 → 窄整数运行时语义到完整函数接线。新增bootstrap.nasm_narrow_arithmetic_function。仅8/16/32位ADD/SUB，与CR38接续D26的64位ADD/SUB/MUL/NEG独立，不替代/复制CR38，不抢DeepSeek其它任务；不是完整AST或类型检查。\npub unsafe fn emit(module_name:[]const u8,item_name:[]const u8,operation:u64,width:u64,signed:bool,checked:bool,error_block:u64,out:[]u8,written:*usize)u64\noperation=0 ADD、1 SUB，其它INVALID；width仅8/16/32；error_block!=NONE，无论checked是否开启均验证。signed/checked是语言bool。runtime为真正SysV Pair f(u64 lhs,u64 rhs)，RAX=value、RDX=status。两输入先按各自低width位用CR14规范到u64零扩展或i64符号扩展，高位垃圾不影响操作数。checked=true：数学和/差在相应width有/无符号范围内返回{规范结果,0}，否则{0,1}。checked=false：按低width模2^width求和/差，再按signed规范成64位，status=0。不是把signed i8结果当未扩展u8返回。\n固定frame32、mask0，输入槽8/16，结果value/status槽24/32。严格CR3标签→C44([0,0],[8,16],32)入口→CR12以64位读取lhs/RAX、rhs/RCX→分别CR14.emit(RAX,RAX,width,signed)与CR14.emit(RCX,RCX,width,signed)规范输入→C23.emit(ADD或SUB,RAX,RCX)算术→checked时实际调用D21 bootstrap.nasm_checked_narrow_result.emit(width,signed,error_block)，unchecked时实际CR14规范结果。检查必须在结果截窄之前，不能先cast再guard。8/16/32位两数规范后ADD/SUB的数学结果可用64位承载（unsigned SUB借位所得u64大值应被unsigned范围guard拒绝），不得误用64位溢出标志代替窄范围判断。\n成功路径CR13写结果槽24，CR9装0并CR13写status32，C42(kind11,frame32,mask0,low24,high32)真实ret；随后CR18错误标签，CR9/CR13写value0/status1，同规格C42真实ret。unchecked仍输出合法但不可达的错误块，不根据测试输入在宿主端预选路径。使用D21现有guard→cast次序，不重写范围或cast组件。先全部预检/充分局部生成，再最后发布；按受限frame/宽度证明每段上界。\n永久测试<=24主要向量，不强求width×signed×op×checked的全笛卡尔积。有限选择覆盖三个宽度、两signed、两op、两checked，正/负边界、0/最大值、上/下越界、unsigned借位、lhs/rhs高位垃圾、checked与unchecked对同输入的不同结果；同文件至少两函数含20位error ID无冲突。真实Dong生成整函数、真实call/ret捕获RAX/RDX；独立Python无限精度先按输入width解释，算数学结果再判范围或模运算，最后正确扩展，不能用生产guard判定当oracle。断言错误路径RAX严格0且RDX1，所有正常路径RDX0，两个出口安全保持/栈恢复。发射层覆盖bad width/op/NONE、名字与完整别名/只读输入/精确容量等。\n真实坏Dong：在checked路径把CR14结果cast提前并删除D21对原值的检查（u8 200+100、i8 127+1等安全夹具）→正常返回后按Pair数值/状态拒绝；安全交换SUB源（选unchecked不同操作数）→正常返回后按RAX拒绝；CAPACITY提前发布头部→完整原子性拒绝。另保留两个出口的RBX数值保持敏感性。\n\n## 共用执行与复验要求\n本项仅四个声明文件，生产为Dong，无隐式分配/全局可变生产缓存/OS调用，新模块不导出C符号（临时wrapper可导出）。不得修改code/lang、编译器、已集成依赖、协调器、其它负责人或本批其它任务。CR38继续原队列，本人已领取/返修优先；不恢复已转交归档任务。\n统一发射状态OK0/INVALID1/CAPACITY2。先完整检查written非NULL、8对齐、8字节端点；所有输入/嵌套数组和out完整区间非空非NULL、自然对齐、元素乘法、端点不回绕；空可NULL。written与整个out（包括未用尾部）及全部完整输入互斥；out亦与全部输入互斥，输入之间可重叠且只读。所有非法枚举/名称长度/块ID/结构内容先于容量拒绝，非法数量不读取正文。任何INVALID/CAPACITY均保持输入、out、written全文不变；成功只写精确前缀和written，尾部不变。\nmodule/item及被调用者名字均为1..64原始字节，CR3编码，不能裸拼标签。块ID不得NONE，多个块必须不同，上游保证全文件唯一。本模块不分配全局编号。文本严格ASCII/单LF，仅函数标签、必要块标签和指令，无bits/section/global/extern/注释/额外空行；测试包装可补节/global和独立桥。\n真实复用正文指定已集成组件及只读完整传递闭包，不复制既有规划/发射算法，不以Python/C模拟生产。每段给保守长度证明和完整缓冲/栈证明，不能拿一次输出实长代替上界；遵守dongc每函数4096 worst-case frame限制，不能直接堆无法编译的大局部数组。可在证明外部失败原子性、输入不变与依赖确定性的前提下使用有界片段完整预演后重放，必须说明第二遍失败为何不可达；或用充分且可编译的最终局部缓冲。不要改编译器/依赖逃避限制，不能先写用户out再回滚。\n只跑本项checks：真实Dong debug/release编译、ELF64/COFF组装、显式SysV桥链接并原生执行。单模式不同主要原生输入向量总数<=24，复用同输入的好/坏重放不新增向量；不做全笛卡尔积/全回归/性能基准。独立Python/C oracle，不用生产输出作为唯一oracle。全部返回路径捕获真实RAX（PAIR还RDX）、所有callee-saved及RSP，独立保存观察区/宿主栈锚，先独立捕获现场，再恢复宿主ABI后断言；不能让返回RBX承担观察指针或依赖返回RSP恢复宿主。\n除正文语义/原子性负控外，永久保留安全实际坏Dong的RBX保持数值负控（正文有两个出口则覆盖两个出口）：同输入正式好侧先实际生成并执行，坏侧正常编译/链接/原生返回后按指定RBX数值拒绝，不用错位/guard/对齐/崩溃代替。其它坏体也必须正常构建执行后按指定数值/状态/顺序/原子性拒绝，缺符号、组装失败、崩溃、超时、仅文本不同不算指定语义负控；所有访问和ret都在预留安全范围。\n有限覆盖exact/短1/0/富余容量、成功未用尾部、INVALID优先、完整描述符和尾部别名独立可达；written端点溢出使用8对齐UINT64_MAX-7+合法空out，避免漏检后非法解引用。输入真实只读保护须断言保护调用成功；源码、说明、测试、全部只读依赖/输入SHA前后稳定，0skip才可验收。\n仅用户在Cursor客户端手动通过worker MCP读最新rev/完整任务书/review_note/write_paths/依赖，claim成功后实现，交付真实命令、tests/skips、双模式/双格式、全部SHA、坏体实际观察和未执行限制，再原编号submit。临时产物cursor-works/build/<编号>/<唯一目录>。不启动Cursor CLI或任何AI CLI/自动化，不自行accept/integrate、提交/推送、运行OS/VM。最后由Codex独立复验、验收和真实集成；组件通过不等于完整语义/IR、stage1/stage2、客体自举或L3完成。",
+      "status": "todo",
+      "rev": 1,
+      "write_paths": [
+        "cursor-works/src/bootstrap/nasm_narrow_arithmetic_function.dg",
+        "cursor-works/src/bootstrap/nasm_narrow_arithmetic_function.md",
+        "cursor-works/tests/test_nasm_narrow_arithmetic_function.py",
+        "cursor-works/deliveries/CR41.md"
+      ],
+      "depends_on": [
+        "cursor:CR3",
+        "cursor:CR9",
+        "cursor:CR12",
+        "cursor:CR13",
+        "cursor:CR14",
+        "cursor:CR18",
+        "claude:C23",
+        "claude:C42",
+        "claude:C44",
+        "deepseek:D21"
+      ],
+      "checks": [
+        "discover:cursor-works/tests:test_nasm_narrow_arithmetic_function.py"
+      ],
+      "auto_dispatch": false,
+      "auto_verify": false,
+      "complexity": "standard",
+      "created_at": "2026-10-19T15:04:33+00:00",
+      "updated_at": "2026-10-19T15:04:33+00:00",
+      "historical": false,
+      "document": "cursor-works/tasks/CR41-board.md",
+      "delivery": "cursor-works/deliveries/CR41.md",
+      "candidate": null,
+      "verification": null,
+      "review_note": "",
+      "legacy_hash": "8c190310ff4583bd51ceec51a883a6ccddb0063ed0ea9268c5b12941ec16f80b"
+    },
+    {
+      "id": "cursor:CR42",
+      "number": "CR42",
+      "owner": "cursor",
+      "title": "[L3] 带边界与地址溢出检查的切片视图PAIR构造",
+      "description": "所属阶段：L3：Dong自举后端 → 运行时切片lo/hi到指针/长度视图接线。新增bootstrap.nasm_slice_view_function。只计算视图、不装入/存储元素，不重复DeepSeek D27有界索引访存；不依赖未集成的C51/C52，不声称完整slice AST lowering。\npub unsafe fn emit(module_name:[]const u8,item_name:[]const u8,element_size:u64,error_block:u64,out:[]u8,written:*usize)u64\nelement_size仅1/2/4/8，其它INVALID；error_block!=NONE。生成真正SysV Pair f(u64 base,u64 length,u64 lo,u64 hi)，成功RAX=base+lo*element_size、RDX=hi-lo。验证完整原视图而不只子视图：lo<=hi<=length；base==0只允许length==0；length*element_size不能溢出usize，base+length*element_size端点不能回绕（允许等于UINT64_MAX）。合法空端点lo==hi==length与NULL/0/0/0必须成功。任一失败返回{0,UINT64_MAX}，不panic、不做元素访存，所有路径正常ret；该失败Pair不会与合法原视图结果混淆。接口参数是原始地址位模式，调用者负责实际存储权限和上游元素对齐；本组件只检查上述算术/NULL协议，不探测页权限，也不声称指针可解引用。\nframe48、mask0，四输入槽8/16/24/32，结果ptr/len槽40/48。严格CR3标签→C44 kinds四个0、offsets8/16/24/32、frame48→CR12装lo到RDI、hi到RSI、length到RDX→CR29.emit(error_block)完整联合无符号边界门禁。不能用有符号比较或只检查其中一个端点。\n其余NULL和溢出验证必须真实复用CR9常量、CR12/13槽、C22规范bool比较、C23二元、CR17立即数shl、CR20无符号边界门禁、C24无符号ADD及其紧邻jc，而非重写已有组件或用宿主预求运行结果。一个可行的明确接线：\n- 用C22把base!=0与length==0各归一化，局部帧槽40暂存一个标志，C23 OR得到valid=0/1；CR9装另一寄存器0，CR20.emit(index=0寄存器,length=valid寄存器,error)在valid=0时拒绝（比较的是寄存器，不把常数当寄存器编号）。valid=1时落空，避免额外自造块号。\n- element_size>1时，令k=log2(element_size)，CR9装阈值2^(64-k)，CR20检查length<阈值；size=1不需要不可表示的2^64阈值。然后CR17算length<<k，CR12重载base，C24.ADD(unsigned)检查完整原视图端点base+byte_length的carry，不能把乘法先溢出后的低位当合法长度。\n- 再用CR12/CR17/C24计算base+(lo<<k)，CR13写槽40；CR12装hi/lo、C23.SUB求hi-lo并CR13写槽48；C42(kind11,frame48,mask0,low40,high48)真实成功ret。成功ret后CR18定义错误块，CR9/CR13写槽40=0、槽48=MAX，再同规格C42 ret。\n可选择等价的组件接线，但所有验证和结果必须符合上述确定协议，不能增加未声明输入或依赖。块只有公开error_block；其它条件若需标签必须通过等价无额外块号方案实现，不能从error ID加减自造全局标签。完整预检与充分局部生成后一次发布，给出每段及总上界/栈证明。\n永久测试<=24主要向量，有限覆盖4种stride、普通/全段/中间空/末端空、NULL空、hi>len、lo>hi、非空NULL、完整64位高位unsigned比较、length乘法溢出和base+byte_length加法溢出、边界端点恰MAX与越1，含lo=0/hi=len。正常例用真实预留只读源缓冲并检查源不变；高位/溢出例只把地址当u64传入，不解引用，不能靠故障拒绝。实际Dong产生整函数并真实call/ret，用独立Python无限精度数学判定协议再对RAX/RDX核对，错误严格{0,MAX}，正确不截断长度或指针；双返回路径完整保持/恢复。\n真实坏Dong：安全删掉CR29 hi<=length联合门禁（用hi=length+1且其它参数合法的有界输入）→正常返回后按Pair拒绝；删掉C24完整原视图加法carry保护（用数值溢出但不访存的安全夹具）→正常返回后按错误Pair拒绝，不能只测试子视图加法掩盖整视图溢出；CAPACITY提前发布函数头→完整原子性拒绝。另按共同要求补两个出口RBX保持数值敏感性，发射层非法stride/NONE/描述符/尾部别名及只读保护齐全。\n\n## 共用执行与复验要求\n本项仅四个声明文件，生产为Dong，无隐式分配/全局可变生产缓存/OS调用，新模块不导出C符号（临时wrapper可导出）。不得修改code/lang、编译器、已集成依赖、协调器、其它负责人或本批其它任务。CR38继续原队列，本人已领取/返修优先；不恢复已转交归档任务。\n统一发射状态OK0/INVALID1/CAPACITY2。先完整检查written非NULL、8对齐、8字节端点；所有输入/嵌套数组和out完整区间非空非NULL、自然对齐、元素乘法、端点不回绕；空可NULL。written与整个out（包括未用尾部）及全部完整输入互斥；out亦与全部输入互斥，输入之间可重叠且只读。所有非法枚举/名称长度/块ID/结构内容先于容量拒绝，非法数量不读取正文。任何INVALID/CAPACITY均保持输入、out、written全文不变；成功只写精确前缀和written，尾部不变。\nmodule/item及被调用者名字均为1..64原始字节，CR3编码，不能裸拼标签。块ID不得NONE，多个块必须不同，上游保证全文件唯一。本模块不分配全局编号。文本严格ASCII/单LF，仅函数标签、必要块标签和指令，无bits/section/global/extern/注释/额外空行；测试包装可补节/global和独立桥。\n真实复用正文指定已集成组件及只读完整传递闭包，不复制既有规划/发射算法，不以Python/C模拟生产。每段给保守长度证明和完整缓冲/栈证明，不能拿一次输出实长代替上界；遵守dongc每函数4096 worst-case frame限制，不能直接堆无法编译的大局部数组。可在证明外部失败原子性、输入不变与依赖确定性的前提下使用有界片段完整预演后重放，必须说明第二遍失败为何不可达；或用充分且可编译的最终局部缓冲。不要改编译器/依赖逃避限制，不能先写用户out再回滚。\n只跑本项checks：真实Dong debug/release编译、ELF64/COFF组装、显式SysV桥链接并原生执行。单模式不同主要原生输入向量总数<=24，复用同输入的好/坏重放不新增向量；不做全笛卡尔积/全回归/性能基准。独立Python/C oracle，不用生产输出作为唯一oracle。全部返回路径捕获真实RAX（PAIR还RDX）、所有callee-saved及RSP，独立保存观察区/宿主栈锚，先独立捕获现场，再恢复宿主ABI后断言；不能让返回RBX承担观察指针或依赖返回RSP恢复宿主。\n除正文语义/原子性负控外，永久保留安全实际坏Dong的RBX保持数值负控（正文有两个出口则覆盖两个出口）：同输入正式好侧先实际生成并执行，坏侧正常编译/链接/原生返回后按指定RBX数值拒绝，不用错位/guard/对齐/崩溃代替。其它坏体也必须正常构建执行后按指定数值/状态/顺序/原子性拒绝，缺符号、组装失败、崩溃、超时、仅文本不同不算指定语义负控；所有访问和ret都在预留安全范围。\n有限覆盖exact/短1/0/富余容量、成功未用尾部、INVALID优先、完整描述符和尾部别名独立可达；written端点溢出使用8对齐UINT64_MAX-7+合法空out，避免漏检后非法解引用。输入真实只读保护须断言保护调用成功；源码、说明、测试、全部只读依赖/输入SHA前后稳定，0skip才可验收。\n仅用户在Cursor客户端手动通过worker MCP读最新rev/完整任务书/review_note/write_paths/依赖，claim成功后实现，交付真实命令、tests/skips、双模式/双格式、全部SHA、坏体实际观察和未执行限制，再原编号submit。临时产物cursor-works/build/<编号>/<唯一目录>。不启动Cursor CLI或任何AI CLI/自动化，不自行accept/integrate、提交/推送、运行OS/VM。最后由Codex独立复验、验收和真实集成；组件通过不等于完整语义/IR、stage1/stage2、客体自举或L3完成。",
+      "status": "todo",
+      "rev": 1,
+      "write_paths": [
+        "cursor-works/src/bootstrap/nasm_slice_view_function.dg",
+        "cursor-works/src/bootstrap/nasm_slice_view_function.md",
+        "cursor-works/tests/test_nasm_slice_view_function.py",
+        "cursor-works/deliveries/CR42.md"
+      ],
+      "depends_on": [
+        "cursor:CR3",
+        "cursor:CR9",
+        "cursor:CR12",
+        "cursor:CR13",
+        "cursor:CR17",
+        "cursor:CR18",
+        "cursor:CR20",
+        "cursor:CR29",
+        "claude:C22",
+        "claude:C23",
+        "claude:C24",
+        "claude:C42",
+        "claude:C44"
+      ],
+      "checks": [
+        "discover:cursor-works/tests:test_nasm_slice_view_function.py"
+      ],
+      "auto_dispatch": false,
+      "auto_verify": false,
+      "complexity": "standard",
+      "created_at": "2026-10-19T15:04:33+00:00",
+      "updated_at": "2026-10-19T15:04:33+00:00",
+      "historical": false,
+      "document": "cursor-works/tasks/CR42-board.md",
+      "delivery": "cursor-works/deliveries/CR42.md",
+      "candidate": null,
+      "verification": null,
+      "review_note": "",
+      "legacy_hash": "ada503c66d03bbf982c7d6f10244bc0e9e77542802c807b813ea5a4a30fdafff"
+    }
+  ],
+  "execution": "Cursor客户端手动worker MCP读取最新rev并领取；未启动Cursor CLI或其它AI CLI",
+  "source_modified": false
+}

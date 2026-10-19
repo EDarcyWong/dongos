@@ -16,14 +16,17 @@ def main(argv=None):
     parser.add_argument('--home', type=Path, default=DEFAULT_HOME, help='独立协调数据/配置目录')
     parser.add_argument('--project', default='dongos', help='项目编号')
     commands = parser.add_subparsers(dest='command', required=True)
-    for command in ('init', 'sync', 'validate', 'status', 'doctor', 'export', 'stop', 'projects', 'backup'):
+    for command in ('init', 'sync', 'validate', 'status', 'doctor', 'export', 'stop', 'projects', 'backup', 'state-sync'):
         commands.add_parser(command)
     timing = commands.add_parser('timing', help='只读查询完整任务时间线及每轮办理/返修时长')
     timing.add_argument('task_id', help='完整任务编号，如claude:C43')
-    recovery = commands.add_parser('recover-state', help='按逐项审查证据恢复历史状态，默认仅预览')
-    recovery.add_argument('--snapshot', required=True, type=Path)
-    recovery.add_argument('--audit', required=True, type=Path)
-    recovery.add_argument('--apply', action='store_true')
+    for name, help_text in (
+            ('recover-state', '按逐项审查证据恢复空库历史状态，默认仅预览'),
+            ('reconcile-state', '按逐项审查证据协调落后状态库并保留历史，默认仅预览')):
+        recovery = commands.add_parser(name, help=help_text)
+        recovery.add_argument('--snapshot', required=True, type=Path)
+        recovery.add_argument('--audit', required=True, type=Path)
+        recovery.add_argument('--apply', action='store_true')
     add = commands.add_parser('add-project')
     add.add_argument('id')
     add.add_argument('--name', required=True)
@@ -65,10 +68,14 @@ def main(argv=None):
         return 0
     config_file = registry.home / 'config.json'
     config = json.loads(config_file.read_text(encoding='utf-8')) if config_file.exists() else {}
-    if args.command == 'recover-state':
-        from .state_recovery import restore
+    if args.command in ('recover-state', 'reconcile-state'):
+        from .state_recovery import reconcile, restore
+        if args.command == 'reconcile-state' and not any(
+                arg == '--project' or arg.startswith('--project=') for arg in (sys.argv[1:] if argv is None else argv)):
+            parser.error('reconcile-state 需要显式 --project，防止协调错误项目')
         store = registry.store(args.project, allow_state_recovery=True)
-        result = restore(store, args.project, args.snapshot, args.audit, apply=args.apply)
+        operation = reconcile if args.command == 'reconcile-state' else restore
+        result = operation(store, args.project, args.snapshot, args.audit, apply=args.apply)
         print(json.dumps(result, ensure_ascii=False, indent=2))
         return 0
     store = registry.store(args.project) if args.command not in ('serve', 'stop') else None
@@ -88,6 +95,8 @@ def main(argv=None):
         store.export()
     elif args.command == 'backup':
         result = dict(backup=str(store.backup()))
+    elif args.command == 'state-sync':
+        result = store.state.sync()          # merge state/ into the database, then write every change back
     elif args.command == 'validate':
         result = store.validate()
         print(json.dumps(result, ensure_ascii=False, indent=2))
