@@ -2,7 +2,10 @@
 import hashlib,json,os,py_compile,subprocess,unittest,uuid
 from pathlib import Path
 from lang.tests.test_dongc import tool,nasm_flags
-ROOT=Path(__file__).resolve().parents[1];BASE=ROOT/'build/test/p6-cpl3-integration-candidate';NORMAL=BASE/'normal'
+from lang.dongc import compile_file
+from tools.gen_offsets import generate
+from tests.test_user_smp_services import current_files
+ROOT=Path(__file__).resolve().parents[1];BASE=ROOT;NORMAL=ROOT
 C=r'''
 #include <stdint.h>
 #include <stdio.h>
@@ -20,16 +23,20 @@ int main(void){for(U n=0;n<18;n++){U expected=n==0||n>16?UINT64_MAX:n<3?0:1;
 '''
 class Tests(unittest.TestCase):
  def test_default_desktop_selector_legacy_levels_and_topology_controls(self):
-  files=[p for p in NORMAL.rglob('*')if p.is_file()and'bases'not in p.parts]+list((BASE/'include').glob('*.inc'));before={str(p.relative_to(ROOT)):hashlib.sha256(p.read_bytes()).hexdigest()for p in files}
-  out=ROOT/'build/test/p6-cpl3-normal-native'/('run-'+uuid.uuid4().hex[:12]);out.mkdir(parents=True);incs=ROOT/'build/test/p6-cpl3-integration-native/run-7a18b68d67cc';nasm,cc=tool('nasm','NASM'),tool('gcc','CC');evidence={}
+  files=current_files()+[ROOT/'tools/build.py',ROOT/'tools/gen_offsets.py',Path(__file__)];before={str(p.relative_to(ROOT)):hashlib.sha256(p.read_bytes()).hexdigest()for p in files}
+  out=ROOT/'build/test/p6-cpl3-normal-native'/('run-'+uuid.uuid4().hex[:12]);out.mkdir(parents=True);incs=out;nasm,cc=tool('nasm','NASM'),tool('gcc','CC');evidence={}
   def run(args,label):
    args=list(map(str,args));r=subprocess.run(args,cwd=ROOT,capture_output=True,text=True,timeout=60);(out/(label+'.json')).write_text(json.dumps(dict(command=args,returncode=r.returncode,stdout=r.stdout,stderr=r.stderr),indent=2));return r
+  # Generate native assembly interfaces from this same current source graph.
+  for source,typ,symbol,filename in [('lang/examples/boot/abi.dg','boot.abi.BootInfo','BootInfo','bootinfo_layout.inc'),('kernel/boot/runtime_view.dg','boot.runtime_view.View','RuntimeView','runtime_view.inc'),('kernel/user/services.dg','user.services.Report','ServiceReport','service_report.inc'),('kernel/smp/runtime.dg','smp.runtime.Report','SmpReport','smp_report.inc')]:
+   compiled=compile_file(ROOT/source,roots=[ROOT/'kernel',ROOT/'services',ROOT/'lang/std',ROOT/'lang/examples'],mode='release')
+   (out/filename).write_text(generate(compiled.layout_manifest,typ,symbol))
   prefix=[nasm,*nasm_flags(nasm),'-I',str(BASE/'include')+os.sep,'-I',str(incs)+os.sep,'-I',str(ROOT/'include')+os.sep]
   for runtime in(4,5,6,7):
    for test in(0,1):
     for fmt in('elf64','win64'):
      name=f'services-r{runtime}-t{test}-{fmt}';obj=out/(name+'.o');r=run([*prefix,'-f',fmt,'-DP1_TEST='+str(test),'-DRUNTIME_LEVEL='+str(runtime),NORMAL/'kernel/services_run.asm','-o',obj],name);self.assertEqual(0,r.returncode,r.stderr)
-     self.assertEqual(runtime==7,b'user_smp_boot_begin'in obj.read_bytes());self.assertEqual(runtime==7,b'user_smp_normal_policy'in obj.read_bytes());evidence[name]=dict(passed=True,activated_by_default=runtime==7)
+     self.assertEqual(runtime==7,b'user_smp_boot_begin'in obj.read_bytes());self.assertEqual(runtime==7,b'user_smp_normal_policy'in obj.read_bytes());evidence[name]=dict(passed=True,source_commit=subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip(),contract="tracked-current-cpl3-v1",activated_by_default=runtime==7)
   r=run([*prefix,'-f','elf64','-DP1_TEST=0','-DRUNTIME_LEVEL=6','-DP6_USER_SMP=1',NORMAL/'kernel/services_run.asm','-o',out/'wrong-level.o'],'wrong-level');self.assertNotEqual(0,r.returncode);self.assertIn('requires desktop runtime7',r.stderr)
   (out/'probe.c').write_text(C)
   for bad in(False,True):
@@ -40,5 +47,5 @@ class Tests(unittest.TestCase):
   for fmt in('elf64','win64'):
    r=run([*prefix,'-f',fmt,'-DP1_TEST=0','-DRUNTIME_LEVEL=7',NORMAL/'kernel/smp_runtime.asm','-o',out/('smp-'+fmt+'.o')],'smp-'+fmt);self.assertEqual(0,r.returncode,r.stderr)
   py_compile.compile(str(NORMAL/'tools/build.py'),cfile=str(out/'normal-build.pyc'),doraise=True)
-  after={str(p.relative_to(ROOT)):hashlib.sha256(p.read_bytes()).hexdigest()for p in files};self.assertEqual(before,after);(out/'validation-summary.json').write_text(json.dumps(dict(passed=True,candidate_only=True,normal_patch_applied=False,os_build_executed=False,actual_ap_cpl3_executed=False,raw_policy_native_executed=True,production_builder_syntax_checked=True,production_builder_actual_build_still_required=True,source_sha256=after,evidence=evidence),indent=2)+'\n');print('USER_SMP_NORMAL_EVIDENCE',out)
+  after={str(p.relative_to(ROOT)):hashlib.sha256(p.read_bytes()).hexdigest()for p in files};self.assertEqual(before,after);(out/'validation-summary.json').write_text(json.dumps(dict(passed=True,source_commit=subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip(),contract="tracked-current-cpl3-v1",current_source=True,historical_replay=False,normal_patch_applied=False,os_build_executed=False,actual_ap_cpl3_executed=False,raw_policy_native_executed=True,production_builder_syntax_checked=True,production_builder_actual_build_still_required=True,source_sha256=after,evidence=evidence),indent=2)+'\n');print('USER_SMP_NORMAL_EVIDENCE',out)
 if __name__=='__main__':unittest.main(verbosity=2)

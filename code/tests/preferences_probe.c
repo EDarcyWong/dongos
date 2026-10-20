@@ -52,7 +52,7 @@ static void bad_decode(const uint8_t *p,size_t length){
 static void choice(const uint8_t *a,size_t alen,const uint8_t *b,size_t blen,uint64_t want_slot,const Theme *t,uint64_t sequence){
  uint8_t saved_a[128],saved_b[128];if(a)memcpy(saved_a,a,128);if(b)memcpy(saved_b,b,128);uint64_t slot=UINT64_MAX;reset_out();
  CHECK(prefs_select(a,alen,b,blen,&out.value,&slot)==0&&slot==want_slot);CHECK(out.value.sequence==sequence);same_theme(&out.value.theme,t);
- if(a)CHECK(memcmp(a,saved_a,128)==0);if(b)CHECK(memcmp(b,saved_b,128)==0);guards();selected++;
+ if(a){CHECK(memcmp(a,saved_a,128)==0);}if(b){CHECK(memcmp(b,saved_b,128)==0);}guards();selected++;
 }
 static void bad_choice(const uint8_t *a,size_t alen,const uint8_t *b,size_t blen,uint64_t error){
  uint64_t slot=UINT64_MAX;reset_out();Record old=out.value;

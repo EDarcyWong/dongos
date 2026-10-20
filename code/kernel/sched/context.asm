@@ -678,19 +678,19 @@ section .data
 align 8
 sched_xstate_mask: dq 3
 section .bss
-alignb 64
+align 64, resb 1
 sched_report: resb SchedReport_size
 sched_report_end:
-alignb 64
+align 64, resb 1
 sched_engine: resb SCHED_ENGINE_SIZE
-alignb 64
+align 64, resb 1
 sched_xstates: resb SCHED_XSTATE_STRIDE * 3
 worker0_scratch: resb 272
 worker1_scratch: resb 272
 xstate_ready: resq 1
 started: resq 1
 bootstrap_stack_ceiling: resq 1
-alignb 4096
+align 4096, resb 1
 sched_worker0_guard_low: resb 4096
 sched_worker0_stack_bottom: resb SCHED_STACK_SIZE
 sched_worker0_stack_top:

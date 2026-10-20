@@ -83,7 +83,8 @@ def simple_scope(paths, description):
         raise ValueError('LM Studio 只接简单任务：含交付最多3个文件、说明最多3000字符')
     for path in paths:
         relative(path)
-        if (not path.startswith(('lmstudio-works/src/', 'lmstudio-works/docs/', 'lmstudio-works/fixtures/', 'lmstudio-works/deliveries/')) or
+        if (not path.startswith(tuple(owner + '-works/' + folder + '/' for owner in ('lmstudio', 'pool')
+                                     for folder in ('src', 'docs', 'fixtures', 'deliveries'))) or
                 Path(path).suffix not in ('.py', '.md', '.json', '.txt')):
             raise ValueError('本地模型只写专属src/docs/fixtures/deliveries内的明确文本文件，不修改测试或主线')
 

@@ -32,6 +32,6 @@ apic_eoi:
     mov dword [rax + 0xb0], 0
     ret
 section .bss
-alignb 8
+align 8, resb 1
 irq_lapic_base: resq 1
 section .note.GNU-stack noalloc noexec nowrite progbits

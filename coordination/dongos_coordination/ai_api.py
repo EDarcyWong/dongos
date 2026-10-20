@@ -20,8 +20,8 @@ def discovery(base):
                  automatic_client_execution=False),
         authentication=dict(kind='local_same_origin_csrf',bootstrap='GET /api/session',
             write_headers={'Origin':base,'X-Coordinator-CSRF':'<csrf from session>','Content-Type':'application/json'}),
-        operations=['list_projects','list_tasks','get_task','create_task','claim_task','release_task','submit_delivery','read_document'],
-        rules=['所有任务请求必须在URL中指定项目','领取/释放/提交必须使用最新rev及owner、agent_id',
+        operations=['list_projects','list_tasks','get_task','create_task','claim_task','release_task','acknowledge_pause','submit_delivery','read_document'],
+        rules=['发布可省略owner，公共任务保持pool编号；领取时指定实际owner，释放后重新开放','所有任务请求必须在URL中指定项目','领取/释放/提交必须使用最新rev及owner、agent_id',
                '409后先重新查询，不盲目重试','提交交付只进入submitted，不自动验收','agent_id仅用于协作归属记录，不是独立身份认证'])
 
 
@@ -62,9 +62,9 @@ def get(server,path,query):
         if set(filters)-{'owner','status','q'} or any(len(v)!=1 for v in filters.values()):
             raise ValueError('只支持单值owner/status/q查询参数')
         owner,status,search=(filters.get(k,[''])[0] for k in ('owner','status','q'))
-        if owner and owner not in OWNERS or status and status not in STATES:
+        if owner and owner not in (*OWNERS, 'unassigned') or status and status not in STATES:
             raise ValueError('owner或status无效')
-        tasks=[t for t in store.tasks() if (not owner or t['owner']==owner) and
+        tasks=[t for t in store.tasks() if (not owner or t['owner']==owner or owner == 'unassigned' and t['owner'] is None) and
                (not status or t['status']==status) and (not search or search.casefold() in (t['id']+' '+t['title']).casefold())]
         return dict(project=project,total=len(tasks),tasks=tasks)
     task=task_or_404(store,tail[0])
@@ -91,12 +91,12 @@ def post(server,path,data):
             raise ValueError('创建任务包含未知字段；不能设置status、rev或验收结果')
         task=store.create(data)
         code=201
-    elif len(tail)==2 and tail[1] in ('claim','release','submit'):
+    elif len(tail)==2 and tail[1] in ('claim','release','submit','acknowledge_pause'):
         task_or_404(store,tail[0])
-        allowed={'rev','owner','agent_id'}|({'report'} if tail[1]=='submit' else set())
+        allowed={'rev','owner','agent_id','claim_token'}|({'report'} if tail[1]=='submit' else set())
         if set(data)-allowed or not {'rev','owner','agent_id'}<=set(data):
             raise ValueError('需要rev、owner、agent_id；只有submit还可带report')
-        options=dict(ai_request=True,owner=data['owner'],agent_id=data['agent_id'])
+        options=dict(ai_request=True,owner=data['owner'],agent_id=data['agent_id'],claim_token=data.get('claim_token'))
         if 'report' in data:
             options['report']=data['report']
         task=store.change(tail[0],data['rev'],tail[1],options=options)
@@ -109,15 +109,16 @@ def post(server,path,data):
 
 def openapi(base):
     string={'type':'string'}
-    task_create=dict(type='object',additionalProperties=False,required=['id','owner','title','write_paths'],properties={
+    task_create=dict(type='object',additionalProperties=False,required=['id','title','write_paths'],properties={
         'id':dict(type='string',pattern='^[A-Z][A-Z0-9_-]{0,39}$'),
-        'owner':dict(type='string',enum=list(OWNERS)), 'title':dict(type='string',minLength=1,maxLength=180),
+        'owner':dict(type=['string','null'],enum=[*OWNERS,None],description='省略或null发布到公共任务池；路径使用pool-works/'), 'title':dict(type='string',minLength=1,maxLength=180),
         'description':dict(type='string',maxLength=24000),
         'write_paths':dict(type='array',minItems=1,maxItems=40,items=string),
         'checks':dict(type='array',maxItems=12,items=string),'depends_on':dict(type='array',maxItems=32,items=string)})
     claim=dict(type='object',additionalProperties=False,required=['rev','owner','agent_id'],properties={
         'rev':dict(type='integer',minimum=1),'owner':dict(type='string',enum=list(OWNERS)),
-        'agent_id':dict(type='string',pattern='^[A-Za-z0-9_.:-]{1,80}$')})
+        'agent_id':dict(type='string',pattern='^[A-Za-z0-9_.:-]{1,80}$'),
+        'claim_token':dict(type='string',description='本轮claim响应的令牌；提交、释放、停止确认必须回传，不能使用旧轮次令牌')})
     submit=claim|{'properties':claim['properties']|{'report':dict(type='string',minLength=1,maxLength=24000)}}
     paths={}
     def op(method,path,ident,summary,body=None,parameters=None):
@@ -144,7 +145,7 @@ def openapi(base):
     op('post',root,'createTask','提交/发布一项新任务',task_create)
     op('get',root+'/{task_id}','getTask','查看任务及最新rev')
     op('get',root+'/{task_id}/document','getTaskDocument','读取任务书或交付',parameters=[dict(name='kind',**{'in':'query'},schema=dict(type='string',enum=['task','delivery']))])
-    for action,body in [('claim',claim),('release',claim),('submit',submit)]:
-        op('post',root+'/{task_id}/'+action,action+'Task',{'claim':'领取任务','release':'释放已领取任务','submit':'提交交付，等待独立复验'}[action],body)
+    for action,body in [('claim',claim),('release',claim),('submit',submit),('acknowledge_pause',claim)]:
+        op('post',root+'/{task_id}/'+action,action+'Task',{'claim':'领取任务','release':'释放已领取任务','submit':'提交交付，等待独立复验','acknowledge_pause':'原领取者确认已停止外部工作'}[action],body)
     return dict(openapi='3.1.0',info=dict(title='Coordination AI Task API',version='1.0.0',description='本地可信协作接口，agent_id用于归属记录，不代表独立安全身份。'),
         servers=[{'url':base}],paths=paths,components=dict(securitySchemes={'CoordinatorCSRF':dict(type='apiKey',**{'in':'header'},name='X-Coordinator-CSRF')}))

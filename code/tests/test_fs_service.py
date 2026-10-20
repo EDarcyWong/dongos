@@ -21,7 +21,7 @@ from tests.test_fat32 import stack_bound
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCES = [ROOT / p for p in ("services/fs/service.dg", "services/fs/protocol.dg",
-    "services/fs/fat32.dg", "services/fs/errors.dg", "services/fs/path.dg", "services/fs/lfn.dg", "services/fs/handles.dg",
+    "services/fs/fat32.dg", "services/fs/mount_cache.dg", "services/fs/errors.dg", "services/fs/path.dg", "services/fs/lfn.dg", "services/fs/handles.dg",
     "services/lib/abi.dg", "services/lib/sys.dg", "tests/fs_service_probe.dg.in",
     "tests/fs_service_probe.c", "tests/test_fs_service.py", "tests/fat32_disk_oracle.py")]
 

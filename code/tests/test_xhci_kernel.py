@@ -1,8 +1,10 @@
-"""Actual overlay kernel authorization with only physical I/O/allocator boundaries lowered.
+"""Current-source regression, not a replay of unavailable candidate snapshots.
+
+Actual current kernel authorization with only physical I/O/allocator boundaries lowered.
 
 This is no full OS build. Low-level hooks are explicit, hashed native transport
 substitutions; all grant, binding, capability, gate and quarantine code is the
-actual candidate. A separate unmodified-source compilation is required too.
+actual current source. A separate unmodified-source compilation is required too.
 """
 from __future__ import annotations
 import hashlib,json,os,re,subprocess,unittest,uuid
@@ -10,7 +12,7 @@ from pathlib import Path
 from lang.dongc import compile_file
 from lang.tests.test_dongc import nasm_flags,tool
 ROOT=Path(__file__).resolve().parents[1]
-CANDIDATE=ROOT/'build/test/p8-kernel-candidate'
+SOURCE_ROOT=ROOT
 
 def replace_function(source,name,replacement):
  m=re.search(r'(?m)^(?:pub\s+)?unsafe\s+fn\s+'+name+r'\s*\(',source)
@@ -24,7 +26,7 @@ def replace_function(source,name,replacement):
 
 def dependencies(stage,names,overrides=None):
  paths={}
- for base in (ROOT/'lang/examples',ROOT/'kernel',ROOT/'services',ROOT/'lang/std',CANDIDATE/'kernel',CANDIDATE/'services'):
+ for base in (ROOT/'lang/examples',ROOT/'kernel',ROOT/'services',ROOT/'lang/std'):
   for p in base.rglob('*.dg'):
    s=p.read_text(encoding='utf-8');m=re.search(r'^module\s+([\w.]+);',s,re.M)
    if m:paths[m[1]]=p
@@ -48,6 +50,10 @@ def stubs():
  ''',
  'boot.device_memory':'''module boot.device_memory;pub fn runtime_invalidate(address:u64)void{return;}''',
  'mm.paging':'''module mm.paging;pub const WRITE:u64=1;pub const UNCACHED:u64=8;pub struct Space {pub value:u64}
+pub struct Mapping {pub physical:u64,pub flags:u64}
+pub error Unmodeled=0x7fff0001;
+// The physical-window fast path is outside this native grant fixture.
+pub unsafe fn query(s:*const Space,v:u64,out:*Mapping)!void{return error.Unmodeled;}
  pub unsafe fn map_live(s:*Space,v:u64,p:u64,f:u64)!void{return;}pub unsafe fn replace_live(s:*Space,v:u64,p:u64,f:u64)!void{return;}''',
  'cpu.capabilities':'''module cpu.capabilities;pub struct Capabilities {pub physical_bits:u8}
  pub const EMPTY_CAPABILITIES:Capabilities=Capabilities {physical_bits:48};pub unsafe fn detect(c:*Capabilities)!void{return;}''',
@@ -67,10 +73,20 @@ def stubs():
  pub unsafe fn owned_alias(id:usize,virtual:u64,write:bool)!u64{unsafe{var out:u64=0;if !write||native_alias(id as u64,virtual,&out)!=0{return error.Invalid;}return out;}}
  pub unsafe fn copy_in(id:usize,virtual:u64,out:[]u8)!void{unsafe{if native_copy(id as u64,virtual,out.ptr,out.len as u64)!=0{return error.Invalid;}}return;}
  ''',
- 'boot.service_memory':'''module boot.service_memory;pub error Invalid=0x0f000001;pub struct Block {pub physical:u64,pub virtual:u64,pub pages:u64}
- unsafe extern "sysv64" fn native_table(out:*u64)u64;
- pub unsafe fn allocate(pages:usize,alignment:usize,out:*Block)!void{unsafe{var p:u64=0;if native_table(&p)!=0{return error.Invalid;}*out=Block {physical:p,virtual:p,pages:pages as u64};}return;}''',
+ 'boot.service_memory':'''module boot.service_memory;pub error Invalid=0x0f000001;pub struct Block{pub physical:u64,pub virtual:u64,pub pages:u64}
+ pub struct Arena{pub physical:u64,pub length:u64}pub struct Plan{pub arena:Arena}
+ var PLAN:Plan=Plan{arena:Arena{physical:0x30000000,length:43*4096}};pub var ARENA_BASE:u64=0;
+ unsafe extern "sysv64" fn native_resources(pages:u64,alignment:u64,out:*Block)u64;
+ unsafe extern "sysv64" fn native_arena()u64;
+ pub unsafe fn plan_pointer()*const Plan{unsafe{return &PLAN;}}
+ pub unsafe fn allocate(pages:usize,alignment:usize,out:*Block)!void{unsafe{
+  ARENA_BASE=native_arena();if native_resources(pages as u64,alignment as u64,out)!=0{return error.Invalid;}
+ }return;}''',
  'irq.platform':'''module irq.platform;pub struct Route {pub gsi:u64}pub const EMPTY_ISA_ROUTE:Route=Route {gsi:0};
+pub struct Report {pub lapic_id:u64}pub const EMPTY_REPORT:Report=Report {lapic_id:0};
+pub error Unmodeled=0x7fff0002;
+// Binding a physical MSI route is not modeled by these grant/quarantine cases.
+pub unsafe fn describe(out:*Report)!void{return error.Unmodeled;}
  pub unsafe fn route_isa(irq:u64,masked:bool,out:*Route)!void{unsafe{(*out).gsi=irq;}return;}
  pub unsafe fn mask_isa(irq:u64,masked:bool)!void{return;}pub unsafe fn device_eoi()!void{return;}''',
  }
@@ -99,17 +115,17 @@ class XhciKernelTests(unittest.TestCase):
  @classmethod
  def setUpClass(cls):
   cls.out=ROOT/'build/test/p8-xhci-kernel'/('run-'+uuid.uuid4().hex[:12]);cls.out.mkdir(parents=True)
-  cls.inputs=[CANDIDATE/'kernel/user/devices.dg',CANDIDATE/'kernel/user/device_host.dg',CANDIDATE/'services/drivers/device_manager.dg',CANDIDATE/'services/drivers/xhci_authority.dg',ROOT/'tests/xhci_kernel_probe.dg',ROOT/'tests/xhci_kernel_probe.c',Path(__file__)]
+  cls.inputs=[SOURCE_ROOT/'kernel/user/devices.dg',SOURCE_ROOT/'kernel/user/device_host.dg',SOURCE_ROOT/'services/drivers/device_manager.dg',SOURCE_ROOT/'services/drivers/xhci_authority.dg',ROOT/'tests/xhci_kernel_probe.dg',ROOT/'tests/xhci_kernel_probe.c',Path(__file__)]
   cls.before={str(p.relative_to(ROOT)):hashlib.sha256(p.read_bytes()).hexdigest() for p in cls.inputs};(cls.out/'source-before.json').write_text(json.dumps(cls.before,indent=2)+'\n')
  @classmethod
  def tearDownClass(cls):
   after={str(p.relative_to(ROOT)):hashlib.sha256(p.read_bytes()).hexdigest() for p in cls.inputs};(cls.out/'source-after.json').write_text(json.dumps(after,indent=2)+'\n')
-  if after!=cls.before:raise AssertionError('xHCI kernel candidate changed during verification')
+  if after!=cls.before:raise AssertionError('xHCI kernel source changed during verification')
  def command(self,args,d,name):
   r=subprocess.run(args,cwd=ROOT,capture_output=True,text=True,timeout=90);(d/(name+'.json')).write_text(json.dumps(dict(command=args,returncode=r.returncode,stdout=r.stdout,stderr=r.stderr),indent=2)+'\n');return r
  def native(self,mutation=None):
   for mode in ('debug','release'):
-   d=self.out/((mutation+'-' if mutation else '')+mode);d.mkdir();stage=d/'source';override=stubs();original=(CANDIDATE/'kernel/user/devices.dg').read_text()
+   d=self.out/((mutation+'-' if mutation else '')+mode);d.mkdir();stage=d/'source';override=stubs();original=(SOURCE_ROOT/'kernel/user/devices.dg').read_text()
    if mutation:
     needle,replacement={
      'wrong-device':('((try read32(XHCI_ADMITTED))!=XHCI_IDENTITY)','false'),

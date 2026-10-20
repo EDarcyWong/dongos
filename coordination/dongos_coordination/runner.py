@@ -14,7 +14,7 @@ from . import providers
 from .store import Conflict, digest, fingerprint, now, owns
 
 TOPS = {'lang', 'kernel', 'services', 'include', 'boot', 'p0', 'tools', 'tests', 'assets',
-        'editors', 'docs', 'claude-works', 'cursor-works', 'deepseek-works', 'codex-works', 'lmstudio-works'}
+        'editors', 'docs', 'claude-works', 'cursor-works', 'deepseek-works', 'codex-works', 'lmstudio-works', 'pool-works'}
 ROOT_FILES = {'Makefile', 'PLAN.md', 'README.md', 'AGENTS.md', 'CLAUDE.md'}
 EXCLUDE = {'.git', '.local', 'build', 'esp', 'node_modules', '__pycache__', '.venv'}
 
@@ -42,7 +42,7 @@ def inventory(root, *, source_filter=False, works_root=None):
                 raise ValueError('工作源超过200MiB，请缩小或清理任务源中的生成产物')
             result[path.relative_to(root).as_posix()] = digest(path)
     if works_root and Path(works_root).resolve() != root:
-        for owner in ('codex', 'cursor', 'claude', 'deepseek', 'gemini', 'lmstudio'):
+        for owner in ('codex', 'cursor', 'claude', 'deepseek', 'gemini', 'lmstudio', 'pool'):
             directory = Path(works_root) / (owner + '-works')
             if directory.is_dir():
                 for name, value in inventory(directory, source_filter=source_filter).items():
@@ -141,6 +141,9 @@ class Runner:
                         result = self.execute(job)
                     except Exception as error:
                         result = dict(passed=False, summary=str(error)[:1000])
+                        with self.process_lock:
+                            process = self.processes.get(job['id'])
+                            result['process_stopped'] = process is None or self.tree_stopped(process)
                     self.store.finish(job, result)
                     self.store.export()
                     continue
@@ -151,17 +154,52 @@ class Runner:
 
     @staticmethod
     def terminate(process):
-        if process.poll() is not None:
-            return
         if os.name == 'nt':
-            subprocess.run(['taskkill', '/PID', str(process.pid), '/T', '/F'], capture_output=True,
-                           creationflags=subprocess.CREATE_NO_WINDOW, timeout=15)
+            if process.poll() is None:
+                result = subprocess.run(['taskkill', '/PID', str(process.pid), '/T', '/F'], capture_output=True,
+                                        creationflags=subprocess.CREATE_NO_WINDOW, timeout=15)
+                process.coordination_tree_terminated = result.returncode == 0
         else:
             import signal
             try:
                 os.killpg(process.pid, signal.SIGTERM)
             except ProcessLookupError:
                 pass
+
+    @staticmethod
+    def tree_stopped(process):
+        """Confirm our bounded process group stopped, not merely its leader.
+
+        This is not containment for arbitrary detached/daemonized processes.
+        Unknown group state is conservative and must never unlock transfer.
+        """
+        if os.name == 'nt':
+            return process.poll() is not None and getattr(process, 'coordination_tree_terminated', False)
+        try:
+            os.killpg(process.pid, 0)
+        except ProcessLookupError:
+            return True
+        except PermissionError:
+            return False
+        # Orphan zombies in containers may not be reaped promptly. They cannot
+        # execute or write files; a live group member still blocks confirmation.
+        proc = Path('/proc')
+        if not proc.is_dir():
+            return False
+        try:
+            for entry in proc.iterdir():
+                if not entry.name.isdigit():
+                    continue
+                try:
+                    value = (entry / 'stat').read_text()
+                except (FileNotFoundError, ProcessLookupError):
+                    continue
+                fields = value[value.rfind(')') + 2:].split()
+                if int(fields[2]) == process.pid and fields[0] not in ('Z', 'X'):
+                    return False
+            return True
+        except (OSError, ValueError, IndexError):
+            return False
 
     def run_process(self, job, argv, cwd, prompt, log):
         flags = dict(creationflags=subprocess.CREATE_NO_WINDOW | subprocess.CREATE_NEW_PROCESS_GROUP) if os.name == 'nt' else dict(start_new_session=True)
@@ -215,13 +253,41 @@ class Runner:
                     self.terminate(process)
                     break
                 time.sleep(0.2)
-            process.wait(timeout=20)
+            try:
+                process.wait(timeout=20)
+            except subprocess.TimeoutExpired:
+                if os.name == 'nt':
+                    process.kill()
+                else:
+                    import signal
+                    os.killpg(process.pid, signal.SIGKILL)
+                process.wait(timeout=5)
+            if os.name != 'nt' and not self.tree_stopped(process):
+                # The leader can exit while a child ignores SIGTERM, even with
+                # its output redirected. Kill and verify the remaining group.
+                cancelled = True
+                import signal
+                try:
+                    os.killpg(process.pid, signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+                deadline = time.monotonic() + 5
+                while not self.tree_stopped(process) and time.monotonic() < deadline:
+                    time.sleep(0.05)
             thread.join(timeout=10)
-            return dict(returncode=process.returncode, cancelled=cancelled, timed_out=timed_out,
+            stop_requested = cancelled or timed_out or self.stop_event.is_set() or self.store.cancellation(job['id'])
+            # Windows normal completion reports a leader exit, not a proof that
+            # all descendants stopped. A concurrent pause therefore needs the
+            # explicit external confirmation path unless taskkill verified it.
+            stopped = self.tree_stopped(process)
+            if os.name == 'nt' and not stopped and not stop_requested:
+                stopped = None
+            return dict(returncode=process.returncode, cancelled=cancelled, timed_out=timed_out, process_stopped=stopped, execution_exited=process.poll() is not None,
                         elapsed_seconds=round(time.monotonic() - start, 3)), b''.join(chunks).decode('utf-8', 'replace')
         finally:
             with self.process_lock:
-                self.processes.pop(job['id'], None)
+                if self.tree_stopped(process) or (os.name == 'nt' and not cancelled and process.poll() is not None):
+                    self.processes.pop(job['id'], None)
             process.stdout.close()
 
     def execute(self, job):
@@ -239,7 +305,7 @@ class Runner:
                 base = json.loads(previous.read_text(encoding='utf-8'))
         (work / 'base.json').write_text(json.dumps(base, indent=2), encoding='utf-8')
         if job['kind'] == 'verify':
-            result, outputs = dict(passed=True, checks=[]), []
+            result, outputs = dict(passed=True, checks=[], process_stopped=True), []
             for spec in task['checks']:
                 if spec.startswith('module:'):
                     argv = [sys.executable, '-m', 'unittest', '-v', spec[7:]]
@@ -251,9 +317,11 @@ class Runner:
                 counts = re.findall(r'Ran (\d+) tests?', text)
                 skipped = re.findall(r'skipped=(\d+)', text)
                 passed = (meta['returncode'] == 0 and bool(counts) and int(counts[-1]) > 0 and
-                          not any(int(x) for x in skipped) and not meta['cancelled'] and not meta['timed_out'])
+                          not any(int(x) for x in skipped) and not meta['cancelled'] and not meta['timed_out'] and meta['process_stopped'] is not False)
                 result['checks'].append(dict(spec=spec, passed=passed, tests=int(counts[-1]) if counts else 0,
                                              skips=sum(map(int, skipped)), **meta))
+                result['process_stopped'] = result['process_stopped'] and meta['process_stopped']
+                result['execution_exited'] = meta.get('execution_exited', False)
                 result['passed'] = result['passed'] and passed
                 outputs.append(text)
                 if not passed:
@@ -312,7 +380,7 @@ class Runner:
                         pass
             if response:
                 (work / 'response.md').write_text(providers.redact(response), encoding='utf-8')
-            passed = meta['returncode'] == 0 and not (forbidden or denials or errors or meta['cancelled'] or meta['timed_out'])
+            passed = meta['returncode'] == 0 and meta['process_stopped'] is not False and not (forbidden or denials or errors or meta['cancelled'] or meta['timed_out'])
             if job['kind'] == 'implement':
                 passed = passed and (cwd / task['delivery']).is_file()
             result = dict(passed=passed, candidate_valid=not forbidden and job['kind'] == 'implement',

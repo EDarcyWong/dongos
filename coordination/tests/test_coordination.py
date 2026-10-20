@@ -58,6 +58,9 @@ class StateTests(Fixture):
         task = self.store.change(task['id'], task['rev'], 'claim')
         with self.assertRaises(Conflict):self.store.change(task['id'], 1, 'release')
         self.assertEqual(book.read_bytes(), before)
+        with self.assertRaises(Conflict):self.store.change(task['id'], task['rev'], 'release')
+        task = self.store.change(task['id'], task['rev'], 'pause')
+        task = self.store.change(task['id'], task['rev'], 'confirm_pause', note='isolated fixture stopped', options={'stopped_confirmed': True})
         task = self.store.change(task['id'], task['rev'], 'release')
         self.assertEqual(task['status'], 'todo')
         with self.assertRaises(Conflict):self.task()
@@ -316,7 +319,7 @@ class HTTPTests(Fixture):
         self.assertEqual(self.store.jobs(),[])
         with urlopen(self.url,timeout=5) as response:
             self.assertIn("frame-ancestors 'none'",response.headers['Content-Security-Policy'])
-            self.assertIn('协作控制台',response.read().decode())
+            self.assertIn('协作工作台',response.read().decode())
 
 
 if __name__=='__main__':unittest.main()

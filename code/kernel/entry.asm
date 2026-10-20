@@ -1698,7 +1698,7 @@ glyphs:
     db 31,1,2,4,8,16,31 ; Z
 
 section .bss
-alignb 8
+align 8, resb 1
 memory_report: resb MemoryReport_size
 memory_info_physical: resq 1
 memory_display: resb RuntimeDisplay_size

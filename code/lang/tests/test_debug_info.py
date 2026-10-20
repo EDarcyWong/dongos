@@ -278,7 +278,11 @@ int main(int argc,char**argv){
         return output
 
     def test_source_break_step_parameters_locals_and_backtrace(self):
-        output=self.gdb("source-step",["break debug_probe.dg:10","run","print outer","step","next","next","next",
+        # GDB versions differ on whether step first stops at the function
+        # declaration or its first statement. Advance by source location rather
+        # than a fixed number of next commands that can leave the leaf frame.
+        output=self.gdb("source-step",["break debug_probe.dg:10","run","print outer","step","next",
+            "until debug_probe.dg:6",
             'printf "DG_VALUES=%llu,%llu,%llu\\n", a,b,sum',"backtrace","info line"])
         self.assertIn("DG_VALUES=12,3,16",output)
         self.assertRegex(output,r"#0\s+.*leaf")
@@ -432,7 +436,9 @@ int main(int argc,char**argv){
             (directory/"gdb.txt").write_text(output,encoding="utf-8")
             # A missing debugger, bad executable, failed breakpoint, or generic
             # environment error is a test FAILURE, never a successful negative.
-            self.assertRegex(output,r"hit Breakpoint 1, leaf ",name)
+            # Native Linux GDB omits the Windows thread prefix "hit ".
+            # Still require the numbered breakpoint to resolve to leaf.
+            self.assertRegex(output,r"\bBreakpoint 1, leaf ",name)
             self.assertIn("DG_VALUES=",output,name)
             if name == "bad-line":
                 self.assertIn("value has been optimized out",output)

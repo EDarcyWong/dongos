@@ -3,11 +3,11 @@ import copy,importlib.util,struct,sys,unittest
 from pathlib import Path
 from types import SimpleNamespace
 from unittest import mock
-ROOT=Path(__file__).resolve().parents[1];PATH=ROOT/'build/test/p6-normal-fallback-candidate/run_normal_fallback_qemu.py'
+ROOT=Path(__file__).resolve().parents[1];PATH=ROOT/'tests/run_current_normal_fallback_qemu.py'
 def module():
  s=importlib.util.spec_from_file_location('normal_fallback_runner',PATH);m=importlib.util.module_from_spec(s);s.loader.exec_module(m);return m
 def fixture(count=2):
- r=[0]*28;r[:10]=[1,count,count,count-1,count*2097152,count*1536,count*512,0,10,20];r[20]=0xffffd40010000000;r[26]=31
+ r=[0]*28;r[:10]=[1,count,count,count-1,count*2097152,count*1536,count*512,0,10,20];r[10:20]=[4,4*(count-1),4*(count-1),2,2,2,3,8,8,count-1];r[20]=0xffffd40010000000;r[24:26]=[0x1122334455667788,0x8877665544332211];r[26]=31
  c=[];regs=[]
  for cpu in range(count):
   context=[0]*32;context[0]=r[20]+cpu*256;context[1:5]=[cpu,cpu,4,1];context[13:16]=[0xffffd40020000000+cpu*8192,0xffffd40020000040+cpu*8192,0xffffd40020001000+cpu*8192];context[25]=1;c.append(context)

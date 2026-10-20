@@ -1,4 +1,10 @@
-"""Actual bridge/domain/service retirement, real ASM validators, no guest."""
+"""Current bridge/domain/service retirement, real ASM validators, no guest.
+
+The absent R3 replay is retired. The old-global-held control now explicitly
+injects that defect into the current invalid-return branch. The EOI control
+mutates only a live capture; the newer detached-capture completion path stays
+intact and is not confused with the operation exercised by this oracle.
+"""
 import hashlib,json,os,re,subprocess,unittest,uuid
 from pathlib import Path
 from lang.dongc import compile_file
@@ -6,7 +12,7 @@ from lang.tests.test_dongc import tool,nasm_flags
 from tests.test_service_ipc_cancellation import block
 from tests.test_service_gui_wiring import copy_graph
 from tests import test_user_smp_services as old
-ROOT=Path(__file__).resolve().parents[1];BASE=ROOT/'build/test/p6-user-fault-isolation-candidate';R3=ROOT/'build/test/combined-user-smp-positive-r3/source';ARCH=ROOT/'build/test/p6-cpl3-integration-candidate'
+ROOT=Path(__file__).resolve().parents[1];BASE=ROOT;ARCH=ROOT
 TAIL='''
 export("fi_add") fn add()u64{unsafe{
  match catalog_start(10,8){ok=>{},err(e)=>{return e;},}let p=process(8);(*p).ready=1;(*p).root=0x208000;(*p).frame=abi.EMPTY;(*p).frame.rip=0x400000;(*p).frame.rsp=0x70000000;(*p).frame.cr3=(*p).root;
@@ -56,12 +62,12 @@ int main(int argc,char**argv){C(argc==2);U which=strtoull(argv[1],0,10);setup();
 '''
 class Tests(unittest.TestCase):
  def test_actual_bad_return_capture_deferred_retirement(self):
-  text=(BASE/'kernel/user/services.dg').read_text();prefix=old.PREFIX.replace('import user.abi as abi;','import user.abi as abi;import boot.trace as trace;import boot.trace_runtime as boot_trace;')
+  text=(BASE/'kernel/user/services.dg').read_text();prefix=old.PREFIX
   actual='\n'.join(block(text,n)for n in ('unsafe fn process(', 'unsafe fn managed(', 'unsafe fn retire_one(', 'pub unsafe fn enable_smp(', 'export("dong_user_smp_project")','export("dong_user_smp_service")','export("dong_user_smp_interrupt")'))
-  source=(ROOT/'tests/user_entry_probe.dg').read_text().replace('bridge.initialize(storage,704,','bridge.initialize(storage,1536,')+prefix+actual+old.TAIL+TAIL
-  memory=old.MEMORY+'pub var OBJECT_FAILED:bool=false;'
-  device=old.DEVICE+'pub var PCI_FAILED:bool=false;'
-  c=(ROOT/'tests/user_entry_probe.c').read_text()
+  source=(ROOT/'tests/user_current_entry_probe.dg').read_text()+prefix+actual+old.TAIL+TAIL
+  memory=old.MEMORY
+  device=old.DEVICE
+  c=(ROOT/'tests/user_current_entry_probe.c').read_text()
   for needle in ('U ABI user_bridge_service(', 'U ABI user_bridge_project(', 'U ABI dong_user_smp_service(', 'U ABI dong_user_smp_project(', 'U ABI user_smp_arch_validate('):c=c.replace(block(c,needle),'')
   c=c.replace('static void fail(', 'extern U ABI user_smp_arch_validate(U,U),dong_user_smp_service(U,U,U),dong_user_smp_project(void);\nstatic void fail(')
   c=c.replace(block(c,'U ABI user_bridge_eoi('),'U ABI user_bridge_eoi(U who,U vector){C(who==cpu&&(vector==0x40||vector==0xf4||vector==0xff));eois++;return 0;}')
@@ -70,17 +76,14 @@ class Tests(unittest.TestCase):
   c=c.replace('U ABI fi_service(', 'U ABI fi_service(')
   c=c.replace('static void plan_controls(', 'U ABI user_bridge_service(U a,U b,U c){return dong_user_smp_service(a,b,c);}\nU ABI user_bridge_project(void){return dong_user_smp_project();}\nstatic void plan_controls(')
   # Actual pure validator, extracted without modifying the raw production object.
-  ctx=(R3/'kernel/user/context.asm').read_text();validator='bits 64\ndefault rel\n%include "user_context.inc"\nglobal user_validate_frame,user_validate_interrupt_frame,user_smp_arch_validate\n'+ctx[ctx.index('user_validate_frame:'):ctx.index('user_frame_size:')]
-  raw=(R3/'kernel/sched/user_arch.asm').read_text();validator+=raw[raw.index('user_smp_arch_validate:'):raw.index('user_smp_arch_kick:')]
+  ctx=(ROOT/'kernel/user/context.asm').read_text();validator='bits 64\ndefault rel\n%include "user_context.inc"\nglobal user_validate_frame,user_validate_interrupt_frame,user_smp_arch_validate\n'+ctx[ctx.index('user_validate_frame:'):ctx.index('user_frame_size:')]
+  raw=(ROOT/'kernel/sched/user_arch.asm').read_text();validator+=raw[raw.index('user_smp_arch_validate:'):raw.index('user_smp_arch_kick:')]
   bridge=(BASE/'kernel/sched/user_bridge.dg').read_text()
   domain=(BASE/'kernel/sched/user_domain.dg').read_text()
-  controls={'old-global-held':('bridge',bridge,(R3/'kernel/sched/user_bridge.dg').read_text()),'missing-EOI':('bridge','else if user_bridge_eoi(cpu as u64,event)!=0{return error.Held;}',''),'invalid-Frame-discarded':('bridge','deferred=true;service_event=258;','deferred=false;service_event=258;'),'new-event-not-retired':('service','}else if event==258{','}else if event==259{'),'trusted-root-treated-user-fault':('bridge','if *(((*process).frame+144) as *const u64)!=(*process).root{return error.Held;}',''),'missing-final-return-validation':('domain','if user_smp_arch_validate((*c).returned,(*c).return_root)!=1{fail(d);return error.Held;}','')}
+  controls={'old-global-held':('bridge','deferred=true;service_event=258;','return error.Held;'),'missing-EOI':('bridge','else if user_bridge_eoi(cpu as u64,event)!=0{return error.Held;}\n   if !(try ud.captured_return_valid','if !(try ud.captured_return_valid'),'invalid-Frame-discarded':('bridge','deferred=true;service_event=258;','deferred=false;service_event=258;'),'new-event-not-retired':('service','}else if event==258{','}else if event==259{'),'trusted-root-treated-user-fault':('bridge','if *(((*process).frame+144) as *const u64)!=(*process).root{return error.Held;}',''),'missing-final-return-validation':('domain','if user_smp_arch_validate((*c).returned,(*c).return_root)!=1{fail(d);return error.Held;}','')}
   candidate={}
-  for tree in (R3/'kernel/sched',R3/'services'):
-   for p in tree.rglob('*.dg'):
-    s=p.read_text(encoding='utf-8');candidate[re.search(r'module\s+([\w.]+);',s)[1]]=s
   candidate['sched.user_domain']=(BASE/'kernel/sched/user_domain.dg').read_text()
-  files=[BASE/'kernel/sched/user_bridge.dg',BASE/'kernel/sched/user_domain.dg',BASE/'kernel/user/services.dg',Path(__file__),R3/'kernel/user/context.asm',R3/'kernel/sched/user_arch.asm'];before={str(p.relative_to(ROOT)):hashlib.sha256(p.read_bytes()).hexdigest()for p in files}
+  files=old.current_files()+[Path(__file__),ROOT/'tests/test_user_smp_services.py',ROOT/'tests/user_current_entry_probe.dg',ROOT/'tests/user_current_entry_probe.c'];before={str(p.relative_to(ROOT)):hashlib.sha256(p.read_bytes()).hexdigest()for p in files}
   out=ROOT/'build/test/p6-user-fault-native'/('run-'+uuid.uuid4().hex[:12]);out.mkdir(parents=True);nasm,cc=tool('nasm','NASM'),tool('gcc','CC');evidence={}
   for mode in ('debug','release'):
    for variant in ('normal',*controls):
@@ -88,8 +91,8 @@ class Tests(unittest.TestCase):
     if variant!='normal':
      kind,a,z=controls[variant];target={'service':s,'bridge':b,'domain':u}[kind];self.assertEqual(1,target.count(a));target=target.replace(a,z)
      s=target if kind=='service'else s;b=target if kind=='bridge'else b;u=target if kind=='domain'else u
-    overrides={**candidate,'sched.user_domain':u,'sched.user_bridge':b,'user_entry_probe':s,'user.memory':memory,'user.window_broker':old.WINDOWS,'user.device_host':device,'boot.trace':'module boot.trace;pub const SERVICE_STOP:u64=8;','boot.trace_runtime':'module boot.trace_runtime;pub unsafe fn event(a:u64,b:u64,c:u64,d:u64)void{return;}'}
-    copy_graph(stage,['user_entry_probe'],overrides);result=compile_file(stage/'user_entry_probe.dg',roots=[stage],mode=mode);(d/'probe.asm').write_text(result.assembly);(d/'probe.c').write_text(c);(d/'validator.asm').write_text(validator)
+    overrides={**candidate,'sched.user_domain':u,'sched.user_bridge':b,'user_current_entry_probe':s,'user.memory':memory,'user.window_broker':old.WINDOWS,'user.device_host':device,'boot.trace':'module boot.trace;pub const SERVICE_STOP:u64=8;','boot.trace_runtime':'module boot.trace_runtime;pub unsafe fn event(a:u64,b:u64,c:u64,d:u64)void{return;}'}
+    copy_graph(stage,['user_current_entry_probe'],overrides);result=compile_file(stage/'user_current_entry_probe.dg',roots=[stage],mode=mode);(d/'probe.asm').write_text(result.assembly);(d/'probe.c').write_text(c);(d/'validator.asm').write_text(validator)
     def run(args,label):
      r=subprocess.run(list(map(str,args)),cwd=ROOT,capture_output=True,text=True,timeout=60);(d/(label+'.json')).write_text(json.dumps(dict(command=list(map(str,args)),returncode=r.returncode,stdout=r.stdout,stderr=r.stderr),indent=2)+'\n');return r
     objects=[]
@@ -98,8 +101,8 @@ class Tests(unittest.TestCase):
     exe=d/('probe.exe'if os.name=='nt'else'probe');r=run([cc,'-std=c11','-O2','-Wall','-Wextra','-Werror','-Wno-unused-function',*([]if os.name=='nt'else['-no-pie']),d/'probe.c',*objects,'-o',exe],'link');self.assertEqual(0,r.returncode,r.stderr)
     for scenario in (0,1,2,3,4)if variant=='normal'else((3,)if variant=='trusted-root-treated-user-fault'else(4,)if variant=='missing-final-return-validation'else(0,)):
      r=run([exe,str(scenario)],str(scenario));self.assertEqual(0 if variant=='normal'else 1,r.returncode,r.stdout+r.stderr)
-     if variant!='normal':self.assertIn('user CPL3 candidate oracle line',r.stderr)
+     if variant!='normal':self.assertIn('user CPL3 current-source oracle line',r.stderr)
      evidence[mode+'-'+variant+'-'+str(scenario)]=dict(returncode=r.returncode,stdout=r.stdout,stderr=r.stderr)
   after={str(p.relative_to(ROOT)):hashlib.sha256(p.read_bytes()).hexdigest()for p in files};self.assertEqual(before,after)
-  (out/'validation-summary.json').write_text(json.dumps(dict(passed=True,real_bridge_domain_queue_catalog_retirement=True,real_asm_frame_validators=True,hardware_xstate_flush_and_memory_boundaries_adapted=True,no_os_build_or_vm=True,source_sha256=after,sources_unchanged=True,evidence=evidence),indent=2)+'\n');print('USER_FAULT_EVIDENCE',out)
+  (out/'validation-summary.json').write_text(json.dumps(dict(passed=True,source_commit=subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip(),contract="tracked-current-cpl3-v1",historical_replay=False,current_source=True,real_bridge_domain_queue_catalog_retirement=True,real_asm_frame_validators=True,hardware_xstate_flush_and_memory_boundaries_adapted=True,no_os_build_or_vm=True,source_sha256=after,sources_unchanged=True,evidence=evidence),indent=2)+'\n');print('USER_FAULT_EVIDENCE',out)
 if __name__=='__main__':unittest.main(verbosity=2)

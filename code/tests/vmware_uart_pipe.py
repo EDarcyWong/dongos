@@ -15,9 +15,10 @@ def validate_name(name):
         raise ValueError('only this run\'s unique local DongOS pipe name is allowed')
 
 
+# Windows DWORD fields stay 32-bit when the ABI is tested on LP64 hosts.
 class OVERLAPPED(C.Structure):
     _fields_=[('Internal',C.c_size_t),('InternalHigh',C.c_size_t),
-              ('Offset',W.DWORD),('OffsetHigh',W.DWORD),('hEvent',W.HANDLE)]
+              ('Offset',C.c_uint32),('OffsetHigh',C.c_uint32),('hEvent',W.HANDLE)]
 
 
 class WindowsPipe:

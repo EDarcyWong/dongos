@@ -22,6 +22,9 @@ def extract(app):
     app = Path(app).resolve()
     archive = app / 'node_modules.asar'
     vscode = json.loads((app / 'package.json').read_text(encoding='utf-8'))
+    lock = json.loads((HERE / 'engine-lock.json').read_text(encoding='utf-8'))
+    if vscode['version'] != lock['vscode_version']:
+        raise ValueError('VS Code version does not match engine-lock.json')
     extracted = {}
     with archive.open('rb') as stream:
         first, header_size, _, json_size = struct.unpack('<4I', stream.read(16))
@@ -49,23 +52,18 @@ def extract(app):
                 raise ValueError(f'{module}: expected pinned {version}, found {metadata.get("version")}')
             for relative in ALLOWLIST[module]:
                 data = contents(module, relative)
-                output = HERE / 'node_modules' / module / relative
-                output.parent.mkdir(parents=True, exist_ok=True)
-                output.write_bytes(data)
-                path = output.relative_to(HERE).as_posix()
-                extracted[path] = {'bytes': len(data), 'sha256': hashlib.sha256(data).hexdigest()}
-    lock = {
-        'source': 'Read-only extraction from an existing Microsoft VS Code installation; no npm install.',
-        'source_app': str(app), 'vscode_version': vscode['version'],
-        'source_archive_sha256': hashlib.sha256(archive.read_bytes()).hexdigest(),
-        'packages': PINNED,
-        'repositories': {
-            'vscode-textmate': 'https://github.com/microsoft/vscode-textmate',
-            'vscode-oniguruma': 'https://github.com/microsoft/vscode-oniguruma',
-        },
-        'files': extracted,
-    }
-    (HERE / 'engine-lock.json').write_text(json.dumps(lock, indent=2) + '\n', encoding='utf-8')
+                path = f'vendor/{module}/{relative}'
+                actual = {'bytes': len(data), 'sha256': hashlib.sha256(data).hexdigest()}
+                if lock['files'].get(path) != actual:
+                    raise ValueError(f'dependency hash mismatch: {path}')
+                extracted[path] = data
+    if set(extracted) != set(lock['files']):
+        raise ValueError('dependency allowlist does not match engine-lock.json')
+    # Validate every input before writing anything; never regenerate trusted pins.
+    for relative, data in extracted.items():
+        output = HERE / relative
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_bytes(data)
     return lock
 
 

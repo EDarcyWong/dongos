@@ -2,7 +2,7 @@
 import copy,importlib.util,json,py_compile,sys,tempfile,unittest,struct
 from pathlib import Path
 from unittest import mock
-ROOT=Path(__file__).resolve().parents[1];BASE=ROOT/'build/test/p6-user-smp-acceptance-candidate'
+ROOT=Path(__file__).resolve().parents[1];BASE=ROOT/'tests'
 def load(path,name):
  s=importlib.util.spec_from_file_location(name,path);m=importlib.util.module_from_spec(s);s.loader.exec_module(m);return m
 def snapshot():
@@ -16,7 +16,7 @@ def catalog():
  states[9].update(state=4,status=6)
  return dict(sequence=2,snapshots=states,events=[dict(sequence=2,configuration=9,generation=1,process=266,state=4,status=6)])
 class Tests(unittest.TestCase):
- def setUp(self):self.a=load(BASE/'acceptance.py','actual_acceptance')
+ def setUp(self):self.a=load(BASE/'current_user_smp_acceptance.py','actual_acceptance')
  def test_actual_four_cpu_xcr0_and_all_five_worker_avx(self):
   s=snapshot();values=[]
   for cfg,arg in self.a.ARGS.items():
@@ -83,18 +83,35 @@ class Tests(unittest.TestCase):
    with self.subTest(field=field),self.assertRaises(ValueError):self.a.retirement(before,bad,7)
  def test_marker_or_bad_boot_never_seals_and_negative_avx_required(self):
   a=self.a;s=snapshot();s['metrics'][1][2]=1;record=dict(snapshot=s,catalog=catalog(),launched_workers=launched(),catalog_start_sequence=1,serial_marker_offset=100,serial_start_offset=90,actual_negative_busy_simd_assertion=True,actual_fault_status_6=True,actual_ap_user_timer=True)
-  source=dict(built=True,source_unchanged=True,test=True,runtime_level=7,user_smp=True,user_workload=True,user_case='omit-xstate',workload_elf_sha256={n:'source-bound'for n in ['echo','fault','waiter','ipc-peer','fs-reader']})
+  # Newly generated host fixture: actual hash-bound bytes, not guest evidence.
+  from tests import run_current_user_smp_qemu as runner
+  temporary=tempfile.TemporaryDirectory(prefix='current-seal-',dir=ROOT/'build/test');self.addCleanup(temporary.cleanup)
+  out=Path(temporary.name);esp=out/'esp';esp.mkdir();(out/'source/kernel').mkdir(parents=True)
+  (out/'source/kernel/probe.dg').write_text('host-only staged fixture');(out/'kernel.elf').write_bytes(b'host-only kernel fixture')
+  elfs={}
+  for name in runner.NAMES[7:12]:
+   path=out/'services'/name/'program.elf';path.parent.mkdir(parents=True);path.write_bytes(('host-only '+name).encode());elfs[name]=runner.sha(path)
+  sources={'tests/user_smp_oracle.py':runner.sha(ROOT/'tests/user_smp_oracle.py')}
+  source=dict(schema=1,contract='current-user-smp-v1',source_root=str(ROOT.resolve()),esp=str(esp.resolve()),built=True,source_unchanged=True,test=True,runtime_level=7,user_smp=True,user_workload=True,user_case='omit-xstate',source_sha256=sources,staged_kernel_sha256={'kernel/probe.dg':runner.sha(out/'source/kernel/probe.dg')},kernel_elf_sha256=runner.sha(out/'kernel.elf'),workload_elf_sha256=elfs)
+  (out/'current-user-smp-source.json').write_text(json.dumps(source))
+  artifacts={'kernel.elf':source['kernel_elf_sha256'],**{'services/'+n+'/program.elf':h for n,h in elfs.items()}}
+  (out/'build-inputs.json').write_text(json.dumps(dict(test=True,runtime_level=7,source_unchanged=True,graphics_case=None,source_sha256=sources,artifacts=artifacts)))
+  def seal(value):
+   value=copy.deepcopy(value);value['esp']=str(esp);value['boot_receipts']=[]
+   for i,boot in enumerate(value['boots']):
+    path=out/('boot-'+str(i)+'.json');path.write_text(json.dumps(boot));value['boot_receipts'].append(dict(path=str(path.resolve()),sha256=runner.sha(path)))
+   return a.seal_negative_result(value)
   result=dict(passed=True,execute=True,runner_inputs_unchanged=True,all_started_guests_stopped=True,actual_qemu_boots=2,same_disk_reboot_verified=True,source_identity=source,negative_xstate=True,boots=[record,copy.deepcopy(record)])
-  self.assertTrue(a.seal_negative_result(result)['passed'])
+  self.assertTrue(seal(result)['passed']);self.assertFalse(seal(result)['guest_execution_verified'])
   for key,value in [('actual_qemu_boots',1),('runner_inputs_unchanged',False),('all_started_guests_stopped',False),('same_disk_reboot_verified',False)]:
    bad=copy.deepcopy(result);bad[key]=value
-   with self.subTest(field=key),self.assertRaises(ValueError):a.seal_negative_result(bad)
+   with self.subTest(field=key),self.assertRaises(ValueError):seal(bad)
   bad=copy.deepcopy(result);bad['boots'][0]['serial_marker_offset']=89
-  with self.assertRaisesRegex(ValueError,'fresh'):a.seal_negative_result(bad)
+  with self.assertRaisesRegex(ValueError,'fresh'):seal(bad)
   bad=copy.deepcopy(result);bad['boots'][0]['snapshot']['metrics'][1][19]=3
-  with self.assertRaisesRegex(ValueError,'XCR0'):a.seal_negative_result(bad)
+  with self.assertRaisesRegex(ValueError,'XCR0'):seal(bad)
   bad=copy.deepcopy(result);bad['boots'][0]['snapshot']['metrics'][1][2]=0
-  with self.assertRaisesRegex(ValueError,'timer'):a.seal_negative_result(bad)
+  with self.assertRaisesRegex(ValueError,'timer'):seal(bad)
   with self.assertRaises(ValueError):a.seal_result(dict(passed=True,serial=b'DONGOS_P6_USER_WORKER_BAD'.hex()))
  def test_normal_one_two_cpu_fallback_is_explicit_and_not_smp_acceptance(self):
   good=dict(normal_runtime=7,test=False,cpu_count=2,smp_steps=31,user_domain_pointer=0,services_smp_enabled=False,legacy_busy=1,essential_ready=list(range(7)),desktop_ready=True,filesystem_read_and_sync=True,actual_bsp_cpl=3,ap_online=1)
@@ -103,25 +120,25 @@ class Tests(unittest.TestCase):
    bad=dict(good);bad[key]=value
    with self.subTest(field=key),self.assertRaises(ValueError):self.a.normal_fallback(bad)
  def test_revised_runner_syntax_and_default_does_not_start_vm(self):
-  path=BASE/'tests/run_user_smp_qemu.py';m=load(path,'new_acceptance_runner')
+  path=BASE/'run_current_user_smp_qemu.py';m=load(path,'new_acceptance_runner')
   with tempfile.TemporaryDirectory(dir=ROOT/'build/test')as d:py_compile.compile(str(path),cfile=str(Path(d)/'runner.pyc'),doraise=True)
   with mock.patch.object(m,'identity',return_value={'explicit':'test-only'}),mock.patch.object(m,'UserGuest',side_effect=AssertionError('unexpected VM')),mock.patch.object(sys,'argv',['runner','--reuse-esp',str(ROOT/'build/test/not-an-esp')]):self.assertEqual(0,m.main())
  def test_revised_runner_actual_worker_requires_upper_ymm_not_user_flag(self):
-  m=load(BASE/'tests/run_user_smp_qemu.py','revised_worker');g=object.__new__(m.UserGuest);g.esp=ROOT/'build/test/no-real-esp'
+  m=load(BASE/'run_current_user_smp_qemu.py','revised_worker');g=object.__new__(m.UserGuest);g.esp=ROOT/'build/test/no-real-esp'
   arg,slot,inc,cfg=99323,7,2,9;cat=dict(slots=[0]*32,incarnations=[0]*16,snapshots=[{}for _ in range(32)]);cat['slots'][cfg]=slot;cat['incarnations'][slot]=inc;cat['snapshots'][cfg]['process']=(inc<<8)|(slot+1)
   g.catalog=mock.Mock(return_value=cat);g.verify_process=mock.Mock(return_value=dict(root=0x123000,bias=0x10000));g.effective=mock.Mock(return_value=dict(present=True,effective_user=True,effective_nx=True,physical=0x300000));g.physical=mock.Mock(return_value=struct.pack('<Q',arg))
   p=[0]*24;p[:8]=[1,arg,slot+1,1048576,1,0,2,1];p[8]=6;p[16:18]=[100,200];p[19:24]=[arg,cfg,inc,128,0x534d5046494c4553]
   raw=bytearray(1024)
   for at,value in [(160,0x1122334455667788^arg),(400,0x8877665544332211^(slot+1)),(816,0xcafebabedeadbeef^arg^(slot+1))]:struct.pack_into('<Q',raw,at,value)
-  g.read=mock.Mock(return_value=bytes(raw));g.user=mock.Mock(return_value=struct.pack('<24Q',*p));s=snapshot();s['contexts']=[[0,0,i]+[0]*29 for i in range(4)];s['processes'][slot]=[123,inc,0x123000,4,5,0,0]
+  g.read=mock.Mock(return_value=bytes(raw));g.user=mock.Mock(return_value=struct.pack('<24Q',*p));s=snapshot();s['contexts']=[[0,0,i]+[0]*29 for i in range(4)];s['processes'][slot]=[(inc<<8)|(slot+1),inc,0x123000,4,5,0,0]
   with mock.patch.object(m,'read_elf_symbols',return_value={m.storage.symbol('apps.user_smp_worker','PROBE'):0x100}):
-   self.assertTrue(g.worker(cfg,arg,s)['actual_upper_ymm_verified'])
+   self.assertTrue(g.worker(cfg,arg,s)['actual_upper_ymm_verified']);g.effective.assert_called_with(0x123000,0x44000000)
    p[7]=0;g.user.return_value=struct.pack('<24Q',*p)
    with self.assertRaisesRegex(ValueError,'upper-YMM'):g.worker(cfg,arg,s)
    p[7]=1;g.user.return_value=struct.pack('<24Q',*p);raw[816]^=1;g.read.return_value=bytes(raw)
    with self.assertRaisesRegex(ValueError,'upper YMM15'):g.worker(cfg,arg,s)
  def test_revised_runner_negative_rejects_old_marker_or_stale_token_fault(self):
-  m=load(BASE/'tests/run_user_smp_qemu.py','revised_negative')
+  m=load(BASE/'run_current_user_smp_qemu.py','revised_negative')
   for fresh,event_token,ok in [(True,266,True),(False,266,False),(True,267,False)]:
    g=mock.Mock();g.raw=bytearray(b'DONGOS_P6_USER_WORKER_BAD\r\n');before=catalog();before['sequence']=1;before['events']=[];g.catalog.return_value=before;s=snapshot();s['metrics'][1][2]=1;g.snapshot.return_value=s
    g.kval.return_value=0xffffd40012340000;g.readwords.return_value=[8,3,1,12,4,257,0x73]

@@ -97,7 +97,7 @@ static int allocation(void){
  CHECK(!unshare_allocate(0,1,0x48000000,0x49000000,4));CHECK(unshare_journal_count()==4&&!unshare_get(2,0)&&!unshare_get(3,0));
  for(unsigned i=0;i<4;i++){uint64_t a=unshare_leaf(0,0x48000000+i*4096),b=unshare_leaf(1,0x49000000+i*4096);CHECK(a==b&&a==(0x200000+i*4096+3));CHECK(!unshare_get(0,i));CHECK(!zero(i));}
  observe(0,0x48000000,4);CHECK(!unshare_run(0,0x48000000,4));observe(1,0x49000000,4);CHECK(!unshare_run(1,0x49000000,4));
- for(unsigned i=0;i<4;i++)CHECK(unshare_get(0,i)==1);CHECK(unshare_resources_calls()==1);CHECK(!guard());
+ for(unsigned i=0;i<4;i++){CHECK(unshare_get(0,i)==1);}CHECK(unshare_resources_calls()==1);CHECK(!guard());
  CHECK(!setup(4,0,0));CHECK(unshare_allocate(0,1,0x48000000,0x45000000,0)!=0); /* zero count rejected */
  CHECK(!unshare_resources_calls());CHECK(unshare_allocate(0,1,0x44000000,0x45000000,4)!=0);CHECK(!unshare_resources_calls());
  CHECK(!setup(4,0,0));observe(0,0x44000000,4);CHECK(!unshare_run(0,0x44000000,4));watch=0;CHECK(!unshare_fill_tables(1));

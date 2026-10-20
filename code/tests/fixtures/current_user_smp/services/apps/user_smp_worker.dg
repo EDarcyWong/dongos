@@ -1,0 +1,39 @@
+// NEW synthetic current-source workload, not recovered historical P6 code.
+// PIE linking is tested; actual guest execution is a separate, unexecuted gate.
+module apps.user_smp_worker;
+import lib.sys as sys;
+import lib.files as files;
+pub var PROBE:[24]u64=[0;24];
+var SESSION:files.Session=files.EMPTY;
+const BAD:u64=0x060b_0040;
+const ARGUMENT_PAGE:u64=0x4400_0000;
+unsafe extern "sysv64" fn user_smp_app_run(probe:*u64,argument:u64,pid:u64,limit:u64)u64;
+unsafe extern "sysv64" fn svc_user_ud2()void;
+export("service_main") fn main()u64 {unsafe{
+    let boot=sys.boot();
+    if boot==null||(*boot).version!=1||(*boot).channel_bytes!=65536||PROBE[0]!=0{return BAD;}
+    let argument=(*boot).reserved0;let configuration=(*boot).reserved1;
+    if configuration<7||configuration>11{return BAD;}
+    let incarnation=sys.incarnation((*boot).endpoint);
+    if incarnation==0||incarnation>0x0fff_ffff{return BAD;}
+    let pid=sys.svc_call(1,0,0,0,0,0,0);if pid==0||pid>16{return BAD;}
+    let ready=sys.ready_boot(boot);if ready!=0{return ready;}
+    var status=files.init(&SESSION,(*boot).filesystem,(*boot).channel_address,395);
+    if status!=0{return status;}var token:u64=0;
+    status=files.open(&SESSION,SESSION.root,"/README.TXT",files.READ|files.STAT,&token);
+    if status!=0{return status;}
+    status=files.read(&SESSION,token,0,4096);if status!=0{return status;}
+    let bytes=SESSION.response.words[1];let prefix="DongOS FAT32 persistence fixture.\n";
+    if bytes<prefix.len as u64||bytes>4096{return BAD;}
+    var i:usize=0;while i<prefix.len{
+        if *(((*boot).channel_address+4096) as *const u8+i)!=prefix[i]{return BAD;}i+=1;
+    }
+    status=files.close(&SESSION,token);if status!=0{return status;}
+    // Written only after real successful init/open/read/close and byte verification.
+    PROBE[20]=configuration;PROBE[21]=incarnation;PROBE[22]=bytes;PROBE[23]=0x534d_5046_494c_4553;
+    // channels() maps this read-only incarnation-specific argument page.
+    PROBE[19]=volatile_load(ARGUMENT_PAGE as *const u64);if PROBE[19]!=argument{return BAD;}
+    let result=user_smp_app_run(&PROBE[0],argument,pid,0);
+    if result!=0{let logged=sys.log("DONGOS_P6_USER_WORKER_BAD\r\n");svc_user_ud2();}
+    return result;
+}}

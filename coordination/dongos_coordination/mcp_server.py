@@ -16,10 +16,11 @@ VERSIONS = ('2025-06-18', '2025-03-26', '2024-11-05')
 MAX_MESSAGE = 1024 * 1024
 CLIENT_OWNERS = ('claude', 'cursor', 'lmstudio', 'deepseek', 'codex')
 INSTRUCTIONS = '''本机可信任务协作。先list_projects确认project，再list_tasks/get_task/read_document。
-只领取当前owner的todo/rework，读取完整任务书、review_note、write_paths和依赖，领取成功才开始。
+只领取当前owner或未指定负责人的todo/rework，读取完整任务书、review_note、write_paths和依赖，领取成功才开始。
 所有变更显式提供最新rev；409后重新查询，不盲重试，不抢占别人的领取/活动作业。
+pause_requested_at存在时先停止编辑和外部进程，再acknowledge_pause确认；不能把状态暂停当作进程已停止。
 只能修改授权文件，路径按项目source_root/works_root映射；候选副本不等于主目录，需负责人完成迁移再改。
-由客户端自己的编辑工具修改实现；本MCP不上传源码、不提供文件或shell工具。LM Studio只做已分配的简单任务；
+由客户端自己的编辑工具修改实现；本MCP不上传源码、不提供文件或shell工具。LM Studio只做符合文件范围限制的简单任务；
 若客户端无文件工具，不能只交报告冒充实现落盘，应先说明阻塞并释放任务。
 submit_task追加真实交付报告，未执行测试须明确写未执行；submitted不是验收。执行者不得自行验收/集成、改库或索引。
 Cursor始终由用户在客户端手动发起；本服务不唤起Agent、不轮询派单。agent_id是归属标签，不是安全身份。
@@ -50,21 +51,23 @@ def tools(role='worker'):
     task = text_schema('完整任务编号，例如claude:C17', maxLength=81)
     identity = dict(project=project, task_id=task)
     revision = dict(identity, rev=dict(type='integer', minimum=1))
+    claim_revision = dict(revision, claim_token=text_schema('本轮领取响应的令牌；客户端重启后可显式回传', maxLength=32))
     specs = [
         ('get_workflow', '查看当前客户端负责人、领取标识和执行约定。', schema(), True),
         ('list_projects', '列出项目及source_root、works_root；不依赖网页当前选中的项目。', schema(), True),
-        ('list_tasks', '查询任务。owner默认当前客户端；可只读查看其它负责人。返回摘要及分页。',
-         schema(dict(project=project, owner=dict(type='string', enum=list(OWNERS)),
+        ('list_tasks', '查询任务。owner默认当前客户端及公共待领取任务；可只读查看其它负责人。返回摘要及分页。',
+         schema(dict(project=project, owner=dict(type='string', enum=[*OWNERS, 'unassigned']),
                      status=dict(type='string', enum=list(STATES)), q=dict(type='string', maxLength=180),
                      offset=dict(type='integer', minimum=0), limit=dict(type='integer', minimum=1, maximum=100)), ['project']), True),
         ('get_task', '读取完整任务、最新rev、依赖、审查/返修说明和候选信息。', schema(identity, identity), True),
         ('read_document', '读取任务书或最新交付，保留原API的截断标识和SHA256。',
          schema(dict(identity, kind=dict(type='string', enum=['task', 'delivery'])), identity), True),
-        ('claim_task', '领取当前负责人的任务。必须使用最新rev；活动作业/依赖/文件冲突会拒绝。',
+        ('claim_task', '领取当前负责人或公共任务池的任务。必须使用最新rev；活动作业/依赖/文件冲突会拒绝。',
          schema(revision, revision), False),
-        ('release_task', '释放由本客户端领取的任务；不会停止CLI作业或删除文件。', schema(revision, revision), False),
+        ('release_task', '释放由本客户端领取的任务；先自行停止外部工作，不会停止CLI作业或删除文件。', schema(claim_revision, revision), False),
+        ('acknowledge_pause', '原领取者确认已停止外部编辑/进程。必须确实停止，不能只修改状态；停止后才允许协调者转派。', schema(claim_revision, revision), False),
         ('submit_task', '提交本客户端领取的任务，追加交付报告且进入submitted，等待独立复验。不能自行验收。',
-         schema(dict(revision, report=text_schema('真实实现、实际测试和限制；未运行须明确写未运行', maxLength=24000)), revision), False),
+         schema(dict(claim_revision, report=text_schema('真实实现、实际测试和限制；未运行须明确写未运行', maxLength=24000)), revision), False),
     ]
     if role == 'coordinator':
         specs=[(name,description.replace('owner默认当前客户端','owner默认全部负责人') if name=='list_tasks' else description,inputs,readonly)
@@ -76,10 +79,11 @@ def tools(role='worker'):
                          write_paths=dict(type='array', minItems=1, maxItems=40, items=text_schema(maxLength=500)),
                          checks=dict(type='array', maxItems=12, items=text_schema(maxLength=500)),
                          depends_on=dict(type='array', maxItems=32, items=text_schema(maxLength=81))),
-                    ['project','id','owner','title','write_paths']), False),
+                    ['project','id','title','write_paths']), False),
             ('change_task', 'Codex协调：返修、暂停、恢复、归档/恢复归档、验收或登记集成。归档保留历史并从默认列表隐藏；验收需实际审查和独立复验。',
-             schema(dict(revision, action=dict(type='string', enum=['rework','pause','resume','accept','integrate','archive','unarchive']),
-                         note=text_schema('真实审查依据或状态变更说明', maxLength=12000)), ['project','task_id','rev','action','note']), False),
+             schema(dict(revision, action=dict(type='string', enum=['rework','pause','resume','accept','integrate','archive','unarchive','reassign']),
+                         note=text_schema('真实审查依据或状态变更说明', maxLength=12000),
+                         new_owner=dict(type='string',enum=[*OWNERS,'unassigned'])), ['project','task_id','rev','action','note']), False),
             ('queue_verification', 'Codex协调：只排队任务预先声明的定向测试；排队成功不代表通过，不执行AI CLI。',
              schema(revision, revision), False),
             ('list_jobs', 'Codex协调：读取项目最近最多120个作业摘要，可按task_id筛选；详测结果读get_task.verification。',
@@ -152,8 +156,10 @@ class TaskMCP:
             return dict(projects=self.client.projects())
         if name == 'list_tasks':
             values = self.client.tasks(a['project'], owner=a.get('owner', '' if self.role=='coordinator' else self.owner), status=a.get('status', ''), q=a.get('q', ''))
+            if self.role == 'worker' and 'owner' not in a:
+                values += self.client.tasks(a['project'], owner='unassigned', status=a.get('status', ''), q=a.get('q', ''))
             start, limit = a.get('offset', 0), a.get('limit', 25)
-            fields = ('id', 'owner', 'title', 'status', 'rev', 'claimed_by', 'updated_at', 'depends_on')
+            fields = ('id', 'owner', 'title', 'status', 'rev', 'claimed_by', 'claimed_at', 'completed_at', 'pause_requested_at', 'pause_control', 'updated_at', 'depends_on')
             return dict(project=a['project'], total=len(values), offset=start,
                         tasks=[{k: t.get(k) for k in fields} for t in values[start:start+limit]],
                         next_offset=start+limit if start+limit < len(values) else None)
@@ -165,11 +171,14 @@ class TaskMCP:
             if name=='create_task':
                 return dict(project=a['project'],task=self.client.create_task(a['project'],**{k:v for k,v in a.items() if k!='project'}))
             if name=='change_task':
+                if a['action']=='reassign' and 'new_owner' not in a:
+                    raise ProtocolError(-32602,'转派必须指定new_owner，公共领取用unassigned')
                 if a['action'] in ('accept','integrate'):
                     t=self.client.task(a['project'],a['task_id']);v=t.get('verification') or {};checks=v.get('checks') or []
                     if not (v.get('passed') and v.get('source_stable') and checks and all(x.get('passed') and x.get('tests',0)>0 and x.get('skips')==0 for x in checks)):
                         raise APIError(409,dict(error='需要真实独立复验通过、零skip且源码稳定；不能用交付报告替代验收'))
-                return dict(project=a['project'],task=self.client.manage_task(a['project'],a['task_id'],rev=a['rev'],action=a['action'],note=a['note']))
+                return dict(project=a['project'],task=self.client.manage_task(a['project'],a['task_id'],rev=a['rev'],action=a['action'],note=a['note'],
+                    options={'owner':None if a.get('new_owner')=='unassigned' else a.get('new_owner')} if a['action']=='reassign' else None))
             if name=='queue_verification':
                 return dict(project=a['project'],job=self.client.queue_verification(a['project'],a['task_id'],rev=a['rev']))
             if name=='list_jobs':
@@ -177,11 +186,10 @@ class TaskMCP:
                 return dict(project=a['project'],jobs=[{k:j[k] for k in fields}|{'summary':j.get('data',{}).get('summary','')} for j in jobs if not a.get('task_id') or j['task_id']==a['task_id']])
             if name=='read_job_log':
                 return dict(project=a['project'],**self.client.job_log(a['project'],a['job_id']))
-        if a['task_id'].split(':', 1)[0] != self.owner:
-            raise APIError(409, dict(error='只能变更当前客户端负责人'+self.owner+'的任务'))
+        # A task keeps its original ID after reassignment. The store checks its current owner and claim token.
         method = {'claim_task': self.client.claim_task, 'release_task': self.client.release_task,
-                  'submit_task': self.client.submit_task}[name]
-        extra = {'report': a['report']} if 'report' in a else {}
+                  'submit_task': self.client.submit_task, 'acknowledge_pause': self.client.acknowledge_pause}[name]
+        extra = {key:a[key] for key in ('report','claim_token') if key in a}
         task = method(a['project'], a['task_id'], rev=a['rev'], owner=self.owner, agent_id=self.agent_id, **extra)
         return dict(project=a['project'], task=task)
 

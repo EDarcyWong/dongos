@@ -28,6 +28,12 @@ extern char smp_trampoline_start[],smp_trampoline_end[],smp_trampoline_cr3[],smp
 extern char smp_trampoline_pm[],smp_trampoline_long[],smp_ap_entry[];
 ABI void __dong_panic(uint64_t code){fprintf(stderr,"unexpected DG panic %llu\n",(unsigned long long)code);exit(99);}
 ABI void kernel_exception_panic(void *frame){(void)frame;abort();}
+/* Privileged AP paths are linked but never executed by this host-only probe.
+   Fail closed if a future test accidentally reaches one. */
+ABI void sched_parallel_idle(void){abort();}
+ABI void user_smp_try_handoff(void){abort();}
+ABI void sched_parallel_timer_entry(void){abort();}
+ABI void sched_parallel_ipi_entry(void){abort();}
 static unsigned checks;
 static Context valid_context(void){
  Context c={{0}};uint64_t h=UINT64_C(0xffffd40000000000);

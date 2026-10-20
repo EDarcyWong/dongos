@@ -113,7 +113,7 @@ int main(void){
  invalid();readonly_inputs();uint64_t count;rd(&count,8);
  while(count--){
   uint64_t h[5];rd(h,sizeof(h));uint64_t len=h[0],cap=h[1];
-  if(len>100000||cap>100000)exit(94);
+  if(len>100000||cap>200064)exit(94); /* 2 * maximum source bytes + 64 nodes */
   uint8_t *s=malloc(len+32),*strings=malloc(len+1),*scopy=malloc(len+1);
   uint64_t tc=len+1;uint8_t*tb=malloc(tc*56+32);Token*t=(Token*)(tb+16);
   uint8_t*nb=malloc(cap*64+32);Node*n=(Node*)(nb+16);

@@ -18,6 +18,11 @@ class ProcessCatalogTests(unittest.TestCase):
                 'slot-token-revival':('(*c).incarnation[slot]+=1;let incarnation=', '(*c).incarnation[slot]=1;let incarnation='),
                 'shell-control-essential':('if actor==0{if !write||((*c).configs[id].flags&abi.ORDINARY)!=0{return;}}', 'if actor==0{return;}'),
                 'forged-ready-incarnation':('||(*c).incarnation[slot]!=incarnation', '||false'),
+                'vacant-physical-terminal':('    if actor<SLOTS&&(*c).configuration[actor]==14&&(*c).slot[14]==actor as u64{', '    if actor==14{return;}if actor<SLOTS&&(*c).configuration[actor]==14&&(*c).slot[14]==actor as u64{'),
+                'compositor-controls-drivers':('if actor==3{if !write||(id>=14&&id<=17){return;}}','if actor==3{return;}'),
+                'terminal-controls-essential':('&&(!write||((*c).configs[id].flags&abi.ORDINARY)!=0){return;}','&&true{return;}'),
+                'terminal-stale-token':('&&terminal.process==((incarnation<<8)|(actor as u64+1))','&&true'),
+                'config16-truncation':('pub const CONFIGS:usize=18;','pub const CONFIGS:usize=16;'),
                 'failure-clobbers-output':('    try dependencies(c,id);\n    if (*c).sequence', '    if out!=null{(*out).argument=0;}\n    try dependencies(c,id);\n    if (*c).sequence'),
             }
             for mode,variant in ((mode,variant) for mode in ('debug','release') for variant in ('normal',*controls)):
@@ -28,7 +33,7 @@ class ProcessCatalogTests(unittest.TestCase):
                     roots=[ROOT/'tests',d/'kernel',ROOT/'services']
                 c=compile_file(ROOT/names[2],roots=roots,mode=mode)
                 layouts={v['full_name']:v for v in c.layout_manifest['types']}
-                for name,size in (('lib.process_abi.Config',128),('lib.process_abi.Snapshot',64),('lib.process_abi.Event',64),('user.processes.Catalog',7576)):
+                for name,size in (('lib.process_abi.Config',128),('lib.process_abi.Snapshot',64),('lib.process_abi.Event',64),('user.processes.Catalog',10776)):
                     self.assertEqual(size,layouts[name]['size'])
                 self.assertNotRegex(c.assembly.lower(),r'\b(?:invlpg|invpcid|rdmsr|wrmsr|hlt|cli|sti)\b')
                 asm=d/'probe.asm';asm.write_text(c.assembly);obj=d/'probe.o';fmt='win64' if os.name=='nt' else 'elf64'
@@ -41,6 +46,6 @@ class ProcessCatalogTests(unittest.TestCase):
                 else:self.assertEqual(1,r.returncode,r.stdout+r.stderr);self.assertIn('catalog oracle failed line',r.stderr)
         finally:
             after={p:hashlib.sha256((ROOT/p).read_bytes()).hexdigest() for p in names}
-            passed=len(evidence)==10 and all(v['returncode']==(0 if name.endswith('-normal') else 1) for name,v in evidence.items())
+            passed=len(evidence)==2*(1+len(controls)) and all(v['returncode']==(0 if name.endswith('-normal') else 1) for name,v in evidence.items())
             (out/'validation-summary.json').write_text(json.dumps(dict(passed=passed,source_sha256=after,sources_unchanged=before==after,evidence=evidence),indent=2)+'\n')
         self.assertEqual(before,after);print('PROCESS_CATALOG_EVIDENCE',out)

@@ -13,7 +13,7 @@ pub unsafe fn emit(label:[]const u8, byte_count:usize, alignment:usize, out:[]u8
 成功时严格为：
 
 ```text
-alignb <alignment>\n
+align <alignment>, resb 1\n
 <label>: resb <byte_count>\n
 ```
 
@@ -22,6 +22,8 @@ alignb <alignment>\n
 - `label` 长度 8～128，前缀恰为 ASCII `__dong_`，非空后缀仅 `A–Z` / `a–z` / `0–9` / `_`。
 - `alignment` ∈ `{1,2,4,...,4096}`（二次幂）。
 - `byte_count` 可为 0～`usize` 最大；`0` 仍输出 `resb 0`。不在宿主分配对应 BSS。
+- `align <alignment>, resb 1` 使用未初始化字节填充，保留 BSS 对齐和大小语义，避免部分 NASM 2.x 的 `alignb` 宏展开不支持的 warning push/pop；仍启用严格警告。
+- 总输出长度为 `23 + label.len + alignment 的十进制位数 + byte_count 的十进制位数`；容量检查包含新增的显式填充文本。
 
 ## 检查顺序
 

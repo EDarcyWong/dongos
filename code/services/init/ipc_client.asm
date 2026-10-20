@@ -127,6 +127,6 @@ align 8
 request: dq 0
     times 7 dq 0x1122334455667788
 section .bss
-alignb 8
+align 8, resb 1
 response: resq 8
 section .note.GNU-stack noalloc noexec nowrite progbits

@@ -31,6 +31,8 @@ uint64_t SYSV svc_call(uint64_t number,uint64_t a,uint64_t b,uint64_t c,uint64_t
  if(number==0x29){peer_calls++;if(a!=boot.words[2]||b!=123){bad_syscall++;return 0;}return peer;}
  if(number==0x2a){if(a!=boot.words[2]||b!=123||peer>8){bad_syscall++;return 0;}return (fs_epoch<<32)|(caller_epoch[peer]?caller_epoch[peer]:1);}
  if(number==0x2b){if(a!=boot.words[2]||b!=123){bad_syscall++;return 0;}return grant;}
+ /* Existing role-policy query: default unscoped client, no new authority. */
+ if(number==0x2d){if(a!=boot.words[2]||b!=123||c||d||e||f){bad_syscall++;return 99;}return 0;}
  if(number==0x2c){if(a!=boot.words[2]||b||c||d||e||f){bad_syscall++;return 0;}for(unsigned i=1;i<9;i++){if(departures[i]){uint64_t key=((uint64_t)i<<32)|departures[i];departures[i]=0;return key;}}return 0;}
  if(number==0x22&&a==boot.words[4]){const Message*r=(const Message*)(uintptr_t)b;Message*out=(Message*)(uintptr_t)c;memset(out,0,sizeof *out);uint64_t op=r->words[0],lba=r->words[1],count=r->words[2];
   if(op==1){out->words[2]=sectors;return 0;}if(op==4){flushes++;return fflush(disk)?1:0;}

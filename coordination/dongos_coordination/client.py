@@ -23,6 +23,7 @@ class CoordinationClient:
             raise ValueError('只支持本机协调服务的http源地址')
         self.base_url=base_url.rstrip('/')
         self.timeout,self.csrf=timeout,None
+        self.claims={}
         self.opener=build_opener(ProxyHandler({}),NoRedirect())
 
     def _request(self,path,data=None,*,retry=True,project=None):
@@ -59,22 +60,31 @@ class CoordinationClient:
         return self._request(self._root(project),fields)['task']
 
     def _action(self,project,task_id,action,rev,owner,agent_id,**extra):
-        return self._request(self._root(project)+'/'+quote(task_id,safe='')+'/'+action,dict(rev=rev,owner=owner,agent_id=agent_id,**extra))['task']
+        key=(project,task_id,agent_id)
+        if action!='claim' and 'claim_token' not in extra and key in self.claims:
+            extra['claim_token']=self.claims[key]
+        result=self._request(self._root(project)+'/'+quote(task_id,safe='')+'/'+action,dict(rev=rev,owner=owner,agent_id=agent_id,**extra))['task']
+        if action=='claim':self.claims[key]=result.get('claim_token')
+        elif action in ('release','submit'):self.claims.pop(key,None)
+        return result
 
     def claim_task(self,project,task_id,*,rev,owner,agent_id):
         return self._action(project,task_id,'claim',rev,owner,agent_id)
 
-    def release_task(self,project,task_id,*,rev,owner,agent_id):
-        return self._action(project,task_id,'release',rev,owner,agent_id)
+    def release_task(self,project,task_id,*,rev,owner,agent_id,claim_token=None):
+        return self._action(project,task_id,'release',rev,owner,agent_id,**({} if claim_token is None else {'claim_token':claim_token}))
 
-    def submit_task(self,project,task_id,*,rev,owner,agent_id,report=None):
-        return self._action(project,task_id,'submit',rev,owner,agent_id,**({} if report is None else {'report':report}))
+    def acknowledge_pause(self,project,task_id,*,rev,owner,agent_id,claim_token=None):
+        return self._action(project,task_id,'acknowledge_pause',rev,owner,agent_id,**({} if claim_token is None else {'claim_token':claim_token}))
+
+    def submit_task(self,project,task_id,*,rev,owner,agent_id,report=None,claim_token=None):
+        return self._action(project,task_id,'submit',rev,owner,agent_id,**({} if report is None else {'report':report}),**({} if claim_token is None else {'claim_token':claim_token}))
 
     def document(self,project,task_id,*,kind='task'):
         return self._request(self._root(project)+'/'+quote(task_id,safe='')+'/document?'+urlencode({'kind':kind}))
 
-    def manage_task(self,project,task_id,*,rev,action,note):
-        return self._request('/api/action',dict(task=task_id,rev=rev,action=action,note=note),project=project)
+    def manage_task(self,project,task_id,*,rev,action,note,options=None):
+        return self._request('/api/action',dict(task=task_id,rev=rev,action=action,note=note,options=options),project=project)
 
     def queue_verification(self,project,task_id,*,rev):
         return self._request('/api/queue',dict(task=task_id,rev=rev,kind='verify'),project=project)

@@ -38,7 +38,7 @@ export("broker_caps") fn caps(ecam:u64,disable:u64,out:*u64)u64 {unsafe {
 }}
 '''
         controls={
-            'no-capwalk':(b'if nvm && (try interrupt_caps(ecam,true))!=3 {return error.Invalid;}',
+            'no-capwalk':(b'if (try interrupt_caps(ecam,true))!=3 {return error.Invalid;}',
                           b'if nvm {negative_hit(1);}', 'interrupt_disabled()'),
             'no-cap-readback':(b'if ((try read32(ecam+offset))>>16)!=(planned as u32) {return error.Invalid;}',
                                b'negative_hit(2);', 'interrupt_disabled()'),

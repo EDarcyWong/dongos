@@ -32,8 +32,8 @@ class InputServiceTests(unittest.TestCase):
                     services=d/'services'
                     for p in (ROOT/'services').rglob('*.dg'):
                         q=services/p.relative_to(ROOT/'services');q.parent.mkdir(parents=True,exist_ok=True);q.write_bytes(p.read_bytes())
-                    p=services/'drivers/input_service.dg';source=p.read_text();needle='if key||mouse {try drain(boot,queue,characters,modern);}'
-                    self.assertEqual(1,source.count(needle));p.write_text(source.replace(needle,'if false {try drain(boot,queue,characters,modern);}'))
+                    p=services/'drivers/input_service.dg';source=p.read_text();needle='if KEY_PENDING||MOUSE_PENDING{\n                    let drained=try drain(boot,queue,characters,modern);'
+                    self.assertEqual(1,source.count(needle));p.write_text(source.replace(needle,'if KEY_PENDING||MOUSE_PENDING{\n                    let drained=true;'))
                     (d/'mutation.json').write_text(json.dumps(dict(mutation='actual acknowledged IRQ without draining i8042',expected='independent syscall model rejects unread hardware bytes at ACK'),indent=2)+'\n')
                 c=compile_file(ROOT/'tests/input_service_probe.dg',roots=[ROOT/'tests',services,ROOT/'lang/std'],mode=mode)
                 src=d/'probe.asm';src.write_text(c.assembly);obj=d/'probe.o';nasm=tool('nasm','NASM');cc=tool('gcc','CC');self.assertTrue(nasm);self.assertTrue(cc)

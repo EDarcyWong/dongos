@@ -1,4 +1,6 @@
-"""Candidate xHCI controller executes reset, MMIO setup and DMA NoOps."""
+"""Current-source regression, not a replay of unavailable candidate snapshots.
+
+Tracked xHCI controller executes reset, MMIO setup and DMA NoOps."""
 from __future__ import annotations
 import hashlib,json,os,subprocess,unittest,uuid
 from pathlib import Path
@@ -11,7 +13,7 @@ def source_root():
     override=os.environ.get('DONGOS_XHCI_CONTROLLER_ROOT')
     if override:return Path(override)
     production=ROOT/'services'
-    return production if (production/'usb/xhci_controller.dg').exists() else ROOT/'build/test/p8-xhci-candidate/services'
+    return production
 
 class XhciControllerTests(unittest.TestCase):
     @classmethod
@@ -25,7 +27,7 @@ class XhciControllerTests(unittest.TestCase):
     def tearDownClass(cls):
         after={str(p.relative_to(ROOT)):hashlib.sha256(p.read_bytes()).hexdigest() for p in cls.inputs}
         (cls.out/'source-after.json').write_text(json.dumps(after,indent=2)+'\n')
-        if after!=cls.before:raise AssertionError('candidate controller inputs changed during execution')
+        if after!=cls.before:raise AssertionError('current controller inputs changed during execution')
     def command(self,args,d,n):
         r=subprocess.run(args,cwd=ROOT,capture_output=True,text=True,timeout=90)
         (d/(n+'.json')).write_text(json.dumps(dict(command=args,returncode=r.returncode,stdout=r.stdout,stderr=r.stderr),indent=2)+'\n');return r
@@ -46,7 +48,7 @@ class XhciControllerTests(unittest.TestCase):
                         'completion-pointer':('if e.parameter==(*r).physical+(*r).slots[i]*16 {found=i;}','if i==0 {found=i;}'),
                     }[mutation]
                     self.assertEqual(1,source.count(needle));p.write_text(source.replace(needle,replacement))
-                    (d/'mutation.json').write_text(json.dumps(dict(mutation=mutation,needle=needle,replacement=replacement,expected='independent MMIO and DMA hardware model rejects actual changed candidate source'),indent=2)+'\n')
+                    (d/'mutation.json').write_text(json.dumps(dict(mutation=mutation,needle=needle,replacement=replacement,expected='independent MMIO and DMA hardware model rejects actual changed current source'),indent=2)+'\n')
                 c=compile_file(ROOT/'tests/xhci_controller_probe.dg',roots=[ROOT/'tests',services],mode=mode)
                 layouts={x['full_name']:x for x in c.layout_manifest['types']}
                 for name,size in {'usb.xhci_controller.Ops':40,'usb.xhci_controller.Setup':112,'usb.xhci_controller.Caps':328,'usb.xhci_controller.State':1280}.items():self.assertEqual(size,layouts[name]['size'])

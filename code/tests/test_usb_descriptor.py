@@ -1,4 +1,6 @@
-"""Production-candidate USB descriptor byte parser, independent wire fixtures."""
+"""Current-source regression, not a replay of unavailable candidate snapshots.
+
+Tracked production USB descriptor byte parser, independent wire fixtures."""
 from __future__ import annotations
 import hashlib,json,os,subprocess,unittest,uuid
 from pathlib import Path
@@ -8,7 +10,7 @@ ROOT=Path(__file__).resolve().parents[1]
 class UsbDescriptorTests(unittest.TestCase):
  @classmethod
  def setUpClass(cls):
-  cls.services=ROOT/'services' if (ROOT/'services/usb/descriptor.dg').exists() else ROOT/'build/test/p8-xhci-candidate/services';cls.inputs=[cls.services/'usb/descriptor.dg',ROOT/'tests/usb_descriptor_probe.dg',ROOT/'tests/usb_descriptor_probe.c',Path(__file__)]
+  cls.services=ROOT/'services';cls.inputs=[cls.services/'usb/descriptor.dg',ROOT/'tests/usb_descriptor_probe.dg',ROOT/'tests/usb_descriptor_probe.c',Path(__file__)]
   cls.out=ROOT/'build/test/p8-usb-descriptor/host'/('run-'+uuid.uuid4().hex[:12]);cls.out.mkdir(parents=True)
   cls.before={str(p.relative_to(ROOT)):hashlib.sha256(p.read_bytes()).hexdigest() for p in cls.inputs};(cls.out/'source-before.json').write_text(json.dumps(cls.before,indent=2)+'\n')
  @classmethod

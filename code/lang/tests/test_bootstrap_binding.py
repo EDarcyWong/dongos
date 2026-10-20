@@ -93,7 +93,11 @@ class BootstrapBindingTests(unittest.TestCase):
         cls.nasm,cls.cc=tool('nasm','NASM'),tool('gcc','CC')
         if not cls.nasm or not cls.cc:raise unittest.SkipTest('native binding requires NASM/GCC')
         cls.work=ROOT/'build/test/bootstrap-binding'/('run-'+uuid.uuid4().hex[:12]);cls.work.mkdir(parents=True)
-        (cls.work/'probe.c').write_text(HARNESS,encoding='utf-8')
+        # The full compiler catalog now exceeds the original small-probe admission.
+        size=sum(len(source) for _,_,source in cls.actual_catalog())
+        harness=HARNESS.replace('tc>300000||sc>300000||nc>500000',
+            f'tc>{max(300000,size+32)}||sc>{max(300000,size+32)}||nc>{max(500000,size*2+64)}')
+        (cls.work/'probe.c').write_text(harness,encoding='utf-8')
         cls.files=['binding.dg','modules.dg','names.dg','expression.dg','syntax.dg','lexer.dg','unicode.dg']
         cls.inputs={p:hashlib.sha256((ROOT/'lang/bootstrap'/p).read_bytes()).hexdigest() for p in cls.files};cls.records=[]
         cls.executables={m:cls.build(ROOT/'lang',m,m) for m in ('debug','release')}
@@ -162,14 +166,21 @@ class BootstrapBindingTests(unittest.TestCase):
         cases.append(case(simple,8,bind_depth=1))
         for mode,exe in self.executables.items():self.run_cases(exe,cases,'errors-'+mode)
         self.records.append(dict(test='errors-capacity-depth',cases=len(cases),invalid_preflights_per_process=10,modes=2,passed=True))
+    @staticmethod
+    def actual_catalog():
+        # Include every bootstrap module and its standard-library dependencies.
+        files=[(0,'bootstrap/'+p.name,p.read_bytes()) for p in sorted((ROOT/'lang/bootstrap').glob('*.dg'))]
+        files.extend((0,p.relative_to(ROOT/'lang/std').as_posix(),p.read_bytes())
+                     for p in sorted((ROOT/'lang/std').rglob('*.dg')))
+        return files
     def test_actual_bootstrap_module_graphs(self):
-        files=[(0,'bootstrap/'+p.name,p.read_bytes()) for p in sorted((ROOT/'lang/bootstrap').glob('*.dg'))
-               if p.name not in {'source_position.dg'}]
-        cases=[case('',files=files,entry=i) for i in range(len(files))]
+        files=self.actual_catalog()
+        entries=sum(path.startswith('bootstrap/') for _,path,_ in files)
+        cases=[case('',files=files,entry=i) for i in range(entries)]
         # entry is a module-loader budget, not a binder limit.
         for i,(c,status,refs) in enumerate(cases):c['entry']=i
         for mode,exe in self.executables.items():self.run_cases(exe,cases,'real-bootstrap-'+mode)
-        self.records.append(dict(test='actual-bootstrap-graphs',entry_modules=len(files),modes=2,passed=True))
+        self.records.append(dict(test='actual-bootstrap-graphs',entry_modules=entries,catalog_modules=len(files),modes=2,passed=True))
     def test_actual_bad_nearest_scope_and_control_checks_are_rejected(self):
         source=(ROOT/'lang/bootstrap/binding.dg').read_text(encoding='utf-8')
         s='module a;fn f(x:u64)u64{{let x:u64=1;return x;}}'

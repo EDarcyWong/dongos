@@ -19,6 +19,8 @@ static void*alloc(size_t n){
  C(p!=NULL);memset(p,0,n);return p;
 }
 void ABI __dong_panic(void){C(0);}
+/* Builder never dispatches or retires a live thread. */
+void ABI parallel_live_retire(U cpu,U slot,U frame){(void)cpu;(void)slot;(void)frame;C(0);}
 U ABI pb_allocate(U pages,Block*out){count++;if(count==fail_at)return 1;C(count<32&&pages&&pages<64);
  blocks[count-1]=(Block){0x400000+count*0x40000,(U)(uintptr_t)alloc((size_t)pages*4096),pages};*out=blocks[count-1];return 0;}
 void ABI pb_barrier(void){barriers++;C(barriers<=18);}
@@ -47,6 +49,7 @@ int main(int argc,char**argv){C(argc==2);C(!pb_space_init());void*idle=alloc(4*1
  else{C(!result&&!pb_get(2,0)&&pb_get(1,0)==6&&pb_get(3,0)==1&&pb_get(4,0)==6&&pb_get(5,0)&&kicks==3&&barriers==18&&count==11);
   for(unsigned i=0;i<count;i++){Block*b=&blocks[i];for(U p=0;p<b->pages;p++){U leaf=pb_leaf(b->virtual+p*4096);
    if(b->pages==6&&(p==0||p==5))C(!leaf);else C(leaf==(b->physical+p*4096+1));}}
-  for(unsigned cpu=1;cpu<=3;cpu++)C(tops[cpu]==pb_get(6,cpu));for(unsigned i=0;i<6;i++)C(pb_get(7,i)>255);
+  for(unsigned cpu=1;cpu<=3;cpu++){C(tops[cpu]==pb_get(6,cpu));}
+  for(unsigned i=0;i<6;i++){C(pb_get(7,i)>255);}
   fail_at=count+1;U out=0xa5;C(pb_more(&out)!=0&&out==0xa5&&pb_get(2,0)&&pb_get(0,0));C(pb_more(&out)!=0&&out==0xa5&&count==fail_at);
  }printf("parallel builder checks passed %u; scenario=%s real-paging double-guards acknowledged-retire arena-only failed-allocation-held\n",checks,argv[1]);return 0;}

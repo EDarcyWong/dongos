@@ -2,6 +2,7 @@ module usb_root_probe;
 import lib.abi as sys;import ipc.handles as handles;import ipc.core as ipc;
 import lib.process_abi as proc;import lib.desktop as gui;
 import user.memory as memory;import user.devices as devices;import user.desktop as desktop;
+import usb_root_shared as shared;
 import user.device_host as device_host;import user.processes as procs;
 import boot.power_startup as power;import input.console as console;
 const COUNT:usize=16;const ACTIVE:usize=16;const BOOT_ADDRESS:u64=0x70000000;

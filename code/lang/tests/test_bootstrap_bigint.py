@@ -110,7 +110,7 @@ class BootstrapBigintTests(unittest.TestCase):
     def build(cls,root,mode,name):
         compiled=compile_file(root/'bootstrap/bigint.dg',roots=[root],mode=mode)
         asm=cls.work/(name+'.asm');asm.write_text(compiled.assembly,encoding='utf-8')
-        obj=cls.work/(name+'.o');exe=cls.work/(name+('.exe'if os.name=='nt'else''))
+        obj=cls.work/(name+'.o');exe=cls.work/(name+('.exe'if os.name=='nt'else'.bin'))
         for fmt in ('elf64','win64'):
             output=obj if fmt==('win64'if os.name=='nt'else'elf64')else cls.work/(name+'.'+fmt+'.o')
             cls.command([cls.nasm,'-f',fmt,*nasm_flags(cls.nasm),'-o',output,asm],name+'-'+fmt)

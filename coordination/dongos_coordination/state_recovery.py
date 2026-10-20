@@ -6,7 +6,8 @@ import hashlib
 import json
 from pathlib import Path
 
-from .store import Conflict, OWNERS, STATES, checks, digest, now, relative, resolve
+from .statesync import TASK_NUMBER
+from .store import Conflict, OWNERS, NAMESPACES, STATES, checks, digest, now, relative, resolve
 
 
 def _instant(value):
@@ -37,7 +38,11 @@ def load_plan(store, project, snapshot_path, audit_path, *, allow_superseded=Fal
     by_id = {task['id']: task for task in records}
     for task in records:
         item = evidence[task['id']]
-        if (task['owner'] not in OWNERS or task['id'] != task['owner'] + ':' + task['number'] or
+        namespace, _, number = task['id'].partition(':')
+        valid_owner = (task.get('owner') in (*OWNERS, None) if namespace == 'pool' or 'assignment_owner' in task
+                       else task.get('owner') == namespace)
+        if (namespace not in NAMESPACES or not TASK_NUMBER.fullmatch(number) or
+                number != task.get('number') or not valid_owner or
                 task['status'] not in STATES or type(task['rev']) is not int or task['rev'] < 1 or
                 item.get('status') != task['status'] or item.get('rev') != task['rev']):
             raise ValueError('无效任务或证据状态不一致：' + task['id'])

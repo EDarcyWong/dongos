@@ -1,13 +1,15 @@
-"""Actual xHCI entry NoMedia lifecycle, with only the syscall boundary mocked."""
+"""Current-source regression, not a replay of unavailable candidate snapshots.
+
+Actual xHCI entry NoMedia lifecycle, with only the syscall boundary mocked."""
 from __future__ import annotations
 import hashlib,json,os,shutil,subprocess,unittest,uuid
 from pathlib import Path
 from lang.dongc import compile_file
 from lang.tests.test_dongc import nasm_flags,tool
 ROOT=Path(__file__).resolve().parents[1]
-BASE=ROOT/'build/test/p8-rpc-candidate'
+BASE=ROOT
 SOURCE=BASE/'services/drivers/xhci_service.dg'
-ADAPTER=ROOT/'build/test/p8-async-candidate/services/usb/xhci_transport.dg'
+ADAPTER=ROOT/'services/usb/xhci_transport.dg'
 SEAM=r'''
 // Test-only exports appended to the otherwise unchanged production entry.
 // Hardware startup is outside this fixture; the real async DMA native covers it.

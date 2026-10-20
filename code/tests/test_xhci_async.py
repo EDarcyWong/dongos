@@ -1,11 +1,13 @@
-"""Actual async event multiplexer and recovery over independent DMA hardware."""
+"""Current-source regression, not a replay of unavailable candidate snapshots.
+
+Actual async event multiplexer and recovery over independent DMA hardware."""
 from __future__ import annotations
 import hashlib,json,os,subprocess,unittest,uuid,shutil
 from pathlib import Path
 from lang.dongc import compile_file
 from lang.tests.test_dongc import nasm_flags,tool
 ROOT=Path(__file__).resolve().parents[1]
-SOURCE=ROOT/'build/test/p8-async-candidate/services/usb/xhci_transport.dg'
+SOURCE=ROOT/'services/usb/xhci_transport.dg'
 class XhciAsyncTests(unittest.TestCase):
  @classmethod
  def setUpClass(cls):

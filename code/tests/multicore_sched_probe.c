@@ -60,7 +60,8 @@ static void admit(unsigned id,unsigned p,uint64_t mask,uint64_t frame){
  uint64_t code=(id>=64||p>=32||!frame||(frame&7)||!mask||(mask&~m.online))?INVALID:(m.t[id].state?STATE:0);
  CHECK(status==code);
  if(!code){unsigned cpu=least(mask);ModelThread*t=&m.t[id];uint64_t generation=t->generation+1;*t=(ModelThread){1,p,mask,cpu,generation,frame,0};queue(id,cpu);++m.count;++m.sequence;CHECK(value==handle(id));}
- else CHECK(value==before);compare();
+ else {CHECK(value==before);}
+ compare();
 }
 static unsigned first(unsigned cpu,unsigned p,uint64_t affinity,unsigned newest){
  unsigned best=64;uint64_t order=newest?0:UINT64_MAX;

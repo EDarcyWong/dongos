@@ -9,7 +9,7 @@
 typedef uint64_t U;
 typedef struct{U w[25];} Frame;
 extern U ABI ud_required(void),ud_init(U,U),ud_lock(U,U),ud_unlock(U),ud_admit(U,U,U,U,U,U,U*),ud_select(U,U*),ud_begin(U),ud_complete(U),ud_drain(U),ud_release(U,U),ud_commit(U),ud_cancel(U),ud_park(U),ud_poll(U),ud_barrier_begin(U),ud_barrier_finish(U,U),ud_wait(U,U,U),ud_retire_begin(U,U),ud_retire_finish(U,U),ud_wake(U,U,U),ud_audit(void),ud_get(U,U);
-static U checks,cpu,roots[16],switches,retains,flushes[16],kicks[16],clock_tick=1,flush_fault,kick_fault,switch_fault,if0=1,lock_wait_release,wait_sequence;
+static U checks,cpu,roots[16],switches,retains,flushes[16],kicks[16],clock_tick=1,flush_fault,kick_fault,switch_fault,if0=1,lock_wait_release,wait_sequence,legacy_fault,legacy_polls;
 static U tlb_root[16][17],tlb_version[16][17],map_version[17];
 static Frame frames[16] __attribute__((aligned(64)));
 static unsigned char xstates[16][1024] __attribute__((aligned(64))),hardware[16][1024];
@@ -20,6 +20,8 @@ void ABI __dong_panic(void){fail("Dong panic",__LINE__);}
 U ABI user_smp_arch_if0(void){return if0;}
 U ABI user_smp_arch_cpu(void){return cpu;}
 U ABI user_smp_arch_root(void){return roots[cpu];}
+/* Hardware legacy-mailbox boundary, not part of the queue/ownership model. */
+U ABI user_domain_legacy_poll(void){C(roots[cpu]==0x100000);legacy_polls++;return legacy_fault;}
 U ABI user_smp_arch_try_lock(U*p){if(*p)return 0;*p=1;return 1;}
 void ABI user_smp_arch_unlock(U*p){C(*p==1);*p=0;}
 U ABI user_smp_arch_clock(void){return clock_tick++;}
@@ -76,7 +78,8 @@ static int normal(void){
 }
 static int failure(const char*name){
  setup();lock(0);admit(0,1,0x200000,0x11);C(select_user()==0);enter(0,0x44);lock(0);C(ud_drain(0)==1);C(!ud_release(0,3));
- if(!strcmp(name,"flush-fail")){U seq=ud_barrier_begin(0);C(seq==1);flush_fault=1;C(ud_poll(0)==0x06090003&&ud_get(0,0)&&ud_get(13,0)==0);}
+ if(!strcmp(name,"legacy-fail")){U seq=ud_barrier_begin(0);C(seq==1);U before=legacy_polls;legacy_fault=1;C(ud_poll(0)==0x06090003&&ud_get(0,0)&&ud_get(13,0)==0&&legacy_polls==before+1);}
+ else if(!strcmp(name,"flush-fail")){U seq=ud_barrier_begin(0);C(seq==1);flush_fault=1;C(ud_poll(0)==0x06090003&&ud_get(0,0)&&ud_get(13,0)==0);}
  else if(!strcmp(name,"timeout")){U seq=ud_barrier_begin(0);C(seq==1);C(ud_wait(0,seq,clock_tick+3)==0x06090005&&ud_get(0,0)&&ud_get(3,0)==seq&&ud_get(2,0)==1);}
  else if(!strcmp(name,"kick-fail")){kick_fault=1;C(ud_wake(0,0,1)==0x06090003&&ud_get(0,0));}
  else if(!strcmp(name,"switch-fail")){C(!ud_wake(0,0,1));U out=0;C(ud_select(0,&out)==1);C(!ud_unlock(0));switch_fault=1;C(ud_commit(0)==0x06090003&&ud_get(0,0));}

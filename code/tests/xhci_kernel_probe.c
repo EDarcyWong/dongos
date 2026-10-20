@@ -22,7 +22,9 @@ static U checks;
 static const U ECAM=0xe0000000,XHCI=0xe0018000,OWNER=0x10000000e,INCARNATION=1;
 static const U DENIED=0x050a0002,HOST_DENIED=0x05120002,REMOVED=0x05120008;
 static uint32_t pci[3][64],mmio[4096];static U bars[3]={0xf1000000,0xf2000000,0xf3000000};
-static unsigned char dma[131072],table[8192];static Frame frames[32];
+static unsigned char dma[131072],table[8192],snapshot_storage[43*4096+4095];static Frame frames[32];
+static U table_allocations,snapshot_allocations;
+typedef struct {U physical,virtual,pages;} ResourceBlock;
 static U mapped[16],allocations[16],bme_writes,alias_calls,mmio_reads,range_calls,quarantine_writes;
 static int probes[3],partial_grant,readback_failure,readback_pending,bad_alias;
 static Device catalog[4];static Binding binding[4];static Handles handles[16];
@@ -38,7 +40,17 @@ ABI U native_alloc(U id,U virtual,U requested,U*out){CK(out&&virtual==0x68000000
 ABI U native_alias(U id,U virtual,U*out){CK(id==13&&virtual>=0x68000000&&virtual<0x68020000&&!(virtual&4095)&&out);alias_calls++;*out=(U)(uintptr_t)(dma+virtual-0x68000000);if(bad_alias&&virtual==0x6801f000)*out+=8;return 0;}
 ABI U native_copy(U id,U virtual,unsigned char*out,U bytes){CK(id==13&&virtual==0x68000000&&out&&bytes==sizeof dma);memcpy(out,dma,sizeof dma);return 0;}
 ABI const Frame* native_frames(void){return frames;}
-ABI U native_table(U*out){CK(out);*out=(U)(uintptr_t)table;return 0;}
+ABI U native_arena(void){return ((U)(uintptr_t)snapshot_storage+4095)&~(U)4095;}
+ABI U native_resources(U pages,U alignment,ResourceBlock*out){
+ CK(out&&alignment==1);
+ if(pages==2){CK(!table_allocations&&!snapshot_allocations);table_allocations++;out->physical=0x2fffe000;out->virtual=(U)(uintptr_t)table;}
+ else{CK(pages==43&&table_allocations==1&&!snapshot_allocations);snapshot_allocations++;out->physical=0x30000000;out->virtual=native_arena();
+  CK(!(out->virtual&4095)&&out->virtual>=(U)(uintptr_t)snapshot_storage&&out->virtual+43*4096<=(U)(uintptr_t)snapshot_storage+sizeof snapshot_storage);
+  CK(out->virtual+43*4096<=(U)(uintptr_t)dma||out->virtual>=(U)(uintptr_t)dma+sizeof dma);
+  for(U i=0;i<43*4096;i++)CK(!((unsigned char*)(uintptr_t)out->virtual)[i]);
+ }
+ out->pages=pages;return 0;
+}
 ABI void __dong_panic(void){fprintf(stderr,"unexpected Dong panic\n");exit(2);}
 static Bar* bar(U id){return (Bar*)(uintptr_t)xk_bars(id);}
 static Lease* lease(U id){return (Lease*)(uintptr_t)xk_lease(id);}

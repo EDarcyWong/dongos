@@ -1,0 +1,82 @@
+// Bounded deterministic preflight/replay. Only the final replay publishes user output.
+module bootstrap.nasm_narrow_arithmetic_function;
+import bootstrap.nasm_symbol as sym;
+import bootstrap.nasm_sysv_function_entry as ent;
+import bootstrap.nasm_integer_memory_load as mld;
+import bootstrap.nasm_integer_memory_store as mst;
+import bootstrap.nasm_integer_load as ld;
+import bootstrap.nasm_sysv_function_exit as ex;
+import bootstrap.nasm_block_emit as blk;
+import bootstrap.nasm_integer_cast as cast;
+import bootstrap.nasm_integer_binary as bin;
+import bootstrap.nasm_checked_narrow_result as narrow;
+pub const OK:u64=0;pub const INVALID:u64=1;pub const CAPACITY:u64=2;
+const MAX:u64=0xffff_ffff_ffff_ffff;const RBP:u64=5;
+struct Config{module_name:[]const u8,item_name:[]const u8,operation:u64,width:u64,signed:bool,checked:bool,error_block:u64}
+fn span(p:u64,n:u64)bool{return n==0||(p!=0&&n<=MAX-p);}
+fn overlap(a:u64,n:u64,b:u64,m:u64)bool{return n!=0&&m!=0&&a<b+m&&b<a+n;}
+fn room(out:[]u8,at:usize,size:usize)bool{return at<=out.len&&size<=out.len-at;}
+unsafe fn put(out:[]u8,at:*usize,text:[]const u8)bool{unsafe{
+ if !room(out,*at,text.len){return false;}
+ var i:usize=0;while i<text.len{out[*at+i]=text[i];i+=1;}*at+=text.len;return true;
+}}
+unsafe fn load_memory(piece:[]u8,at:*usize,register:u64,displacement:i64)bool{unsafe{
+ if !room(piece,*at,128){return false;}
+ var n:usize=0;
+ if mld.emit(register,RBP,displacement,64,false,slice_from_raw_parts(&piece[*at],128),&n)!=mld.OK{return false;}
+ if n>128{return false;}
+ *at+=n;return true;
+}}
+unsafe fn store_memory(piece:[]u8,at:*usize,source:u64,displacement:i64)bool{unsafe{
+ if !room(piece,*at,128){return false;}
+ var n:usize=0;
+ if mst.emit(source,RBP,displacement,64,slice_from_raw_parts(&piece[*at],128),&n)!=mst.OK{return false;}
+ if n>128{return false;}
+ *at+=n;return true;
+}}
+unsafe fn load_immediate(piece:[]u8,at:*usize,register:u64,value:u64)bool{unsafe{
+ if !room(piece,*at,64){return false;}
+ var n:usize=0;
+ if ld.emit(register,value,64,false,slice_from_raw_parts(&piece[*at],64),&n)!=ld.OK{return false;}
+ if n>64{return false;}
+ *at+=n;return true;
+}}
+unsafe fn name_ok(s:[]const u8,out:[]u8,wp:u64)bool{unsafe{
+ let p=s.ptr as u64;let n=s.len;
+ return n>=1&&n<=64&&span(p,n)&&!overlap(p,n,out.ptr as u64,out.len)&&!overlap(p,n,wp,8);
+}}
+unsafe fn piece(index:usize,c:*const Config,buffer:[]u8,length:*usize)bool{unsafe{
+ var at:usize=0;var n:usize=0;
+ if index==0{if sym.encode((*c).module_name,(*c).item_name,slice_from_raw_parts(&buffer[0],266),&n)!=0{return false;}at=n;if !put(buffer,&at,":\n"){return false;}}
+ else if index==1{var kinds:[2]u8=[0;2];var offsets:[2]usize=[0;2];offsets[0]=8;offsets[1]=16;if ent.emit(slice_from_raw_parts(&kinds[0],2),slice_from_raw_parts(&offsets[0],2),32,buffer,&n)!=0{return false;}at=n;}
+ else if index==2{if !load_memory(buffer,&at,0,-8){return false;}if !load_memory(buffer,&at,1,-16){return false;}}
+ else if index==3{if cast.emit(0,0,(*c).width,(*c).signed,buffer,&n)!=0{return false;}at=n;}
+ else if index==4{if cast.emit(1,1,(*c).width,(*c).signed,buffer,&n)!=0{return false;}at=n;}
+ else if index==5{if bin.emit((*c).operation,0,1,buffer,&n)!=0{return false;}at=n;}
+ else if index==6{if (*c).checked{if narrow.emit((*c).width,(*c).signed,(*c).error_block,buffer,&n)!=0{return false;}at=n;}else{if cast.emit(0,0,(*c).width,(*c).signed,buffer,&n)!=0{return false;}at=n;}}
+ else if index==7{if !store_memory(buffer,&at,0,-24){return false;}if !load_immediate(buffer,&at,0,0){return false;}if !store_memory(buffer,&at,0,-32){return false;}}
+ else if index==8{if ex.emit(11,32,0,24,32,buffer,&n)!=0{return false;}at=n;}
+ else if index==9{if blk.emit(0,(*c).error_block,buffer,&n)!=0{return false;}at=n;}
+ else if index==10{if !load_immediate(buffer,&at,0,0){return false;}if !store_memory(buffer,&at,0,-24){return false;}if !load_immediate(buffer,&at,0,1){return false;}if !store_memory(buffer,&at,0,-32){return false;}}
+ else if index==11{if ex.emit(11,32,0,24,32,buffer,&n)!=0{return false;}at=n;}
+ else{return false;}if at>1536{return false;}*length=at;return true;
+}}
+pub unsafe fn emit(module_name:[]const u8,item_name:[]const u8,operation:u64,width:u64,signed:bool,checked:bool,error_block:u64,out:[]u8,written:*usize)u64{unsafe{
+let wp=written as u64;let op=out.ptr as u64;
+ if written==null||(wp&7)!=0||!span(wp,8)||!span(op,out.len)||overlap(wp,8,op,out.len){return INVALID;}
+if !name_ok(module_name,out,wp)||!name_ok(item_name,out,wp){return INVALID;}
+if operation>1||(width!=8&&width!=16&&width!=32)||error_block==MAX{return INVALID;}
+let c=Config{module_name:module_name,item_name:item_name,operation:operation,width:width,signed:signed,checked:checked,error_block:error_block};
+var buffer:[1536]u8=[0;1536];var n:usize=0;var total:usize=0;var p:usize=0;
+ while p<12{
+  if !piece(p,&c,slice_from_raw_parts(&buffer[0],1536),&n)||n>1536{return INVALID;}
+  total+=n;p+=1;
+ }
+ if total>out.len{return CAPACITY;}
+ var at:usize=0;p=0;
+ while p<12{
+  if !piece(p,&c,slice_from_raw_parts(&buffer[0],1536),&n){return INVALID;}
+  var i:usize=0;while i<n{out[at+i]=buffer[i];i+=1;}at+=n;p+=1;
+ }
+ *written=at;return OK;
+}}

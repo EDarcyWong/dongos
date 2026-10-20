@@ -1,0 +1,125 @@
+// Full finite i64 switch function. C35 performs the actual signed ordering and
+// duplicate-value check; original Arm order supplies the return blocks.
+// Prefix and all return blocks are built in bounded local buffers in three live
+// stack frames. No user output is touched until all dependencies and capacity
+// checks finish. Publication has no dependency calls or error-return paths.
+module bootstrap.nasm_i64_switch_function;
+import bootstrap.nasm_symbol as sym;
+import bootstrap.nasm_sysv_function_entry as entry;
+import bootstrap.nasm_integer_memory_load as load;
+import bootstrap.nasm_switch_dispatch as dispatch;
+import bootstrap.switch_cases as cases;
+import bootstrap.nasm_block_emit as block;
+import bootstrap.nasm_integer_load as immediate;
+import bootstrap.nasm_integer_memory_store as store;
+import bootstrap.nasm_sysv_function_exit as exit;
+pub const OK:u64=0;pub const INVALID:u64=1;pub const CAPACITY:u64=2;
+pub struct Arm{pub value:i64,pub block:u64,pub result:u64}
+const MAX:u64=0xffff_ffff_ffff_ffff;
+// Prefix <= 268 symbol + 59 fixed C44 entry + 25 fixed CR12 load + 1233 C35
+// = 1585 <= 1600. Each return block <= 30 label + 30 immediate + 26 store
+// + 50 fixed C42 exit = 136. At most 17 * 136 = 2312 <= 2320.
+// Prefix1600, first eight return blocks1088, remaining nine1224 coexist until
+// publication in three bounded frames (Dong limits each compiler frame4096).
+// 3897 total text bound is tighter than the task's general6325, not measured.
+const PREFIX:usize=1600;const RETURN:usize=136;
+fn span(p:u64,n:u64)bool{return n==0||(p!=0&&n<=MAX-p);}
+fn overlap(a:u64,n:u64,b:u64,m:u64)bool{return n!=0&&m!=0&&a<b+m&&b<a+n;}
+fn room(out:[]u8,at:usize,n:usize)bool{return at<=out.len&&n<=out.len-at;}
+unsafe fn put(out:[]u8,at:*usize,text:[]const u8)bool{unsafe{
+ if !room(out,*at,text.len){return false;}
+ var i:usize=0;while i<text.len{out[*at+i]=text[i];i+=1;}*at+=text.len;return true;
+}}
+unsafe fn head(module_name:[]const u8,item_name:[]const u8,input:[]const cases.Case,
+ default_block:u64,out:[]u8,written:*usize)bool{unsafe{
+ var at:usize=0;var n:usize=0;
+ if !room(out,0,266){return false;}
+ if sym.encode(module_name,item_name,slice_from_raw_parts(&out[0],266),&n)!=sym.OK||n>266{return false;}
+ at=n;if !put(out,&at,":\n"){return false;}
+ var kinds:[1]u8=[0;1];var offsets:[1]usize=[8;1];
+ if !room(out,at,59){return false;}
+ if entry.emit(slice_from_raw_parts(&kinds[0],1),slice_from_raw_parts(&offsets[0],1),16,
+  slice_from_raw_parts(&out[at],59),&n)!=entry.OK||n>59{return false;}
+ at+=n;
+ if !room(out,at,25){return false;}
+ if load.emit(7,5,-8,64,false,slice_from_raw_parts(&out[at],25),&n)!=load.OK||n>25{return false;}
+ at+=n;
+ if !room(out,at,1233){return false;}
+ if dispatch.emit(input,default_block,slice_from_raw_parts(&out[at],1233),&n)!=dispatch.OK||n>1233{return false;}
+ at+=n;*written=at;return true;
+}}
+unsafe fn return_block(block_id:u64,result:u64,out:[]u8,written:*usize)bool{unsafe{
+ var at:usize=0;var n:usize=0;
+ if !room(out,at,30){return false;}
+ if block.emit(0,block_id,slice_from_raw_parts(&out[at],30),&n)!=block.OK||n>30{return false;}
+ at+=n;
+ if !room(out,at,30){return false;}
+ if immediate.emit(0,result,64,false,slice_from_raw_parts(&out[at],30),&n)!=immediate.OK||n>30{return false;}
+ at+=n;
+ if !room(out,at,26){return false;}
+ if store.emit(0,5,-16,64,slice_from_raw_parts(&out[at],26),&n)!=store.OK||n>26{return false;}
+ at+=n;
+ if !room(out,at,50){return false;}
+ if exit.emit(8,16,0,16,0,slice_from_raw_parts(&out[at],50),&n)!=exit.OK||n>50{return false;}
+ at+=n;*written=at;return true;
+}}
+unsafe fn body(arms:[]const Arm,default_block:u64,default_result:u64,start:usize,end:usize,
+ out:[]u8,written:*usize)bool{unsafe{
+ var at:usize=0;var n:usize=0;var i=start;
+ while i<end{
+  if !room(out,at,RETURN){return false;}
+  if i<arms.len{
+   if !return_block(arms[i].block,arms[i].result,slice_from_raw_parts(&out[at],RETURN),&n)||n>RETURN{return false;}
+  }else{
+   if !return_block(default_block,default_result,slice_from_raw_parts(&out[at],RETURN),&n)||n>RETURN{return false;}
+  }
+  at+=n;i+=1;
+ }
+ *written=at;return true;
+}}
+// All three scratch segments remain live in their respective caller frames.
+unsafe fn finish_tail(prefix:[]const u8,first:[]const u8,arms:[]const Arm,default_block:u64,
+ default_result:u64,start:usize,out:[]u8,written:*usize)u64{unsafe{
+ var buffer:[1224]u8=[0;1224];var n:usize=0;
+ if !body(arms,default_block,default_result,start,arms.len+1,slice_from_raw_parts(&buffer[0],1224),&n){return INVALID;}
+ if n>1224||first.len>1088||prefix.len>1585{return INVALID;}
+ let total=prefix.len+first.len+n;
+ if total>out.len{return CAPACITY;}
+ // All dependencies complete: failure cannot occur during publication.
+ var i:usize=0;while i<prefix.len{out[i]=prefix[i];i+=1;}
+ i=0;while i<first.len{out[prefix.len+i]=first[i];i+=1;}
+ i=0;while i<n{out[prefix.len+first.len+i]=buffer[i];i+=1;}
+ *written=total;return OK;
+}}
+unsafe fn finish(prefix:[]const u8,arms:[]const Arm,default_block:u64,default_result:u64,
+ out:[]u8,written:*usize)u64{unsafe{
+ var buffer:[1088]u8=[0;1088];var n:usize=0;var split=arms.len;if split>8{split=8;}
+ if !body(arms,default_block,default_result,0,split,slice_from_raw_parts(&buffer[0],1088),&n){return INVALID;}
+ return finish_tail(prefix,slice_from_raw_parts(&buffer[0],n),arms,default_block,default_result,split,out,written);
+}}
+pub unsafe fn emit(module_name:[]const u8,item_name:[]const u8,arms:[]const Arm,
+ default_block:u64,default_result:u64,out:[]u8,written:*usize)u64{unsafe{
+ let wp=written as u64;let mp=module_name.ptr as u64;let ip=item_name.ptr as u64;
+ let ap=arms.ptr as u64;let op=out.ptr as u64;
+ if written==null||(wp&7)!=0||!span(wp,8){return INVALID;}
+ if arms.len>MAX/24{return INVALID;}
+ let an=arms.len*24;let mn=module_name.len;let inn=item_name.len;let on=out.len;
+ if !span(mp,mn)||!span(ip,inn)||!span(ap,an)||!span(op,on)||(an!=0&&(ap&7)!=0){return INVALID;}
+ if overlap(wp,8,op,on)||overlap(wp,8,mp,mn)||overlap(wp,8,ip,inn)||overlap(wp,8,ap,an){return INVALID;}
+ if overlap(op,on,mp,mn)||overlap(op,on,ip,inn)||overlap(op,on,ap,an){return INVALID;}
+ if mn==0||mn>64||inn==0||inn>64||arms.len>16||default_block==MAX{return INVALID;}
+ var i:usize=0;
+ while i<arms.len{
+  let b=arms[i].block;if b==MAX||b==default_block{return INVALID;}
+  var j:usize=0;while j<i{if arms[j].block==b{return INVALID;}j+=1;}
+  i+=1;
+ }
+ var input:[16]cases.Case=[cases.Case{value:0,label:0};16];
+ i=0;while i<arms.len{
+  input[i]=cases.Case{value:arms[i].value,label:arms[i].block as usize};i+=1;
+ }
+ var prefix:[1600]u8=[0;1600];var n:usize=0;
+ if !head(module_name,item_name,slice_from_raw_parts(&input[0],arms.len),default_block,
+  slice_from_raw_parts(&prefix[0],PREFIX),&n){return INVALID;}
+ return finish(slice_from_raw_parts(&prefix[0],n),arms,default_block,default_result,out,written);
+}}

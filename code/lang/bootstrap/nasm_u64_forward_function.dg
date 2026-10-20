@@ -1,0 +1,85 @@
+// A whole SysV function u64 f(u64 a0,...,a{n-1}) { return callee(a[map[0]],...,a[map[m-1]]); }
+// with n = incoming_count (0..6) and m = argument_map.len (0..6). Incoming slot i is [rbp-8*(i+1)],
+// the result slot is [rbp-8*(n+1)], frame = align_up(8*(n+1),16), no saved registers.
+// Order: CR3 symbol + ":\n", CR11 prologue, C37 capture of the n INTEGER words, the C41 direct
+// invoke (setup from the mapped slots, call, cleanup, capture RAX into the result slot), then
+// C42 (load the result slot into RAX, epilogue, ret). Every component is called for real into a
+// bounded local scratch; out and written are written once, after every check.
+module bootstrap.nasm_u64_forward_function;
+import bootstrap.nasm_symbol as sym;
+import bootstrap.nasm_function_frame as ff;
+import bootstrap.nasm_sysv_incoming_args as inc;
+import bootstrap.nasm_sysv_direct_invoke as inv;
+import bootstrap.nasm_sysv_function_exit as ex;
+pub const OK:u64=0;pub const INVALID:u64=1;pub const CAPACITY:u64=2;
+pub const NAME_LIMIT:usize=64;pub const MAX_ARGUMENTS:usize=6;
+const MAX:u64=0xffff_ffff_ffff_ffff;
+const U64_KIND:u64=8;
+// Local scratch: each component gets a fixed segment at least as large as its proven maximum for at most
+// 6 single-word arguments, laid out back to back after the text already produced (at never exceeds the sum so far):
+//   symbol    266  (CR3: 10 + 2*(64+64) = 266)                                    -> at <= 266
+//   ":\n"       2                                                                   -> at <= 268
+//   prologue   64  ("push rbp\nmov rbp, rsp\nsub rsp, 64\n" = 34; frame <= 64)     -> at <= 332
+//   capture   256  (C37, 6 register words, each "mov qword [rbp - 48], rsi\n" <= 26 -> 156) -> at <= 588
+//   invoke    640  (C41: 6 setup lines "mov rsi, qword [rbp - 48]\n" <= 26 -> 156, no stack words so no
+//                   sub/add rsp, "call " + 266 + LF = 272, "mov qword [rbp - 56], rax\n" = 26 -> 454) -> at <= 1228
+//   exit      128  ("mov rax, qword [rbp - 56]\nadd rsp, 64\npop rbp\nret\n" = 50; C42 bound 122) -> at <= 1356
+// 1356 <= TEXT, and each component writes at most the slice it is given, so no segment runs past TEXT.
+// C37 and C41 still build their text in their own full internal scratch (1024 / 1536 bytes) and only copy
+// the exact result here. A larger scratch is not possible: dongc limits one function's worst-case frame to
+// 4096 bytes and an initialized [N]u8 costs about 2N of it (N=2048 already measures 4592).
+const SYMBOL:usize=266;const PROLOGUE:usize=64;const CAPTURE:usize=256;const INVOKE:usize=640;const EXIT:usize=128;
+const TEXT:usize=1536;
+fn span(p:u64,n:u64)bool{return n==0||(p!=0&&n<=MAX-p);}
+fn overlap(a:u64,n:u64,b:u64,m:u64)bool{return n!=0&&m!=0&&a<b+m&&b<a+n;}
+fn same(a:[]const u8,b:[]const u8)bool{
+ if a.len!=b.len{return false;}
+ var i:usize=0;while i<a.len{if a[i]!=b[i]{return false;}i+=1;}
+ return true;
+}
+unsafe fn put(out:[]u8,at:*usize,text:[]const u8)void{unsafe{
+ var i:usize=0;while i<text.len{out[*at+i]=text[i];i+=1;}*at+=text.len;
+}}
+pub unsafe fn emit(module_name:[]const u8,item_name:[]const u8,callee_module:[]const u8,callee_item:[]const u8,
+ incoming_count:usize,argument_map:[]const usize,out:[]u8,written:*usize)u64{unsafe{
+ let wp=written as u64;let mp=module_name.ptr as u64;let ip=item_name.ptr as u64;
+ let cmp=callee_module.ptr as u64;let cip=callee_item.ptr as u64;let ap=argument_map.ptr as u64;let op=out.ptr as u64;
+ if written==null||(wp&7)!=0||!span(wp,8){return INVALID;}
+ if argument_map.len>MAX/8{return INVALID;}
+ let mn=module_name.len;let inn=item_name.len;let cmn=callee_module.len;let cin=callee_item.len;
+ let an=argument_map.len*8;let on=out.len;
+ if !span(mp,mn)||!span(ip,inn)||!span(cmp,cmn)||!span(cip,cin)||!span(ap,an)||(an!=0&&(ap&7)!=0)||!span(op,on){return INVALID;}
+ // Inputs may overlap each other; out and written are disjoint from every whole input and from each other.
+ if overlap(wp,8,op,on){return INVALID;}
+ if overlap(wp,8,mp,mn)||overlap(wp,8,ip,inn)||overlap(wp,8,cmp,cmn)||overlap(wp,8,cip,cin)||overlap(wp,8,ap,an)
+  ||overlap(op,on,mp,mn)||overlap(op,on,ip,inn)||overlap(op,on,cmp,cmn)||overlap(op,on,cip,cin)||overlap(op,on,ap,an){return INVALID;}
+ if mn==0||mn>NAME_LIMIT||inn==0||inn>NAME_LIMIT||cmn==0||cmn>NAME_LIMIT||cin==0||cin>NAME_LIMIT{return INVALID;}
+ if incoming_count>MAX_ARGUMENTS||argument_map.len>MAX_ARGUMENTS{return INVALID;}
+ // Only now read the map: every entry names an incoming argument (so zero incoming allows only an empty map).
+ var j:usize=0;while j<argument_map.len{if argument_map[j]>=incoming_count{return INVALID;}j+=1;}
+ // No direct self-recursion: CR3 is injective, so equal names are exactly an equal symbol.
+ if same(module_name,callee_module)&&same(item_name,callee_item){return INVALID;}
+ let result=8*(incoming_count+1);let frame=(result+15)/16*16;
+ var kinds:[6]u8=[0;6];var incoming:[6]usize=[0;6];var sources:[6]usize=[0;6];
+ var i:usize=0;while i<incoming_count{incoming[i]=8*(i+1);i+=1;}
+ j=0;while j<argument_map.len{sources[j]=8*(argument_map[j]+1);j+=1;}
+ // Components, in order, into the local scratch. Any non-OK here is an INVALID input
+ // (the segments are proven large enough), and nothing has touched out yet.
+ var buffer:[1536]u8=[0;1536];let text=slice_from_raw_parts(&buffer[0],TEXT);var at:usize=0;var n:usize=0;
+ if sym.encode(module_name,item_name,slice_from_raw_parts(&buffer[at],SYMBOL),&n)!=sym.OK{return INVALID;}
+ at+=n;put(text,&at,":\n");
+ if ff.prologue(frame,0,slice_from_raw_parts(&buffer[at],PROLOGUE),&n)!=ff.OK{return INVALID;}
+ at+=n;
+ if inc.emit(slice_from_raw_parts(&kinds[0],incoming_count),slice_from_raw_parts(&incoming[0],incoming_count),frame,
+  slice_from_raw_parts(&buffer[at],CAPTURE),&n)!=inc.OK{return INVALID;}
+ at+=n;
+ if inv.emit(callee_module,callee_item,slice_from_raw_parts(&kinds[0],argument_map.len),slice_from_raw_parts(&sources[0],argument_map.len),
+  U64_KIND,frame,result,0,slice_from_raw_parts(&buffer[at],INVOKE),&n)!=inv.OK{return INVALID;}
+ at+=n;
+ if ex.emit(U64_KIND,frame,0,result,0,slice_from_raw_parts(&buffer[at],EXIT),&n)!=ex.OK{return INVALID;}
+ at+=n;
+ if at>TEXT{return INVALID;}
+ if at>on{return CAPACITY;}
+ i=0;while i<at{out[i]=buffer[i];i+=1;}
+ *written=at;return OK;
+}}

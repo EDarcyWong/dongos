@@ -144,7 +144,7 @@ def align_ok(a:int)->bool:
 
 
 def expected(label:bytes,byte_count:int,alignment:int)->bytes:
-    return b'alignb '+str(alignment).encode()+b'\n'+label+b': resb '+str(byte_count).encode()+b'\n'
+    return b'align '+str(alignment).encode()+b', resb 1\n'+label+b': resb '+str(byte_count).encode()+b'\n'
 
 
 def need_total(label:bytes,byte_count:int,alignment:int)->int:
@@ -321,6 +321,7 @@ class NasmBssTests(unittest.TestCase):
             for align in (1,8,4096):
                 for n in (0,1,7,8,16,100):
                     need=need_total(lab,n,align)
+                    self.assertEqual(need,23+len(lab)+len(str(align))+len(str(n)))
                     cases+=[item(lab,n,align),item(lab,n,align,cap=need+5),item(lab,n,align,cap=max(0,need-1))]
         # illegal labels / alignments
         for lab in (b'__dong_',b'__dong_!',b'dong_abc',b'__Dong_a',b''):
@@ -344,6 +345,7 @@ class NasmBssTests(unittest.TestCase):
         samples=[
             (b'__dong_s0',0,8),(b'__dong_s1',1,1),(b'__dong_s8',8,8),
             (b'__dong_s16',16,16),(b'__dong_s7',7,4),(b'__dong_s64',64,32),
+            (b'__dong_s4096',17,4096),
         ]
         cases=[item(lab,n,a)for lab,n,a in samples]
         results=self.run_both(cases,'bss-obj')
@@ -362,10 +364,9 @@ class NasmBssTests(unittest.TestCase):
                                      capture_output=True,timeout=30)
                     self.assertEqual(r.returncode,0,(mode,index,fmt,r.stderr))
                     value,bss_size=reader(obj,lab)
-                    # after resb 1, alignb pads so label % align == 0 and value >= 1
-                    self.assertEqual(value%align,0,(mode,index,fmt,'align',value,align))
-                    self.assertGreaterEqual(value,1,(mode,index,fmt,'value'))
-                    self.assertEqual(bss_size,value+n,(mode,index,fmt,'bss_size',bss_size,value,n))
+                    # After resb 1, the next aligned offset is exactly alignment.
+                    self.assertEqual(value,align,(mode,index,fmt,'value',value,align))
+                    self.assertEqual(bss_size,align+n,(mode,index,fmt,'bss_size',bss_size,align,n))
                     checked+=1
         self.records.append(dict(test='dong-bss-object-symbol-size',samples=len(samples),
                                  checks=checked,modes=2,formats=2,passed=True))
@@ -381,9 +382,13 @@ class NasmBssTests(unittest.TestCase):
 
     def test_actual_compiled_wrong_sources_are_rejected(self):
         controls=[
-            ('bad-alignb-kw',
-             'out[0]=97;out[1]=108;out[2]=105;out[3]=103;out[4]=110;out[5]=98;out[6]=32;',
-             'out[0]=97;out[1]=108;out[2]=105;out[3]=103;out[4]=110;out[5]=32;out[6]=32;',
+            ('bad-align-kw',
+             'out[0]=97;out[1]=108;out[2]=105;out[3]=103;out[4]=110;out[5]=32;',
+             'out[0]=97;out[1]=108;out[2]=105;out[3]=120;out[4]=110;out[5]=32;',
+             [item(b'__dong_x',8,8)],'output'),
+            ('bad-resb-fill',
+             'out[at+7]=49;at+=8;',
+             'out[at+7]=50;at+=8;',
              [item(b'__dong_x',8,8)],'output'),
             ('bad-early-capacity',
              'if total>out.len{return CAPACITY;}',

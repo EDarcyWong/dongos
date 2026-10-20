@@ -688,7 +688,7 @@ user_gdtr: dw 55
 [warning pop]
 %endif
 section .bss
-alignb 16
+align 16, resb 1
 user_context_cpu: resb UserCpu_size
 user_context_gdt: resb 56
 user_context_gdt_end:

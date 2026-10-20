@@ -49,6 +49,6 @@ section .data
 align 8
 server_data_anchor: dq 0
 section .bss
-alignb 8
+align 8, resb 1
 message: resq 8
 section .note.GNU-stack noalloc noexec nowrite progbits

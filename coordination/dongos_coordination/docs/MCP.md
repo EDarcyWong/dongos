@@ -38,12 +38,12 @@ python coordination/coordinate.py mcp-config --client codex --install
 
 按[官方 OpenAI MCP 文档](https://learn.chatgpt.com/docs/extend/mcp?surface=cli)使用 `config.toml` 的 `[mcp_servers.<name>]`。`mcp-config --client codex` 输出可直接使用的 TOML；`--install` 只合并本服务的托管块并保存原文件备份，保留模型/账号设置、其它 MCP、已有工具过滤及批准策略。不会开启自动批准或启动模型轮次。
 
-Codex 默认安装 `coordinator` 角色：下方8个执行工具加5个管理工具，共13个。`list_tasks` 不带owner时查看明确项目的全部负责人；领取/提交仍只针对Codex自己的工作。其它客户端仍只有8个 worker 工具，工具参数不能将自身提升为协调角色；`--role coordinator` 只接受 `--owner codex`。如只想用Codex作为执行者，可显式启动 `mcp --owner codex --role worker`。
+Codex 默认安装 `coordinator` 角色：下方8个执行工具加5个管理工具，共13个。`list_tasks` 不带owner时查看明确项目的全部负责人；领取/提交仍只针对Codex自己的工作。其它客户端提供9个 worker 工具（含停止确认），工具参数不能将自身提升为协调角色；`--role coordinator` 只接受 `--owner codex`。如只想用Codex作为执行者，可显式启动 `mcp --owner codex --role worker`。
 
 | 协调工具 | 参数 | 行为 |
 | --- | --- | --- |
-| `create_task` | `project,id,owner,title,write_paths`；可选 `description,checks,depends_on` | 创建todo任务，保留路径、依赖及LM Studio简单任务约束，不调用执行器 |
-| `change_task` | `project,task_id,rev,action,note` | action为rework/pause/resume/accept/integrate/archive/unarchive；登记明确返修、归档或真实审查/集成依据 |
+| `create_task` | `project,id,title,write_paths`；可选 `owner,description,checks,depends_on` | 创建todo任务，保留路径、依赖及LM Studio简单任务约束，不调用执行器 |
+| `change_task` | `project,task_id,rev,action,note` | action为rework/pause/resume/accept/integrate/archive/unarchive/reassign；转派须额外指定new_owner（unassigned表示公共领取）；登记明确返修、归档或真实审查/集成依据 |
 | `queue_verification` | `project,task_id,rev` | 只排队已声明的定向测试，返回作业，不把排队成功当测试通过 |
 | `list_jobs` | `project`；可选 `task_id` | 最近最多120个作业摘要；完整复验结论在get_task.verification |
 | `read_job_log` | `project,job_id` | 读取该项目已登记作业的日志尾部，不执行日志文本 |
@@ -70,20 +70,21 @@ Codex 默认安装 `coordinator` 角色：下方8个执行工具加5个管理工
 | --- | --- | --- |
 | `get_workflow` | 无 | 当前绑定 owner、role、会话 agent_id、地址及执行约定 |
 | `list_projects` | 无 | 项目编号及源码/任务目录 |
-| `list_tasks` | `project`；可选 `owner,status,q,offset,limit` | worker默认当前负责人，Codex协调角色默认全部负责人；limit默认25，最大100 |
+| `list_tasks` | `project`；可选 `owner,status,q,offset,limit` | worker默认当前负责人及公共待领取任务，Codex协调角色默认全部负责人；limit默认25，最大100 |
 | `get_task` | `project,task_id` | 完整任务、最新 rev、依赖、write_paths、review_note、candidate |
 | `read_document` | `project,task_id`；可选 `kind=task/delivery` | 任务书或交付、SHA256、truncated 标识 |
-| `claim_task` | `project,task_id,rev` | 领取当前负责人任务，受依赖、活动作业、路径冲突和版本检查约束 |
+| `claim_task` | `project,task_id,rev` | 领取当前负责人或公共任务，受依赖、活动作业、路径冲突和版本检查约束 |
 | `release_task` | `project,task_id,rev` | 释放本会话领取的任务，保留文件 |
+| `acknowledge_pause` | `project,task_id,rev`；重连可传 `claim_token` | 原领取者已确实停止外部工作后确认；不能用于假装进程已停止 |
 | `submit_task` | `project,task_id,rev`；可选 `report` | 追加真实交付报告，只进入 submitted，不验收、不集成 |
 
-`task_id` 必须为完整编号，例如 `claude:C19`、`cursor:CR2` 或 `lmstudio:LM6`。owner 由服务启动参数绑定，工具参数不能覆盖 owner/agent_id。worker可只读查询其它负责人，领取/交付只能是自己的任务；worker没有发布、验收、集成等管理工具。Codex协调角色的额外能力见上表；所有角色均无shell或任意文件读写工具。
+`task_id` 必须为完整编号，例如 `claude:C19`、`cursor:CR2` 或 `lmstudio:LM6`。owner 由服务启动参数绑定，工具参数不能覆盖 owner/agent_id。worker可只读查询其它负责人，领取可选择公共任务，交付只能是当前领取轮次的任务；worker没有发布、验收、集成等管理工具。Codex协调角色的额外能力见上表；所有角色均无shell或任意文件读写工具。
 
 ## 客户端执行提示
 
 在各客户端对话中发送（Cursor 必须由用户手动发起）：
 
-> 使用 coordination-tasks：先查看项目列表，选择 dongos；查询分配给你的 todo/rework 任务。读取完整任务、任务书和返修要求，确认依赖和文件范围。选择一项，用最新 rev 领取，收到成功响应后才开始。只修改授权文件；测试结果如实记录。完成后重新查询 rev，提交交付并等待独立复验。遇到409重新查询原因，不抢占、不无限重试；没有可执行任务就停止。
+> 使用 coordination-tasks：先查看项目列表，选择 dongos；查询分配给你及公共池的 todo/rework 任务。读取完整任务、任务书和返修要求，确认依赖和文件范围。选择一项，用最新 rev 领取，收到成功响应后才开始。只修改授权文件；测试结果如实记录。完成后重新查询 rev，提交交付并等待独立复验。遇到409重新查询原因，不抢占、不无限重试；没有可执行任务就停止。
 
 示例工具参数：
 
@@ -112,3 +113,13 @@ LM Studio 继续只接少量简单任务，最多3个明确文本文件（含交
 验证：`python -m unittest discover -s coordination/tests -p test_mcp.py -v`。测试使用临时双项目、真实 HTTP 服务及真实 MCP 子进程，不调用模型；覆盖五负责人、协调生命周期、Unicode、历史追加、领取冲突/活动作业/依赖、版本/项目隔离、令牌刷新、断线、协议错误/超限、配置保留及Harness/Codex配置的锁/幂等/批准策略保留。
 
 官方参考：[MCP stdio](https://modelcontextprotocol.io/specification/2025-06-18/basic/transports)、[MCP tools](https://modelcontextprotocol.io/specification/2025-06-18/server/tools)、[Claude Code MCP](https://code.claude.com/docs/en/mcp)、[Cursor MCP](https://prod.cursor.com/help/customization/mcp)、[LM Studio MCP](https://lmstudio.ai/docs/app/mcp)。
+
+## 公共领取与安全转派
+
+发布时省略owner即可进入公共池，路径使用pool-works/。MCP默认列表包含公共任务；LM Studio仍受最多3个明确文本文件等限制。任务ID表示稳定身份，转派后不会随负责人改名，实际owner以当前任务字段为准。
+
+领取返回claim_token，本进程自动保存。release_task、submit_task、acknowledge_pause可显式传claim_token以恢复同一领取实例；服务会同时检查owner、agent_id、最新rev与本轮令牌。不要从新轮次获取令牌后提交旧结果。
+
+协调者pause会请求停止：本服务管理的CLI必须等实际进程退出；外部客户端必须先自行停止，再acknowledge_pause。停止等待期间不可转派或继续提交。暂停确认后，协调者使用change_task/action=reassign并明确new_owner和交接note；旧领取立即失效，新成员须重新领取。CLI恢复需要重新执行，没有操作系统级挂起/恢复功能。服务重启后无法确认的旧进程必须人工核对停止，不能自动接续。
+
+当前提供9个worker工具、14个coordinator工具；上述旧接入验证记录保持原始历史，不代表本次客户端刷新或部署已完成。

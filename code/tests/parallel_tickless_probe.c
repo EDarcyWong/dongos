@@ -15,6 +15,7 @@ static U checks,kicks,saves,restores,arms,stops,eois,locks,unlocks,registered[16
 static unsigned char expected[64][1024],hardware[16][1024],initial[1024] __attribute__((aligned(64)));
 static unsigned char *arena,*stacks,*idle,*scheduler;
 static U active_cpu,old_token,phase,serial,event_active,if0=1,on_scheduler=1,wrong_root,timer_fault,kick_fault;
+static U retirements,exit_requested[16];
 static void fail(const char*s,unsigned line){fprintf(stderr,"parallel adapter oracle line %u: %s\n",line,s);exit(1);}
 #define C(x) do{checks++;if(!(x))fail(#x,__LINE__);}while(0)
 static void*alloc(size_t n){
@@ -31,6 +32,14 @@ void ABI parallel_arch_lock(U*p){C(if0&&!*p);*p=1;locks++;if(event_active)C(phas
 void ABI parallel_arch_unlock(U*p){C(*p==1);*p=0;unlocks++;if(event_active)phase=2;}
 U ABI parallel_arch_on_scheduler(U low,U top){C(low==(U)(uintptr_t)(scheduler+active_cpu*16384)&&top==low+16384);return on_scheduler;}
 U ABI parallel_arch_root(void){return wrong_root?0x200000:0x100000;}
+/* Retire notification is observed before the old token/frame are cleared. */
+void ABI parallel_live_retire(U cpu,U slot,U frame){
+ C(event_active&&cpu==active_cpu&&exit_requested[cpu]&&phase==1&&locks==unlocks+1);
+ C(old_token&&slot==id(old_token)&&ps_get(3,cpu)==old_token&&ps_get(4,slot)==old_token);
+ C(ps_get(5,slot)==3&&frame==ps_get(6,slot));retirements++;
+}
+static U request_exit(U cpu){U result=parallel_request(cpu,2);if(!result){C(!exit_requested[cpu]);exit_requested[cpu]=1;}return result;}
+
 void ABI parallel_arch_save(U pointer){C(event_active&&on_scheduler&&phase==0&&old_token&&pointer==ps_get(8,id(old_token)));C(ps_get(5,id(old_token))==2);
  memcpy((void*)(uintptr_t)pointer,hardware[active_cpu],1024);memcpy(expected[id(old_token)],hardware[active_cpu],1024);saves++;phase=1;}
 void ABI parallel_arch_restore(U pointer){U token=ps_get(3,active_cpu);C(event_active&&phase==5&&token&&pointer==ps_get(8,id(token)));
@@ -68,11 +77,13 @@ static U dispatch(U cpu,U expect_failure){
  active_cpu=cpu;old_token=ps_get(3,cpu);phase=0;event_active=1;serial++;
  U old_frame=old_token?ps_get(6,id(old_token)):idle_frame(cpu);
  if(old_token){for(unsigned i=0;i<1024;i++)hardware[cpu][i]=(unsigned char)(serial+i*17+old_token);}
- U before_restore=restores,before_saves=saves;U result=parallel_dispatch(cpu,old_frame,2);
+ U before_restore=restores,before_saves=saves,before_retire=retirements;U result=parallel_dispatch(cpu,old_frame,2);
  if(expect_failure){C(!result&&ps_get(0,0));event_active=0;return 0;}
+ C(retirements==before_retire+exit_requested[cpu]);exit_requested[cpu]=0;
  C(result&&!ps_get(0,0));U now=ps_get(3,cpu);C(saves==before_saves+(old_token?1:0));C(restores==before_restore+(now?1:0));
  C(phase==(now?6:5));if(now){C(result==ps_get(6,id(now))&&ps_get(5,id(now))==2&&(ps_get(18,id(now))&(1<<cpu)));}
- else C(result==idle_frame(cpu));event_active=0;C(!ps_audit());return now;
+ else {C(result==idle_frame(cpu));}
+ event_active=0;C(!ps_audit());return now;
 }
 static int normal(void){
  setup();U out=0xa5;U seq=ps_get(2,0);if0=0;C(ps_admit(0,1,14,stack(0),&out)!=0&&out==0xa5&&ps_get(2,0)==seq);if0=1;
@@ -83,7 +94,7 @@ static int normal(void){
  C(!ps_priority(tokens[0],0));C(!ps_preempt(1,1));C(parallel_request(1,1)!=0);
  ((Frame*)(uintptr_t)ps_get(6,1))->w[20]=0x10602;C(dispatch(1,0)==tokens[1]&&ps_get(13,1)==1);C(!ps_preempt(1,0));C(dispatch(1,0)==tokens[0]);
  C(!parallel_request(1,1));C(dispatch(1,0)==tokens[1]&&ps_get(5,0)==3);U wake_kicks=kicks;C(!ps_wake(tokens[0])&&kicks==wake_kicks+1);C(dispatch(1,0)==tokens[0]);
- U stale=tokens[0];C(!parallel_request(1,2));C(dispatch(1,0)==tokens[1]);C(ps_get(4,0)==0&&ps_get(5,0)==0);seq=ps_get(2,0);C(ps_wake(stale)!=0&&ps_get(2,0)==seq);
+ U stale=tokens[0];C(!request_exit(1));C(dispatch(1,0)==tokens[1]);C(ps_get(4,0)==0&&ps_get(5,0)==0);seq=ps_get(2,0);C(ps_wake(stale)!=0&&ps_get(2,0)==seq);
  admit(0,8,2);C(tokens[0]!=stale&&ps_wake(stale)!=0);C(!parallel_request(1,1));C(dispatch(1,0)==tokens[0]);C(!parallel_request(1,1));C(dispatch(1,0)==tokens[2]);
  C(!parallel_request(2,1));C(dispatch(2,0)==0);C(!ps_affinity(tokens[0],14));C(!ps_wake(tokens[0]));C(ps_get(7,0)==2&&dispatch(2,0)==tokens[0]);
  seq=ps_get(2,0);C(ps_affinity(tokens[0],2)!=0&&ps_get(2,0)==seq&&ps_get(7,0)==2);
@@ -119,8 +130,8 @@ static int tickless(void){
  C(!parallel_request(1,1));C(!dispatch(1,0)&&!timer_active[1]&&stops==4);
  C(!ps_wake(tokens[0])&&kicks==prior_kicks+3);C(dispatch(1,0)==tokens[0]&&!timer_active[1]);
  C(!ps_wake(tokens[1])&&kicks==prior_kicks+4);C(dispatch(1,0)==tokens[1]&&timer_active[1]&&arms==3);
- C(!parallel_request(1,2));C(dispatch(1,0)==tokens[0]&&!timer_active[1]&&stops==5);
- C(!parallel_request(1,2));C(!dispatch(1,0)&&!timer_active[1]&&ps_get(1,0)==0&&stops==5);
+ C(!request_exit(1));C(dispatch(1,0)==tokens[0]&&!timer_active[1]&&stops==5);
+ C(!request_exit(1));C(!dispatch(1,0)&&!timer_active[1]&&ps_get(1,0)==0&&stops==5);
  active_cpu=1;C(parallel_idle_arm(1)==1&&!timer_active[1]&&stops==5);
  prior_kicks=kicks;admit(0,8,2);C(kicks==prior_kicks+1);C(dispatch(1,0)==tokens[0]&&!timer_active[1]);
  admit(1,8,2);U c2=cpu_kicks[2],c3=cpu_kicks[3];C(!ps_affinity(tokens[1],14));C(cpu_kicks[2]==c2+1&&cpu_kicks[3]==c3+1);
@@ -129,8 +140,8 @@ static int tickless(void){
  C(!parallel_request(2,1));C(!dispatch(2,0)&&!timer_active[2]);
  c2=cpu_kicks[2];c3=cpu_kicks[3];C(!ps_wake(tokens[1]));C(cpu_kicks[2]==c2+1&&cpu_kicks[3]==c3+1);
  C(dispatch(3,0)==tokens[1]&&!timer_active[3]);
- C(!parallel_request(3,2));C(!dispatch(3,0)&&!timer_active[3]);C(!ps_wake(tokens[0]));C(dispatch(1,0)==tokens[0]);
- C(!parallel_request(1,2));C(!dispatch(1,0)&&!ps_get(1,0));C(!ps_audit()&&locks==unlocks);return 0;
+ C(!request_exit(3));C(!dispatch(3,0)&&!timer_active[3]);C(!ps_wake(tokens[0]));C(dispatch(1,0)==tokens[0]);
+ C(!request_exit(1));C(!dispatch(1,0)&&!ps_get(1,0));C(!ps_audit()&&locks==unlocks);return 0;
 }
 int main(int argc,char**argv){C(argc==2);if(!strcmp(argv[1],"normal"))normal();else if(!strcmp(argv[1],"tickless"))tickless();else failure(argv[1]);
  printf("parallel tickless native checks passed %u; scenario=%s real-runqueue timer-stop idle-IPI wake private-stack-xstate\n",(unsigned)checks,argv[1]);return 0;}
