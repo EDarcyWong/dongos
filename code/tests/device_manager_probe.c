@@ -27,18 +27,24 @@ static void ranks(void){Device d=pci(0xe0000000,0x1af4,0x1042,0);CK(dm_rank(&d,1
 static void interrupts(void){Table t={0};Device d=ps2(),view;Binding b;Irq q,out,poison;U owner=0;CK(dm_init(&t)==0);CK(dm_register(&t,&d,&view)==0);CK(dm_bind(&t,view.token,&d,3,&b)==0&&b.irqmask==((1<<1)|(1<<12)));CK(dm_irq_bind(&t,5,7,1,1,&q)==0&&q.token==257&&q.vector==0x51&&q.generation==7);CK(dm_irq_bind(&t,5,7,1,1,&q)==BUSY);memset(&out,0xa5,sizeof out);poison=out;CK(dm_poll(&t,257,5,0,&out)==BLOCKED&&!memcmp(&out,&poison,sizeof out));for(U n=1;n<=1024;n++){CK(dm_signal(&t,0x51,&out,&owner)==0&&owner==5&&out.sequence==n&&out.flags==3);CK(dm_signal(&t,0x51,&out,&owner)==BUSY);CK(dm_poll(&t,257,4,n-1,&out)==STALE);CK(dm_poll(&t,257,5,n-1,&out)==0&&out.sequence==n);Table before=t;CK(dm_ack(&t,257,5,n+1)==STALE&&!memcmp(&t,&before,sizeof t));CK(dm_ack_valid(&t,257,5,n)==0);CK(dm_ack(&t,257,5,n)==0);CK(dm_ack(&t,257,5,n)==STALE);}CK(dm_irq_revoke(&t,5)==0);CK(dm_poll(&t,257,5,1024,&out)==STALE);CK(dm_irq_bind(&t,5,8,1,1,&q)==0&&q.token==513&&q.generation==8);CK(dm_signal(&t,0x51,&out,&owner)==0&&out.sequence==1);CK(dm_ack(&t,257,5,1)==STALE);CK(dm_irq_bind(&t,5,8,12,12,&q)==0&&q.token==258&&q.vector==0x5c);CK(dm_revoke(&t,view.token,1)==0);CK(dm_poll(&t,513,5,0,&out)==STALE&&dm_signal(&t,0x5c,&out,&owner)==STALE);}
 typedef U (ABI *RecoveryStep)(U,U,U);
 typedef U (ABI *RecoveryRead)(U,Device*);
-typedef struct {RecoveryStep quiesce,retire,reclaim;RecoveryRead read;} RecoveryOps;
+typedef struct {RecoveryStep stop,quiesce,retire,reclaim;RecoveryRead read;} RecoveryOps;
 extern ABI U dm_recover(Table*,U,U,const RecoveryOps*,U,Device*);
 static Table *recovery_table;
 static Device recovery_hardware;
-static U recovery_token,recovery_generation,recovery_calls,recovery_fail,recovery_reentry;
+static U recovery_token,recovery_generation,recovery_calls,recovery_fail,recovery_reentry,recovery_stops;
 static RecoveryOps recovery_ops;
 static ABI U recovery_step(U context,U token,U generation,U stage){
     CK(context==0xcafe&&token==recovery_token&&generation==recovery_generation);
-    CK(++recovery_calls==stage);
+    CK(recovery_stops==1&&++recovery_calls==stage);
     CK(recovery_table->devices[(token&255)-1].flags&8);
     if(recovery_reentry){Device ignored;CK(dm_recover(recovery_table,token,generation,&recovery_ops,context,&ignored)==BUSY);}
     return recovery_fail==stage?1:0;
+}
+static ABI U stop_owner(U c,U t,U g){
+    CK(c==0xcafe&&t==recovery_token&&g==recovery_generation&&recovery_calls==0);
+    CK(++recovery_stops==1&&(recovery_table->devices[(t&255)-1].flags&8));
+    Device ignored;CK(dm_recover(recovery_table,t,g,&recovery_ops,c,&ignored)==BUSY);
+    return recovery_fail==7?1:0;
 }
 static ABI U quiesce(U c,U t,U g){return recovery_step(c,t,g,1);}
 static ABI U retire(U c,U t,U g){return recovery_step(c,t,g,2);}
@@ -50,10 +56,10 @@ static ABI U recovery_read(U c,Device *out){
     *out=recovery_hardware;return recovery_fail==4?1:0;
 }
 static void recovery(void){
-    recovery_ops=(RecoveryOps){quiesce,retire,reclaim,recovery_read};
-    for(U fail=0;fail<=6;fail++){
+    recovery_ops=(RecoveryOps){stop_owner,quiesce,retire,reclaim,recovery_read};
+    for(U fail=0;fail<=7;fail++){
         Table t={0},before;Device d=ps2(),v,out,poison;Binding b;Irq irq;
-        recovery_table=&t;recovery_hardware=d;recovery_calls=0;recovery_fail=fail;recovery_reentry=1;
+        recovery_table=&t;recovery_hardware=d;recovery_calls=0;recovery_stops=0;recovery_fail=fail;recovery_reentry=1;
         CK(dm_init(&t)==0&&dm_register(&t,&d,&v)==0&&dm_bind(&t,v.token,&d,3,&b)==0);
         CK(dm_irq_bind(&t,5,1,1,1,&irq)==0&&irq.token==257);
         recovery_token=v.token;recovery_generation=2;
@@ -68,8 +74,8 @@ static void recovery(void){
         if(fail==6)recovery_hardware.token=257;
         U result=dm_recover(&t,v.token,2,&recovery_ops,0xcafe,&out);
         if(fail){
-            CK(result==(fail<=4?UINT64_C(0x05120009):fail==5?REMOVED:INVALID));
-            CK(recovery_calls==(fail<=4?fail:4));
+            CK(result==(fail<=4||fail==7?UINT64_C(0x05120009):fail==5?REMOVED:INVALID));
+            CK(recovery_calls==(fail==7?0:fail<=4?fail:4));
             CK(!memcmp(&out,&poison,sizeof out)&&t.devices[0].token==257&&t.devices[0].generation==2);
             CK(t.devices[0].flags==(before.devices[0].flags|8));
             before.devices[0].flags|=8;CK(!memcmp(&t,&before,sizeof t));
@@ -82,7 +88,7 @@ static void recovery(void){
             CK(dm_irq_bind(&t,6,2,1,1,&irq)==BUSY);
             for(U generation=3;generation<66;generation++){
                 U old=t.devices[0].token;CK(dm_revoke(&t,old,generation-1)==0);
-                recovery_token=old;recovery_generation=generation;recovery_calls=0;
+                recovery_token=old;recovery_generation=generation;recovery_calls=0;recovery_stops=0;
                 CK(dm_recover(&t,old,generation,&recovery_ops,0xcafe,&out)==0&&out.token==(generation<<8|1));
                 CK(dm_bind(&t,old,&d,3,&b)==STALE&&dm_bind(&t,out.token,&d,3,&b)==0);
             }
@@ -91,7 +97,7 @@ static void recovery(void){
     // PCI block recovery uses the same transaction, never auto-binds a role.
     for(U fail=0;fail<=4;fail++){
         Table p={0};Device d=pci(0xe0000000,0x8086,1,0x010802),v,out;Binding b;
-        recovery_table=&p;recovery_hardware=d;recovery_calls=0;recovery_fail=fail;recovery_reentry=1;
+        recovery_table=&p;recovery_hardware=d;recovery_calls=0;recovery_stops=0;recovery_fail=fail;recovery_reentry=1;
         CK(dm_init(&p)==0&&dm_register(&p,&d,&v)==0&&dm_bind(&p,v.token,&d,1,&b)==0);
         recovery_token=v.token;recovery_generation=2;CK(dm_revoke(&p,v.token,1)==0);
         U result=dm_recover(&p,v.token,2,&recovery_ops,0xcafe,&out);
@@ -106,7 +112,7 @@ static void recovery(void){
         CK(dm_register(&p,&d,&v)==0&&v.token==258&&dm_bind(&p,v.token,&d,1,&b)==0);
         CK(dm_revoke(&p,v.token,1)==0);before=p;
         recovery_table=&p;recovery_hardware=d;recovery_token=v.token;recovery_generation=2;
-        recovery_calls=0;recovery_fail=0;recovery_reentry=1;
+        recovery_calls=0;recovery_stops=0;recovery_fail=0;recovery_reentry=1;
         CK(dm_recover(&p,v.token,2,&recovery_ops,0xcafe,&out)==0&&out.token==514&&recovery_calls==4);
         CK(!memcmp(&p.devices[0],&before.devices[0],sizeof(Device)));
         CK(!memcmp(&p.bindings[2],&before.bindings[2],sizeof(Binding)));
@@ -117,7 +123,7 @@ static void recovery(void){
     CK(dm_init(&t)==0&&dm_register(&t,&d,&v)==0&&dm_bind(&t,v.token,&d,3,&b)==0);
     const U max=UINT64_C(0x00ffffffffffffff);
     t.devices[0].generation=max-1;t.devices[0].token=((max-1)<<8)|1;
-    CK(dm_revoke(&t,t.devices[0].token,max-1)==0);before=t;recovery_calls=0;
+    CK(dm_revoke(&t,t.devices[0].token,max-1)==0);before=t;recovery_calls=0;recovery_stops=0;
     CK(dm_recover(&t,t.devices[0].token,max,&recovery_ops,0xcafe,&out)==CAPACITY&&!memcmp(&t,&before,sizeof t)&&!recovery_calls);
 }
 

@@ -35,9 +35,10 @@ class DeviceManagerTests(unittest.TestCase):
                     if mutation=='accepted-replaced-device':
                         path=services/'drivers/device_policy.dg';src=path.read_text();needle='return (*a).version==(*b).version&&(*a).kind==(*b).kind&&(*a).ecam==(*b).ecam&&(*a).segment==(*b).segment'
                         self.assertEqual(1,src.count(needle));src=src.replace(needle,'return true||(*a).version==(*b).version&&(*a).kind==(*b).kind&&(*a).ecam==(*b).ecam&&(*a).segment==(*b).segment')
-                    elif mutation in ('skipped-recovery-retirement','reused-recovery-token'):
+                    elif mutation in ('skipped-recovery-stop','skipped-recovery-retirement','reused-recovery-token'):
                         path=kernel/'user/device_manager.dg';src=path.read_text()
                         needle,replacement={
+                            'skipped-recovery-stop':('if (*ops).stop(context,token,generation)!=0','if false'),
                             'skipped-recovery-retirement':('if (*ops).retire(context,token,generation)!=0','if false'),
                             'reused-recovery-token':('fresh.token=(generation<<8)|slot','fresh.token=token'),
                         }[mutation]
@@ -69,7 +70,7 @@ class DeviceManagerTests(unittest.TestCase):
             c=compile_file(ROOT/'tests/device_manager_probe.dg',roots=[ROOT/'tests',ROOT/'kernel',ROOT/'services',ROOT/'lang/std'],mode=mode)
             layouts={x['full_name']:x for x in c.layout_manifest['types']}
             self.assertEqual(4560,layouts['user.device_manager.Table']['size'])
-            self.assertEqual(32,layouts['user.device_manager.RecoveryOps']['size'])
+            self.assertEqual(40,layouts['user.device_manager.RecoveryOps']['size'])
             self.assertIn('dm_recover',c.assembly)
     def test_actual_recovery_mutations_are_rejected(self):
-        for mutation in ('skipped-recovery-retirement','reused-recovery-token'):self.native(mutation)
+        for mutation in ('skipped-recovery-stop','skipped-recovery-retirement','reused-recovery-token'):self.native(mutation)

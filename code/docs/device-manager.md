@@ -52,6 +52,7 @@ DMA 仍按原路径永久持有，不能据此关闭 P5 的同次启动恢复或
 owner/incarnation、旧 DMA lease 与传入的旧 device token/撤权后 generation；
 不得直接修改账本。事务顺序固定为：
 
+0. `stop`：先确认精确旧 owner 在所有 CPU 上都不能继续运行或返回用户态；此排除必须维持到事务结束，防止旧驱动在 reset 完成后重新启用设备。失败不进入任何硬件复位步骤。
 1. `quiesce`：硬件停止并确认 DMA 已排空/完成受支持控制器复位。单独关闭
    PCI BME 或 MSI 不构成这个证明。
 2. `retire`：旧 owner 的能力、映射和所有 CPU 上的调度/地址翻译引用均已退休。
@@ -73,9 +74,7 @@ owner/incarnation、旧 DMA lease 与传入的旧 device token/撤权后 generat
 
 候选测试执行实际 Dong 账本，C 独立回调模型检查顺序、各阶段失败、重入、
 身份替换/无效快照、输出不变、跨代旧 token 拒绝、IRQ serial 保留和代际耗尽，
-并提供跳过退休/复用旧 token 的真实坏源负控。当前仅完成 debug/release 编译和
-C fixture 严格语法检查；本云环境缺 NASM，native 链接执行与坏源负控尚未运行，
-更不代表真实 DMA 安全证明或完整 P5 验收。
+并提供跳过退休/复用旧 token 的真实坏源负控。首版头提交 `2a739eb` 的 [专用原生CI](https://github.com/EDarcyWong/dongos/actions/runs/39413294161) 已完成6个测试入口、两模式实际执行与坏源拒绝，并通过完整 memory 依赖图编译。后续加入 `stop` 前置回调，须以更新提交的CI结果复核。宿主通过不代表真实 DMA 安全证明或完整 P5 验收。
 
 ### DMA 部分申请记录
 

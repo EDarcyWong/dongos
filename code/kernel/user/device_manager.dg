@@ -96,6 +96,8 @@ pub unsafe fn revoke(t:*Table,token:u64,generation:u64)!void {unsafe {
 // Kernel-only recovery transaction; intentionally not exposed by device_host
 // or the syscall ABI yet. Ops are trusted implementations, never user pointers.
 // Each callback receives the exact OLD token and its post-revoke generation.
+// stop must prove the exact old owner cannot run/return on any CPU;
+// that exclusion stays in force through every subsequent callback.
 // quiesce must prove controller DMA drained/reset, not just BME cleared;
 // retire must prove caps/mappings and every CPU's old owner/translation retired;
 // reclaim may release the exact old DMA lease only after those proofs.
@@ -104,7 +106,7 @@ pub unsafe fn revoke(t:*Table,token:u64,generation:u64)!void {unsafe {
 pub const RECOVERY_HELD:u64=8;
 pub type RecoveryStep=unsafe fn(context:u64,token:u64,generation:u64)u64;
 pub type RecoveryRead=unsafe fn(context:u64,out:*abi.Device)u64;
-pub struct RecoveryOps {pub quiesce:RecoveryStep,pub retire:RecoveryStep,pub reclaim:RecoveryStep,pub read:RecoveryRead}
+pub struct RecoveryOps {pub stop:RecoveryStep,pub quiesce:RecoveryStep,pub retire:RecoveryStep,pub reclaim:RecoveryStep,pub read:RecoveryRead}
 pub unsafe fn recover(t:*Table,token:u64,generation:u64,ops:*const RecoveryOps,context:u64,out:*abi.Device)!void {unsafe {
     try require(t);
     if ops==null||out==null {return error.abi.Invalid;}
@@ -120,6 +122,7 @@ pub unsafe fn recover(t:*Table,token:u64,generation:u64,ops:*const RecoveryOps,c
     while n<2 {if (*t).interrupts[n].device_token==token&&(*t).interrupts[n].live!=0 {return error.abi.Busy;}n+=1;}
     // Set before any callback so reentrant recovery and uncertain retries fail.
     (*t).devices[i].flags|=RECOVERY_HELD;
+    if (*ops).stop(context,token,generation)!=0 {return error.abi.Readback;}
     if (*ops).quiesce(context,token,generation)!=0 {return error.abi.Readback;}
     if (*ops).retire(context,token,generation)!=0 {return error.abi.Readback;}
     if (*ops).reclaim(context,token,generation)!=0 {return error.abi.Readback;}
