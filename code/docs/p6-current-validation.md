@@ -46,3 +46,17 @@ python3 -m tests.run_p6_kvm_qemu --reuse-esp build/test/p6-kvm/build/esp --outpu
 保留没有 KVM 的失败原因，不用允许失败来伪造通过。用户仅授权本次验收
 进程临时使用设备所属的既有 kvm 组；不改设备权限或永久组成员，其他 PR
 与 main push 不继承这一权限。后续 KVM 验收须使用已有访问权限或另行授权。
+
+## 首代 init DAG 结构验证
+
+`tests/run_p6_initial_dag_qemu.py` 是独立的四核 TCG 功能观察器，不执行
+KVM，不证明启动耗时。它使用相同正常 runtime7 构建绑定，在首次 GUI
+启动尚未全部 READY 时只读捕获 Catalog、init 启动回执、CPU 寄存器及
+所属页表，并核对实际执行 ELF；至少两个 AP 必须同时持有首代 GUI
+用户线程，至少一个仍在 STARTING，且完成非零调度 epoch。随后恢复
+同一客体，要求首代依赖图全部 READY、封存 trace 与早期前缀一致。
+错过窗口、回执或地址绑定不一致均失败，不以晚期快照替代初始证据。
+
+该观察会暂停客体，因此即使结构门禁成功，也不提供 ≤500ms 时间证据，
+更不表示完整 GUI/USB 操作回归已完成。实际运行结果记录在
+`build/test/p6-initial-dag/actual/result.json`，主机负控测试不是一次启动。
