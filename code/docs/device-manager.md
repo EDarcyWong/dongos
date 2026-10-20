@@ -139,3 +139,17 @@ C 硬件边界检查单字节写入、屏障顺序、身份/能力/BAR 错误、
 旧 owner/token、全核退休、实际 PCI/设备状态及完整32页 DMA 租约仍保持；
 第二次观察必须保持一致。构建清单、测试源清单、原始盘哈希和失败证据保存
 在 CI artifact。验证器单测或前端编译通过不能替代真实 guest CI 通过。
+
+### DMA alias refusal
+
+The trusted ordinary `memory.share_at` path rejects a physical page in any
+recorded nonempty DMA lease's whole rounded block, including partial mapping
+suffixes. Both read-only and writable sharing are refused before USER mapping.
+This does not withdraw existing aliases, prove reset/drain, retire a root,
+unpin, reclaim, or enable restart. Ordinary shared channel frames remain
+eligible when they are outside every DMA lease.
+
+`tests.test_dma_alias` compiles and executes the actual production guard and
+`share_at`, with full-block/partial-lease, boundary, owner-slot and read/write
+cases plus skip-guard/mapped-prefix-only mutations. Native execution requires
+NASM and GCC; compilation alone is not a native pass.

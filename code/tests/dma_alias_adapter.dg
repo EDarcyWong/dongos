@@ -1,0 +1,8 @@
+module dma_alias_adapter;
+pub const USER_MIN:u64=0x1000;pub const USER_LIMIT:u64=0x8000000000;
+pub const USER:u64=4;pub const WRITE:u64=2;pub const EXECUTE:u64=8;pub const UNCACHED:u64=16;
+pub struct Mapping{pub physical:u64,pub flags:u64}pub struct Space{pub unused:u64}
+pub var PHYSICAL:u64=0;pub var MAPS:u64=0;
+pub unsafe fn query(space:*Space,address:u64,out:*Mapping)!void{unsafe{*out=Mapping{physical:PHYSICAL,flags:USER|WRITE};}return;}
+pub unsafe fn map_live(space:*Space,address:u64,physical:u64,flags:u64)!void{unsafe{MAPS+=1;}return;}
+pub unsafe fn runtime_invalidate(address:u64)void{return;}
