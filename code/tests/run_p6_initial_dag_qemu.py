@@ -410,11 +410,23 @@ class InitialGuest(clock.ClockGuest):
         self.kernel_memory_layout = life.nvme.check_kernel_memory_layout(esp)
         self.deadline = None
         self.sampling = []
+        self.candidate_rejections = []
+        self.observations = []
+        self.confirmed_stop = None
+        self.catalog_initialized = False
+        self.gui_sampling_started = False
+        self.evidence['register_prefilter'] = dict(
+            diagnostic_only=True, samples=0, ap_cpl3_counts=[0, 0, 0, 0],
+            full_candidates=0, armed_at_stop_id=None)
         self.qmp_path = None
 
     def close(self):
         try:
-            timing.KvmGuest.close(self)
+            try:
+                self.finish_observation(time.monotonic())
+            finally:
+                # Diagnostic accounting must never prevent owned-guest cleanup.
+                timing.KvmGuest.close(self)
         finally:
             # Guest termination is mandatory; endpoint deletion is not. Never
             # unlink a preexisting/replaced socket or introduce an inode race.
@@ -434,28 +446,49 @@ class InitialGuest(clock.ClockGuest):
     def pause(self):
         self.qmp.request('stop')
         check(self.qmp.request('query-status').get('running') is False, 'QMP did not stop all CPUs')
+        confirmed = time.monotonic()
         self.stopped = True
         self.stop_id += 1
         self.tables = {}
         self._arena_limit = None
+        self.confirmed_stop = dict(stop_id=self.stop_id, diagnostic_only=True,
+                                   confirmed_stopped_monotonic=confirmed)
+        self.observations.append(self.confirmed_stop)
+        return confirmed
+
+    def finish_observation(self, end):
+        observation = getattr(self, 'confirmed_stop', None)
+        if observation is not None and 'collection_end_monotonic' not in observation:
+            observation.update(collection_end_monotonic=end,
+                               confirmed_stopped_collection_seconds=
+                               end - observation['confirmed_stopped_monotonic'])
 
     def resume(self):
         check(self.stopped, 'unpaired observation resume')
+        requested = time.monotonic()
+        self.finish_observation(requested)
         self.qmp.request('cont')
+        replied = time.monotonic()
         self.stopped = False
+        return requested, replied
 
     def sample_after(self, delay):
-        # QMP latency and host scheduling make requested sleep != guest runtime.
-        # Preserve both boundaries; never derive acceptance/timing from them.
+        # These are host observer intervals, never guest/KVM timing evidence.
         sample = dict(requested_sleep_seconds=delay, diagnostic_only=True,
-                      cont_request_monotonic=time.monotonic())
+                      guest_runtime_measured=False)
         self.sampling.append(sample)
-        self.resume()
-        sample['cont_reply_monotonic'] = time.monotonic()
+        requested, replied = self.resume()
+        sample.update(cont_request_monotonic=requested, cont_reply_monotonic=replied,
+                      cont_wait_seconds=replied - requested)
         time.sleep(delay)
         sample['stop_request_monotonic'] = time.monotonic()
-        self.pause()
-        sample.update(stopped_monotonic=time.monotonic(), stop_id=self.stop_id)
+        confirmed = self.pause()
+        sample.update(stopped_monotonic=confirmed, stop_id=self.stop_id,
+                      cont_reply_to_stop_request_seconds=
+                      sample['stop_request_monotonic'] - replied,
+                      stop_confirmation_wait_seconds=
+                      confirmed - sample['stop_request_monotonic'],
+                      possibly_running_seconds_upper_bound=confirmed - requested)
 
     def kernel(self, va, n, role):
         check(self.stopped, 'linked-kernel read while guest is running')
@@ -590,18 +623,61 @@ class InitialGuest(clock.ClockGuest):
         cpus = [words(raw_cpus[i * 120:(i + 1) * 120], 15) for i in range(4)]
         return dict(report=report, domain=domain, cpus=cpus)
 
-    def capture_initial(self, catalog):
-        stopped_before = self.qmp.request('query-status').get('running') is False
-        check(stopped_before, 'candidate capture requires a stopped guest')
-        registers, hardware_dumps = [], []
+    def hardware_registers(self):
+        """Four in-memory reads; no physical access, file I/O, or PASS evidence."""
+        check(self.stopped, 'register prefilter requires a stopped guest')
+        stop_id = self.stop_id
+        registers, texts = [], []
         for i in range(4):
             text = self.qmp.request('human-monitor-command',
                                     {'command-line': 'info registers', 'cpu-index': i})
+            texts.append(text)
+            registers.append(oracle.registers(text))
+        check(self.stopped and self.stop_id == stop_id,
+              'register observation crossed a stop boundary')
+        return registers, texts
+
+    def observe_initial(self):
+        """Latch only the cheap sampling phase, never Catalog or proof state."""
+        check(self.stopped, 'initial observation requires a stopped guest')
+        if not self.gui_sampling_started:
+            pointer = self.catalog_pointer()
+            self.catalog_initialized = bool(
+                pointer and self.readwords(pointer, 3, 'Catalog publication')[:2] == [1, 18])
+            window = (self.read(pointer + GUI_OFFSET, 256, 'GUI startup prefilter')
+                      if self.catalog_initialized else None)
+            if window is None or not any(
+                    struct.unpack_from('<Q', window, i * 64 + 16)[0] for i in range(4)):
+                return None
+            self.gui_sampling_started = True
+            self.evidence['register_prefilter']['armed_at_stop_id'] = self.stop_id
+        # A stale phase latch can only cause extra register reads. It cannot
+        # supply Catalog, registers, ownership, or any acceptance evidence.
+        registers, _ = self.hardware_registers()
+        count = sum(reg['CS'] & 3 == 3 for reg in registers[1:])
+        stats = self.evidence['register_prefilter']
+        stats['samples'] += 1
+        stats['ap_cpl3_counts'][count] += 1
+        if count < 2:
+            return None
+        stats['full_candidates'] += 1
+        # Re-read EVERYTHING in the same stop; no prefilter data is an input.
+        return self.capture_initial()
+
+    def capture_initial(self):
+        stop_id = self.stop_id
+        stopped_before = self.qmp.request('query-status').get('running') is False
+        check(self.stopped and stopped_before, 'candidate capture requires a stopped guest')
+        registers, texts = self.hardware_registers()
+        check(sum(reg['CS'] & 3 == 3 for reg in registers[1:]) >= 2,
+              'candidate has fewer than two APs in hardware CPL3')
+        catalog = self.catalog()
+        hardware_dumps = []
+        for i, text in enumerate(texts):
             path = self.state / f'initial-{self.stop_id}-cpu-{i}.txt'
             path.write_text(text)
             hardware_dumps.append(dict(cpu=i, file=path.name, sha256=timing.sha(path),
                                        stop_id=self.stop_id))
-            registers.append(oracle.registers(text))
         diagnostic = dict(diagnostic_only=True, stop_id=self.stop_id,
                           hardware_dumps=hardware_dumps, registers=registers, complete=False)
         try:
@@ -617,9 +693,6 @@ class InitialGuest(clock.ClockGuest):
             diagnostic['physical_reads'] = [chunk for chunk in self.chunks
                                             if chunk['stop_id'] == self.stop_id]
             write(self.state / f'candidate-{self.stop_id}.json', diagnostic)
-        # Diagnostic acquisition never substitutes for simultaneous AP CPL3.
-        check(sum(reg['CS'] & 3 == 3 for reg in registers[1:]) >= 2,
-              'candidate has fewer than two APs in hardware CPL3')
         report, domain, cpus = (ownership[key] for key in ('report', 'domain', 'cpus'))
         addresses = self.readwords(report[6], 4, 'private Header pointers')
         check(len(set(addresses)) == 4 and all(a % 4096 == 0 for a in addresses),
@@ -647,6 +720,8 @@ class InitialGuest(clock.ClockGuest):
                       trace_hex=self.trace().hex(), stop_id=self.stop_id,
                       hardware_dumps=hardware_dumps, stopped_before=stopped_before,
                       stopped_after=self.qmp.request('query-status').get('running') is False)
+        check(self.stopped and self.stop_id == stop_id,
+              'full initial capture crossed a stop boundary')
         proof = validate_initial(record)
         verified = [init, self.verify_process(3, 'compositor')]
         for cfg in proof['ap_gui_configurations']:
@@ -656,6 +731,9 @@ class InitialGuest(clock.ClockGuest):
             verified.append(image)
         record['verified_processes'] = verified
         record['kernel_executable_bytes_verified'] = self.verify_code()
+        check(self.stopped and self.stop_id == stop_id
+              and self.qmp.request('query-status').get('running') is False,
+              'executable verification did not remain in the initial stop')
         record['physical_reads'] = [chunk for chunk in self.chunks if chunk['stop_id'] == self.stop_id]
         record['proof'] = proof
         return record
@@ -708,33 +786,25 @@ class InitialGuest(clock.ClockGuest):
         self.boot = struct.unpack('<20Q', self.physical(int(matches[0], 16) - clock.acpi.HHDM, 160, 'original BootInfo'))
         check(self.boot[1:3] == (1, 160) and self.boot[15] > 0 and self.boot[15] % 4096 == 0,
               'invalid original BootInfo')
-        attempts, dense_index = [], 0
+        dense_index = 0
         while True:
             self.alive()
-            pointer = self.catalog_pointer()
-            initialized = pointer and self.readwords(pointer, 3, 'Catalog publication')[:2] == [1, 18]
-            window = self.read(pointer + GUI_OFFSET, 256, 'GUI startup prefilter') if initialized else None
-            if window is not None and gui_window(window):
-                try:
-                    # QMP may stop BSP between the Snapshot copy and its slot-map
-                    # commit. That partial candidate is not acceptance evidence.
-                    catalog = self.catalog()
-                    initial = self.capture_initial(catalog)
-                except ValueError as exc:
-                    attempts.append(dict(stop_id=self.stop_id, reason=str(exc)))
-                    write(self.state / 'candidate-rejections.json', attempts)
-                else:
+            try:
+                initial = self.observe_initial()
+            except ValueError as exc:
+                self.candidate_rejections.append(dict(stop_id=self.stop_id, reason=str(exc)))
+            else:
+                if initial is not None:
                     write(self.state / 'initial.json', initial)
                     self.evidence['initial_window_observed'] = True
                     break
             check(MARKERS[1] not in self.raw, 'initial AP/STARTING window missed; late readiness is not proof')
             # Do not pay dense observer overhead during firmware/CPL0 setup.
             # This only adjusts sampling cadence, never the same-stop oracle.
-            have_gui = window is not None and any(struct.unpack_from('<Q', window, i * 64 + 16)[0] for i in range(4))
             # Vary the dense cadence rather than repeatedly requesting the same
             # 1ms as the optional user quantum. This does not guarantee overlap.
-            delay = sampling_delay(initialized, have_gui, dense_index)
-            if have_gui:
+            delay = sampling_delay(self.catalog_initialized, self.gui_sampling_started, dense_index)
+            if self.gui_sampling_started:
                 dense_index += 1
             self.sample_after(delay)
         self.resume()
@@ -786,7 +856,9 @@ def run(esp, state, timeout):
                 result.update(passed=False, cleanup_error=str(exc))
             # Retain receipts independently of close()/diagnostic success.
             for name, content in (('physical-manifest.json', guest.chunks),
-                                  ('sampling.json', guest.sampling)):
+                                  ('sampling.json', guest.sampling),
+                                  ('observation-intervals.json', guest.observations),
+                                  ('candidate-rejections.json', guest.candidate_rejections)):
                 try:
                     write(state / name, content)
                 except Exception as exc:

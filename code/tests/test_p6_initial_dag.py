@@ -118,6 +118,50 @@ def initial_fixture():
                 trace_hex=partial_trace().hex(), stopped_before=True, stopped_after=True, stop_id=3)
 
 
+def observer_fixture(state):
+    """Current same-stop full acquisition, with hardware/memory boundaries mocked."""
+    record = initial_fixture()
+    g = object.__new__(r.InitialGuest)
+    g.state, g.stop_id, g.stopped, g.chunks = Path(state), 3, True, []
+    g.gui_sampling_started, g.catalog_initialized = True, True
+    g.evidence = {'register_prefilter': dict(
+        diagnostic_only=True, samples=0, ap_cpl3_counts=[0, 0, 0, 0],
+        full_candidates=0, armed_at_stop_id=2)}
+    g.qmp = mock.Mock()
+    g.qmp.request.side_effect = lambda command, *args: (
+        {'running': False} if command == 'query-status' else 'fresh hardware registers')
+    g.catalog = mock.Mock(return_value=copy.deepcopy(record['catalog']))
+    g.candidate_domain = mock.Mock(return_value={
+        key: record[key] for key in ('report', 'domain', 'cpus')})
+    g.symbols = {'user_smp_syscall_entry': record['syscall_entry']}
+
+    def read(va, size, role):
+        values = {'sixteen process ownership records': record['processes'],
+                  'bounded queue thread array': record['threads']}[role]
+        return struct.pack('<' + 'Q' * sum(map(len, values)), *(x for row in values for x in row))
+
+    def readwords(va, count, role):
+        if role == 'private Header pointers':
+            return record['header_addresses']
+        offset = 5632 if role == 'private CPU hardware Metrics' else 0
+        cpu = record['header_addresses'].index(va - offset)
+        return record['metrics' if offset else 'headers'][cpu]
+
+    g.read, g.readwords = mock.Mock(side_effect=read), mock.Mock(side_effect=readwords)
+    g.kernel = mock.Mock(side_effect=lambda va, size, role: struct.pack(
+        '<32Q', *record['contexts'][(va - record['report'][7]) // 256]))
+    g.refresh_processes, g.validate_private_pools = mock.Mock(), mock.Mock()
+    g.verify_process = mock.Mock(side_effect=lambda slot, name: dict(
+        pid=slot, image=name, root=record['processes'][slot][2], executable_bytes=32))
+    initial_bytes = b''.join(struct.pack('<8Q', *s.values()) for s in record['init_initial'])
+    g.init_global = mock.Mock(side_effect=lambda name, size, image: {
+        'SNAPSHOTS': initial_bytes, 'MANAGER': bytes.fromhex(record['init_manager_hex']),
+        'STARTED': struct.pack('<8Q', *record['init_started'])}[name])
+    g.trace = mock.Mock(return_value=bytes.fromhex(record['trace_hex']))
+    g.verify_code = mock.Mock(return_value=256)
+    return g, record
+
+
 class InitialDagTests(unittest.TestCase):
     def test_dense_cadence_is_deterministic_and_records_host_boundaries(self):
         expected = [.0002, .0005, .0013, .0021] * 3
@@ -129,8 +173,8 @@ class InitialDagTests(unittest.TestCase):
                 r.sampling_delay(True, True, index)
         g = object.__new__(r.InitialGuest)
         g.sampling, g.stop_id = [], 9
-        g.resume, g.pause = mock.Mock(), mock.Mock()
-        with mock.patch.object(r.time, 'monotonic', side_effect=[10, 10.02, 10.021, 10.05]), \
+        g.resume, g.pause = mock.Mock(return_value=(10, 10.02)), mock.Mock(return_value=10.05)
+        with mock.patch.object(r.time, 'monotonic', return_value=10.021), \
              mock.patch.object(r.time, 'sleep') as sleep:
             g.sample_after(.0002)
         sleep.assert_called_once_with(.0002)
@@ -140,7 +184,38 @@ class InitialDagTests(unittest.TestCase):
         self.assertEqual(10.05, sample['stopped_monotonic'])
         self.assertEqual(9, sample['stop_id'])
         self.assertTrue(sample['diagnostic_only'])
+        self.assertFalse(sample['guest_runtime_measured'])
+        self.assertAlmostEqual(.02, sample['cont_wait_seconds'])
+        self.assertAlmostEqual(.001, sample['cont_reply_to_stop_request_seconds'])
+        self.assertAlmostEqual(.029, sample['stop_confirmation_wait_seconds'])
+        self.assertAlmostEqual(.05, sample['possibly_running_seconds_upper_bound'])
         self.assertNotIn('passed', sample)
+
+    def test_confirmed_stopped_collection_is_separate_from_possible_runtime(self):
+        g = object.__new__(r.InitialGuest)
+        g.qmp = mock.Mock()
+        g.qmp.request.return_value = {'running': False}
+        g.stop_id, g.stopped, g.observations, g.confirmed_stop = 0, False, [], None
+        with mock.patch.object(r.time, 'monotonic', side_effect=[10, 12, 12.5]):
+            self.assertEqual(10, g.pause())
+            self.assertEqual((12, 12.5), g.resume())
+        observation = g.observations[0]
+        self.assertEqual(1, observation['stop_id'])
+        self.assertEqual(2, observation['confirmed_stopped_collection_seconds'])
+        self.assertEqual(12, observation['collection_end_monotonic'])
+        self.assertTrue(observation['diagnostic_only'])
+        g.finish_observation(20)
+        self.assertEqual(2, observation['confirmed_stopped_collection_seconds'])
+        self.assertFalse(g.stopped)
+
+    def test_observer_accounting_failure_cannot_prevent_guest_cleanup(self):
+        g = object.__new__(r.InitialGuest)
+        g.qmp_path = None
+        g.finish_observation = mock.Mock(side_effect=ValueError('diagnostic accounting failed'))
+        with mock.patch.object(r.timing.KvmGuest, 'close') as close:
+            with self.assertRaisesRegex(ValueError, 'accounting failed'):
+                g.close()
+        close.assert_called_once_with(g)
 
     def test_candidate_domain_validates_identity_before_cpu_read(self):
         g = object.__new__(r.InitialGuest)
@@ -195,27 +270,128 @@ class InitialDagTests(unittest.TestCase):
             g.candidate_domain()
         g.read.assert_not_called()
 
-    def test_complete_candidate_diagnostic_cannot_replace_hardware_cpl3(self):
+    def test_latched_low_cpl3_budget_is_four_register_reads_and_zero_io(self):
+        for users in (0, 1):
+            with self.subTest(users=users), tempfile.TemporaryDirectory() as temp:
+                g, record = observer_fixture(temp)
+                registers = copy.deepcopy(record['registers'])
+                registers[2]['CS'] = 8
+                registers[1]['CS'] = 0x33 if users else 8
+                for method in ('catalog_pointer', 'read', 'readwords', 'physical',
+                               'kernel', 'candidate_domain', 'capture_initial'):
+                    setattr(g, method, mock.Mock(side_effect=AssertionError('forbidden low-CPL3 I/O')))
+                with mock.patch.object(r.oracle, 'registers', side_effect=registers), \
+                     mock.patch.object(r, 'write') as write, \
+                     mock.patch.object(Path, 'write_text') as write_text, \
+                     mock.patch.object(r, 'validate_initial') as validate:
+                    self.assertIsNone(g.observe_initial())
+                self.assertEqual([
+                    mock.call('human-monitor-command', {'command-line': 'info registers', 'cpu-index': i})
+                    for i in range(4)], g.qmp.request.call_args_list)
+                g.catalog.assert_not_called()
+                for method in ('catalog_pointer', 'read', 'readwords', 'physical',
+                               'kernel', 'candidate_domain', 'capture_initial'):
+                    getattr(g, method).assert_not_called()
+                write.assert_not_called()
+                write_text.assert_not_called()
+                validate.assert_not_called()
+                self.assertEqual([], list(Path(temp).iterdir()))
+                stats = g.evidence['register_prefilter']
+                self.assertEqual(1, stats['samples'])
+                self.assertEqual(1, stats['ap_cpl3_counts'][users])
+                self.assertEqual(0, stats['full_candidates'])
+                self.assertNotIn('proof', stats)
+
+    def test_gui_phase_latches_only_flow_and_does_not_repeat_memory_prefilter(self):
         with tempfile.TemporaryDirectory() as temp:
-            g = object.__new__(r.InitialGuest)
-            g.state, g.stop_id, g.chunks = Path(temp), 4, []
-            g.qmp = mock.Mock()
-            g.qmp.request.side_effect = lambda command, *args: (
-                {'running': False} if command == 'query-status' else 'raw hardware registers')
-            record = initial_fixture()
-            g.candidate_domain = mock.Mock(return_value={
-                key: record[key] for key in ('report', 'domain', 'cpus')})
-            with mock.patch.object(r.oracle, 'registers', return_value={'CS': 8}), \
-                 mock.patch.object(r, 'validate_initial') as validate:
-                with self.assertRaisesRegex(ValueError, 'fewer than two APs'):
-                    g.capture_initial(record['catalog'])
-            validate.assert_not_called()
-            diagnostic = json.loads((Path(temp) / 'candidate-4.json').read_text())
-            self.assertTrue(diagnostic['diagnostic_only'])
-            self.assertTrue(diagnostic['complete'])
-            self.assertNotIn('passed', diagnostic)
+            g, _ = observer_fixture(temp)
+            g.gui_sampling_started = g.catalog_initialized = False
+            g.catalog_pointer = mock.Mock(return_value=r.ARENA)
+            g.readwords = mock.Mock(return_value=[1, 18, 7])
+            g.read = mock.Mock(return_value=bytes(catalog_bytes()[r.GUI_OFFSET:r.GUI_OFFSET + 256]))
+            with mock.patch.object(r.oracle, 'registers', return_value={'CS': 8}):
+                self.assertIsNone(g.observe_initial())
+                self.assertTrue(g.gui_sampling_started)
+                g.stop_id += 1
+                self.assertIsNone(g.observe_initial())
+            g.catalog_pointer.assert_called_once()
+            g.readwords.assert_called_once()
+            g.read.assert_called_once()
+            g.catalog.assert_not_called()
+            g.candidate_domain.assert_not_called()
+            self.assertEqual(8, g.qmp.request.call_count)
+            self.assertEqual(3, g.evidence['register_prefilter']['armed_at_stop_id'])
+
+    def test_eligible_prefilter_reacquires_full_same_stop_proof(self):
+        with tempfile.TemporaryDirectory() as temp:
+            g, record = observer_fixture(temp)
+            with mock.patch.object(r.oracle, 'registers', side_effect=record['registers'] * 2):
+                captured = g.observe_initial()
+            self.assertEqual([14, 15], captured['proof']['ap_gui_configurations'])
+            self.assertEqual(3, captured['stop_id'])
+            self.assertTrue(captured['stopped_before'] and captured['stopped_after'])
+            self.assertEqual(8, sum(c.args[0] == 'human-monitor-command'
+                                    for c in g.qmp.request.call_args_list))
+            g.catalog.assert_called_once_with()
+            g.candidate_domain.assert_called_once_with()
+            g.refresh_processes.assert_called_once()
+            g.validate_private_pools.assert_called_once()
+            g.verify_code.assert_called_once()
+            self.assertEqual([mock.call(5, 'init'), mock.call(3, 'compositor'),
+                              mock.call(7, 'terminal'), mock.call(8, 'files')],
+                             g.verify_process.call_args_list)
+            diagnostic = json.loads((Path(temp) / 'candidate-3.json').read_text())
+            self.assertTrue(diagnostic['complete'] and diagnostic['diagnostic_only'])
             self.assertNotIn('proof', diagnostic)
-            self.assertEqual(4, len(diagnostic['hardware_dumps']))
+
+    def test_stale_latch_and_old_catalog_cannot_supply_acceptance(self):
+        with tempfile.TemporaryDirectory() as temp:
+            g, record = observer_fixture(temp)
+            # The old prefilter would have accepted this early Catalog, but
+            # current memory says all GUI clients are READY.
+            g.old_catalog = record['catalog']
+            g.catalog.return_value = r.decode_catalog(catalog_bytes(True))
+            with mock.patch.object(r.oracle, 'registers', side_effect=record['registers'] * 2):
+                with self.assertRaisesRegex(ValueError, 'STARTING'):
+                    g.observe_initial()
+            g.catalog.assert_called_once_with()
+            g.verify_code.assert_not_called()
+            # There is intentionally no API for supplying an old Catalog.
+            with self.assertRaises(TypeError):
+                g.capture_initial(record['catalog'])
+
+    def test_old_or_cross_stop_registers_cannot_supply_acceptance(self):
+        with tempfile.TemporaryDirectory() as temp:
+            g, record = observer_fixture(temp)
+            fresh = copy.deepcopy(record['registers'])
+            fresh[2]['CS'] = 8
+            with mock.patch.object(r.oracle, 'registers', side_effect=record['registers'] + fresh):
+                with self.assertRaisesRegex(ValueError, 'fewer than two APs'):
+                    g.observe_initial()
+            g.catalog.assert_not_called()
+            g.candidate_domain.assert_not_called()
+            self.assertEqual([], list(Path(temp).iterdir()))
+            g.qmp.reset_mock()
+
+            def crossed(text):
+                g.stop_id += 1
+                return {'CS': 0x33}
+            with mock.patch.object(r.oracle, 'registers', side_effect=crossed):
+                with self.assertRaisesRegex(ValueError, 'crossed a stop'):
+                    g.observe_initial()
+            g.catalog.assert_not_called()
+
+    def test_full_proof_cannot_cross_stop_during_code_verification(self):
+        with tempfile.TemporaryDirectory() as temp:
+            g, record = observer_fixture(temp)
+
+            def moved():
+                g.stop_id += 1
+                return 256
+            g.verify_code.side_effect = moved
+            with mock.patch.object(r.oracle, 'registers', side_effect=record['registers'] * 2):
+                with self.assertRaisesRegex(ValueError, 'initial stop'):
+                    g.observe_initial()
 
     def test_current_catalog_and_cheap_window(self):
         raw = catalog_bytes()
@@ -583,6 +759,9 @@ class InitialDagTests(unittest.TestCase):
             guest.evidence = {'actual_qemu_executed': True}
             guest.chunks = [{'stop_id': 4, 'physical': 4096, 'bytes': 8, 'role': 'bounded fixture'}]
             guest.sampling = [{'stop_id': 4, 'requested_sleep_seconds': .0002, 'diagnostic_only': True}]
+            guest.observations = [{'stop_id': 4, 'confirmed_stopped_collection_seconds': 1,
+                                   'diagnostic_only': True}]
+            guest.candidate_rejections = [{'stop_id': 4, 'reason': 'current candidate rejected'}]
             guest.process.poll.return_value = 0
             guest.start.side_effect = ValueError('initial AP/STARTING window missed')
             guest.close.side_effect = RuntimeError('cleanup diagnostic failed')
@@ -602,6 +781,10 @@ class InitialDagTests(unittest.TestCase):
             self.assertIn('cleanup diagnostic failed', result['cleanup_error'])
             self.assertEqual(guest.chunks, json.loads((Path(temp) / 'run/physical-manifest.json').read_text()))
             self.assertEqual(guest.sampling, json.loads((Path(temp) / 'run/sampling.json').read_text()))
+            self.assertEqual(guest.observations, json.loads(
+                (Path(temp) / 'run/observation-intervals.json').read_text()))
+            self.assertEqual(guest.candidate_rejections, json.loads(
+                (Path(temp) / 'run/candidate-rejections.json').read_text()))
 
     def test_actual_source_layouts_match_narrow_observer_contract(self):
         for source, expected in (
