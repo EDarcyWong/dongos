@@ -25,3 +25,22 @@ ACK 前 drain、ACK 后重查、背压后的重查义务。测试成功只证明
 现有 `tests/boot_trace_oracle.py` 只有在真实 KVM、绑定产物、Linux 和不变
 TSC 证据同时成立时才允许时间门槛通过。其主机测试不是一次真实启动。
 完整 P6 状态必须由上述实际证据决定，不能由本文件或某个宿主测试推定。
+
+## 可复现的 KVM 时间门禁
+
+`tests/run_p6_kvm_qemu.py` 只复用新构建的正常 runtime7 镜像。
+运行前重算完整源码清单及所请求 ESP 的五个精确产物，启动后在第一次
+`cont` 之前读取真实 `query-kvm`。没有 KVM 或权限不足即失败，不改宿主
+权限、不退回 TCG。此运行不插入初始启动观测暂停，在 shell 和四客户就绪
+之后才停止并读取实际内核代码和封存 trace；无论通过或失败都清理自有客体。
+该门禁明确不证明 init 首代跨 AP DAG。
+
+```sh
+python3 -c "from tests.run_p6_kvm_qemu import preflight; print(preflight())"
+python3 -c "from pathlib import Path; from tools.build import build; build(runtime_level=7, output=Path('build/test/p6-kvm/build'))"
+python3 -m tests.run_p6_kvm_qemu --reuse-esp build/test/p6-kvm/build/esp --output build/test/p6-kvm/actual --timeout 120
+```
+
+保存整个 `build/test/p6-kvm/`；实际结果是 `actual/result.json`，不是主机
+单元测试中的合成 KVM 标志。`.github/workflows/p6.yml` 自动尝试相同门禁，
+保留没有 KVM 的失败原因，不用跳过或允许失败来伪造通过。
