@@ -24,23 +24,34 @@ class InputServiceTests(unittest.TestCase):
     def test_real_input_service_irq_ack_resend_and_console(self):
         self.native()
     def test_actual_ack_without_drain_is_rejected(self):self.native(True)
+    def test_actual_missing_post_ack_recheck_is_rejected(self):self.native('lost-edge')
+    def test_actual_lost_backpressure_obligation_is_rejected(self):self.native('lost-obligation')
     def native(self,negative=False):
         for mode in ('debug','release'):
             with self.subTest(mode=mode):
-                d=self.out/(('ack-before-drain-' if negative else '')+mode);d.mkdir();services=ROOT/'services'
+                d=self.out/((str(negative)+'-' if negative else '')+mode);d.mkdir();services=ROOT/'services'
                 if negative:
                     services=d/'services'
                     for p in (ROOT/'services').rglob('*.dg'):
                         q=services/p.relative_to(ROOT/'services');q.parent.mkdir(parents=True,exist_ok=True);q.write_bytes(p.read_bytes())
-                    p=services/'drivers/input_service.dg';source=p.read_text();needle='if KEY_PENDING||MOUSE_PENDING{\n                    let drained=try drain(boot,queue,characters,modern);'
-                    self.assertEqual(1,source.count(needle));p.write_text(source.replace(needle,'if KEY_PENDING||MOUSE_PENDING{\n                    let drained=true;'))
-                    (d/'mutation.json').write_text(json.dumps(dict(mutation='actual acknowledged IRQ without draining i8042',expected='independent syscall model rejects unread hardware bytes at ACK'),indent=2)+'\n')
+                    p=services/'drivers/input_service.dg';source=p.read_text()
+                    if negative=='lost-edge':
+                        needle='if acknowledged{RECHECK=!(try drain(boot,queue,characters,modern));}'
+                        replacement='if acknowledged{RECHECK=false;}'
+                    elif negative=='lost-obligation':
+                        needle='if acknowledged{RECHECK=!(try drain(boot,queue,characters,modern));}'
+                        replacement='if acknowledged{let ignored=try drain(boot,queue,characters,modern);RECHECK=false;}'
+                    else:
+                        needle='if KEY_PENDING||MOUSE_PENDING||RECHECK{\n                    let drained=try drain(boot,queue,characters,modern);'
+                        replacement='if KEY_PENDING||MOUSE_PENDING||RECHECK{\n                    let drained=true;'
+                    self.assertEqual(1,source.count(needle));p.write_text(source.replace(needle,replacement))
+                    (d/'mutation.json').write_text(json.dumps(dict(mutation=str(negative),expected='independent syscall model rejects lost bytes or unread hardware at ACK'),indent=2)+'\n')
                 c=compile_file(ROOT/'tests/input_service_probe.dg',roots=[ROOT/'tests',services,ROOT/'lang/std'],mode=mode)
                 src=d/'probe.asm';src.write_text(c.assembly);obj=d/'probe.o';nasm=tool('nasm','NASM');cc=tool('gcc','CC');self.assertTrue(nasm);self.assertTrue(cc)
                 r=self.command([nasm,'-f','win64' if os.name=='nt' else 'elf64',*nasm_flags(nasm),'-o',str(obj),str(src)],d,'assemble');self.assertEqual(0,r.returncode,r.stderr)
                 exe=d/('probe.exe' if os.name=='nt' else 'probe');r=self.command([cc,'-std=c11','-O2','-Wall','-Wextra','-Werror',* ([] if os.name=='nt' else ['-no-pie','-D_DEFAULT_SOURCE']),str(ROOT/'tests/input_service_probe.c'),str(obj),'-o',str(exe)],d,'link');self.assertEqual(0,r.returncode,r.stderr)
-                for scenario in ([0] if negative else range(6)):
+                for scenario in ([6] if negative=='lost-edge' else [7] if negative=='lost-obligation' else [0] if negative else range(8)):
                     with self.subTest(scenario=scenario):
                         r=self.command([str(exe),str(scenario)],d,'scenario-'+str(scenario))
-                        if negative:self.assertEqual(1,r.returncode,r.stdout+r.stderr);self.assertIn('rxhead==rxtail',r.stderr)
+                        if negative:self.assertEqual(1,r.returncode,r.stdout+r.stderr);self.assertIn('input service check failed line',r.stderr)
                         else:self.assertEqual(0,r.returncode,r.stdout+r.stderr);self.assertIn('scenario='+str(scenario)+' passed',r.stdout)

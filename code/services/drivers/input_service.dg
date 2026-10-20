@@ -26,6 +26,9 @@ var USB_RESPONSE:sys.Message=sys.EMPTY_MESSAGE;
 var USB_TICKET:u64=0;
 var KEY_PENDING:bool=false;
 var MOUSE_PENDING:bool=false;
+// An edge arriving while an IRQ is masked may not produce another notification.
+// Keep the post-ACK drain obligation across output queue backpressure.
+var RECHECK:bool=false;
 var CONSOLE:console.State=console.EMPTY_STATE;
 var IRQ_KEY:device_abi.Irq=device_abi.EMPTY_IRQ;
 var IRQ_MOUSE:device_abi.Irq=device_abi.EMPTY_IRQ;
@@ -198,18 +201,21 @@ unsafe fn run()!void {
         if INTERRUPTS {let marker=sys.log("DONGOS_INPUT_IRQ_READY\r\n");if marker!=0 {return error.Transport;}}
         // Clear bytes queued during setup even if their IRQ was coalesced
         // before the first WAIT. Any accepted notification is ACKed below.
-        if PS2_ACTIVE{let initial_drained=try drain(boot,queue,characters,modern);}
+        if PS2_ACTIVE{let initial_drained=try drain(boot,queue,characters,modern);RECHECK=!initial_drained;}
         loop {
             let flushed=try flush(queue,characters,modern);
             if flushed{try usb_departures(boot);try usb_pump(boot);}
             if INTERRUPTS {
                 if !KEY_PENDING{KEY_PENDING=try irq_poll(IRQ_KEY.token,&KEY_EVENT);}
                 if !MOUSE_PENDING{MOUSE_PENDING=try irq_poll(IRQ_MOUSE.token,&MOUSE_EVENT);}
-                if KEY_PENDING||MOUSE_PENDING{
+                if KEY_PENDING||MOUSE_PENDING||RECHECK{
                     let drained=try drain(boot,queue,characters,modern);
+                    RECHECK=!drained;
                     if drained{
+                        let acknowledged=KEY_PENDING||MOUSE_PENDING;
                         if KEY_PENDING{if device.acknowledge(IRQ_KEY.token,KEY_EVENT.sequence)!=0{return error.Transport;}KEY_PENDING=false;}
                         if MOUSE_PENDING{if device.acknowledge(IRQ_MOUSE.token,MOUSE_EVENT.sequence)!=0{return error.Transport;}MOUSE_PENDING=false;}
+                        if acknowledged{RECHECK=!(try drain(boot,queue,characters,modern));}
                     }
                 }
             }else if PS2_ACTIVE{
