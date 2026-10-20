@@ -57,7 +57,8 @@ pub unsafe fn query(s:*const Space,v:u64,out:*Mapping)!void{return error.Unmodel
  pub unsafe fn map_live(s:*Space,v:u64,p:u64,f:u64)!void{return;}pub unsafe fn replace_live(s:*Space,v:u64,p:u64,f:u64)!void{return;}''',
  'cpu.capabilities':'''module cpu.capabilities;pub struct Capabilities {pub physical_bits:u8}
  pub const EMPTY_CAPABILITIES:Capabilities=Capabilities {physical_bits:48};pub unsafe fn detect(c:*Capabilities)!void{return;}''',
- 'drivers.virtio_pci':'''module drivers.virtio_pci;pub struct Bar {pub physical:u64,pub length:u64,pub handle:u64}''',
+ # Keep the real VirtIO PCI types/parser: the trusted reset dependency now
+ # uses its callback ABI even though these xHCI cases never invoke reset.
  'drivers.virtio_blk':'''module drivers.virtio_blk;pub const DMA_BYTES:usize=69632;pub struct Lease {pub token:u64,pub physical:u64,pub pointer:*u8,pub length:usize}
  pub const EMPTY_LEASE:Lease=Lease {token:0,physical:0,pointer:null,length:0};''',
  'user.memory':'''module user.memory;pub error Invalid=0x04060003;
@@ -115,7 +116,7 @@ class XhciKernelTests(unittest.TestCase):
  @classmethod
  def setUpClass(cls):
   cls.out=ROOT/'build/test/p8-xhci-kernel'/('run-'+uuid.uuid4().hex[:12]);cls.out.mkdir(parents=True)
-  cls.inputs=[SOURCE_ROOT/'kernel/user/devices.dg',SOURCE_ROOT/'kernel/user/device_host.dg',SOURCE_ROOT/'services/drivers/device_manager.dg',SOURCE_ROOT/'services/drivers/xhci_authority.dg',ROOT/'tests/xhci_kernel_probe.dg',ROOT/'tests/xhci_kernel_probe.c',Path(__file__)]
+  cls.inputs=[SOURCE_ROOT/'kernel/user/devices.dg',SOURCE_ROOT/'kernel/user/device_host.dg',SOURCE_ROOT/'kernel/user/virtio_quiesce.dg',SOURCE_ROOT/'services/drivers/virtio_pci.dg',SOURCE_ROOT/'services/drivers/pci.dg',SOURCE_ROOT/'services/drivers/device_manager.dg',SOURCE_ROOT/'services/drivers/xhci_authority.dg',ROOT/'tests/xhci_kernel_probe.dg',ROOT/'tests/xhci_kernel_probe.c',Path(__file__)]
   cls.before={str(p.relative_to(ROOT)):hashlib.sha256(p.read_bytes()).hexdigest() for p in cls.inputs};(cls.out/'source-before.json').write_text(json.dumps(cls.before,indent=2)+'\n')
  @classmethod
  def tearDownClass(cls):

@@ -18,6 +18,8 @@ var ENUMERATED:bool=false;
 var XHCI_OWNER:u64=0;
 var PCI_OWNERS:[2]u64=[0;2];
 var PCI_TOKENS:[2]u64=[0;2];
+pub var BLOCK_RESET_OWNER:u64=0;
+pub var BLOCK_RESET_TOKEN:u64=0;
 pub var MSI:msi.State=msi.EMPTY;
 pub var PCI_FAILED:bool=false;
 var MSI_OPS:msi.Ops=msi.Ops{read:msi_read,write:msi_write};
@@ -118,6 +120,8 @@ pub unsafe fn interrupt(vector:u64)!u64{unsafe{
     },}
     let signaled=ledger.irq_signal(TABLE,vector,&IRQ);try platform.device_eoi();return signaled;
 }}
+// Caller permanently stops the exact owner on all CPUs before entry; no
+// error return permits it to resume. This is not the manager REVOKE path.
 pub unsafe fn revoke_owner(owner:u64)!void{unsafe{
     if TABLE==null{return;}
     // Retire the message route and verified BME before closing driver caps.
@@ -126,6 +130,7 @@ pub unsafe fn revoke_owner(owner:u64)!void{unsafe{
         var slot:usize=2;if pci==1{slot=4;}
         let isolated=devices.quarantine(slot);match isolated{ok=>{},err(e)=>{PCI_FAILED=true;return isolated;},}
         let token=PCI_TOKENS[pci];let index=(token&255)-1;
+        if slot==2{if try devices.quiesce_stopped_block(){BLOCK_RESET_OWNER=owner;BLOCK_RESET_TOKEN=token;}}
         if token!=0&&((*TABLE).devices[index as usize].flags&abi.REVOKED)==0{
             try ledger.revoke(TABLE,token,token>>8);
         }

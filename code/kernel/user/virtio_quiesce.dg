@@ -1,0 +1,33 @@
+// Kernel-owned modern VirtIO block reset. No driver State or user PA is trusted.
+// The caller has permanently stopped the exact old owner on every CPU and
+// disabled BME/MSI/INTx. All DMA and mappings remain held on every outcome.
+module user.virtio_quiesce;
+import drivers.pci as pci;
+import drivers.virtio_pci as vp;
+pub error Invalid=0x052b_0001;
+pub error Io=0x052b_0002;
+pub error Timeout=0x052b_0003;
+pub struct Ops{pub config:pci.Read32,pub read:vp.Read,pub write:vp.Write,pub fence:vp.Fence}
+pub unsafe fn reset(ops:*const Ops,context:u64,ecam:u64,bars:[]const vp.Bar)!void{unsafe{
+    if ops==null||ecam==0||(ecam&4095)!=0{return error.Invalid;}
+    if (try pci.read((*ops).config,context,ecam,0))!=0x1042_1af4{return error.Invalid;}
+    let header=((try pci.read((*ops).config,context,ecam,12))>>16)&255;
+    if (header&127)!=0||((try pci.read((*ops).config,context,ecam,4))&0x406)!=0x402{return error.Invalid;}
+    var function=pci.EMPTY_FUNCTION;function.ecam=ecam;function.vendor=0x1af4;function.device_id=0x1042;function.header=header as u64;
+    var transport=vp.EMPTY_TRANSPORT;
+    try vp.discover((*ops).config,context,&function,bars,&transport);
+    // status is one byte. Do not issue a dword write that touches adjacent
+    // queue-selection or generation fields, and never reenable bus mastering.
+    try vp.write((*ops).write,context,&transport.common,20,1,0);
+    if (*ops).fence(context,3)!=0{return error.Io;}
+    var attempt:usize=0;
+    while attempt<1024{
+        if (try vp.read((*ops).read,context,&transport.common,20,1))==0{
+            if (*ops).fence(context,3)!=0{return error.Io;}
+            if (try pci.read((*ops).config,context,ecam,0))!=0x1042_1af4
+                ||((try pci.read((*ops).config,context,ecam,4))&0x406)!=0x402{return error.Invalid;}
+            return;
+        }
+        attempt+=1;
+    }
+}return error.Timeout;}

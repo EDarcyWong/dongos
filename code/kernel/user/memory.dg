@@ -787,6 +787,19 @@ pub unsafe fn share(source: usize, target: usize, virtual: u64, write: bool) !vo
     unsafe { return share_at(source,target,virtual,virtual,write); }
 }
 
+// DMA ownership covers the entire rounded allocation, including a suffix
+// whose Frame/USER mapping was never published. Never manufacture a second
+// USER alias through the ordinary sharing API, even for an incomplete lease.
+unsafe fn dma_reserved(physical:u64)bool {unsafe{
+    var id:usize=0;while id<LIMIT{
+        let lease=DMA_LEASES[id];
+        if lease.state!=0&&lease.physical!=0&&physical>=lease.physical
+            &&(physical-lease.physical)/4096<lease.pages{return true;}
+        id+=1;
+    }
+    return false;
+}}
+
 // Owned data only, BSP/IF=0. Both roots and the source allocation remain
 // stable throughout publication. The target must be absent; map_live performs
 // that complete preflight before allocating tables or publishing any entry.
@@ -800,6 +813,7 @@ pub unsafe fn share_at(source:usize,target:usize,source_virtual:u64,target_virtu
         try paging.query(&SPACES[source],source_virtual,&mapping);
         if (mapping.flags & (paging.USER | paging.EXECUTE | paging.UNCACHED)) != paging.USER
             || (write && (mapping.flags & paging.WRITE) == 0) { return error.InvalidAccess; }
+        if dma_reserved(mapping.physical){return error.InvalidAccess;}
         let index = try frame_index(mapping.physical);
         if write&&(*record(index)).writable!=1 { return error.InvalidAccess; }
         var flags = paging.USER;

@@ -1,0 +1,22 @@
+// Only the production wrapper body is inserted; C supplies hardware boundaries.
+module virtio_quiesce_fixture;
+import user.virtio_quiesce as virtio_quiesce;
+import drivers.virtio_pci as vp;
+pub error Denied=0x050a_0002;pub error Busy=0x050a_0003;
+var SELECTED_KIND:u64=0;var SELECTED:u64=0;
+var BLOCK_QUARANTINED:bool=false;var BLOCK_RESET_STATE:u64=0;
+var BLOCK_RESET_OPS:virtio_quiesce.Ops=virtio_quiesce.Ops{config:unused_config,read:unused_read,write:unused_write,fence:unused_fence};
+var BARS:[6]vp.Bar=[vp.Bar{physical:0,length:0,handle:0};6];
+unsafe fn unused_config(a:u64,b:u64,c:*u32)u64{return 1;}
+unsafe fn unused_read(a:u64,b:u64,c:u64,d:u64,e:*u64)u64{return 1;}
+unsafe fn unused_write(a:u64,b:u64,c:u64,d:u64,e:u64)u64{return 1;}
+unsafe fn unused_fence(a:u64,b:u64)u64{return 1;}
+// PRODUCTION_WRAPPER
+export("vq_wrapper_setup") fn setup(ops:*const virtio_quiesce.Ops,bars:*const vp.Bar,kind:u64,selected:u64,quarantined:u64)void{unsafe{
+ BLOCK_RESET_OPS=*ops;SELECTED_KIND=kind;SELECTED=selected;BLOCK_QUARANTINED=quarantined!=0;BLOCK_RESET_STATE=0;
+ var i:usize=0;while i<6{BARS[i]=*(bars+i);i+=1;}
+}return;}
+export("vq_wrapper_state") fn state()u64{unsafe{return BLOCK_RESET_STATE;}}
+export("vq_wrapper") fn wrapper(out:*u64)u64{unsafe{
+ match quiesce_stopped_block(){ok(value)=>{*out=0;if value{*out=1;}return 0;},err(e)=>{return e;},}
+}}

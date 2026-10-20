@@ -1,0 +1,21 @@
+module dma_alias_fixture;
+import dma_alias_adapter as paging;import dma_alias_adapter as devices;import dma_alias_adapter as elf;
+pub error InvalidState=0x0406_0001;pub error InvalidAddress=0x0406_0003;pub error InvalidAccess=0x0406_0004;
+const LIMIT:usize=16;
+struct Process{ready:u64,root:u64}struct Frame{writable:u64}
+var PROCESSES:[16]Process=[Process{ready:1,root:0x9000};16];
+var SPACES:[16]paging.Space=[paging.Space{unused:0};16];
+var FRAME:Frame=Frame{writable:1};
+unsafe fn frame_index(physical:u64)!usize{return 0;}
+unsafe fn record(index:usize)*Frame{unsafe{return &FRAME;}}
+unsafe fn user_pcid_invalidate_root(root:u64)void{return;}
+// PRODUCTION_METADATA
+// PRODUCTION_RESERVED
+// PRODUCTION_SHARE
+export("alias_check") fn check(physical:u64,base:u64,pages:usize,state:u64,owner:usize,write:u64)u64{unsafe{
+ var i:usize=0;while i<LIMIT{DMA_LEASES[i]=EMPTY_DMA;i+=1;}
+ var attempted:usize=1;var mapped:usize=0;if state==DMA_COMPLETE{attempted=pages;mapped=pages;}
+ DMA_LEASES[owner]=DmaLease{physical:base,virtual:0x60000000,pages:pages,root:0x9000,generation:7,attempted:attempted,mapped:mapped,state:state};
+ paging.PHYSICAL=physical;paging.MAPS=0;
+ match share_at(2,3,0x60000000,0x61000000,write!=0){ok=>{if paging.MAPS!=1{return 99;}return 0;},err(e)=>{if paging.MAPS!=0{return 98;}return e;},}
+}}
