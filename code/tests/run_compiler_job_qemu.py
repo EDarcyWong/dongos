@@ -109,7 +109,7 @@ def compiler_project(serial,symbols):
         raise ValueError('compiler artifact completion differs')
     if block.count(b'DONGOS_L3_EXACT_FIXEDPOINT\r\n')!=int(inputs[0]==b'STAGE1'):raise ValueError('in-guest exact comparison missing')
     old,p3=p5.runtime.project_runtime(serial[:start]+serial[stop:]);platform,scheduler=p5.runtime.validate_fields(p3,'normal')
-    firmware,prior=p5.acpi.parse_report(old,symbols)
+    firmware,prior=p5.acpi.parse_report(old,symbols,production=True)
     return fields,platform,scheduler,firmware,prior
 
 def live_job(qmp,state,serial,build,blob,image):

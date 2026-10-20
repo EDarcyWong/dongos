@@ -191,6 +191,53 @@ class GuestRunnerTests(unittest.TestCase):
         self.assertEqual(calls,[]);self.assertTrue((state/'failure-registers.txt').is_file())
         self.assertEqual(json.loads((state/'failure-physical-manifest.json').read_text()),[])
 
+    def compiler_serial(self,retries=0):
+        from tests import test_acpi_qemu_result as acpi_fixture
+        runtime=runner.p5.runtime
+        values={'platform_'+n:0 for n in runtime.PLATFORM}|{'sched_'+n:0 for n in runtime.SCHED}
+        platform=dict(lapic_pa=0xfee00000,lapic_va=runtime.BASE,lapic_id=0,ioapic_count=1,redirection_count=24,
+            pic_master=255,pic_slave=255,timer_vector=0x40,spurious_vector=255,interval_ns=10000000,
+            arm_count=130,stop_count=1,steps=127,tsc_hz=3000000000,timer_mode=2,lapic_hz=62500000,
+            last_tsc=1000000000,last_deadline=1030000000,reference_source=2)
+        scheduler=dict(version=1,vector=0x40,ticks=129,switches=65,worker0_ticks=64,worker1_ticks=64,
+            worker0_count=10,worker1_count=20,gpr_checks=30,restore_checks=129,guard_count=2,steps=7,
+            xstate_mode=2,xstate_bytes=576,xcr0=3,worker0_stack_bottom=0xffffffff80010000,
+            worker0_stack_top=0xffffffff80014000,worker0_rsp=0xffffffff80013ff8,
+            worker1_stack_bottom=0xffffffff80016000,worker1_stack_top=0xffffffff8001a000,worker1_rsp=0xffffffff80019ff8)
+        values.update({'platform_'+k:v for k,v in platform.items()});values.update({'sched_'+k:v for k,v in scheduler.items()})
+        values.update(runtime_device_plan=0xffffffff80000000,runtime_spurious_count=0)
+        names=['platform_'+n for n in runtime.PLATFORM]+['sched_'+n for n in runtime.SCHED]+['runtime_device_plan','runtime_spurious_count']
+        lines=['DONGOS_P3_RUNTIME_START','DONGOS_P3_IRQ_READY']+[f'{n}=0x{values[n]:016x}' for n in names]+['DONGOS_P3_THREADS_READY']
+        fields={n:0 for n in runner.p5.FIELDS};fields.update(version=1,process_count=3,last_pid=1,last_syscall=255,
+            completed=1,steps=31,current=1,calls=1,replies=1,syscalls=2,frames=1,start_tsc=1,end_tsc=2)
+        lines+=['DONGOS_P5_SERVICES_START','DONGOS_P5_ELF_LOADED','DONGOS_BLK_READY','DONGOS_FS_READY',
+            'DONGOS_L3_INPUT SEED.ELF','DONGOS_L3_RUN',
+            'DONGOS_L3_RESULT 0x0000000000000000 0x0000000000000003 0x0000000000000000 0x0000000000000000',
+            'DONGOS_L3_DURABLE STAGE1.ELF 0x00000000001ce128','DONGOS_L3_EXIT']
+        lines += [f'services_{n}=0x{fields[n]:016x}' for n in runner.p5.FIELDS]+['DONGOS_P5_SERVICES_READY']
+        prior=acpi_fixture.capture().replace(b'DONGOS_P1_EBS_RETRY\r\n',b'DONGOS_P1_EBS_RETRY\r\n'*retries)
+        serial=prior.replace(b'DONGOS_P1_PASS\r\n','\r\n'.join(lines).encode()+b'\r\nDONGOS_P1_PASS\r\n')
+        return serial,acpi_fixture.SYMBOLS
+
+    def test_compiler_projection_accepts_real_production_retry_prefix(self):
+        # Exercise all real service/runtime/ACPI/cache/memory parsers, without
+        # substituting validators or fabricating a retry marker in the runner.
+        for retries in (0,1,7):
+            with self.subTest(retries=retries):
+                serial,symbols=self.compiler_serial(retries);before=bytes(serial)
+                *_,prior=runner.compiler_project(serial,symbols)
+                self.assertTrue(prior['passed']);self.assertEqual(prior['errors'],[]);self.assertEqual(serial,before)
+
+    def test_compiler_production_projection_keeps_retry_and_prior_gates_strict(self):
+        serial,symbols=self.compiler_serial(8)
+        with self.assertRaisesRegex(ValueError,'bounded'):runner.compiler_project(serial,symbols)
+        serial,symbols=self.compiler_serial()
+        for changed in (serial.replace(b'DONGOS_P2_CACHE_READY\r\n',b'DONGOS_P2_CACHE_READY\r\n'*2),
+                        serial.replace(b'DONGOS_P2_MUTATION_READY\r\n',b''),
+                        serial.replace(b'sched_ticks=0x0000000000000081',b'sched_ticks=0x0000000000000080')):
+            with self.subTest(changed=hashlib.sha256(changed).hexdigest()),self.assertRaises(ValueError):
+                runner.compiler_project(changed,symbols)
+
     def load_inputs_for_main(self,*args):
         # Keep actual checkout harness hashes while main writes only in temp.
         with patch.object(runner,'ROOT',Path(__file__).resolve().parents[1]):return self.real_load_inputs(*args)
