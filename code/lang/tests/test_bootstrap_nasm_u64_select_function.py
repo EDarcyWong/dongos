@@ -15,16 +15,9 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0,str(ROOT))
 
 from lang.dongc import compile_file
-from lang.tests.test_dongc import tool,nasm_flags as _nasm_flags
+from lang.tests.test_dongc import tool,nasm_flags
 
 
-def nasm_flags(nasm):
-    """Shared -Wall -Werror flags; NASM 3.x lists its warnings only under "-h -w", so the shared probe misses
-    reloc-rel-dword and ordinary RIP-relative .text -> .rodata references would fail. Every other warning stays an error."""
-    flags=list(_nasm_flags(nasm))
-    if '-w-reloc-rel-dword' not in flags:
-        flags.append('-w-reloc-rel-dword')
-    return flags
 
 SOURCE=ROOT/'lang/bootstrap/nasm_u64_select_function.dg'
 DOC=ROOT/'lang/bootstrap/nasm_u64_select_function.md'

@@ -19,7 +19,7 @@ WORKS = ROOT
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 from lang.dongc import compile_file
-from lang.tests.test_dongc import tool, nasm_flags as _nasm_flags
+from lang.tests.test_dongc import tool, nasm_flags
 
 SOURCE = ROOT / 'lang/bootstrap/nasm_checked_u64_function.dg'
 DOC = SOURCE.with_suffix('.md')
@@ -266,11 +266,6 @@ VECTORS = [
 ]
 
 
-def nasm_flags(nasm):
-    flags = list(_nasm_flags(nasm))
-    if '-w-reloc-rel-dword' not in flags:
-        flags.append('-w-reloc-rel-dword')
-    return flags
 
 
 class NasmCheckedU64FunctionTests(unittest.TestCase):

@@ -18,7 +18,7 @@ ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 from lang.dongc import compile_file
-from lang.tests.test_dongc import tool, nasm_flags as _nasm_flags
+from lang.tests.test_dongc import tool, nasm_flags
 
 SOURCE = ROOT / 'lang/bootstrap/nasm_indexed_memory_function.dg'
 DOC = SOURCE.with_suffix('.md')
@@ -229,11 +229,6 @@ def interpret(v):
   result=value&((1<<width)-1);memory[at:at+n]=result.to_bytes(n,'little')
  return (result,0),bytes(memory)
 
-def nasm_flags(nasm):
-    flags = list(_nasm_flags(nasm))
-    if '-w-reloc-rel-dword' not in flags:
-        flags.append('-w-reloc-rel-dword')
-    return flags
 
 
 class NasmIndexedMemoryFunctionTests(unittest.TestCase):
