@@ -5,7 +5,76 @@ sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 from tests import run_services_qemu as p5
 from tools import build as builder
 from tools.make_fat32_disk import create
+from tools.compiler_job import source_blob
 ROOT=builder.ROOT
+
+def file_hash(path):
+    return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+
+def source_names(rows):
+    result={str(p).replace('\\','/'):v for p,v in rows.items()}
+    if len(result)!=len(rows):raise ValueError('duplicate normalized source path')
+    for name in result:
+        if Path(name).is_absolute() or '..' in Path(name).parts:raise ValueError('unsafe source path')
+    return result
+
+def frozen_changes(groups):
+    return {group:[str(p) for p,digest in rows.items() if not p.is_file() or file_hash(p)!=digest]
+            for group,rows in groups.items()}
+
+def verify_frozen(groups):
+    changed={k:v for k,v in frozen_changes(groups).items() if v}
+    if changed:raise ValueError('frozen compiler inputs changed: '+json.dumps(changed))
+
+def load_inputs(source_root,esp,fixture):
+    """Bind the host fixture and the actual boot/observation files to one source."""
+    source_root=Path(source_root).resolve();esp=Path(esp).resolve();fixture=Path(fixture).resolve();build=esp.parent
+    receipt_path=fixture/'receipt.json';build_path=build/'build-inputs.json'
+    receipt_bytes=receipt_path.read_bytes();build_bytes=build_path.read_bytes()
+    receipt=json.loads(receipt_bytes);build_receipt=json.loads(build_bytes)
+    blob=(fixture/'sources.bin').read_bytes();image=(fixture/'stage1.elf').read_bytes()
+    if (receipt.get('source_stable') is not True or receipt.get('exact_fixedpoint') is not True
+        or hashlib.sha256(blob).hexdigest()!=receipt['blob_sha256']
+        or hashlib.sha256(image).hexdigest()!=receipt['elf_sha256'] or receipt.get('elf_bytes')!=len(image)):
+        raise ValueError('host fixture changed or fixed point unproven')
+    if (build_receipt.get('source_unchanged') is not True or build_receipt.get('compiler_job') is not True
+        or build_receipt.get('runtime_level')!=5):raise ValueError('compiler profile build not stable')
+    expected=source_names(build_receipt['source_sha256'])
+    before={p:file_hash(source_root/p) for p in expected}
+    if before!=expected:raise ValueError('current source does not match compiler profile build')
+    canonical,sources=source_blob(source_root);sources=source_names(sources)
+    if (blob!=canonical or source_names(receipt['sources'])!=sources
+        or any(before.get(p)!=v for p,v in sources.items())):
+        raise ValueError('host and guest compiler source revisions differ')
+    # build.py records absolute paths for exactly the generated boot payloads.
+    artifacts={Path(p).resolve():v for p,v in build_receipt['artifacts'].items()}
+    required={build/'kernel.bin',build/'kernel.elf',esp/'DONGOS.IMG',esp/'EFI/BOOT/BOOTX64.EFI',esp/'SERVICES.BIN'}
+    if not required.issubset(artifacts) or any(not p.is_relative_to(build) for p in artifacts):
+        raise ValueError('compiler profile artifact manifest incomplete or outside build')
+    if any(not p.is_file() or file_hash(p)!=digest for p,digest in artifacts.items()):
+        raise ValueError('compiler profile artifact differs from build manifest')
+    profile=[build/'dong_layout.json',*[build/'services'/n/'program.elf' for n in ('shell','fs','block')]]
+    fixtures={receipt_path:hashlib.sha256(receipt_bytes).hexdigest(),fixture/'sources.bin':hashlib.sha256(blob).hexdigest(),
+        fixture/'stage1.elf':hashlib.sha256(image).hexdigest()}
+    if (fixture/'stage2.elf').exists():
+        if (fixture/'stage2.elf').read_bytes()!=image:raise ValueError('host fixed point ELF differs')
+        fixtures[fixture/'stage2.elf']=hashlib.sha256(image).hexdigest()
+    harness=[ROOT/p for p in ('tests/run_compiler_job_qemu.py','tests/run_services_qemu.py',
+        'tests/run_runtime_qemu.py','tests/run_acpi_qemu.py','tools/build.py','tools/compiler_job.py','tools/make_fat32_disk.py')]
+    groups=dict(sources={source_root/p:v for p,v in before.items()},harness={p:file_hash(p) for p in harness},
+        fixture=fixtures,profile=artifacts|{p:file_hash(p) for p in profile}|{build_path:hashlib.sha256(build_bytes).hexdigest()})
+    verify_frozen(groups)
+    return blob,image,before,groups
+
+def compiler_context(registers,ready,root,expected_root,current):
+    # RUNNING is published before dispatch switches CURRENT and returns via
+    # SYSRET. A stopped kernel/controller is not a live compiler observation.
+    if 'CPL=3' not in registers:return False
+    match=re.search(r'CR3=([0-9a-fA-F]+)',registers)
+    if match is None:raise ValueError('live compiler register report missing CR3')
+    if int(match[1],16)!=root:return False
+    if ready!=1 or root!=expected_root or current!=3:raise ValueError('live compiler is not current published slot3')
+    return True
 
 def seed_disk(path,blob,image):
     g=create(path,64);fat=bytearray(g['fat_sectors']*512)
@@ -40,7 +109,7 @@ def compiler_project(serial,symbols):
         raise ValueError('compiler artifact completion differs')
     if block.count(b'DONGOS_L3_EXACT_FIXEDPOINT\r\n')!=int(inputs[0]==b'STAGE1'):raise ValueError('in-guest exact comparison missing')
     old,p3=p5.runtime.project_runtime(serial[:start]+serial[stop:]);platform,scheduler=p5.runtime.validate_fields(p3,'normal')
-    firmware,prior=p5.acpi.parse_report(old,symbols)
+    firmware,prior=p5.acpi.parse_report(old,symbols,production=True)
     return fields,platform,scheduler,firmware,prior
 
 def live_job(qmp,state,serial,build,blob,image):
@@ -74,9 +143,8 @@ def live_job(qmp,state,serial,build,blob,image):
     arena_pa,arena_bytes=struct.unpack_from('<2Q',global_data('boot.service_memory','PLAN',48),32)
     roots=struct.unpack('<16Q',global_data('user.memory','DYNAMIC_PHYSICAL',128))
     process=global_data('user.memory','PROCESSES',4*1288);ready,root=struct.unpack_from('<2Q',process,3*1288)
-    if ready!=1 or root!=roots[3] or struct.unpack_from('<Q',global_data('user.services','CURRENT',8))[0]!=3:raise ValueError('live compiler is not current published slot3')
     registers=qmp.request('human-monitor-command',{'command-line':'info registers'});(state/'live-registers.txt').write_text(registers)
-    if 'CPL=3' not in registers or int(re.search(r'CR3=([0-9a-fA-F]+)',registers)[1],16)!=root:return None
+    if not compiler_context(registers,ready,root,roots[3],struct.unpack_from('<Q',global_data('user.services','CURRENT',8))[0]):return None
     cache={}
     def pte(r,va,pool_pages):
         current=r
@@ -171,6 +239,35 @@ def final_job(qmp,state,serial,build,expected_bytes):
     p5.write_json(state/'final-physical-manifest.json',chunks)
     return dict(slot_retired=True,tables_cleared=True,controller_resumed=True,source_loan_withdrawn=True)
 
+def failure_snapshot(qmp,state,serial,build):
+    """Capture linked globals physically, independent of the current user CR3."""
+    (state/'failure-registers.txt').write_text(qmp.request('human-monitor-command',{'command-line':'info registers'}))
+    symbols=p5.acpi.validation_symbols(build/'kernel.elf');chunks=[]
+    def physical(pa,n,role,name):
+        if not 0<pa<1<<48 or not 0<n<=1<<20 or n>(1<<48)-pa:raise ValueError('unsafe failure dump')
+        path=state/name;qmp.request('pmemsave',{'val':pa,'size':n,'filename':str(path.resolve())});data=path.read_bytes()
+        if len(data)!=n:raise ValueError('short failure dump')
+        chunks.append(dict(physical=pa,length=n,role=role,file=path.name,sha256=hashlib.sha256(data).hexdigest()));return data
+    try:
+        rows=re.findall(rb'^memory_runtime_boot_info=0x([0-9a-f]{16})\r$',serial,re.M)
+        if len(rows)!=1:raise ValueError('missing/duplicate failure BootInfo locator')
+        boot_va=int(rows[0],16)
+        if not p5.acpi.HHDM<boot_va<p5.acpi.HHDM+(1<<48):raise ValueError('unsafe failure BootInfo locator')
+        boot=struct.unpack('<20Q',physical(boot_va-p5.acpi.HHDM,160,'BootInfo','failure-BootInfo.bin'))
+        for module,name,n in [('user.services','INFO',160),('user.services','STATES',4*1336),
+            ('user.services','CURRENT',8),('user.services','ACTIVE',8),('user.services','BOOTS',4*128),
+            ('user.compiler_job','RUNNING',1),('user.compiler_job','FAILED',1),('user.compiler_job','RUNS',8),
+            ('user.compiler_job','LAST',72),('user.compiler_job','REQUEST',48),
+            ('user.memory','PROCESSES',4*1288),('user.memory','SPACES',4*64),
+            ('user.memory','DYNAMIC_PHYSICAL',128),('user.memory','FRAME_COUNT',8),
+            ('user.memory','EXTENDED',8),('user.memory','EXTENDED_LIMIT',8)]:
+            va=symbols[p5.symbol(module,name)]
+            if not symbols['__kernel_text_start']<=va<=symbols['__kernel_bss_end']-n:raise ValueError('failure global escaped kernel')
+            physical(boot[15]+va-p5.KERNEL,n,module+'.'+name,'failure-'+module+'-'+name+'.bin')
+    finally:
+        p5.write_json(state/'failure-physical-manifest.json',chunks)
+
+
 def boot(esp,disk,state,blob,image,timeout=3600):
     state.mkdir(parents=True);up,qp=p5.free_port(),p5.free_port();command=builder.qemu_command(esp,state,test=True)
     # The compiler profile is deliberately an exclusive BSP job. A single CPU
@@ -213,12 +310,7 @@ def boot(esp,disk,state,blob,image,timeout=3600):
         if qmp:
             try:
                 qmp.request('stop')
-                (state/'failure-registers.txt').write_text(qmp.request('human-monitor-command',{'command-line':'info registers'}))
-                symbols=p5.acpi.validation_symbols(esp.parent/'kernel.elf')
-                for module,name,n in [('user.services','INFO',160),('user.services','STATES',4*1336),('user.services','CURRENT',8),('user.compiler_job','RUNNING',1),('user.compiler_job','LAST',72),('user.compiler_job','REQUEST',48),('user.memory','PROCESSES',4*1288)]:
-                    va=symbols[p5.symbol(module,name)]
-                    if symbols['__kernel_text_start']<=va<=symbols['__kernel_bss_end']-n:
-                        qmp.request('memsave',{'val':va,'size':n,'filename':str((state/('failure-'+name+'.bin')).resolve())})
+                failure_snapshot(qmp,state,bytes(raw),esp.parent)
             except Exception as diagnostic:result['errors'].append('diagnostic: '+str(diagnostic))
     finally:
         if qmp:
@@ -236,25 +328,32 @@ def boot(esp,disk,state,blob,image,timeout=3600):
 def main():
     a=argparse.ArgumentParser();a.add_argument('--esp',type=Path,required=True);a.add_argument('--fixture',type=Path,required=True);a.add_argument('--source-root',type=Path,default=ROOT);args=a.parse_args()
     state=ROOT/'build/test/l3-guest'/('run-'+uuid.uuid4().hex[:12]);state.mkdir(parents=True)
-    receipt=json.loads((args.fixture/'receipt.json').read_text());blob=(args.fixture/'sources.bin').read_bytes();image=(args.fixture/'stage1.elf').read_bytes()
-    if not receipt['source_stable'] or hashlib.sha256(blob).hexdigest()!=receipt['blob_sha256'] or hashlib.sha256(image).hexdigest()!=receipt['elf_sha256']:raise ValueError('host fixture changed')
-    build_receipt=json.loads((args.esp.parent/'build-inputs.json').read_text())
-    if not build_receipt['source_unchanged'] or not build_receipt.get('compiler_job'):raise ValueError('compiler profile build not stable')
-    hashes=lambda:{p:hashlib.sha256((args.source_root/p).read_bytes()).hexdigest() for p in build_receipt['source_sha256']}
-    harness_hashes=lambda:{p:hashlib.sha256((ROOT/p).read_bytes()).hexdigest() for p in ['tests/run_compiler_job_qemu.py','tests/run_services_qemu.py','tools/build.py']}
-    harness_before=harness_hashes()
-    before=hashes()
-    if before!=build_receipt['source_sha256']:raise ValueError('current source does not match compiler profile build')
-    if any(before.get(Path(p).as_posix())!=v for p,v in receipt['sources'].items()):raise ValueError('host and guest compiler source revisions differ')
-    disk=state/'disk.img';seed_disk(disk,blob,image);results=[boot(args.esp.resolve(),disk,state/'seed',blob,image)]
-    if results[0]['passed']:
-        p5.check_disk(disk,raw_name=b'SOURCES BIN',payload=blob)
-        p5.check_disk(disk,raw_name=b'STAGE1  ELF',payload=image)
-        results.append(boot(args.esp.resolve(),disk,state/'reboot',blob,image))
-        if results[-1]['passed']:
+    results=[];errors=[];before={};groups={};checks=[];blob=image=b'';passed=False
+    try:
+        blob,image,before,groups=load_inputs(args.source_root,args.esp,args.fixture)
+        verify_frozen(groups);checks.append('before seed')
+        disk=state/'disk.img';seed_disk(disk,blob,image);results.append(boot(args.esp.resolve(),disk,state/'seed',blob,image))
+        verify_frozen(groups);checks.append('after seed')
+        if results[0]['passed']:
             p5.check_disk(disk,raw_name=b'SOURCES BIN',payload=blob)
-            p5.check_disk(disk,raw_name=b'STAGE2  ELF',payload=image)
-    after=hashes();harness_stable=harness_before==harness_hashes();passed=len(results)==2 and all(r['passed'] for r in results) and before==after and harness_stable
-    p5.write_json(state/'receipt.json',dict(passed=passed,actual_qemu_executed=True,exact_host_guest_elf=passed,source_unchanged=before==after,harness_unchanged=harness_stable,harness=harness_before,source_root=str(args.source_root.resolve()),sources=before,results=results,blob_sha256=hashlib.sha256(blob).hexdigest(),elf_sha256=hashlib.sha256(image).hexdigest()))
+            p5.check_disk(disk,raw_name=b'STAGE1  ELF',payload=image)
+            verify_frozen(groups);checks.append('before reboot')
+            results.append(boot(args.esp.resolve(),disk,state/'reboot',blob,image))
+            verify_frozen(groups);checks.append('after reboot')
+            if results[-1]['passed']:
+                p5.check_disk(disk,raw_name=b'SOURCES BIN',payload=blob)
+                p5.check_disk(disk,raw_name=b'STAGE2  ELF',payload=image)
+        passed=len(results)==2 and all(r['passed'] and r.get('actual_qemu_executed') for r in results)
+    except Exception as e:
+        errors.append(f'{type(e).__name__}: {e}')
+    changed=frozen_changes(groups);stable={k:not v for k,v in changed.items()}
+    if not groups or any(changed.values()):passed=False
+    p5.write_json(state/'receipt.json',dict(passed=passed,actual_qemu_executed=any(r.get('actual_qemu_executed') for r in results),
+        exact_host_guest_elf=passed,source_unchanged=stable.get('sources',False),harness_unchanged=stable.get('harness',False),
+        harness={str(p.relative_to(ROOT) if p.is_relative_to(ROOT) else p):v for p,v in groups.get('harness',{}).items()},
+        fixture_unchanged=stable.get('fixture',False),profile_unchanged=stable.get('profile',False),
+        frozen_inputs={k:{str(p):v for p,v in rows.items()} for k,rows in groups.items()},changed_inputs=changed,input_checks=checks,
+        errors=errors,source_root=str(args.source_root.resolve()),sources=before,results=results,
+        blob_sha256=hashlib.sha256(blob).hexdigest(),elf_sha256=hashlib.sha256(image).hexdigest()))
     print('L3 actual guest','PASS' if passed else 'FAIL',state);return 0 if passed else 1
 if __name__=='__main__':raise SystemExit(main())

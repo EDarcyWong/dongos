@@ -75,3 +75,32 @@ it requires slot-three Process/Space withdrawal, all 128 private tables cleared,
 source-loan metadata cleared and the controller wait state restored. Actual
 results are recorded in per-run receipts; these requirements alone are not a
 claim that the guest acceptance has passed.
+
+## Actual two-boot CI
+
+`.github/workflows/l3-guest-selfhost.yml` runs the existing guest acceptance on
+an exact, clean PR head or a manually selected revision. It records both the
+commit and tree, regenerates the complete native fixture (including sources.bin),
+builds a new runtime5 compiler-profile kernel, and calls the same-disk runner.
+The two boots use a disposable disk and headless single-CPU TCG; KVM timing is
+not part of this gate. Both boots retain their existing 3600-second limit.
+
+The dedicated job allows 180 minutes, with a 145-minute guest step so native
+fixture generation, the kernel build and evidence upload have separate budget.
+Explicit Bash pipefail preserves command failures when console logs are teed.
+An always-run artifact step retains the complete fixture, build manifests,
+guest receipts, serial logs, physical snapshots and disk on success or failure.
+The artifact is named l3-actual-guest-selfhost-evidence-<run-attempt>.
+
+Large compiler artifacts require bounded FAT allocation I/O. Free-space scans
+read each 512-byte FAT sector once for its 128 entries. A serialized grow starts
+at cluster two and advances a local cursor after successful allocations; later
+operations start at two again so newly freed low clusters remain reusable.
+Native callback-count controls reject per-entry reads and repeated prefix scans.
+Mirrored updates, zero filling, dirty state and the durable flush sequence retain
+their existing order. Actual guest acceptance keeps the same per-boot deadline.
+
+A green host fixture or first boot alone is insufficient. Acceptance requires
+two actual successful boots, exact persisted STAGE1/STAGE2 ELF bytes, live
+physical isolation, normal job retirement and unchanged source/harness hashes.
+The recorded evidence must be independently checked before marking G6 complete.

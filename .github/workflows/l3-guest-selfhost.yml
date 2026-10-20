@@ -1,0 +1,79 @@
+name: L3 actual guest self-host acceptance
+
+on:
+  pull_request:
+    paths:
+      - .github/workflows/l3-guest-selfhost.yml
+      - code/**
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: l3-guest-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  same-disk-two-boot:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    env:
+      PYTHONUNBUFFERED: "1"
+      EXPECTED_SOURCE_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+    defaults:
+      run:
+        working-directory: code
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Record exact immutable source revision
+        run: |
+          mkdir -p build/g6
+          python3 - <<'PY' | tee build/g6/source-revision.log
+          import json, os, subprocess
+          from pathlib import Path
+          head = subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip()
+          tree = subprocess.check_output(['git', 'rev-parse', 'HEAD^{tree}'], text=True).strip()
+          dirty = subprocess.check_output(['git', 'status', '--porcelain'], text=True)
+          evidence = dict(head=head, tree=tree, expected_head=os.environ['EXPECTED_SOURCE_SHA'],
+                          run_id=os.environ['GITHUB_RUN_ID'], attempt=os.environ['GITHUB_RUN_ATTEMPT'],
+                          dirty=dirty)
+          Path('build/g6/source-revision.json').write_text(json.dumps(evidence, indent=2)+'\n')
+          print(json.dumps(evidence, indent=2))
+          if head != evidence['expected_head'] or dirty:
+              raise SystemExit('checkout does not match the exact clean source revision')
+          PY
+      - name: Install disposable guest and native tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends nasm gcc binutils python3 lld qemu-system-x86 ovmf make mtools gdb
+      - name: Validate harness and bounded FAT allocation controls
+        run: python3 -m unittest tests.test_compiler_guest_runner tests.test_fat32_allocation -v 2>&1 | tee build/g6/harness-tests.log
+      - name: Generate fresh complete native compiler fixture
+        run: python3 -m tools.compiler_job --output build/g6/fixture --mode release 2>&1 | tee build/g6/host-console.log
+      - name: Build fresh isolated compiler profile
+        run: |
+          python3 - <<'PY' 2>&1 | tee build/g6/build-console.log
+          from pathlib import Path
+          from tools.build import build
+          print(build(stage="p1", runtime_level=5, compiler_job=True, test=False,
+                      output=Path("build/g6/kernel").resolve()))
+          PY
+      - name: Execute actual same-disk two-boot acceptance
+        timeout-minutes: 145
+        run: python3 tests/run_compiler_job_qemu.py --esp build/g6/kernel/esp --fixture build/g6/fixture --source-root "$PWD" 2>&1 | tee build/g6/guest-console.log
+      - name: Preserve exact success and failure evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: l3-actual-guest-selfhost-evidence-${{ github.run_attempt }}
+          path: |
+            code/build/g6/
+            code/build/test/l3-guest/
+            code/build/test/p5-fat32-allocation/
+          if-no-files-found: error
+          retention-days: 14
