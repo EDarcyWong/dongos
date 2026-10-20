@@ -133,6 +133,16 @@ class KvmRunnerTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'symlink'):
                 runner.verify_build(esp, root)
 
+    def test_source_symlink_directory_cannot_hide_unbound_modules(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root, esp, metadata = build_fixture(Path(temp))
+            external = Path(temp) / 'external'
+            external.mkdir()
+            (external/'unbound.dg').write_text('module unbound;')
+            (root/'kernel/included').symlink_to(external, target_is_directory=True)
+            with self.assertRaisesRegex(ValueError, 'symlink in source inventory'):
+                runner.verify_build(esp, root)
+
     def test_preflight_fails_closed_without_linux_device_or_access(self):
         with mock.patch.object(runner.sys, 'platform', 'win32'):
             with self.assertRaisesRegex(ValueError, 'Linux'):
@@ -217,6 +227,55 @@ class KvmRunnerTests(unittest.TestCase):
             guest.reader.join(timeout=2)
             guest.stderr.close()
 
+    def test_failure_in_same_batch_as_readiness_is_rejected(self):
+        ready = b''.join(runner.MARKERS)
+        runner.check_startup_failure(ready)
+        for failure in (b'PANIC', b'DONGOS_P1_KERNEL_FAIL', b'DONGOS_INIT_FAILURE 2'):
+            with self.subTest(failure=failure), self.assertRaisesRegex(ValueError, 'startup failure'):
+                runner.check_startup_failure(ready + failure)
+
+    def test_start_rejects_failure_with_readiness_or_while_stopping(self):
+        for phase in ('cont', 'stop'):
+            for failure in (b'PANIC', b'DONGOS_P1_KERNEL_FAIL', b'DONGOS_INIT_FAILURE 2'):
+                with self.subTest(phase=phase, failure=failure), \
+                     tempfile.TemporaryDirectory() as temp:
+                    guest = runner.KvmGuest(Path(temp) / 'esp', Path(temp), 1)
+
+                    def respond(command, *args):
+                        if command == 'query-kvm':
+                            return dict(enabled=True, present=True)
+                        if command == 'query-status':
+                            return dict(running=False)
+                        if command == 'cont':
+                            guest.raw.extend(b''.join(runner.MARKERS))
+                        if command == phase:
+                            guest.raw.extend(failure + b'\r\n')
+                        return {}
+
+                    qmp = mock.Mock()
+                    qmp.request.side_effect = respond
+                    try:
+                        with mock.patch.object(runner, 'create'), \
+                             mock.patch.object(runner, 'command_for', return_value=['not executed']), \
+                             mock.patch.object(runner.subprocess, 'Popen'), \
+                             mock.patch.object(runner.clock.acpi, 'QMP', return_value=qmp), \
+                             mock.patch.object(runner.socket, 'create_connection'), \
+                             mock.patch.object(runner.threading, 'Thread'), \
+                             mock.patch.object(runner, 'read_elf_symbols') as symbols, \
+                             mock.patch.object(guest, 'physical') as physical:
+                            with self.assertRaisesRegex(ValueError, 'startup failure'):
+                                guest.start()
+                            symbols.assert_not_called()
+                            physical.assert_not_called()
+                        expected = ['query-kvm', 'query-status', 'cont']
+                        if phase == 'stop':
+                            expected += ['stop', 'query-status']
+                        self.assertEqual(expected, [c.args[0] for c in qmp.request.call_args_list])
+                        self.assertNotIn('stopped_for_capture', guest.evidence)
+                    finally:
+                        if guest.stderr:
+                            guest.stderr.close()
+
     def test_exact_500ms_boundary_and_eligibility(self):
         good = decoded_fixture()
         self.assertEqual(449999000, runner.timing_pass(good))
@@ -272,6 +331,7 @@ class KvmRunnerTests(unittest.TestCase):
                 binding = {'esp': str(Path(temp) / 'esp'), 'build': 'exact fixture'}
                 guest = mock.Mock()
                 guest.evidence = dict(actual_qemu_executed=True, actual_kvm_boots=1)
+                guest.raw = b''.join(runner.MARKERS)
                 guest.process.poll.return_value = 0
                 capture = mock.Mock(return_value=decoded_fixture())
                 if capture_fails:

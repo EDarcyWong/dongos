@@ -61,7 +61,10 @@ def source_fingerprints(root):
     for tree in TREES:
         base = root / tree
         check(base.is_dir() and not base.is_symlink(), 'source tree missing: ' + tree)
-        paths.extend(p for p in base.rglob('*') if p.is_file() and p.suffix in SUFFIXES)
+        for path in base.rglob('*'):
+            check(not path.is_symlink(), 'symlink in source inventory: ' + str(path))
+            if path.is_file() and path.suffix in SUFFIXES:
+                paths.append(path)
     check(paths, 'empty current source inventory')
     return {p.relative_to(root).as_posix(): sha(ordinary(p)) for p in sorted(paths)}
 
@@ -148,6 +151,12 @@ def command_for(esp, state, disk, uart_port, qmp_port):
     return command
 
 
+def check_startup_failure(raw):
+    check(b'PANIC' not in raw and b'DONGOS_P1_KERNEL_FAIL' not in raw
+          and b'DONGOS_INIT_FAILURE ' not in raw,
+          'guest startup failure; retain the failed run')
+
+
 def timing_pass(decoded):
     check(decoded.get('kvm_gate_eligible') is True and decoded.get('invariant_tsc') is True,
           'captured trace is not eligible Linux/KVM invariant-TSC evidence')
@@ -209,17 +218,17 @@ class KvmGuest(clock.ClockGuest):
         deadline = time.monotonic() + self.timeout
         while not all(marker in self.raw for marker in MARKERS):
             check(self.process.poll() is None, 'KVM guest exited before readiness')
-            check(b'PANIC' not in self.raw and b'DONGOS_P1_KERNEL_FAIL' not in self.raw
-                  and b'DONGOS_INIT_FAILURE ' not in self.raw,
-                  'guest startup failure; retain the failed run')
+            check_startup_failure(self.raw)
             if time.monotonic() >= deadline:
                 raise TimeoutError('shell and clients did not both become ready')
             time.sleep(.01)
+        check_startup_failure(self.raw)
         check(all(bytes(self.raw).count(marker) == 1 for marker in MARKERS),
               'initial boot readiness markers must be unique')
         self.qmp.request('stop')
         check(self.qmp.request('query-status').get('running') is False,
               'guest did not stop for read-only trace capture')
+        check_startup_failure(self.raw)
         self.evidence['stopped_for_capture'] = True
         self.symbols = read_elf_symbols(self.esp.parent / 'kernel.elf')
         matches = re.findall(rb'^memory_runtime_boot_info=0x([0-9a-f]{16})\r?$',
@@ -316,6 +325,7 @@ def run(esp, state, timeout, preflight_only=False):
             guest = KvmGuest(Path(binding['esp']), state, timeout)
             guest.start()
             result['trace'] = boot_trace_capture.capture(guest, state / 'trace')
+            check_startup_failure(guest.raw)
             result['loader_to_shell_upper_ns'] = timing_pass(result['trace'])
             result['actual_kvm_boots'] = 1
             result['passed'] = True
