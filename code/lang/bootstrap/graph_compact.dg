@@ -1,0 +1,81 @@
+// Explicit consuming ownership transition for a successful frontend graph.
+// Existing compiler APIs keep their immutable-arena contract. This opt-in
+// operation requires exclusive ownership; all old arena aliases are invalidated.
+module bootstrap.graph_compact;
+import bootstrap.frontend as frontend;
+import bootstrap.modules as modules;
+import bootstrap.lexer as lex;
+import bootstrap.expression as ast;
+import bootstrap.names as names;
+import bootstrap.binding as binding;
+import bootstrap.semantic_types as sem;
+import bootstrap.type_layout as layout;
+pub const OK:u64=0;pub const INVALID:u64=1;
+const MAX:u64=0xffff_ffff_ffff_ffff;
+pub struct Result{pub old_bytes:usize,pub retained_bytes:usize,pub reclaimed_bytes:usize}
+struct Pool{p:u64,count:usize,width:usize,alignment:usize}
+fn span(p:u64,n:usize)bool{return n==0||(p!=0&&n<=MAX-p);}
+fn overlap(a:u64,n:usize,b:u64,m:usize)bool{return n!=0&&m!=0&&a<b+m&&b<a+n;}
+pub unsafe fn compact(g:*frontend.Graph,r:*Result)u64{unsafe{
+ if g==null||r==null||(g as u64&7)!=0||(r as u64&7)!=0||!span(g as u64,sizeof(frontend.Graph))||!span(r as u64,sizeof(Result))||overlap(g as u64,sizeof(frontend.Graph),r as u64,sizeof(Result)){return INVALID;}
+ if (*g).units.len==0||(*g).nodes.len==0||(*g).tokens.len==0||(*g).entry>=(*g).units.len
+  ||(*g).refs.len!=(*g).nodes.len||(*g).node_types.len!=(*g).nodes.len||(*g).values.len!=(*g).nodes.len
+  ||(*g).value_states.len!=(*g).nodes.len||(*g).info.len!=(*g).nodes.len||(*g).layouts.len!=(*g).types.len||(*g).field_offsets.len!=(*g).fields.len{return INVALID;}
+ let base=(*g).arena.ptr as u64;let capacity=(*g).arena.len;
+ if !span(base,capacity)||overlap(base,capacity,g as u64,sizeof(frontend.Graph))||overlap(base,capacity,r as u64,sizeof(Result)){return INVALID;}
+ if (*g).sources.len>MAX/sizeof(modules.Source){return INVALID;}let sp=(*g).sources.ptr as u64;let sn=(*g).sources.len*sizeof(modules.Source);
+ if !span(sp,sn)||(sn!=0&&(sp&7)!=0)||overlap(base,capacity,sp,sn)||overlap(g as u64,sizeof(frontend.Graph),sp,sn)||overlap(r as u64,sizeof(Result),sp,sn){return INVALID;}
+ var i:usize=0;while i<(*g).sources.len{let source=(*g).sources[i];let pp=source.path.ptr as u64;let pn=source.path.len;let bp=source.bytes.ptr as u64;let bn=source.bytes.len;
+  if !span(pp,pn)||!span(bp,bn)||overlap(base,capacity,pp,pn)||overlap(base,capacity,bp,bn)
+   ||overlap(g as u64,sizeof(frontend.Graph),pp,pn)||overlap(g as u64,sizeof(frontend.Graph),bp,bn)
+   ||overlap(r as u64,sizeof(Result),pp,pn)||overlap(r as u64,sizeof(Result),bp,bn){return INVALID;}i+=1;
+ }
+ // Monotonic allocation order used by frontend.prepare. Only published used
+ // prefixes move; all typed records contain indices, not pointers into pools.
+ let pools=[Pool{p:(*g).units.ptr as u64,count:(*g).units.len,width:72,alignment:8},
+  Pool{p:(*g).tokens.ptr as u64,count:(*g).tokens.len,width:56,alignment:8},
+  Pool{p:(*g).strings.ptr as u64,count:(*g).strings.len,width:1,alignment:1},
+  Pool{p:(*g).nodes.ptr as u64,count:(*g).nodes.len,width:64,alignment:8},
+  Pool{p:(*g).edges.ptr as u64,count:(*g).edges.len,width:32,alignment:8},
+  Pool{p:(*g).symbols.ptr as u64,count:(*g).symbols.len,width:48,alignment:8},
+  Pool{p:(*g).refs.ptr as u64,count:(*g).refs.len,width:32,alignment:8},
+  Pool{p:(*g).types.ptr as u64,count:(*g).types.len,width:72,alignment:8},
+  Pool{p:(*g).fields.ptr as u64,count:(*g).fields.len,width:24,alignment:8},
+  Pool{p:(*g).node_types.ptr as u64,count:(*g).node_types.len,width:8,alignment:8},
+  Pool{p:(*g).values.ptr as u64,count:(*g).values.len,width:40,alignment:8},
+  Pool{p:(*g).value_states.ptr as u64,count:(*g).value_states.len,width:1,alignment:1},
+  Pool{p:(*g).limbs.ptr as u64,count:(*g).limbs.len,width:4,alignment:4},
+  Pool{p:(*g).layouts.ptr as u64,count:(*g).layouts.len,width:16,alignment:8},
+  Pool{p:(*g).field_offsets.ptr as u64,count:(*g).field_offsets.len,width:8,alignment:8},
+  Pool{p:(*g).info.ptr as u64,count:(*g).info.len,width:24,alignment:8}];
+ var destinations:[16]u64=[0;16];var cursor=base;var previous=base;i=0;
+ while i<pools.len{let p=pools[i];if p.count>MAX/p.width{return INVALID;}let bytes=p.count*p.width;
+  if bytes!=0{if !span(p.p,bytes)||(p.p&(p.alignment-1))!=0||p.p<previous||p.p<base||p.p>base+capacity||bytes>base+capacity-p.p{return INVALID;}previous=p.p+bytes;}
+  let padding=wrapping_sub(0 as u64,cursor)&(p.alignment-1);if padding>MAX-cursor{return INVALID;}cursor+=padding;
+  if bytes>MAX-cursor||cursor<base||cursor>base+capacity||bytes>base+capacity-cursor{return INVALID;}
+  if bytes!=0&&cursor>p.p{return INVALID;}destinations[i]=cursor;cursor+=bytes;i+=1;
+ }
+ // Every extent and dependency is validated before the first write. Forward
+ // byte copies are overlap-safe because each destination precedes its source.
+ i=0;while i<pools.len{let p=pools[i];let bytes=p.count*p.width;let source=p.p as *const u8;let target=destinations[i]as *u8;var j:usize=0;
+  while j<bytes{target[j]=source[j];j+=1;}i+=1;
+ }
+ (*g).units=slice_from_raw_parts(destinations[0]as *const modules.Unit,(*g).units.len);
+ (*g).tokens=slice_from_raw_parts(destinations[1]as *const lex.Token,(*g).tokens.len);
+ (*g).strings=slice_from_raw_parts(destinations[2]as *const u8,(*g).strings.len);
+ (*g).nodes=slice_from_raw_parts(destinations[3]as *const ast.Node,(*g).nodes.len);
+ (*g).edges=slice_from_raw_parts(destinations[4]as *const modules.Edge,(*g).edges.len);
+ (*g).symbols=slice_from_raw_parts(destinations[5]as *const names.Symbol,(*g).symbols.len);
+ (*g).refs=slice_from_raw_parts(destinations[6]as *const binding.Ref,(*g).refs.len);
+ (*g).types=slice_from_raw_parts(destinations[7]as *const sem.Type,(*g).types.len);
+ (*g).fields=slice_from_raw_parts(destinations[8]as *const sem.Field,(*g).fields.len);
+ (*g).node_types=slice_from_raw_parts(destinations[9]as *const usize,(*g).node_types.len);
+ (*g).values=slice_from_raw_parts(destinations[10]as *const sem.Value,(*g).values.len);
+ (*g).value_states=slice_from_raw_parts(destinations[11]as *const u8,(*g).value_states.len);
+ (*g).limbs=slice_from_raw_parts(destinations[12]as *const u32,(*g).limbs.len);
+ (*g).layouts=slice_from_raw_parts(destinations[13]as *const layout.Layout,(*g).layouts.len);
+ (*g).field_offsets=slice_from_raw_parts(destinations[14]as *const usize,(*g).field_offsets.len);
+ (*g).info=slice_from_raw_parts(destinations[15]as *const sem.Info,(*g).info.len);
+ let retained=cursor-base;(*g).arena=slice_from_raw_parts(base as *const u8,retained);
+ *r=Result{old_bytes:capacity,retained_bytes:retained,reclaimed_bytes:capacity-retained};return OK;
+}}

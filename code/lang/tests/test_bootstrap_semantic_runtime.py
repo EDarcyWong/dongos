@@ -15,7 +15,7 @@ HARNESS=decl.HARNESS.replace('typedef struct{Pool pools[24];} Workspace;',
  'typedef struct{Pool pools[24];} Workspace;\ntypedef struct{Pool pools[5];} RuntimeWorkspace;')
 HARNESS=HARNESS.replace('const Ref*,uint64_t,const Workspace*,uint64_t,SResult*);','const Ref*,uint64_t,const Workspace*,const RuntimeWorkspace*,uint64_t,SResult*);')
 HARNESS=HARNESS.replace(' Workspace w;for(int i=0;i<24;i++)',r'''
- const uint64_t fwidth[]={24,1,1,1,1},fcaps[]={nn,nn,nn*512,nn*256,256};RuntimeWorkspace flow;
+ const uint64_t fwidth[]={24,1,1,1,1},fcaps[]={nn,nn,((nn+7)/8)*512,((nn+7)/8)*256,256};RuntimeWorkspace flow;
  for(int i=0;i<5;i++){flow.pools[i]=(Pool){alloc(fcaps[i]*fwidth[i]),fcaps[i]};}
  Workspace w;for(int i=0;i<24;i++)''')
 HARNESS=HARNESS.replace('refs,nn,W,D,R)', 'refs,nn,W,&flow,D,R)')
@@ -38,7 +38,9 @@ HARNESS=HARNESS.replace(' if(h[11]!=UINT64_MAX){if(h[11]>=24||h[12]>caps[h[11]])
   for(int j=0;j<5;j++){if(!filled(flow.pools[j].p,fcaps[j]*fwidth[j]))exit(96);}
  }
  if(h[11]<24){if(h[12]>caps[h[11]])exit(96);w.pools[h[11]].n=h[12];}
- if(h[11]>=24&&h[11]<29){flow.pools[h[11]-24].n=h[12];}
+ flow.pools[2].n=((nn+7)/8)*h[10]*2;flow.pools[3].n=((nn+7)/8)*h[10];flow.pools[4].n=h[10];
+ if(h[11]==29){flow.pools[2].n=fcaps[2];flow.pools[3].n=fcaps[3];}
+ if(h[11]>=24&&h[11]<29){unsigned pool=h[11]-24;flow.pools[pool].n=h[12]==UINT64_MAX?flow.pools[pool].n-1:h[12];}
 ''')
 # Invalid 9 uses a real descriptor inside original scratch, with valid fields,
 # so descriptor-alias rejection is reached before original scratch can change.
@@ -102,6 +104,80 @@ def memory_intrinsic_cases():
     for call in ('volatile_store(p,1)','write_unaligned(p,1)','atomic_store(p,1)',
                  'atomic_compare_exchange(p,0,1)','atomic_fetch_add(p,1)'):
         items.append((f'fn f(p:*const u32)void{{unsafe{{{call};}}}}',12))
+    return items
+
+
+def never_flow_cases():
+    # Typed wrappers keep the intrinsic/aggregate contracts intact: a direct
+    # die() operand is not an integer operand for a wrapping intrinsic.
+    prefix='fn die()noreturn{loop{}}fn g(x:u64)u64{return x;}'
+    items=[]
+    for name in ('wrapping_add','wrapping_sub','wrapping_mul'):
+        for args in ('g(die()),1','1,g(die())'):
+            items.append((prefix+f'fn f()u64{{let b=true&&({name}({args})==0);}}',0))
+    # Exercise all direct noreturn operand positions across contextual sites.
+    # Expected integer types must not turn these into legal intrinsic operands.
+    for args in ('die(),1','1,die()','die(),die()'):
+        items.extend([
+          (prefix+f'fn f()u64{{return wrapping_add({args});}}',3),
+          (prefix+f'fn f()u64{{let x:u8=wrapping_sub({args});}}',3),
+          (prefix+f'fn use(x:u64)void{{}}fn f()u64{{use(wrapping_mul({args}));}}',3),
+        ])
+    items.extend([
+      (prefix+'fn f()u64{return wrapping_add(g(die()),1);}',0),
+      (prefix+'fn h(x:u8)u8{return x;}fn f()u64{let x:u8=wrapping_sub(1,h(die()));}',0),
+      (prefix+'fn use(x:u64)void{}fn f()u64{use(wrapping_mul(g(die()),g(die())));}',0),
+      (prefix+'fn f()u8{return wrapping_add(g(die()),1);}',3),
+      ('fn f()u8{return wrapping_add(~0,1);}',0),
+      ('fn f()u8{return wrapping_mul(255,2);}',0),
+      ('fn f()u8{return wrapping_add(wrapping_add(255,1),255);}',0),
+      ('fn f()u8{return wrapping_add(1<<7,128);}',0),
+      ('fn f()u8{return wrapping_add(~0,2)+1;}',0),
+      ('fn f()u8{return wrapping_add(1<<8,1);}',5),
+      ('fn f()u8{return wrapping_sub(-1,1);}',3),
+      ('fn f()u8{return wrapping_add(256,1);}',3),
+      (prefix+'fn f()u64{return wrapping_add(wrapping_sub(die(),1),1);}',3),
+      (prefix+'fn f()u64{unsafe{let b=false||(slice_from_raw_parts(null as *u8,die()).len==0);}}',0),
+      (prefix+'fn p(x:u64)*u8{return null;}fn f()u64{unsafe{let b=true&&(slice_from_raw_parts(p(die()),1).len==0);}}',0),
+      (prefix+'struct S{x:u64,y:u64}fn f()u64{let b=true&&(S{x:die(),y:1}.y==0);}',0),
+      (prefix+'struct S{x:u64,y:u64}fn f()u64{let b=false||(S{y:1,x:die()}.y==0);}',0),
+      (prefix+'fn f()u64{let b=true&&([1 as u64,die()][0]==0);}',0),
+      (prefix+'fn f()u64{let b=false||([g(die()),1][1]==0);}',0),
+      (prefix+'fn f()u64{let b=true&&([g(die());2][0]==0);}',0),
+      (prefix+'struct S{x:[2]u64}fn f()u64{let b=false||(S{x:[wrapping_mul(1,g(die()));2]}.x[0]==0);}',0),
+      # A skipped or unknown RHS does not terminate the enclosing expression.
+      (prefix+'fn f()u64{let b=false&&(wrapping_add(g(die()),1)==0);}',14),
+      (prefix+'fn f(b:bool)u64{let x=b||(wrapping_sub(1,g(die()))==0);}',14),
+      (prefix+'fn f()u64{unsafe{let b=true||(slice_from_raw_parts(null as *u8,die()).len==0);}}',14),
+      (prefix+'struct S{x:u64}fn f()u64{let b=false&&(S{x:die()}.x==0);}',14),
+      (prefix+'struct S{x:u64}fn f(b:bool)u64{let x=b&&(S{x:die()}.x==0);}',14),
+      (prefix+'fn f()u64{let b=true||([1 as u64,die()][0]==0);}',14),
+      (prefix+'fn f(b:bool)u64{let x=b&&([g(die());2][0]==0);}',14),
+      (prefix+'fn f()u64{let b=false&&([g(die());2][0]==0);return 7;}',0),
+      # Termination is a flow fact, not permission to erase a typed result.
+      (prefix+'fn f()void{let x:bool=wrapping_add(g(die()),1);}',3),
+      (prefix+'fn f()void{unsafe{let x:bool=slice_from_raw_parts(null as *u8,die());}}',3),
+      (prefix+'struct S{x:u64}fn f()void{let x:bool=S{x:die()};}',3),
+      (prefix+'fn f()void{let x:bool=[1 as u64,die()];}',3),
+      (prefix+'fn f()void{let x:bool=[g(die());2];}',3),
+      (prefix+'fn f()void{let x:bool=g(die());}',3),
+      # All children and ordinary dead code still undergo type/read checks.
+      (prefix+'fn f()u64{let b=true&&(wrapping_add(die(),1)==0);}',3),
+      (prefix+'fn f()u64{let b=false&&(wrapping_add(g(die()),true)==0);}',3),
+      (prefix+'fn f()u64{unsafe{let b=true&&(slice_from_raw_parts(null as *u8,true).len==0);}}',3),
+      (prefix+'struct S{x:u64,y:u64}fn f()u64{let b=true&&(S{x:die(),y:true}.x==0);}',3),
+      (prefix+'fn f()u64{let b=true&&([g(die()),true][0]==0);}',3),
+      (prefix+'fn f()u64{let b=true&&([g(die());0][0]==0);}',5),
+      (prefix+'fn f()u64{var x:u64;let b=true&&(wrapping_mul(g(die()),x)==0);}',11),
+      (prefix+'struct S{x:u64,y:u64}fn f()u64{var x:u64;let b=true&&(S{x:die(),y:x}.x==0);}',11),
+      (prefix+'fn f()u64{var x:u64;let b=true&&([g(die()),x][0]==0);}',11),
+      (prefix+'fn f()u64{var x:u64;let b=false&&([g(die());2][0]==0);return x;}',11),
+      (prefix+'fn f()u64{let b=true&&([g(die());2][0]==0);let x:bool=1;}',3),
+      # Skipped cleanup expressions remain nonterminating; captures are still
+      # checked at defer registration, even when a previous child terminates.
+      (prefix+'struct S{x:u64}fn f()u64{defer {let b=false&&(S{x:die()}.x==0);}return 1;}',0),
+      (prefix+'fn f()u64{var x:u64;defer {let b=true&&(wrapping_add(g(die()),x)==0);}return 1;}',11),
+    ])
     return items
 
 
@@ -194,7 +270,9 @@ class BootstrapSemanticRuntimeTests(unittest.TestCase):
         cls.files=['semantic_types.dg','binding.dg','modules.dg','names.dg','expression.dg','syntax.dg','lexer.dg','unicode.dg',
                    'constant_arithmetic.dg','type_layout.dg','bigint.dg','bigint_div.dg','bigint_bits.dg']
         cls.inputs={p:hashlib.sha256((ROOT/'lang/bootstrap'/p).read_bytes()).hexdigest() for p in cls.files};cls.records=[]
-        cls.executables={m:cls.build(ROOT/'lang',m,m) for m in ('debug','release')}
+        cls.snapshot=cls.work/'source';(cls.snapshot/'bootstrap').mkdir(parents=True)
+        for p in cls.files:shutil.copyfile(ROOT/'lang/bootstrap'/p,cls.snapshot/'bootstrap'/p)
+        cls.executables={m:cls.build(cls.snapshot,m,m) for m in ('debug','release')}
     tearDownClass=decl.BootstrapSemanticTypesTests.__dict__['tearDownClass']
     def cases(self,items):
         cases=[]
@@ -244,6 +322,28 @@ class BootstrapSemanticRuntimeTests(unittest.TestCase):
         cases=self.cases(items)
         for mode,exe in self.executables.items():self.run_cases(exe,cases,'runtime-'+mode)
         self.records.append(dict(test='runtime-host-acceptance',cases=len(cases),modes=2,passed=True))
+    def test_contextual_runtime_shift_width(self):
+        items=[]
+        for typ in ('u8','u16','u32','u64','i8','i16','i32','i64'):
+            for op in ('<<','>>'):
+                items.extend([
+                  (f'fn f(mask:{typ},i:u64){typ}{{return mask&(1{op}i);}}',0),
+                  (f'fn f(mask:{typ},i:u64){typ}{{return (1{op}i)&mask;}}',0),
+                  (f'fn f(i:u64){typ}{{return 1{op}i;}}',0),
+                ])
+        items.extend([
+          ('fn f(mask:u64,i:u64)bool{return (mask&(1<<i))!=0;}',0),
+          ('fn f(i:u64)u64{return (1<<i)+(2<<i);}',0),
+          ('fn f(i:u64)i64{let x=1<<i;return x;}',0),
+          ('fn f(i:u64)u8{return (256<<i);}',3),
+          ('fn f(i:u64)u8{return (1<<i)<<8;}',3),
+          ('fn f(i:u8)u64{return 1<<i;}',3),
+          ('fn f(i:u64)bool{return 1<<i;}',3),
+        ])
+        cases=self.cases(items)
+        for mode,exe in self.executables.items():self.run_cases(exe,cases,'contextual-shift-'+mode)
+        self.records.append(dict(test='contextual-runtime-shift',cases=len(cases),modes=2,passed=True))
+
     def test_flow_initialization_reachability_and_cleanup(self):
         items=[('fn f(b:bool)u64{var x:u64;if b{x=1;}else{x=2;}return x;}',0),
           ('fn f()u64{var x:u64;if true{x=1;}return x;}',0),
@@ -275,6 +375,58 @@ class BootstrapSemanticRuntimeTests(unittest.TestCase):
         cases=self.cases(items)
         for mode,exe in self.executables.items():self.run_cases(exe,cases,'flow-'+mode)
         self.records.append(dict(test='flow-host-acceptance',cases=len(cases),modes=2,passed=True))
+    def test_intrinsic_and_aggregate_never_flow(self):
+        cases=self.cases(never_flow_cases())
+        # Terminating cleanup remains explicitly unsupported in the native
+        # subset, although the complete host accepts this program.
+        source='module a;fn die()noreturn{loop{}}struct S{x:u64}fn f()u64{defer {let b=true&&(S{x:die()}.x==0);}}'
+        compile_source(source);cases.append(decl.case(source,8))
+        for mode,exe in self.executables.items():self.run_cases(exe,cases,'never-flow-'+mode)
+        self.records.append(dict(test='intrinsic-aggregate-never-flow',cases=len(cases),modes=2,host_acceptance_checked=True,passed=True))
+
+    def test_never_flow_actual_rollbacks_are_rejected(self):
+        source=(self.snapshot/'bootstrap/semantic_types.dg').read_text(encoding='utf-8')
+        prefix='module a;fn die()noreturn{loop{}}fn g(x:u64)u64{return x;}'
+        pair='(*rt_info(c,id)).flags=((*rt_info(c,first)).flags|(*rt_info(c,second)).flags)&NEVER;'
+        variants=[
+          ('never-wrapping',pair+'\n   let ga=', 'let ga=',
+           [prefix+'fn f()u64{let b=true&&(wrapping_add(g(die()),1)==0);}']),
+          ('never-raw-slice',pair+'\n   let t=', 'let t=',
+           [prefix+'fn f()u64{unsafe{let b=true&&(slice_from_raw_parts(null as *u8,die()).len==0);}}']),
+          ('never-array','(*rt_info(c,id)).flags=stopped;return rt_type(c,ARRAY,0,element,count,id);',
+           'return rt_type(c,ARRAY,0,element,count,id);',
+           [prefix+'fn f()u64{let b=true&&([1 as u64,die()][0]==0);}',
+            prefix+'fn f()u64{let b=true&&([g(die());2][0]==0);}']),
+          ('never-struct','(*rt_info(c,id)).flags=stopped;return typ;', 'return typ;',
+           [prefix+'struct S{x:u64}fn f()u64{let b=true&&(S{x:die()}.x==0);}']),
+          ('never-wrapping-context',
+           'if a==NORETURN||b==NORETURN{return rt_fail(c,TYPE,id,17);}',
+           'if a==NORETURN{a=rt_accept(c,first,target);}if b==NORETURN{b=rt_accept(c,second,target);}',
+           [prefix+'fn f()u64{return wrapping_add(die(),1);}',
+            prefix+'fn f()u64{return wrapping_add(1,die());}',
+            prefix+'fn f()u64{return wrapping_add(die(),die());}']),
+          ('never-typed-coercion','if source==NORETURN{(*info).typ=target;return target;}',
+           'if source==NORETURN||((*info).flags&NEVER)!=0{(*info).typ=target;return target;}',
+           [prefix+'struct S{x:u64}fn f()void{let x:bool=S{x:die()};}']),
+        ]
+        for name,old,new,sources in variants:
+            self.assertEqual(source.count(old),1);root=self.work/('bad-'+name);(root/'bootstrap').mkdir(parents=True)
+            cases=[]
+            for body in sources:
+                status=3 if name in ('never-typed-coercion','never-wrapping-context') else 0
+                try:compile_source(body);host=True
+                except CompileError:host=False
+                self.assertEqual(host,status==0,body);cases.append(decl.case(body,status))
+            for p in self.files:
+                if p!='semantic_types.dg':shutil.copyfile(self.snapshot/'bootstrap'/p,root/'bootstrap'/p)
+            (root/'bootstrap/semantic_types.dg').write_text(source.replace(old,new,1),encoding='utf-8')
+            for mode in ('debug','release'):
+                self.run_cases(self.executables[mode],cases,name+'-good-'+mode)
+                exe=self.build(root,mode,name+'-'+mode)
+                for i,case in enumerate(cases):
+                    with self.assertRaisesRegex(AssertionError,'status'):self.run_cases(exe,[case],name+'-'+mode+'-'+str(i))
+                self.records.append(dict(test='actual-bad-Dong',variant=name,mode=mode,cases=len(cases),rejected_by='status',passed=True))
+
     def test_slices_bounds_readonly_and_place_alignment(self):
         items=[
           ('fn f(s:[]u8)[]u8{return s[0..1];}',0),
@@ -336,7 +488,7 @@ class BootstrapSemanticRuntimeTests(unittest.TestCase):
         self.records.append(dict(test='tagged-flow-host-acceptance',cases=len(cases),modes=2,passed=True))
 
     def test_tagged_unwrap_actual_wrong_flow_is_rejected(self):
-        source=(ROOT/'lang/bootstrap/semantic_types.dg').read_text(encoding='utf-8')
+        source=(self.snapshot/'bootstrap/semantic_types.dg').read_text(encoding='utf-8')
         variants=[
           ('try-context','if (*c).in_defer||rt_kind(c,(*c).returns)!=RESULT',
            'if (*c).in_defer',decl.case('module a;fn f(x:!u8)u8{return try x;}',15)),
@@ -346,7 +498,7 @@ class BootstrapSemanticRuntimeTests(unittest.TestCase):
         for name,old,new,case in variants:
             self.assertEqual(source.count(old),1);root=self.work/('bad-'+name);(root/'bootstrap').mkdir(parents=True)
             for p in self.files:
-                if p!='semantic_types.dg':shutil.copyfile(ROOT/'lang/bootstrap'/p,root/'bootstrap'/p)
+                if p!='semantic_types.dg':shutil.copyfile(self.snapshot/'bootstrap'/p,root/'bootstrap'/p)
             (root/'bootstrap/semantic_types.dg').write_text(source.replace(old,new,1),encoding='utf-8')
             for mode in ('debug','release'):
                 self.run_cases(self.executables[mode],[case],name+'-good-'+mode)
@@ -355,7 +507,7 @@ class BootstrapSemanticRuntimeTests(unittest.TestCase):
                 self.records.append(dict(test='actual-bad-Dong',variant=name,mode=mode,rejected_by='status',passed=True))
 
     def test_memory_intrinsics_actual_wrong_permissions_are_rejected(self):
-        source=(ROOT/'lang/bootstrap/semantic_types.dg').read_text(encoding='utf-8')
+        source=(self.snapshot/'bootstrap/semantic_types.dg').read_text(encoding='utf-8')
         variants=[
           ('memory-unsafe','if !rt_unsafe(c,id){return NONE;}\n if operation==12',
            'if operation==12',decl.case('module a;fn f()void{compiler_fence();}',13)),
@@ -366,7 +518,7 @@ class BootstrapSemanticRuntimeTests(unittest.TestCase):
         for name,old,new,case in variants:
             self.assertEqual(source.count(old),1);root=self.work/('bad-'+name);(root/'bootstrap').mkdir(parents=True)
             for p in self.files:
-                if p!='semantic_types.dg':shutil.copyfile(ROOT/'lang/bootstrap'/p,root/'bootstrap'/p)
+                if p!='semantic_types.dg':shutil.copyfile(self.snapshot/'bootstrap'/p,root/'bootstrap'/p)
             (root/'bootstrap/semantic_types.dg').write_text(source.replace(old,new,1),encoding='utf-8')
             for mode in ('debug','release'):
                 self.run_cases(self.executables[mode],[case],name+'-good-'+mode)
@@ -413,6 +565,39 @@ class BootstrapSemanticRuntimeTests(unittest.TestCase):
         for mode,exe in self.executables.items():self.run_cases(exe,cases,'tagged-match-'+mode)
         self.records.append(dict(test='optional-result-match',cases=len(cases),modes=2,host_acceptance_checked=True,passed=True))
 
+    def test_packed_flow_exact_capacity_and_byte_boundaries(self):
+        # Every byte pattern, including the high bit, with varying global-node
+        # offsets, imported modules, nested branch/loop slots and defer restore.
+        cases=[]
+        for mask in range(256):
+            pad=''.join(f'let pad{i}:u64={i};' for i in range(mask%16))
+            bindings=''.join(f'var x{i}:u64;' for i in range(8))
+            yes=''.join(f'x{i}=1;' for i in range(8) if mask&(1<<i))
+            other=((mask<<1)|(mask>>7))&255
+            no=''.join(f'x{i}=2;' for i in range(8) if other&(1<<i))
+            target=mask%8
+            expected=0 if mask&other&(1<<target) else 11
+            # Loop break snapshots and branch merge must produce the same
+            # intersection; an unrelated initialized defer capture survives.
+            flow=f'loop{{if b{{{yes}break;}}else{{{no}break;}}}}'
+            body=f'fn f(b:bool)u64{{let anchor:u64=1;defer {{let z=anchor;}}{pad}{bindings}{flow}return x{target};}}'
+            source='module a;import b;'+body
+            files=[(0,'a.dg',source),(0,'b.dg','module b;pub fn seed()u64{return 1;}')]
+            # Independent host acceptance, over the identical cross-source input.
+            host=self.work/f'packed-host-{mask}';host.mkdir()
+            for _,path,text in files:(host/path).write_text(text,encoding='utf-8')
+            try:decl.compile_file(host/'a.dg',roots=[host]);accepted=True
+            except CompileError:accepted=False
+            self.assertEqual(accepted,expected==0,mask)
+            cases.append(decl.case('',expected,files=files,semantic_depth=32))
+            if mask<16:
+                for pool in (26,27):cases.append(decl.case('',2,files=files,semantic_depth=32,pool=pool,cap=NONE))
+        # With depth16, full allocated descriptors exceed even the old
+        # byte-per-node contract. Larger callers remain accepted unchanged.
+        cases.append(decl.case('module a;fn f(b:bool)u64{var x:u64;if b{x=1;}else{x=2;}return x;}',semantic_depth=16,pool=29))
+        for mode,exe in self.executables.items():self.run_cases(exe,cases,'packed-flow-'+mode)
+        self.records.append(dict(test='packed-flow-all-byte-patterns-exact-and-one-short',cases=len(cases),modes=2,host_acceptance_checked=True,passed=True))
+
     def test_unsupported_and_workspace_limits_are_explicit(self):
         cases=[decl.case('module a;fn f()void{}',2,pool=i,cap=0) for i in range(24,29)]
         unsupported=['enum E{A,B}fn f(e:E)u64{match e{E.A=>{return 1;},E.B=>{return 2;}}}',
@@ -422,9 +607,13 @@ class BootstrapSemanticRuntimeTests(unittest.TestCase):
         for mode,exe in self.executables.items():self.run_cases(exe,cases,'limits-'+mode)
         self.records.append(dict(test='explicit-unsupported-and-capacity',cases=len(cases),invalid_preflights_per_case=20,modes=2,passed=True))
     def test_z_actual_bad_type_and_branch_intersection_are_rejected(self):
-        source=(ROOT/'lang/bootstrap/semantic_types.dg').read_text(encoding='utf-8')
+        source=(self.snapshot/'bootstrap/semantic_types.dg').read_text(encoding='utf-8')
         variants=[('coercion','return rt_fail(c,TYPE,id,target as u64);','(*info).typ=target;return target;',decl.case('module a;fn f(x:u64)bool{return x;}',3)),
-          ('intersection','(*w).snapshots[slot*count+i]&=value;','(*w).snapshots[slot*count+i]|=value;',decl.case('module a;fn f(b:bool)u64{var x:u64;if b{x=1;}else{}return x;}',11)),
+          ('intersection','bits[slot*stride+byte]&=value;','bits[slot*stride+byte]|=value;',decl.case('module a;fn f(b:bool)u64{var x:u64;if b{x=1;}else{}return x;}',11)),
+          ('packed-high-bit','while bit<8&&byte*8+bit<count','while bit<7&&byte*8+bit<count',
+           decl.case('module a;fn f(b:bool)u64{'+''.join(f'var x{i}:u64;' for i in range(16))+
+             'if b{'+''.join(f'x{i}=1;' for i in range(16))+'}else{'+''.join(f'x{i}=2;' for i in range(16))+
+             '}return '+'+'.join(f'x{i}' for i in range(16))+';}')),
           ('slice-bounds','if have_length&&((have_lo&&lo>length)||(have_hi&&hi>length))','if false&&have_length&&((have_lo&&lo>length)||(have_hi&&hi>length))',decl.case('module a;fn f()[]const u8{return "abc"[0..4];}',3)),
           ('slice-readonly','var readonly=t.flags&1;','var readonly:u64=0;',decl.case('module a;fn f(s:[]const u8)[]u8{return s[..];}',3)),
           ('match-error-payload','mask=2;payload=3;','mask=2;payload=8;',decl.case('module a;fn f(x:!u8)void{match x{ok(v)=>{},err(e)=>{let y:bool=e;}}}',3)),
@@ -432,7 +621,7 @@ class BootstrapSemanticRuntimeTests(unittest.TestCase):
         for name,old,new,c in variants:
             self.assertEqual(source.count(old),1);root=self.work/('bad-'+name);(root/'bootstrap').mkdir(parents=True)
             for p in self.files:
-                if p!='semantic_types.dg':shutil.copyfile(ROOT/'lang/bootstrap'/p,root/'bootstrap'/p)
+                if p!='semantic_types.dg':shutil.copyfile(self.snapshot/'bootstrap'/p,root/'bootstrap'/p)
             (root/'bootstrap/semantic_types.dg').write_text(source.replace(old,new,1),encoding='utf-8')
             for mode in ('debug','release'):
                 exe=self.build(root,mode,name+'-'+mode)

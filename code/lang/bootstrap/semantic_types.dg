@@ -518,7 +518,9 @@ unsafe fn rt_pure(c:*Runtime,id:usize,depth:usize)bool{unsafe{
 }}
 unsafe fn rt_accept(c:*Runtime,id:usize,target:usize)usize{unsafe{
  let info=rt_info(c,id);let source=(*info).typ;let s=(*c).s;let w=(*s).w;
- if target==NONE{return source;}if source==NORETURN||((*info).flags&NEVER)!=0{(*info).typ=target;return target;}
+ // NEVER also marks typed parents of a terminating child; it does not erase
+ // their type. Only an actual noreturn value coerces to every target.
+ if target==NONE{return source;}if source==NORETURN{(*info).typ=target;return target;}
  if rt_same(c,source,target,0){(*info).typ=target;return target;}
  if source==NONE&&target<8{
   if !rt_pure(c,id,0){return rt_expr(c,id,target,true,0);}
@@ -616,8 +618,8 @@ unsafe fn rt_expr(c:*Runtime,id:usize,expected:usize,read:bool,depth:usize)usize
   else{return rt_fail(c,TYPE,id,7);}typ=t.element;
  }else if n.kind==ast.SLICE{typ=rt_slice(c,id,depth+1);if (*s).status!=0{return NONE;}flags=(*info).flags;
  }else if n.kind==ast.CAST{typ=rt_cast(c,id,depth+1);
- }else if n.kind==ast.ARRAY||n.kind==ast.REPEAT{typ=rt_array(c,id,expected,depth+1);
- }else if n.kind==ast.STRUCT{typ=rt_struct(c,id,depth+1);
+ }else if n.kind==ast.ARRAY||n.kind==ast.REPEAT{typ=rt_array(c,id,expected,depth+1);flags=(*info).flags;
+ }else if n.kind==ast.STRUCT{typ=rt_struct(c,id,depth+1);flags=(*info).flags;
  }else{return rt_fail(c,UNSUPPORTED,id,n.kind);}
  if (*s).status!=0{return NONE;}
  if n.kind==ast.UNARY||n.kind==ast.CAST||n.kind==ast.FIELD||n.kind==ast.INDEX{flags|=(*rt_info(c,n.a)).flags&NEVER;}
@@ -691,9 +693,11 @@ unsafe fn rt_binary(c:*Runtime,id:usize,expected:usize,depth:usize)usize{unsafe{
   if ak==ENUM&&(*w).layouts[a].size!=8{return rt_fail(c,TYPE,id,10);}return 8;
  }
  if op==520||op==521{
-  if a==NONE{var target=expected;if target>=8{target=7;}a=rt_accept(c,n.a,target);}rt_accept(c,n.b,3);
-  if a>=8{return rt_fail(c,TYPE,id,11);}let g=gid(s,u,n.b);if (*w).value_states[g]==2{var shift:usize=0;let value=(*w).values[g];
-   if !small(s,u,n.b,&value,false,&shift){return NONE;}if shift>=width(a){return rt_fail(c,TYPE,id,12);}
+  // Keep a runtime shift of an untyped integer contextual until its parent
+  // supplies a width (for example mask & (1 << count)).
+  if a==NONE&&expected<8{a=rt_accept(c,n.a,expected);}rt_accept(c,n.b,3);
+  if a!=NONE&&a>=8{return rt_fail(c,TYPE,id,11);}let g=gid(s,u,n.b);if (*w).value_states[g]==2{var shift:usize=0;let value=(*w).values[g];
+   if !small(s,u,n.b,&value,false,&shift){return NONE;}if a!=NONE&&shift>=width(a){return rt_fail(c,TYPE,id,12);}
   }rt_calculate(c,id,op,a,op==520);return a;
  }
  if a==NONE&&b!=NONE{a=rt_accept(c,n.a,b);}if b==NONE&&a!=NONE{b=rt_accept(c,n.b,a);}
@@ -720,9 +724,14 @@ unsafe fn rt_call(c:*Runtime,id:usize,expected:usize,depth:usize)usize{unsafe{
   let first=n.b;if first==NONE{return rt_fail(c,TYPE,id,15);}let second=(*at(s,u,first)).next;
   if second==NONE||(*at(s,u,second)).next!=NONE{return rt_fail(c,TYPE,id,16);}
   if r.target>=1&&r.target<=3{
-   var target=expected;if target>=8{target=NONE;}var a=rt_expr(c,first,target,true,depth+1);var b=rt_expr(c,second,target,true,depth+1);
+   // Check the original operand types before contextual integer coercion:
+   // typed g(die()) is an integer, but die() itself is not one.
+   var target=expected;if target>=8{target=NONE;}var a=rt_expr(c,first,NONE,true,depth+1);var b=rt_expr(c,second,NONE,true,depth+1);
+   if (*s).status!=0{return NONE;}if a==NORETURN||b==NORETURN{return rt_fail(c,TYPE,id,17);}
+   if target!=NONE{a=rt_accept(c,first,target);b=rt_accept(c,second,target);if (*s).status!=0{return NONE;}}
    if a==NONE&&b!=NONE{a=rt_accept(c,first,b);}if b==NONE&&a!=NONE{b=rt_accept(c,second,a);}
    if (a!=NONE&&a>=8)||!rt_same(c,a,b,0){return rt_fail(c,TYPE,id,17);}
+   (*rt_info(c,id)).flags=((*rt_info(c,first)).flags|(*rt_info(c,second)).flags)&NEVER;
    let ga=gid(s,u,first);let gb=gid(s,u,second);if (*w).value_states[ga]==2&&(*w).value_states[gb]==2{
     let va=(*w).values[ga];let vb=(*w).values[gb];var op:u64=1067;if r.target==2{op=1069;}if r.target==3{op=1066;}
     var value=Value{kind:0,typ:NONE,negative:false,first:0,used:0};if !run_math(s,u,id,op,&va,&vb,false,&value){return NONE;}
@@ -731,7 +740,9 @@ unsafe fn rt_call(c:*Runtime,id:usize,expected:usize,depth:usize)usize{unsafe{
    }return a;
   }
   if r.target==13{if !rt_unsafe(c,id){return NONE;}let pointer=rt_expr(c,first,NONE,true,depth+1);rt_expr(c,second,3,true,depth+1);
-   if rt_kind(c,pointer)!=POINTER{return rt_fail(c,TYPE,id,18);}let t=(*w).types[pointer];return rt_type(c,SLICE,t.flags,t.element,0,id);
+   if rt_kind(c,pointer)!=POINTER{return rt_fail(c,TYPE,id,18);}
+   (*rt_info(c,id)).flags=((*rt_info(c,first)).flags|(*rt_info(c,second)).flags)&NEVER;
+   let t=(*w).types[pointer];return rt_type(c,SLICE,t.flags,t.element,0,id);
   }return rt_fail(c,UNSUPPORTED,id,r.target as u64);
  }
  let callee=rt_expr(c,n.a,NONE,true,depth+1);if (*s).status!=0{return NONE;}
@@ -783,16 +794,21 @@ unsafe fn rt_cast(c:*Runtime,id:usize,depth:usize)usize{unsafe{
 }}
 unsafe fn rt_array(c:*Runtime,id:usize,expected:usize,depth:usize)usize{unsafe{
  let s=(*c).s;let u=(*c).unit;let w=(*s).w;let n=*at(s,u,id);var count:usize=0;var element:usize=NONE;
+ var stopped:u64=0;
  if rt_kind(c,expected)==ARRAY{element=(*w).types[expected].element;}
- if n.kind==ast.REPEAT{if !integer(s,u,n.b,true,0,&count){return NONE;}element=rt_expr(c,n.a,element,true,depth+1);if element==NONE{element=rt_default(c,n.a);}}
+ if n.kind==ast.REPEAT{if !integer(s,u,n.b,true,0,&count){return NONE;}element=rt_expr(c,n.a,element,true,depth+1);if element==NONE{element=rt_default(c,n.a);}
+  stopped=(*rt_info(c,n.a)).flags&NEVER;
+ }
  else{
   var p=n.a;while p!=NONE{let target=rt_expr(c,p,element,true,depth+1);if (*s).status!=0{return NONE;}
+   stopped|=(*rt_info(c,p)).flags&NEVER;
    if element==NONE&&target!=NONE&&target!=NULL_TYPE{element=target;}count+=1;p=(*at(s,u,p)).next;
   }
   if element==NONE{element=7;}p=n.a;while p!=NONE{rt_accept(c,p,element);if (*s).status!=0{return NONE;}p=(*at(s,u,p)).next;}
  }
  if count==0||element==VOID||element==NORETURN{return rt_fail(c,TYPE,id,24);}
- if rt_kind(c,expected)==ARRAY&&(*w).types[expected].count!=count{return rt_fail(c,TYPE,id,25);}return rt_type(c,ARRAY,0,element,count,id);
+ if rt_kind(c,expected)==ARRAY&&(*w).types[expected].count!=count{return rt_fail(c,TYPE,id,25);}
+ (*rt_info(c,id)).flags=stopped;return rt_type(c,ARRAY,0,element,count,id);
 }}
 fn rt_gcd(a:usize,b:usize)usize{var x=a;var y=b;while y!=0{let r=x%y;x=y;y=r;}return x;}
 // Alignment of an already checked place. Packed/nested field offsets and
@@ -845,22 +861,35 @@ unsafe fn rt_slice(c:*Runtime,id:usize,depth:usize)usize{unsafe{
 unsafe fn rt_struct(c:*Runtime,id:usize,depth:usize)usize{unsafe{
  let s=(*c).s;let u=(*c).unit;let w=(*s).w;let n=*at(s,u,id);let r=(*s).refs[gid(s,u,n.a)];
  if r.kind!=binding.GLOBAL{return rt_fail(c,TYPE,id,26);}let symbol=(*s).symbols[r.target];let typ=(*w).node_types[gid(s,symbol.unit,symbol.declaration)];
- if rt_kind(c,typ)!=STRUCT{return rt_fail(c,TYPE,id,27);}let t=(*w).types[typ];var p=n.b;var count:usize=0;
+ if rt_kind(c,typ)!=STRUCT{return rt_fail(c,TYPE,id,27);}let t=(*w).types[typ];var p=n.b;var count:usize=0;var stopped:u64=0;
  while p!=NONE{let init=*at(s,u,p);var f:usize=0;var found=false;while f<t.length{let field=(*w).fields[t.first+f];let node=*at(s,field.unit,field.node);
   if equal(text(s,u,init.token),text(s,field.unit,node.token)){
    if field.unit!=u&&(node.flags&1)==0{return rt_fail(c,PRIVATE,p,0);}rt_expr(c,init.a,field.typ,true,depth+1);found=true;break;
   }f+=1;
- }if !found{return rt_fail(c,TYPE,p,28);}if (*s).status!=0{return NONE;}count+=1;p=init.next;
- }if count!=t.length{return rt_fail(c,TYPE,id,29);}return typ;
+ }if !found{return rt_fail(c,TYPE,p,28);}if (*s).status!=0{return NONE;}stopped|=(*rt_info(c,init.a)).flags&NEVER;count+=1;p=init.next;
+ }if count!=t.length{return rt_fail(c,TYPE,id,29);}(*rt_info(c,id)).flags=stopped;return typ;
+}}
+// Flow snapshots use one bit per node; the working initialized array stays
+// byte-per-node. Each slot has ceil(nodes/8) bytes, including a zeroed tail.
+// Preflight validates slot products before any workspace write.
+fn rt_stride(count:usize)usize{var stride=count/8;if count%8!=0{stride+=1;}return stride;}
+unsafe fn rt_pack(c:*Runtime,bits:[]u8,slot:usize,first:bool)void{unsafe{
+ let count=(*(*c).s).nodes.len;let stride=rt_stride(count);let w=(*c).w;
+ var byte:usize=0;while byte<stride{var value:u8=0;var bit:usize=0;
+  while bit<8&&byte*8+bit<count{if (*w).initialized[byte*8+bit]!=0{value|=(1 as u8)<<bit;}bit+=1;}
+  if first{bits[slot*stride+byte]=value;}else{bits[slot*stride+byte]&=value;}byte+=1;
+ }
+}}
+unsafe fn rt_unpack(c:*Runtime,bits:[]const u8,slot:usize)void{unsafe{
+ let count=(*(*c).s).nodes.len;let stride=rt_stride(count);let w=(*c).w;
+ var i:usize=0;while i<count{(*w).initialized[i]=(bits[slot*stride+i/8]>>(i%8))&1;i+=1;}
 }}
 unsafe fn rt_copy(c:*Runtime,slot:usize,save:bool)bool{unsafe{
- let count=(*(*c).s).nodes.len;let w=(*c).w;if slot>=(*(*c).s).limit*2{rt_fail(c,CAPACITY,0,40);return false;}
- var i:usize=0;while i<count{if save{(*w).snapshots[slot*count+i]=(*w).initialized[i];}else{(*w).initialized[i]=(*w).snapshots[slot*count+i];}i+=1;}return true;
+ let w=(*c).w;if slot>=(*(*c).s).limit*2{rt_fail(c,CAPACITY,0,40);return false;}
+ if save{rt_pack(c,(*w).snapshots,slot,true);}else{rt_unpack(c,(*w).snapshots,slot);}return true;
 }}
 unsafe fn rt_merge(c:*Runtime,slot:usize,first:bool)void{unsafe{
- let count=(*(*c).s).nodes.len;let w=(*c).w;var i:usize=0;while i<count{let value=(*w).initialized[i];
-  if first{(*w).snapshots[slot*count+i]=value;}else{(*w).snapshots[slot*count+i]&=value;}i+=1;
- }
+ rt_pack(c,(*(*c).w).snapshots,slot,first);
 }}
 unsafe fn rt_branch(c:*Runtime,id:usize,depth:usize)bool{unsafe{
  let s=(*c).s;let u=(*c).unit;let n=*at(s,u,id);rt_expr(c,n.a,8,true,depth+1);if (*s).status!=0{return false;}
@@ -872,8 +901,8 @@ unsafe fn rt_branch(c:*Runtime,id:usize,depth:usize)bool{unsafe{
 }}
 unsafe fn rt_break(c:*Runtime,id:usize,is_break:bool)bool{unsafe{
  let s=(*c).s;if (*c).loop_depth==0||(*c).in_defer{rt_fail(c,FLOW,id,0);return false;}
- if is_break&&(*c).live{let level=(*c).loop_depth-1;let w=(*c).w;let count=(*s).nodes.len;let first=(*w).loop_seen[level]==0;
-  var i:usize=0;while i<count{let value=(*w).initialized[i];if first{(*w).breaks[level*count+i]=value;}else{(*w).breaks[level*count+i]&=value;}i+=1;}(*w).loop_seen[level]=1;
+ if is_break&&(*c).live{let level=(*c).loop_depth-1;let w=(*c).w;let first=(*w).loop_seen[level]==0;
+  rt_pack(c,(*w).breaks,level,first);(*w).loop_seen[level]=1;
  }(*c).live=false;return false;
 }}
 unsafe fn rt_loop(c:*Runtime,id:usize,depth:usize)bool{unsafe{
@@ -888,8 +917,8 @@ unsafe fn rt_loop(c:*Runtime,id:usize,depth:usize)bool{unsafe{
  if !rt_copy(c,slot,true){return false;}let level=(*c).loop_depth;if level>=(*s).limit{rt_fail(c,DEPTH,id,0);return false;}
  (*(*c).w).loop_seen[level]=0;(*c).loop_depth+=1;(*c).live=live&&truth!=0;rt_statement(c,body,depth+1);(*c).loop_depth-=1;
  rt_copy(c,slot,false);(*c).snapshot_depth-=1;(*c).live=live;
- if truth==1{let rw=(*c).w;let count=(*s).nodes.len;(*c).live=live&&(*rw).loop_seen[level]!=0;
-  if (*c).live{var i:usize=0;while i<count{(*rw).initialized[i]=(*rw).breaks[level*count+i];i+=1;}}
+ if truth==1{let rw=(*c).w;(*c).live=live&&(*rw).loop_seen[level]!=0;
+  if (*c).live{rt_unpack(c,(*rw).breaks,level);}
  }return (*c).live;
 }}
 unsafe fn rt_match(c:*Runtime,id:usize,depth:usize)bool{unsafe{
@@ -1038,7 +1067,7 @@ pub unsafe fn analyze_program(sources:[]const modules.Source,units:[]const modul
   let bytes=Region{p:source.bytes.ptr as u64,n:source.bytes.len,width:1,alignment:1};if !span(path.p,path.n)||!span(bytes.p,bytes.n){return INVALID;}
   var j:usize=0;while j<outputs.len{if overlap(&outputs[j],&path)||overlap(&outputs[j],&bytes){return INVALID;}j+=1;}i+=1;
  }
- if nodes.len>NONE/(max_depth*2){return INVALID;}let frames=nodes.len*max_depth;
+ let stride=rt_stride(nodes.len);if stride>NONE/(max_depth*2){return INVALID;}let frames=stride*max_depth;
  if (*rw).info.len<nodes.len||(*rw).initialized.len<nodes.len||(*rw).snapshots.len<frames*2
   ||(*rw).breaks.len<frames||(*rw).loop_seen.len<max_depth{
   *result=Result{code:CAPACITY,types:0,fields:0,limbs:0,unchecked_initializers:0,unit:0,token:0,detail:50};return CAPACITY;
