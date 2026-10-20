@@ -1,6 +1,13 @@
 #include <stdint.h>
 #include <stdio.h>
-extern uint64_t alias_check(uint64_t,uint64_t,uint64_t,uint64_t,uint64_t,uint64_t);
+#include <stdlib.h>
+#if defined(_WIN32)
+#define ABI __attribute__((sysv_abi))
+#else
+#define ABI
+#endif
+ABI void __dong_panic(void){fprintf(stderr,"unexpected Dong panic\n");exit(2);}
+extern ABI uint64_t alias_check(uint64_t,uint64_t,uint64_t,uint64_t,uint64_t,uint64_t);
 #define CHECK(x) do {if(!(x)){fprintf(stderr,"DMA alias check failed line %d\n",__LINE__);return 1;}}while(0)
 int main(void){
  for(uint64_t owner=0;owner<16;owner++)for(uint64_t state=1;state<=2;state++)for(uint64_t write=0;write<=1;write++){
