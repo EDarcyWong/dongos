@@ -239,6 +239,35 @@ def final_job(qmp,state,serial,build,expected_bytes):
     p5.write_json(state/'final-physical-manifest.json',chunks)
     return dict(slot_retired=True,tables_cleared=True,controller_resumed=True,source_loan_withdrawn=True)
 
+def failure_snapshot(qmp,state,serial,build):
+    """Capture linked globals physically, independent of the current user CR3."""
+    (state/'failure-registers.txt').write_text(qmp.request('human-monitor-command',{'command-line':'info registers'}))
+    symbols=p5.acpi.validation_symbols(build/'kernel.elf');chunks=[]
+    def physical(pa,n,role,name):
+        if not 0<pa<1<<48 or not 0<n<=1<<20 or n>(1<<48)-pa:raise ValueError('unsafe failure dump')
+        path=state/name;qmp.request('pmemsave',{'val':pa,'size':n,'filename':str(path.resolve())});data=path.read_bytes()
+        if len(data)!=n:raise ValueError('short failure dump')
+        chunks.append(dict(physical=pa,length=n,role=role,file=path.name,sha256=hashlib.sha256(data).hexdigest()));return data
+    try:
+        rows=re.findall(rb'^memory_runtime_boot_info=0x([0-9a-f]{16})\r$',serial,re.M)
+        if len(rows)!=1:raise ValueError('missing/duplicate failure BootInfo locator')
+        boot_va=int(rows[0],16)
+        if not p5.acpi.HHDM<boot_va<p5.acpi.HHDM+(1<<48):raise ValueError('unsafe failure BootInfo locator')
+        boot=struct.unpack('<20Q',physical(boot_va-p5.acpi.HHDM,160,'BootInfo','failure-BootInfo.bin'))
+        for module,name,n in [('user.services','INFO',160),('user.services','STATES',4*1336),
+            ('user.services','CURRENT',8),('user.services','ACTIVE',8),('user.services','BOOTS',4*128),
+            ('user.compiler_job','RUNNING',1),('user.compiler_job','FAILED',1),('user.compiler_job','RUNS',8),
+            ('user.compiler_job','LAST',72),('user.compiler_job','REQUEST',48),
+            ('user.memory','PROCESSES',4*1288),('user.memory','SPACES',4*64),
+            ('user.memory','DYNAMIC_PHYSICAL',128),('user.memory','FRAME_COUNT',8),
+            ('user.memory','EXTENDED',8),('user.memory','EXTENDED_LIMIT',8)]:
+            va=symbols[p5.symbol(module,name)]
+            if not symbols['__kernel_text_start']<=va<=symbols['__kernel_bss_end']-n:raise ValueError('failure global escaped kernel')
+            physical(boot[15]+va-p5.KERNEL,n,module+'.'+name,'failure-'+module+'-'+name+'.bin')
+    finally:
+        p5.write_json(state/'failure-physical-manifest.json',chunks)
+
+
 def boot(esp,disk,state,blob,image,timeout=3600):
     state.mkdir(parents=True);up,qp=p5.free_port(),p5.free_port();command=builder.qemu_command(esp,state,test=True)
     # The compiler profile is deliberately an exclusive BSP job. A single CPU
@@ -281,12 +310,7 @@ def boot(esp,disk,state,blob,image,timeout=3600):
         if qmp:
             try:
                 qmp.request('stop')
-                (state/'failure-registers.txt').write_text(qmp.request('human-monitor-command',{'command-line':'info registers'}))
-                symbols=p5.acpi.validation_symbols(esp.parent/'kernel.elf')
-                for module,name,n in [('user.services','INFO',160),('user.services','STATES',4*1336),('user.services','CURRENT',8),('user.compiler_job','RUNNING',1),('user.compiler_job','LAST',72),('user.compiler_job','REQUEST',48),('user.memory','PROCESSES',4*1288)]:
-                    va=symbols[p5.symbol(module,name)]
-                    if symbols['__kernel_text_start']<=va<=symbols['__kernel_bss_end']-n:
-                        qmp.request('memsave',{'val':va,'size':n,'filename':str((state/('failure-'+name+'.bin')).resolve())})
+                failure_snapshot(qmp,state,bytes(raw),esp.parent)
             except Exception as diagnostic:result['errors'].append('diagnostic: '+str(diagnostic))
     finally:
         if qmp:

@@ -143,6 +143,54 @@ class GuestRunnerTests(unittest.TestCase):
         self.assertFalse(receipt['passed']);self.assertFalse(receipt['actual_qemu_executed'])
         self.assertTrue(receipt['errors'])
 
+    def failure_transport(self,state,*,bad_global=False):
+        base=runner.p5.KERNEL;boot_pa=0x100000;kernel_pa=0x200000
+        class Symbols(dict):
+            def __missing__(self,name):
+                value=base+0x1000+len(self)*0x2000
+                self[name]=base-1 if bad_global else value
+                return self[name]
+        symbols=Symbols(__kernel_text_start=base,__kernel_bss_end=base+0x100000)
+        boot=[0]*20;boot[15]=kernel_pa;calls=[]
+        def request(command,arguments):
+            if command=='human-monitor-command':return 'CPL=3 CR3=000000007d995000 RIP=000000001200f7c3'
+            # QMP memsave rejects unsigned high-half virtual addresses. Physical
+            # captures must also work while a block-service user CR3 is current.
+            self.assertEqual(command,'pmemsave');pa=arguments['val'];size=arguments['size']
+            self.assertIs(type(pa),int);self.assertTrue(0<pa<1<<48)
+            raw=struct.pack('<20Q',*boot) if pa==boot_pa else bytes([pa//4096%256])*size
+            Path(arguments['filename']).write_bytes(raw);calls.append((pa,size))
+        serial=f'memory_runtime_boot_info=0x{runner.p5.acpi.HHDM+boot_pa:016x}\r\n'.encode()
+        return Mock(request=Mock(side_effect=request)),symbols,serial,calls
+
+    def test_failure_snapshot_uses_physical_addresses_under_user_cr3(self):
+        state=self.root/'failure';state.mkdir();qmp,symbols,serial,calls=self.failure_transport(state)
+        with patch.object(runner.p5.acpi,'validation_symbols',return_value=symbols):
+            runner.failure_snapshot(qmp,state,serial,self.build)
+        manifest=json.loads((state/'failure-physical-manifest.json').read_text())
+        self.assertEqual(len(calls),17);self.assertEqual(len(manifest),17)
+        self.assertEqual(manifest[0]['role'],'BootInfo')
+        self.assertIn('CPL=3',(state/'failure-registers.txt').read_text())
+        for row in manifest:
+            raw=(state/row['file']).read_bytes()
+            self.assertEqual(len(raw),row['length']);self.assertEqual(hashlib.sha256(raw).hexdigest(),row['sha256'])
+
+    def test_failure_snapshot_rejects_unsafe_global_and_retains_partial_evidence(self):
+        state=self.root/'failure-bad';state.mkdir();qmp,symbols,serial,calls=self.failure_transport(state,bad_global=True)
+        with patch.object(runner.p5.acpi,'validation_symbols',return_value=symbols):
+            with self.assertRaisesRegex(ValueError,'global escaped kernel'):
+                runner.failure_snapshot(qmp,state,serial,self.build)
+        self.assertEqual(calls,[(0x100000,160)])
+        self.assertEqual(len(json.loads((state/'failure-physical-manifest.json').read_text())),1)
+
+    def test_failure_snapshot_without_boot_locator_still_retains_registers(self):
+        state=self.root/'failure-early';state.mkdir();qmp,symbols,_,calls=self.failure_transport(state)
+        with patch.object(runner.p5.acpi,'validation_symbols',return_value=symbols):
+            with self.assertRaisesRegex(ValueError,'BootInfo locator'):
+                runner.failure_snapshot(qmp,state,b'',self.build)
+        self.assertEqual(calls,[]);self.assertTrue((state/'failure-registers.txt').is_file())
+        self.assertEqual(json.loads((state/'failure-physical-manifest.json').read_text()),[])
+
     def load_inputs_for_main(self,*args):
         # Keep actual checkout harness hashes while main writes only in temp.
         with patch.object(runner,'ROOT',Path(__file__).resolve().parents[1]):return self.real_load_inputs(*args)

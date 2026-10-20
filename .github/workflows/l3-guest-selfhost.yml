@@ -51,8 +51,8 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install --yes --no-install-recommends nasm gcc binutils python3 lld qemu-system-x86 ovmf make mtools gdb
-      - name: Validate guest harness rejection controls
-        run: python3 -m unittest tests.test_compiler_guest_runner -v 2>&1 | tee build/g6/harness-tests.log
+      - name: Validate harness and bounded FAT allocation controls
+        run: python3 -m unittest tests.test_compiler_guest_runner tests.test_fat32_allocation -v 2>&1 | tee build/g6/harness-tests.log
       - name: Generate fresh complete native compiler fixture
         run: python3 -m tools.compiler_job --output build/g6/fixture --mode release 2>&1 | tee build/g6/host-console.log
       - name: Build fresh isolated compiler profile
@@ -74,5 +74,6 @@ jobs:
           path: |
             code/build/g6/
             code/build/test/l3-guest/
+            code/build/test/p5-fat32-allocation/
           if-no-files-found: error
           retention-days: 14

@@ -92,6 +92,14 @@ An always-run artifact step retains the complete fixture, build manifests,
 guest receipts, serial logs, physical snapshots and disk on success or failure.
 The artifact is named l3-actual-guest-selfhost-evidence-<run-attempt>.
 
+Large compiler artifacts require bounded FAT allocation I/O. Free-space scans
+read each 512-byte FAT sector once for its 128 entries. A serialized grow starts
+at cluster two and advances a local cursor after successful allocations; later
+operations start at two again so newly freed low clusters remain reusable.
+Native callback-count controls reject per-entry reads and repeated prefix scans.
+Mirrored updates, zero filling, dirty state and the durable flush sequence retain
+their existing order. Actual guest acceptance keeps the same per-boot deadline.
+
 A green host fixture or first boot alone is insufficient. Acceptance requires
 two actual successful boots, exact persisted STAGE1/STAGE2 ELF bytes, live
 physical isolation, normal job retirement and unchanged source/harness hashes.

@@ -265,18 +265,27 @@ unsafe fn begin_write(v:*Volume,w:*Scratch)!void{unsafe{
     }
 }return;}
 unsafe fn enough(v:*const Volume,w:*Scratch,needed:u64)!void{unsafe{
-    var count:u64=0;var cluster:u64=2;while cluster<(*v).clusters+2&&count<needed{if (try fat_get(v,w,cluster))==0{count+=1;}cluster+=1;}
+    var count:u64=0;var cluster:u64=2;while cluster<(*v).clusters+2&&count<needed{
+        let sector=cluster/128;try read_sector(v,(*v).reserved+sector,&(*w).fat[0]);
+        var end=(sector+1)*128;if end>(*v).clusters+2{end=(*v).clusters+2;}
+        while cluster<end&&count<needed{if (u32(&(*w).fat[0],((cluster%128)*4) as usize)&0x0fff_ffff)==0{count+=1;}cluster+=1;}
+    }
     if count<needed{return error.errors.NoSpace;}
 }return;}
-unsafe fn allocate(v:*Volume,w:*Scratch)!u64{unsafe{
-    var cluster:u64=2;while cluster<(*v).clusters+2{
-        if (try fat_get(v,w,cluster))==0{
-            try fat_put(v,w,cluster,0x0fff_ffff);var i:usize=0;while i<512{(*w).sector[i]=0;i+=1;}
-            let start=try cluster_sector(v,cluster);var sector:u64=0;while sector<(*v).spc{try write_sector(v,start+sector,&(*w).sector[0]);sector+=1;}
-            return cluster;
-        }cluster+=1;
+unsafe fn find_free(v:*const Volume,w:*Scratch,start:u64)!u64{unsafe{
+    var cluster=start;while cluster<(*v).clusters+2{
+        let sector=cluster/128;try read_sector(v,(*v).reserved+sector,&(*w).fat[0]);
+        var end=(sector+1)*128;if end>(*v).clusters+2{end=(*v).clusters+2;}
+        while cluster<end{if (u32(&(*w).fat[0],((cluster%128)*4) as usize)&0x0fff_ffff)==0{return cluster;}cluster+=1;}
     }
 }return error.errors.NoSpace;}
+unsafe fn allocate_from(v:*Volume,w:*Scratch,start:u64)!u64{unsafe{
+    let cluster=try find_free(v,w,start);
+    try fat_put(v,w,cluster,0x0fff_ffff);var i:usize=0;while i<512{(*w).sector[i]=0;i+=1;}
+    let first=try cluster_sector(v,cluster);var sector:u64=0;while sector<(*v).spc{try write_sector(v,first+sector,&(*w).sector[0]);sector+=1;}
+    return cluster;
+}}
+unsafe fn allocate(v:*Volume,w:*Scratch)!u64{unsafe{return allocate_from(v,w,2);}}
 unsafe fn update(v:*Volume,w:*Scratch,item:*const DirEntry)!void{unsafe{
     try read_sector(v,(*item).sector,&(*w).sector[0]);let off=(*item).offset as usize;
     put16(&(*w).sector[0],off+20,(*item).cluster>>16);put16(&(*w).sector[0],off+26,(*item).cluster);put32(&(*w).sector[0],off+28,(*item).size);
@@ -285,7 +294,9 @@ unsafe fn update(v:*Volume,w:*Scratch,item:*const DirEntry)!void{unsafe{
 unsafe fn grow(v:*Volume,w:*Scratch,item:*DirEntry,old_count:u64,new_size:u64)!void{unsafe{
     let wanted=(new_size+(*v).spc*512-1)/((*v).spc*512);if wanted<=old_count{return;}
     try enough(v,w,wanted-old_count);try begin_write(v,w);var last:u64=0;if old_count!=0{last=try nth(v,w,(*item).cluster,old_count-1);}
-    var count=old_count;while count<wanted{let cluster=try allocate(v,w);if last==0{(*item).cluster=cluster;}else{try fat_put(v,w,last,cluster);}last=cluster;count+=1;}
+    // This serialized grow never frees a cluster. Keep its cursor local so a
+    // later operation still starts at 2 and can reuse newly freed low clusters.
+    var next_free:u64=2;var count=old_count;while count<wanted{let cluster=try allocate_from(v,w,next_free);next_free=cluster+1;if last==0{(*item).cluster=cluster;}else{try fat_put(v,w,last,cluster);}last=cluster;count+=1;}
 }return;}
 pub unsafe fn write(v:*Volume,w:*Scratch,name:[]const u8,offset:u64,data:[]const u8)!usize{unsafe{
     try enter(v,true);let result=write_inner(v,w,name,offset,data);match result{ok(n)=>{},err(e)=>{if e==0x0504_0004||e==0x0504_0005{(*v).failed=1;}},}(*v).busy=0;return result;
