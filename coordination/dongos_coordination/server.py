@@ -66,6 +66,7 @@ class Console(ThreadingHTTPServer):
         store, runner = store or self.store, runner or self.runner
         if store.state:
             store.state.refresh()   # files that arrived through git while serving
+        store.recover_orphan_pauses()
         probes = store.local / 'connection-probes.json'
         tasks = [t | {'timing': store.timing(t)} for t in store.tasks()]
         return dict(at=now(), tasks=tasks, jobs=store.jobs(),
@@ -79,6 +80,7 @@ class Console(ThreadingHTTPServer):
     def scan(self, store=None):
         store = store or self.store
         with self.scan_lock:
+            store.recover_orphan_pauses()
             result = migrate.synchronize(store)
             if result['added'] or result['changed']:
                 store.export()

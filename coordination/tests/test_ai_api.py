@@ -44,12 +44,14 @@ class AIAPITests(unittest.TestCase):
     def test_discovery_document_and_openapi_are_served_with_no_project_context(self):
         with urlopen(self.url+'/api/ai') as response:value=json.load(response)
         self.assertEqual(value['version'],'1')
+        self.assertIn('acknowledge_pause', value['operations'])
         with urlopen(value['guide']) as response:
             self.assertIn('text/markdown',response.headers['Content-Type'])
             self.assertIn('领取',response.read().decode('utf-8'))
         with urlopen(value['openapi']) as response:spec=json.load(response)
         self.assertEqual(spec['openapi'],'3.1.0')
         self.assertIn('/api/v1/projects/{project}/tasks/{task_id}/claim',spec['paths'])
+        self.assertIn('/api/v1/projects/{project}/tasks/{task_id}/acknowledge_pause',spec['paths'])
         self.assertEqual(value['mcp']['transport'],'stdio')
         self.assertFalse(value['mcp']['automatic_client_execution'])
         with urlopen(value['mcp']['guide']) as response:

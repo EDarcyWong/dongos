@@ -162,7 +162,7 @@ class MCPTests(unittest.TestCase):
         a=self.create();b=self.create(project='beta');self.create('cursor','CR1')
         h=self.start('codex',role='coordinator');worker=self.start('deepseek')
         error,r=self.call(h,'list_tasks',project='alpha');self.assertFalse(error);self.assertEqual(r['total'],2)
-        self.assertEqual(len(self.rpc(h,'tools/list')['result']['tools']),13)
+        self.assertEqual(len(self.rpc(h,'tools/list')['result']['tools']),14)
         error,r=self.call(h,'change_task',project='alpha',task_id=a['id'],rev=a['rev'],action='pause',note='pause bounded task')
         self.assertFalse(error);self.assertEqual(self.client.task('beta',b['id'])['status'],'todo')
         self.server.csrf='new-manager-token'
@@ -282,9 +282,12 @@ class MCPTests(unittest.TestCase):
         self.assertEqual(self.rpc(h, 'ping')['result'], {})
         self.assertEqual(self.client.task('alpha', t['id'])['status'], 'todo')
         names = [t['name'] for t in self.rpc(h, 'tools/list')['result']['tools']]
-        self.assertEqual(len(names), 8);self.assertNotIn('accept_task', names);self.assertNotIn('queue', names)
+        expected = {'get_workflow', 'list_projects', 'list_tasks', 'get_task', 'read_document',
+                    'claim_task', 'release_task', 'acknowledge_pause', 'submit_task'}
+        self.assertEqual(set(names), expected)
+        self.assertEqual(len(names), len(expected))
         metadata=self.rpc(h,'tools/list',dict(cursor=None,_meta=dict(progressToken='codex-discovery')))
-        self.assertEqual(len(metadata['result']['tools']),8)
+        self.assertEqual([tool['name'] for tool in metadata['result']['tools']], names)
         for name, args in [('accept_task', {}), ('claim_task', dict(project='alpha', task_id=t['id'], rev=True)),
                            ('claim_task', dict(project='alpha', task_id=t['id'], rev=t['rev'], owner='cursor')),
                            ('get_task', dict(project='../beta', task_id=t['id']))]:

@@ -1,5 +1,15 @@
 # L3 后端规划组件集成
 
+2026-10-19晚间补充：按用户接管授权，C52多函数模块与CR40清理双字返回的有效交付已接入主线；修复Linux测试夹具与观察证据缺口，并增加真实cleanup→模块导出组合。详见[未完成交付接管记录](l3-unfinished-owner-integration.md)。原负责人交付和协调器状态保留，完整L3/自举仍未完成。
+
+2026-10-19补充：CR39 AND/OR短路调用与D25 i64 switch整函数已复制到主线，并新增真实short→thunk→switch组合；完整返回值、实际调用先后与三类生产负控独立检查见[控制流集成记录](l3-short-switch-integration.md)。本次确认的安全候选已接入，协调器状态未改，C52/CR40与完整L3/自举仍未完成。
+
+2026-10-19补充：CR38受检64位与CR41窄位宽checked/wrapping算术整函数已复制到主线，新增真实宽→窄算术调用链与溢出传播回归。窄组件先规范化输入，不等于checked宽窄转换；生产字节不变、协调器状态未改。见[算术集成记录](l3-checked-narrow-integration.md)，完整L3与自举仍未完成。
+
+2026-10-19补充：CR42切片视图构造与D27有界索引访存整函数已复制到主线源码目录，新增真实view→LOAD/STORE组合验证。生产/说明保持原accepted交付字节，失败视图哨兵先转错误再跳过访存；完整父缓冲区与安全坏体检查见[切片访存集成记录](l3-slice-memory-integration.md)。协调器状态未改，完整L3/自举仍未完成。
+
+2026-10-19补充：C49条件分支整函数与C50实参重排/跨函数调用整函数已复制到主线源码目录，并新增真实forward→select组合验证。生产和说明与原accepted rev10交付逐字相同；本次未改协调器状态。Linux原生两模式、ELF64/COFF组装、错误接线负控及范围说明见[本轮集成记录](l3-select-forward-integration.md)。完整Dong后端、自举及L3总门禁仍未完成。
+
 2026-10-19最新推进：CR28窄算术范围门禁、CR29切片lo/hi/len门禁均已独立验收并真实集成；正式各3项零skip，主线各3项零skip（57.381秒/41.553秒），输入指纹稳定。审查者补跑正式实际Dong与坏体相同输入的精确路由对照，共8次正确拒绝。完整L3/IR接线仍未完成。Claude C41在途、C42待领取，以协调器实时状态为准。详见[CR28](../../coordination/dongos_works/reviews/2026-10-19-CR28-integration.md)、[CR29](../../coordination/dongos_works/reviews/2026-10-19-CR29-integration.md)。
 
 2026-10-19最新集成：C39/C40与CR24～CR27返修已完成独立验收、真实文件集成；正式独立与主线相同20项分别零skip通过，主线191.761秒且源码/永久测试/只读依赖/编译器前后指纹稳定。返回值装载/保存、原子store/CAS/fetch-add和重叠memmove均为独立组件，完整L3仍未完成。详见[本批集成证据](../../coordination/dongos_works/reviews/2026-10-19-L3-returns-atomics-integration.md)。历史返修/待领取文字为当时快照，以协调器最新状态为准。

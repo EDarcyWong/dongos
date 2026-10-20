@@ -1,0 +1,119 @@
+// Complete bounded SysV indexed LOAD/STORE. All actual operations delegate to
+// integrated components. User output is published only after all local calls.
+module bootstrap.nasm_indexed_memory_function;
+import bootstrap.nasm_symbol as sym;
+import bootstrap.nasm_sysv_function_entry as entry;
+import bootstrap.nasm_integer_memory_load as load;
+import bootstrap.nasm_integer_memory_store as store;
+import bootstrap.nasm_bounds_guard as bounds;
+import bootstrap.nasm_indexed_operand as indexed;
+import bootstrap.nasm_integer_cast as cast;
+import bootstrap.nasm_integer_load as immediate;
+import bootstrap.nasm_sysv_function_exit as exit;
+import bootstrap.nasm_block_emit as block;
+pub const OK:u64=0;pub const INVALID:u64=1;pub const CAPACITY:u64=2;
+pub const LOAD:u64=0;pub const STORE:u64=1;
+const MAX:u64=0xffff_ffff_ffff_ffff;
+// Tightened fixed-entry bound137, fixed frame loads32 each, fixed PAIR exit76.
+// 268+137+4*32+64+74+192+3*40+4*32+2*76+34 = 1297 <=1536.
+// C30 operand64 plus fixed LEA prefix/LF10; actual access128 + cast64.
+const TEXT:usize=1536;const LIMIT:usize=1297;
+fn span(p:u64,n:u64)bool{return n==0||(p!=0&&n<=MAX-p);}
+fn overlap(a:u64,n:u64,b:u64,m:u64)bool{return n!=0&&m!=0&&a<b+m&&b<a+n;}
+fn room(out:[]u8,at:usize,n:usize)bool{return at<=out.len&&n<=out.len-at;}
+unsafe fn put(out:[]u8,at:*usize,text:[]const u8)bool{unsafe{
+ if !room(out,*at,text.len){return false;}
+ var i:usize=0;while i<text.len{out[*at+i]=text[i];i+=1;}*at+=text.len;return true;
+}}
+unsafe fn frame_load(out:[]u8,at:*usize,reg:u64,disp:i64)bool{unsafe{
+ if !room(out,*at,32){return false;}var n:usize=0;
+ if load.emit(reg,5,disp,64,false,slice_from_raw_parts(&out[*at],32),&n)!=load.OK||n>32{return false;}
+ *at+=n;return true;
+}}
+unsafe fn frame_store(out:[]u8,at:*usize,disp:i64)bool{unsafe{
+ if !room(out,*at,32){return false;}var n:usize=0;
+ if store.emit(0,5,disp,64,slice_from_raw_parts(&out[*at],32),&n)!=store.OK||n>32{return false;}
+ *at+=n;return true;
+}}
+unsafe fn constant(out:[]u8,at:*usize,reg:u64,value:u64)bool{unsafe{
+ if !room(out,*at,40){return false;}var n:usize=0;
+ if immediate.emit(reg,value,64,false,slice_from_raw_parts(&out[*at],40),&n)!=immediate.OK||n>40{return false;}
+ *at+=n;return true;
+}}
+unsafe fn pair_exit(out:[]u8,at:*usize)bool{unsafe{
+ if !room(out,*at,76){return false;}var n:usize=0;
+ if exit.emit(11,48,0,40,48,slice_from_raw_parts(&out[*at],76),&n)!=exit.OK||n>76{return false;}
+ *at+=n;return true;
+}}
+unsafe fn head(module_name:[]const u8,item_name:[]const u8,out:[]u8,at:*usize)bool{unsafe{
+ if !room(out,*at,266){return false;}var n:usize=0;
+ if sym.encode(module_name,item_name,slice_from_raw_parts(&out[*at],266),&n)!=sym.OK||n>266{return false;}
+ *at+=n;if !put(out,at,":\n"){return false;}
+ var kinds:[4]u8=[0;4];var slots:[4]usize=[0;4];slots[0]=8;slots[1]=16;slots[2]=24;slots[3]=32;
+ if !room(out,*at,137){return false;}
+ if entry.emit(slice_from_raw_parts(&kinds[0],4),slice_from_raw_parts(&slots[0],4),48,
+  slice_from_raw_parts(&out[*at],137),&n)!=entry.OK||n>137{return false;}
+ *at+=n;return true;
+}}
+unsafe fn gate(error_block:u64,out:[]u8,at:*usize)bool{unsafe{
+ if !frame_load(out,at,0,-24)||!frame_load(out,at,1,-16){return false;}
+ if !room(out,*at,64){return false;}var n:usize=0;
+ if bounds.emit(0,1,error_block,slice_from_raw_parts(&out[*at],64),&n)!=bounds.OK||n>64{return false;}
+ *at+=n;return true;
+}}
+unsafe fn address(width:u64,out:[]u8,at:*usize)bool{unsafe{
+ if !frame_load(out,at,7,-8){return false;}
+ var operand:[64]u8=[0;64];var n:usize=0;
+ if indexed.encode(7,0,width/8,0,slice_from_raw_parts(&operand[0],64),&n)!=indexed.OK||n>64{return false;}
+ return put(out,at,"lea r10, ")&&put(out,at,slice_from_raw_parts(&operand[0],n))&&put(out,at,"\n");
+}}
+unsafe fn access(operation:u64,width:u64,signed:bool,out:[]u8,at:*usize)bool{unsafe{
+ var n:usize=0;
+ if operation==LOAD{
+  if !room(out,*at,128){return false;}
+  if load.emit(0,10,0,width,signed,slice_from_raw_parts(&out[*at],128),&n)!=load.OK||n>128{return false;}
+  *at+=n;
+ }else{
+  if !frame_load(out,at,0,-32){return false;}
+  if !room(out,*at,128){return false;}
+  if store.emit(0,10,0,width,slice_from_raw_parts(&out[*at],128),&n)!=store.OK||n>128{return false;}
+  *at+=n;
+  if !room(out,*at,64){return false;}
+  if cast.emit(0,0,width,false,slice_from_raw_parts(&out[*at],64),&n)!=cast.OK||n>64{return false;}
+  *at+=n;
+ }
+ return true;
+}}
+unsafe fn success(out:[]u8,at:*usize)bool{unsafe{
+ return frame_store(out,at,-40)&&constant(out,at,0,0)&&frame_store(out,at,-48)&&pair_exit(out,at);
+}}
+unsafe fn failure(error_block:u64,out:[]u8,at:*usize)bool{unsafe{
+ if !room(out,*at,34){return false;}var n:usize=0;
+ if block.emit(0,error_block,slice_from_raw_parts(&out[*at],34),&n)!=block.OK||n>34{return false;}
+ *at+=n;
+ return constant(out,at,0,0)&&frame_store(out,at,-40)&&constant(out,at,0,1)&&frame_store(out,at,-48)&&pair_exit(out,at);
+}}
+unsafe fn build(module_name:[]const u8,item_name:[]const u8,operation:u64,width:u64,signed:bool,
+ error_block:u64,out:[]u8,written:*usize)u64{unsafe{
+ var buffer:[1536]u8=[0;1536];let text=slice_from_raw_parts(&buffer[0],TEXT);var at:usize=0;
+ if !head(module_name,item_name,text,&at)||!gate(error_block,text,&at)||!address(width,text,&at)
+  ||!access(operation,width,signed,text,&at)||!success(text,&at)||!failure(error_block,text,&at){return INVALID;}
+ if at>LIMIT{return INVALID;}
+ if at>out.len{return CAPACITY;}
+ // No dependency calls or failure paths after publication starts.
+ var i:usize=0;while i<at{out[i]=buffer[i];i+=1;}
+ *written=at;return OK;
+}}
+pub unsafe fn emit(module_name:[]const u8,item_name:[]const u8,operation:u64,width:u64,signed:bool,
+ error_block:u64,out:[]u8,written:*usize)u64{unsafe{
+ let wp=written as u64;let mp=module_name.ptr as u64;let ip=item_name.ptr as u64;let op=out.ptr as u64;
+ let mn=module_name.len;let inn=item_name.len;let on=out.len;
+ if written==null||(wp&7)!=0||!span(wp,8){return INVALID;}
+ if !span(mp,mn)||!span(ip,inn)||!span(op,on){return INVALID;}
+ if overlap(wp,8,op,on)||overlap(wp,8,mp,mn)||overlap(wp,8,ip,inn)
+  ||overlap(op,on,mp,mn)||overlap(op,on,ip,inn){return INVALID;}
+ if mn==0||mn>64||inn==0||inn>64||operation>STORE||error_block==MAX{return INVALID;}
+ if width!=8&&width!=16&&width!=32&&width!=64{return INVALID;}
+ if signed&&(operation==STORE||width==64){return INVALID;}
+ return build(module_name,item_name,operation,width,signed,error_block,out,written);
+}}

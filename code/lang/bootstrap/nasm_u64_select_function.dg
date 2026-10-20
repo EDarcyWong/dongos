@@ -1,0 +1,90 @@
+// A whole callable SysV function u64 f(u64 lhs,u64 rhs,u64 yes_value,u64 no_value):
+// CR3 symbol + ":\n", CR11 prologue(32,0), C37 capture of the 4 INTEGER words to
+// [rbp-8/-16/-24/-32], CR12 loads lhs->rax and rhs->rcx, C22 canonical bool in RAX,
+// "test rax, rax\n", CR10 NE branch with yes as the fallthrough, then the yes block
+// (CR18 label + C42 return of [rbp-24]) and the no block (CR18 label + C42 return of
+// [rbp-32]); each block ends in its own real ret. Every component is called for real
+// into a bounded local scratch; out and written are written once, after every check.
+module bootstrap.nasm_u64_select_function;
+import bootstrap.nasm_symbol as sym;
+import bootstrap.nasm_function_frame as ff;
+import bootstrap.nasm_sysv_incoming_args as inc;
+import bootstrap.nasm_integer_memory_load as load;
+import bootstrap.nasm_compare_emit as cmp;
+import bootstrap.nasm_branch_emit as br;
+import bootstrap.nasm_block_emit as blk;
+import bootstrap.nasm_sysv_function_exit as ex;
+import bootstrap.branch_plan as bp;
+pub const OK:u64=0;pub const INVALID:u64=1;pub const CAPACITY:u64=2;
+pub const NAME_LIMIT:usize=64;
+const MAX:u64=0xffff_ffff_ffff_ffff;
+const NONE:u64=0xffff_ffff_ffff_ffff;
+const FRAME:usize=32;const RAX:u64=0;const RCX:u64=1;const RBP:u64=5;const U64_KIND:u64=8;
+const LABEL:u64=0;
+// Local scratch: each component gets a fixed segment at least as large as its proven maximum,
+// laid out back to back after the text already produced (at never exceeds the sum so far):
+//   symbol   266  (CR3: 10 + 2*(64+64) = 266)                             -> at <= 266
+//   ":\n"      2                                                           -> at <= 268
+//   prologue  64  ("push rbp\nmov rbp, rsp\nsub rsp, 32\n" = 34)          -> at <= 332
+//   capture  128  (C37: 4 register words, each "mov qword [rbp - 32], rcx\n" <= 28 -> 112, real 103) -> at <= 460
+//   load lhs  64  ("mov rax, qword [rbp - 8]\n" = 25)                     -> at <= 524
+//   load rhs  64  ("mov rcx, qword [rbp - 16]\n" = 26)                    -> at <= 588
+//   compare   48  (C22 bound 36)                                           -> at <= 636
+//   test      14  ("test rax, rax\n")                                     -> at <= 650
+//   branch    48  ("je __dong_b" + 20 digits + LF = 32)                   -> at <= 698
+//   yes label 32  ("__dong_b" + 20 digits + ":\n" = 30)                   -> at <= 730
+//   yes exit 128  ("mov rax, qword [rbp - 24]\nadd rsp, 32\npop rbp\nret\n" = 50; C42 bound 122) -> at <= 858
+//   no label  32                                                           -> at <= 890
+//   no exit  128                                                           -> at <= 1018 <= TEXT
+// Each component writes at most the slice it is given, so no segment can run past TEXT.
+// The largest real text is 266+2+34+103+25+26+36+14+32+30+50+30+50 = 698 bytes.
+const SYMBOL:usize=266;const PROLOGUE:usize=64;const CAPTURE:usize=128;const LOAD:usize=64;const COMPARE:usize=48;
+const BRANCH:usize=48;const BLOCK:usize=32;const EXIT:usize=128;const TEXT:usize=1024;
+fn span(p:u64,n:u64)bool{return n==0||(p!=0&&n<=MAX-p);}
+fn overlap(a:u64,n:u64,b:u64,m:u64)bool{return n!=0&&m!=0&&a<b+m&&b<a+n;}
+unsafe fn put(out:[]u8,at:*usize,text:[]const u8)void{unsafe{
+ var i:usize=0;while i<text.len{out[*at+i]=text[i];i+=1;}*at+=text.len;
+}}
+pub unsafe fn emit(module_name:[]const u8,item_name:[]const u8,condition:u64,yes_block:u64,no_block:u64,out:[]u8,written:*usize)u64{unsafe{
+ let wp=written as u64;let mp=module_name.ptr as u64;let ip=item_name.ptr as u64;let op=out.ptr as u64;
+ let mn=module_name.len;let inn=item_name.len;let on=out.len;
+ if written==null||(wp&7)!=0||!span(wp,8){return INVALID;}
+ if !span(mp,mn)||!span(ip,inn)||!span(op,on){return INVALID;}
+ // Names may overlap each other; out and written are disjoint from both whole names and from each other.
+ if overlap(wp,8,op,on){return INVALID;}
+ if overlap(wp,8,mp,mn)||overlap(wp,8,ip,inn)||overlap(op,on,mp,mn)||overlap(op,on,ip,inn){return INVALID;}
+ if mn==0||mn>NAME_LIMIT||inn==0||inn>NAME_LIMIT{return INVALID;}
+ if condition>bp.SGE{return INVALID;}
+ if yes_block==NONE||no_block==NONE||yes_block==no_block{return INVALID;}
+ // Components, in order, into the local scratch. Any non-OK here is an INVALID input
+ // (the segments are proven large enough), and nothing has touched out yet.
+ var buffer:[1024]u8=[0;1024];let text=slice_from_raw_parts(&buffer[0],TEXT);var at:usize=0;var n:usize=0;
+ if sym.encode(module_name,item_name,slice_from_raw_parts(&buffer[at],SYMBOL),&n)!=sym.OK{return INVALID;}
+ at+=n;put(text,&at,":\n");
+ if ff.prologue(FRAME,0,slice_from_raw_parts(&buffer[at],PROLOGUE),&n)!=ff.OK{return INVALID;}
+ at+=n;
+ var kinds:[4]u8=[0;4];var offsets:[4]usize=[0;4];
+ offsets[0]=8;offsets[1]=16;offsets[2]=24;offsets[3]=32;
+ if inc.emit(slice_from_raw_parts(&kinds[0],4),slice_from_raw_parts(&offsets[0],4),FRAME,slice_from_raw_parts(&buffer[at],CAPTURE),&n)!=inc.OK{return INVALID;}
+ at+=n;
+ if load.emit(RAX,RBP,-8,64,false,slice_from_raw_parts(&buffer[at],LOAD),&n)!=load.OK{return INVALID;}
+ at+=n;
+ if load.emit(RCX,RBP,-16,64,false,slice_from_raw_parts(&buffer[at],LOAD),&n)!=load.OK{return INVALID;}
+ at+=n;
+ if cmp.emit(condition,RAX,RCX,slice_from_raw_parts(&buffer[at],COMPARE),&n)!=cmp.OK{return INVALID;}
+ at+=n;put(text,&at,"test rax, rax\n");
+ if br.emit(bp.NE,yes_block,no_block,yes_block,slice_from_raw_parts(&buffer[at],BRANCH),&n)!=br.OK{return INVALID;}
+ at+=n;
+ if blk.emit(LABEL,yes_block,slice_from_raw_parts(&buffer[at],BLOCK),&n)!=blk.OK{return INVALID;}
+ at+=n;
+ if ex.emit(U64_KIND,FRAME,0,24,0,slice_from_raw_parts(&buffer[at],EXIT),&n)!=ex.OK{return INVALID;}
+ at+=n;
+ if blk.emit(LABEL,no_block,slice_from_raw_parts(&buffer[at],BLOCK),&n)!=blk.OK{return INVALID;}
+ at+=n;
+ if ex.emit(U64_KIND,FRAME,0,32,0,slice_from_raw_parts(&buffer[at],EXIT),&n)!=ex.OK{return INVALID;}
+ at+=n;
+ if at>TEXT{return INVALID;}
+ if at>on{return CAPACITY;}
+ var i:usize=0;while i<at{out[i]=buffer[i];i+=1;}
+ *written=at;return OK;
+}}

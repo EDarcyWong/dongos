@@ -44,7 +44,7 @@ def document_status(text):
 def synchronize(store):
     added, changed = [], []
     books = []
-    for owner in ('claude', 'cursor', 'deepseek', 'codex', 'lmstudio'):
+    for owner in ('claude', 'cursor', 'deepseek', 'codex', 'lmstudio', 'pool'):
         for path in sorted((store.works_root / (owner + '-works/tasks')).glob('*.md')):
             match = re.match(r'([A-Z]+\d+)[-\.]', path.name)
             if match:
@@ -111,7 +111,7 @@ def synchronize(store):
         baseline = baseline_accepted(store.works_root, owner, number)
         if status == 'accepted' and not baseline:
             status = 'submitted' if store.path(f'{owner}-works/deliveries/{number}.md').is_file() else 'todo'
-        data = dict(id=number, owner=owner, title=title[:180], description='从现有任务书导入，历史内容保留。',
+        data = dict(id=number, owner=None if owner == 'pool' else owner, title=title[:180], description='从现有任务书导入，历史内容保留。',
                     status=status, write_paths=patterns, checks=tests,
                     historical=status == 'accepted', document=path.relative_to(store.works_root).as_posix(),
                     delivery=f'{owner}-works/deliveries/{number}.md', legacy_hash=digest(path),

@@ -23,6 +23,8 @@ import re
 import threading
 import uuid
 
+from .timing import ordered_events
+
 CONFLICT = re.compile(r'^(<{7}|={7}|>{7})', re.M)
 TASK_NUMBER = re.compile(r'[A-Z][A-Z0-9_-]{0,39}')
 ATTRIBUTES = ('# Written by the coordinator. LF everywhere; event logs are append-only, so concurrent additions merge by union.\n'
@@ -92,12 +94,14 @@ class StateSync:
         return self.root / 'events' / owner / (number + '.jsonl')
 
     def _validate(self, task, owner, number):
-        from .store import OWNERS, STATES, relative
+        from .store import OWNERS, NAMESPACES, STATES, relative
         if not isinstance(task, dict):
             raise ValueError('不是JSON对象')
-        if owner not in OWNERS or not TASK_NUMBER.fullmatch(number):
+        if owner not in NAMESPACES or not TASK_NUMBER.fullmatch(number):
             raise ValueError('文件路径不是有效的 负责人/编号')
-        if task.get('id') != owner + ':' + number or task.get('owner') != owner or task.get('number') != number:
+        valid_owner = (task.get('owner') in (*OWNERS, None) if owner == 'pool' or 'assignment_owner' in task
+                       else task.get('owner') == owner)
+        if task.get('id') != owner + ':' + number or not valid_owner or task.get('number') != number:
             raise ValueError('文件内容的id/owner/number与路径不一致')
         if type(task.get('rev')) is not int or task['rev'] < 0:
             raise ValueError('rev无效')
@@ -127,9 +131,9 @@ class StateSync:
             candidates = []
             tasks_dir = self.root / 'tasks'
             if tasks_dir.is_dir():
-                from .store import OWNERS
+                from .store import NAMESPACES
                 for owner_dir in sorted(tasks_dir.iterdir()):
-                    if not owner_dir.is_dir() or owner_dir.name not in OWNERS:
+                    if not owner_dir.is_dir() or owner_dir.name not in NAMESPACES:
                         continue
                     for path in sorted(owner_dir.glob('*.json')):
                         signature = self._signature(path)
@@ -150,9 +154,9 @@ class StateSync:
             event_files = []
             events_dir = self.root / 'events'
             if events_dir.is_dir():
-                from .store import OWNERS
+                from .store import NAMESPACES
                 for owner_dir in sorted(events_dir.iterdir()):
-                    if not owner_dir.is_dir() or owner_dir.name not in OWNERS:
+                    if not owner_dir.is_dir() or owner_dir.name not in NAMESPACES:
                         continue
                     for path in sorted(owner_dir.glob('*.jsonl')):
                         signature = self._signature(path)
@@ -209,7 +213,7 @@ class StateSync:
                  c.execute('SELECT at,task_id,kind,data FROM events WHERE task_id=?', (key,))}
         self.file_events[key] = {raw for raw, _ in lines}
         added = 0
-        for raw, item in sorted(lines, key=lambda pair: (pair[1]['at'], pair[0])):
+        for item in ordered_events([item for _, item in lines]):
             canonical = event_line(item['at'], key, item['kind'], item['data'])
             if canonical in known:
                 continue
@@ -277,8 +281,8 @@ class StateSync:
                 by_task.setdefault(event['task_id'], []).append(event)
             for key, items in by_task.items():
                 owner, _, number = key.partition(':')
-                from .store import OWNERS
-                if owner not in OWNERS or not TASK_NUMBER.fullmatch(number):
+                from .store import NAMESPACES
+                if owner not in NAMESPACES or not TASK_NUMBER.fullmatch(number):
                     continue
                 path = self._events_path(key)
                 known = self._known_events(key, path)

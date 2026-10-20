@@ -1,0 +1,94 @@
+// A complete NASM module for 1..8 restricted straight-line u64 functions: "bits 64\nsection .text\n", then for each
+// function "global <CR3 symbol>\n" immediately followed by that function's whole body from the integrated C48
+// emitter. Everything is validated first (descriptors, nested descriptors, duplicate (module,item) pairs, and the
+// full C48 IR check through a real C48.emit call with an empty NULL out, which must answer CAPACITY). Only then is the
+// workspace budget B = 22 + n*(274+6591) compared with work.len; work is written only after that, the module is built
+// there function by function, and out/written are published once at the end.
+module bootstrap.nasm_u64_module;
+import bootstrap.nasm_u64_function as f;
+import bootstrap.nasm_symbol as sym;
+pub const OK:u64=0;pub const INVALID:u64=1;pub const CAPACITY:u64=2;pub const WORKSPACE:u64=3;
+pub const MAX_FUNCTIONS:usize=8;
+pub struct Function{pub module_name:[]const u8,pub item_name:[]const u8,pub parameter_count:usize,pub slot_count:usize,
+ pub instructions:[]const f.Instruction,pub return_slot:usize}
+const MAX:u64=0xffff_ffff_ffff_ffff;
+// Proven bounds: header 22; CR3 symbol <= 10 + 2*(64+64) = 266, so "global " (7) + symbol + LF <= 274; the C48 function
+// body is at most 6591 bytes (268 + 35 + 156 + 64*95 + 52). Per function PER = 274 + 6591 = 6865.
+const HEADER:usize=22;const SYMBOL:usize=266;const BODY:usize=6591;const PER:usize=6865;
+fn span(p:u64,n:u64)bool{return n==0||(p!=0&&n<=MAX-p);}
+fn overlap(a:u64,n:u64,b:u64,m:u64)bool{return n!=0&&m!=0&&a<b+m&&b<a+n;}
+fn same(a:[]const u8,b:[]const u8)bool{
+ if a.len!=b.len{return false;}
+ var i:usize=0;while i<a.len{if a[i]!=b[i]{return false;}i+=1;}
+ return true;
+}
+unsafe fn put(out:[]u8,at:*usize,text:[]const u8)void{unsafe{
+ var i:usize=0;while i<text.len{out[*at+i]=text[i];i+=1;}*at+=text.len;
+}}
+pub unsafe fn emit(functions:[]const Function,work:[]u8,out:[]u8,written:*usize)u64{unsafe{
+ let wp=written as u64;let fp=functions.ptr as u64;let kp=work.ptr as u64;let op=out.ptr as u64;
+ if written==null||(wp&7)!=0||!span(wp,8){return INVALID;}
+ // A wrong function count is rejected before any Function is read.
+ if functions.len==0||functions.len>MAX_FUNCTIONS{return INVALID;}
+ let fn_bytes=functions.len as u64*sizeof(Function);let kn=work.len as u64;let on=out.len as u64;
+ if !span(fp,fn_bytes)||(fp&7)!=0||!span(kp,kn)||!span(op,on){return INVALID;}
+ // written, work and out are pairwise disjoint (whole declared ranges, including unused tails) and disjoint from the array.
+ if overlap(wp,8,kp,kn)||overlap(wp,8,op,on)||overlap(kp,kn,op,on){return INVALID;}
+ if overlap(wp,8,fp,fn_bytes)||overlap(kp,kn,fp,fn_bytes)||overlap(op,on,fp,fn_bytes){return INVALID;}
+ // Nested descriptors of every function, and their aliasing with written/work/out, before any name or IR is read.
+ var i:usize=0;
+ while i<functions.len{
+  let mp=functions[i].module_name.ptr as u64;let mn=functions[i].module_name.len as u64;
+  let ip=functions[i].item_name.ptr as u64;let inn=functions[i].item_name.len as u64;
+  let xp=functions[i].instructions.ptr as u64;
+  // Counts first (C48's own limits, reused): names 1..NAME_LIMIT bytes, at most MAX_INSTRUCTIONS instructions. They are
+  // checked for every function before any name or IR byte is read by the duplicate scan or by C48.
+  if mn==0||mn>f.NAME_LIMIT as u64||inn==0||inn>f.NAME_LIMIT as u64||functions[i].instructions.len>f.MAX_INSTRUCTIONS{return INVALID;}
+  if functions[i].instructions.len as u64>MAX/sizeof(f.Instruction){return INVALID;}
+  let xn=functions[i].instructions.len as u64*sizeof(f.Instruction);
+  if !span(mp,mn)||!span(ip,inn)||!span(xp,xn)||(xn!=0&&(xp&7)!=0){return INVALID;}
+  if overlap(wp,8,mp,mn)||overlap(wp,8,ip,inn)||overlap(wp,8,xp,xn)||overlap(kp,kn,mp,mn)||overlap(kp,kn,ip,inn)||overlap(kp,kn,xp,xn)
+   ||overlap(op,on,mp,mn)||overlap(op,on,ip,inn)||overlap(op,on,xp,xn){return INVALID;}
+  i+=1;
+ }
+ // Duplicate (module,item) byte pairs. CR3 encodes "__dong_m<hex module>_n<hex item>": hex digits never contain '_' or
+ // 'n', so the encoding is injective and equal pairs are exactly equal symbols.
+ i=0;
+ while i<functions.len{
+  var j:usize=0;
+  while j<i{
+   if same(functions[i].module_name,functions[j].module_name)&&same(functions[i].item_name,functions[j].item_name){return INVALID;}
+   j+=1;
+  }
+  i+=1;
+ }
+ // The existing C48 contract is the IR check: a legal function must answer CAPACITY to an empty out. Anything else is INVALID.
+ let nothing:[]u8=slice_from_raw_parts(null as *u8,0);
+ i=0;
+ while i<functions.len{
+  var n:usize=0;
+  let status=f.emit(functions[i].module_name,functions[i].item_name,functions[i].parameter_count,functions[i].slot_count,
+   functions[i].instructions,functions[i].return_slot,nothing,&n);
+  if status!=f.CAPACITY{return INVALID;}
+  i+=1;
+ }
+ // Public fixed workspace budget; it wins over the user's out capacity. Nothing has touched work so far.
+ if work.len<HEADER+functions.len*PER{return WORKSPACE;}
+ // Generation inside work. Before function k the position is at most 22 + k*PER, after its global line at most
+ // 22 + k*PER + 274, and work.len >= 22 + n*PER, so at least n*PER - k*PER - 274 >= 6591 bytes remain for the body (k < n).
+ var at:usize=0;put(work,&at,"bits 64\nsection .text\n");
+ i=0;
+ while i<functions.len{
+  put(work,&at,"global ");
+  var n:usize=0;
+  if sym.encode(functions[i].module_name,functions[i].item_name,slice_from_raw_parts(&work[at],SYMBOL),&n)!=sym.OK{return INVALID;}
+  at+=n;work[at]=10;at+=1;
+  if f.emit(functions[i].module_name,functions[i].item_name,functions[i].parameter_count,functions[i].slot_count,
+   functions[i].instructions,functions[i].return_slot,slice_from_raw_parts(&work[at],BODY),&n)!=f.OK{return INVALID;}
+  at+=n;
+  i+=1;
+ }
+ if at>out.len{return CAPACITY;}
+ i=0;while i<at{out[i]=work[i];i+=1;}
+ *written=at;return OK;
+}}
