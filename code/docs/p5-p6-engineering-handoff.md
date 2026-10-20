@@ -1,6 +1,6 @@
 # P5/P6 工程交接：设备恢复、输入 IRQ 与启动验证
 
-快照截止：2026-10-20 12:03 UTC。本文是可以脱离聊天历史使用的工程入口，不是阶段验收结论。动态 CI 状态必须按下述精确 SHA 重新查询。
+快照截止：2026-10-20 12:11 UTC。本文是可以脱离聊天历史使用的工程入口，不是阶段验收结论。动态 CI 状态必须按下述精确 SHA 重新查询。
 
 ## 当前结论
 
@@ -72,13 +72,19 @@ PR #4 恰好五个文件：
 
 边界不变：DMA 仍 PINNED，没有调用账本 recover，没有销毁根、回收页、发布新 token 或重启驱动。原生四文件为 `tests/virtio_quiesce_fixture.dg`、`tests/virtio_quiesce_probe.c`、`tests/virtio_quiesce_probe.dg`、`tests/test_virtio_quiesce.py`；客体三文件为 `tests/p5_virtio_reset_fixture.py`、`tests/run_virtio_reset_qemu.py`、`tests/test_virtio_reset_guest.py`；加上工作流和 device-manager 文档，共 12 文件。
 
-原始 head `22b317df113bd0d1c33fba6a452cec74a78f6731` 的 native run `39416229559` SUCCESS；head `63c6050f1c8da2346694423bac8caa2ff7d5f07b` 的 native run `39417007181` / job `118608360334` SUCCESS。首次客体门禁的正常对照已到 desktop READY，但旧 decoder 预期 GUI flags=8、当前实际=9，故判定失败；故障副本尚未执行，不能写为复位失败或成功。当前 e2ae56b 修正 decoder 后正在重跑，不能把旧 head 的 native 成功当作最新 guest 成功。
+当前 head `e2ae56ba1af8ef6201e6daf7e95ab563a42bdbbb` 的专项 run `39418385170` 已 SUCCESS：native 与真实 TCG control/fault 两组均通过。故障组证据包含真实 UD2、四 CPU 退休、VirtIO status=0、BME=0、MSE=1、32 页 DMA 仍 PINNED。证据 artifact `12262367735`，SHA-256 `b265af3cd41f058510005c55d9f81f0e3c9a782776881b2e02396b6586072a24`；完整 CI run `39418385157` 仍待完成，PR 仍未合并。
+
+这是受支持现代 VirtIO 的停止/复位后持有路径证明，不是 outstanding DMA 已排空的证明，不是 DMA 回收或驱动重启，也不关闭整个 P5。control/fault 的内核源码相同、故障通过块驱动源注入，但两次构建的内核 ELF hash 不同，**不能声称内核二进制相同**。
+
+历史首次 guest 正常对照已到 desktop READY，但旧 decoder 预期 GUI flags=8、实际=9，因而失败且未执行故障副本；e2ae56b 修正 decoder 后通过上述实际两组验证。不要把这一历史观察器失败说成运行时复位失败。
 
 ### 其他待集成分支 PR #8
 
-[PR #8](https://github.com/EDarcyWong/dongos/pull/8)，分支 `tasks/2026-10-20-c0-c2-integration`，核验远程 head `ca1373fb3db1576df080b4458f33002fb369a67a`，407 文件，尚未合并。范围包含编译器及约 185 个协调状态文件，不能因机械合并或 CI 某组通过宣称这些检查点独立验收完成。
+[PR #8](https://github.com/EDarcyWong/dongos/pull/8)，分支 `tasks/2026-10-20-c0-c2-integration`，远程修正 head `3a4704dbc1f84b90984dd0fcfeed8f53414ec49c`，双 parent 为原分支 `ca1373fb3db1576df080b4458f33002fb369a67a` 与 main `208029b090c722e881e327daef94b3500bb269b8`，当前 404 文件，尚未合并。范围包含编译器及约 185 个协调状态文件，不能因机械合并或 CI 某组通过宣称所有检查点独立验收完成。
 
-当前本地集成针对与 main 的 memory 语义重叠：移除旧的未调用 `release_dma` 解 PIN 路径，保留 P5 精确租约记录和 hold，同时保留编译器栈 API。修正尚未发布；4 项前端/静态聚焦检查通过，本地缺 NASM，未有该修正的原生证据。coordination 149 项测试有 7 errors、3 skips：6 项缺 CLI，另有 archive queue Conflict 正在对照基线，不能提前认定全部是环境问题或全部归因新变更。以实际修正 head、差集审查及重跑结果决定集成。
+已解决 memory 语义重叠：移除旧的未调用 `release_dma` 解 PIN 路径，保留 P5 精确租约记录和 hold，同时保留编译器栈 API。P5 独立核对 DmaLease、contiguous、snapshot、destroy、unshare 与已合入实现精确一致。4 项前端/静态聚焦检查通过；coordination 修正测试发现时的模块身份问题后为 149 项中 146 PASS、3 项 Windows-only SKIP。之前 7 errors 属于旧测试结果，不是当前状态。
+
+本地缺 NASM，修正 head 的原生/boot 仍待 CI；未据此作编译器验收结论。后续以实际 head、差集审查、CI 与正常合并结果为准。
 
 ## P6：输入修复原理
 
@@ -166,4 +172,4 @@ python3 -m tests.run_p6_kvm_qemu --reuse-esp build/test/p6-kvm/build/esp --outpu
 
 ## 快照历史
 
-首版 2026-10-20 11:13 UTC 记录 PR #4/#5 尚待完整 CI、P5 本地缺 NASM，随 PR #6 保存。12:03 UTC 更新记录 PR #4/#5/#6 实际合并及 CI，通过与未完成项已在正文区分；旧状态不再是当前结论。历史内容可通过 Git 查看，无需重复保留逐分片进度。
+首版 2026-10-20 11:13 UTC 记录 PR #4/#5 尚待完整 CI、P5 本地缺 NASM，随 PR #6 保存。12:11 UTC 更新记录 PR #4/#5/#6 实际合并及 CI，通过与未完成项已在正文区分；本次还补入 PR #7 真实 control/fault PASS 与 PR #8 修正后的协调测试结果；旧状态不再是当前结论。历史内容可通过 Git 查看，无需重复保留逐分片进度。
