@@ -11,6 +11,7 @@ import ipc.handles as handles;
 import user.memory as memory;
 import drivers.virtio_pci as vp;
 import drivers.virtio_blk as blk;
+import user.virtio_quiesce as virtio_quiesce;
 import drivers.ahci_authority as ahci;
 import drivers.nvme_authority as nvme;
 import drivers.xhci_authority as xhci;
@@ -38,6 +39,8 @@ var INPUT_SELECTED:u64=0;
 var BLOCK_GRANT_ATTEMPTED:bool=false;
 var INPUT_GRANT_ATTEMPTED:bool=false;
 var BLOCK_QUARANTINED:bool=false;
+var BLOCK_RESET_STATE:u64=0; // 0 unattempted, 1 uncertain/held, 2 confirmed reset.
+var BLOCK_RESET_OPS:virtio_quiesce.Ops=virtio_quiesce.Ops{config:reset_config,read:reset_read,write:reset_write,fence:reset_fence};
 var INPUT_QUARANTINED:bool=false;
 var INPUT_BARS:[6]vp.Bar=[vp.Bar { physical:0,length:0,handle:0 };6];
 var INPUT_VIRTUAL:[6]u64=[0;6];
@@ -106,6 +109,48 @@ pub unsafe fn quarantine(id:usize)!void{unsafe{
     if ((try read32(ecam+4))&0x404)!=0x400{return error.Invalid;}
     let masked=try interrupt_caps(ecam,true);if masked!=3{return error.Invalid;}
 }return;}
+// Only device_host.revoke_owner calls this after its owner is permanently
+// unschedulable. Ordinary manager REVOKE/quarantine must not invoke reset:
+// that path may still have a driver executing on another CPU.
+pub unsafe fn quiesce_stopped_block()!bool{unsafe{
+    if SELECTED_KIND!=1||SELECTED==0{return false;}
+    if !BLOCK_QUARANTINED{return error.Denied;}
+    if BLOCK_RESET_STATE==2{return true;}
+    if BLOCK_RESET_STATE!=0{return error.Busy;}
+    BLOCK_RESET_STATE=1;
+    try virtio_quiesce.reset(&BLOCK_RESET_OPS,SELECTED,SELECTED,BARS[..]);
+    BLOCK_RESET_STATE=2;return true;
+}}
+unsafe fn reset_config(context:u64,address:u64,out:*u32)u64{unsafe{
+    if context!=SELECTED||SELECTED==0||out==null||(address&~4095)!=SELECTED{return 1;}
+    match read32(address){ok(value)=>{*out=value;return 0;},err(e)=>{return e;},}
+}}
+unsafe fn reset_address(handle:u64,offset:u64)!u64{unsafe{
+    var i:usize=0;while i<6{
+        let bar=BARS[i];if handle!=0&&bar.handle==handle{
+            if offset>=bar.length{return error.Denied;}
+            let physical=bar.physical+offset;let page=physical&~4095;
+            if CURRENT_PAGE!=page{
+                try mmio_range(page,4096,false);
+                if CURRENT_PAGE==0{try paging.map_live(startup.space_pointer(),WINDOW,page,paging.WRITE|paging.UNCACHED);}
+                else{try paging.replace_live(startup.space_pointer(),WINDOW,page,paging.WRITE|paging.UNCACHED);}
+                devices.runtime_invalidate(WINDOW);CURRENT_PAGE=page;
+            }
+            return WINDOW+(physical&4095);
+        }i+=1;
+    }
+}return error.Denied;}
+unsafe fn reset_read(context:u64,handle:u64,offset:u64,width:u64,out:*u64)u64{unsafe{
+    if context!=SELECTED||width!=1||out==null||!BLOCK_QUARANTINED||BLOCK_RESET_STATE!=1{return 1;}
+    match reset_address(handle,offset){ok(address)=>{*out=volatile_load(address as *const u8) as u64;return 0;},err(e)=>{return e;},}
+}}
+unsafe fn reset_write(context:u64,handle:u64,offset:u64,width:u64,value:u64)u64{unsafe{
+    if context!=SELECTED||width!=1||value!=0||!BLOCK_QUARANTINED||BLOCK_RESET_STATE!=1{return 1;}
+    match reset_address(handle,offset){ok(address)=>{volatile_store(address as *u8,0);return 0;},err(e)=>{return e;},}
+}}
+unsafe fn reset_fence(context:u64,kind:u64)u64{unsafe{
+    if context!=SELECTED||kind!=3{return 1;}asm {mfence}return 0;
+}}
 unsafe fn raw64(raw: *const u8,offset: usize) u64 { unsafe { return read_unaligned((raw+offset) as *const u64); } }
 pub unsafe fn initialize() !void {
     unsafe {

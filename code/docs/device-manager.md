@@ -95,3 +95,47 @@ owner/incarnation、旧 DMA lease 与传入的旧 device token/撤权后 generat
 失败、分配失败、重复/重入申请、容量不足与地址范围；三个真实坏源负控分别
 丢失取整尾部、分配时未 PIN 和提前 COMPLETE。宿主模型不证明真实 DMA 已停止。
 专用 P5 CI 保存实际原生执行及坏源拒绝证据，正式检查仍包括仓库原有全量门禁。
+
+
+### 现代 VirtIO 的停止后可信复位（仍保持 DMA）
+
+`device_host.revoke_owner` 的真实退休路径现在对已选中的现代 VirtIO block
+执行内核复位。调用者必须先永久停止精确旧 owner：正常路径先完成 SMP
+退休屏障，再终止 Catalog 身份；未运行的 preload 必须满足现有严格检查。
+任何后续失败都不能恢复旧 owner 的运行。普通 manager REVOKE 和 quarantine
+不调用复位，因为它们本身不证明旧驱动已经停止。
+
+内核先保持 BME 关闭且 MSI/MSI-X/INTx 隔离，从可信 ECAM 和原 BAR 授权
+重新发现现代 VirtIO 能力。只用 supervisor UC 窗口向 common device_status
+写入单字节零，执行全屏障，并最多读取1024次等待零；随后再次检查身份和
+PCI 隔离位及 Memory Space Enable。初次尝试之前置为不确定/保持状态，任何错误不允许再次尝试。
+成功状态与精确旧 owner/token 仅为内核诊断，不是新授权凭据。
+
+这一步不调用账本 recover，不清除 PINNED，不销毁旧根，不释放或重新分配
+DMA，不创建新 token，也不重启 block 或依赖服务。复位超时允许安全停机，
+不保证所有真实设备均能在这个有界预算内完成复位。AHCI、NVMe、xHCI
+继续保持原有 quarantine 行为，不从 VirtIO 的协议推导其它控制器的排空。
+
+`tests.test_virtio_quiesce` 编译实际复位实现并连接完整 device_host 图；独立
+C 硬件边界检查单字节写入、屏障顺序、身份/能力/BAR 错误、隔离失效、超时
+和回调失败；实际 production wrapper 的抽取测试检查保持、不重试和重入。
+四个真实坏源负控覆盖省略读回、错误宽度、省略屏障和省略保持状态。原生与
+客体执行必须分别提供当前提交的证据；前端或宿主模型不等于实际客体证明。
+
+完整同 boot 恢复仍须实现专用整块 DMA 池及旧根/共享别名退休，清理精确
+旧授权状态，让用户态 devmgr 正常绑定新 UNBOUND token，并在新绑定完成后
+重建 block 通道及依赖服务。xHCI 与 block 共享的通道不在自动依赖级联内，
+必须额外处理或明确拒绝该恢复配置。不能直接清除 PINNED 后让 DMA 页进入
+普通 RECYCLED 分配路径。
+
+客体验证工具使用独立源码副本，在 block 的正常 setup 成功之后插入已有
+`svc_user_ud2` 调用。原始内核和所有其它源码保持逐文件哈希相同，再通过
+标准 runtime7 构建生成完整 ESP；没有生产调试开关或特殊 syscall。
+正常未故障构建作为对照，故障构建只证明已初始化队列的复位与保持，不证明
+有进行中请求的 DMA 排空，也不证明页重用、重绑定或服务重启。
+
+`tests/run_virtio_reset_qemu.py` 只创建普通临时 FAT 镜像及自身 QEMU 进程，
+不使用真实磁盘、USB、客体内存写入或寄存器修改。读回证据包括精确 #UD、
+旧 owner/token、全核退休、实际 PCI/设备状态及完整32页 DMA 租约仍保持；
+第二次观察必须保持一致。构建清单、测试源清单、原始盘哈希和失败证据保存
+在 CI artifact。验证器单测或前端编译通过不能替代真实 guest CI 通过。

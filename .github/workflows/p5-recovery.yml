@@ -20,7 +20,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install --yes --no-install-recommends nasm gcc python3
       - name: Execute real ledger and DMA allocation fragments
-        run: python3 -m unittest tests.test_device_manager tests.test_dma_lease -v
+        run: python3 -m unittest tests.test_device_manager tests.test_dma_lease tests.test_virtio_quiesce -v
       - name: Compile full production memory dependency graph
         run: |
           python3 - <<'PY'
@@ -39,5 +39,44 @@ jobs:
           path: |
             code/build/test/device-manager/
             code/build/test/dma-lease/
+            code/build/test/virtio-quiesce/
+          if-no-files-found: error
+          retention-days: 14
+  virtio-reset-guest:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: code
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Install disposable guest tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends nasm lld qemu-system-x86 ovmf make python3 mtools gdb gcc
+      - name: Validate fixture and evidence rejection controls
+        run: python3 -m unittest tests.test_virtio_reset_guest -v
+      - name: Build normal unmodified control
+        run: python3 -c 'from pathlib import Path; from tools.build import build; print(build(stage="p1", runtime_level=7, test=False, output=Path("build/p5-reset").resolve()))'
+      - name: Observe unmodified initialized-device control
+        run: python3 tests/run_virtio_reset_qemu.py --reuse-esp build/p5-reset/esp --control
+      - name: Build isolated exact-source fault fixture
+        run: python3 tests/p5_virtio_reset_fixture.py --source "$PWD" --output "$RUNNER_TEMP/p5-reset-fixture" --build
+      - name: Observe actual fault reset and retained DMA
+        working-directory: ${{ runner.temp }}/p5-reset-fixture
+        run: python3 tests/run_virtio_reset_qemu.py --reuse-esp build/p5-reset/esp
+      - name: Save control and fault evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: p5-virtio-reset-guest-evidence
+          path: |
+            code/build/test/p5-reset-guest/
+            code/build/p5-reset/build-inputs.json
+            ${{ runner.temp }}/p5-reset-fixture/p5-reset-fixture.json
+            ${{ runner.temp }}/p5-reset-fixture/build/test/p5-reset-guest/
+            ${{ runner.temp }}/p5-reset-fixture/build/p5-reset/build-inputs.json
           if-no-files-found: error
           retention-days: 14
