@@ -1,0 +1,6 @@
+module virtio_quiesce_probe;
+import virtio_quiesce_fixture as fixture;
+import user.virtio_quiesce as q;import drivers.virtio_pci as vp;
+export("vq_reset") fn reset(ops:*const q.Ops,context:u64,ecam:u64,bars:*const vp.Bar)u64{unsafe{
+ match q.reset(ops,context,ecam,slice_from_raw_parts(bars,6)){ok=>{return 0;},err(e)=>{return e;},}
+}}
