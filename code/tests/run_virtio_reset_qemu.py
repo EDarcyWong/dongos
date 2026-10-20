@@ -15,11 +15,79 @@ settings, storage, nvme = life.settings, life.storage, life.nvme
 builder, acpi = settings.builder, settings.acpi
 check=settings.check
 
+# Current immutable Catalog contract: GUI applications are AUTOSTART|ORDINARY.
+# Do not normalize raw evidence to the older lifecycle runner's flags=8 expectation.
+def decode_catalog(raw):
+    settings.check(len(raw)==life.CATALOG_BYTES,'catalog must have the completed exact ABI size')
+    ready,count,sequence=struct.unpack_from('<3Q',raw)
+    settings.check((ready,count)==(1,18),'kernel catalog is not initialized with 18 admitted configurations')
+    configs=[]
+    for index in range(32):
+        offset=24+index*128;fields=struct.unpack_from('<8Q',raw,offset)
+        version,identifier,deps,retries,timeout,flags,image,length=fields
+        name=raw[offset+64:offset+96];reserved=raw[offset+96:offset+128]
+        settings.check(version==1 and reserved==bytes(32),'config version/reserved field differs')
+        if index<18:
+            expected_flags=7 if index in (0,1,3,6) else (5 if index<7 else (4 if index==13 else (9 if index>=14 else 8)))
+            settings.check(identifier==index and deps==life.DEPS[index] and image==index+1
+                           and flags==expected_flags and retries==(3 if index in (0,1,3,6) else 0)
+                           and timeout>0 and 0<length<=32 and name[:length]==life.NAMES[index].encode()
+                           and name[length:]==bytes(32-length),'admitted configuration or dependency DAG differs')
+        else:
+            settings.check(fields==(1,0,0,0,0,0,0,0) and name==bytes(32),'unused configuration is not empty')
+        configs.append(dict(id=identifier,name=name[:length].decode('ascii'),dependencies=deps,
+                            retries=retries,timeout=timeout,flags=flags,image=image))
+    offset=24+32*128
+    snapshots=[]
+    for index in range(32):
+        version,configuration,process,generation,state,status,event_sequence,argument=struct.unpack_from('<8Q',raw,offset+index*64)
+        settings.check(version==1 and configuration==index and state<=5 and event_sequence<=sequence,
+                       'snapshot version/configuration/state/sequence differs')
+        snapshots.append(dict(configuration=configuration,process=process,generation=generation,state=state,
+                              status=status,sequence=event_sequence,argument=argument))
+    offset+=32*64
+    slots=list(struct.unpack_from('<32Q',raw,offset));offset+=256
+    incarnations=list(struct.unpack_from('<16Q',raw,offset));offset+=128
+    configurations=list(struct.unpack_from('<16Q',raw,offset));offset+=128
+    for index,snapshot in enumerate(snapshots):
+        token=snapshot['process']
+        if token:
+            slot=slots[index]
+            settings.check(index<18 and slot<16 and (slot==13 if index==13 else slot!=13) and configurations[slot]==index
+                           and 0<incarnations[slot]<=0x0fffffff
+                           and token==(incarnations[slot]<<8)|(slot+1)
+                           and snapshot['generation']>0 and snapshot['state'] in (1,2),
+                           'live token/slot/incarnation/configuration do not agree')
+        else:
+            settings.check(slots[index]==life.NONE and snapshot['state'] in (0,3,4,5),
+                           'unowned configuration retains a slot or live state')
+    for slot,configuration in enumerate(configurations):
+        settings.check(configuration==life.NONE or (configuration<18 and slots[configuration]==slot
+                       and snapshots[configuration]['process']!=0),'slot map is not the exact inverse of configurations')
+    events=[]
+    for index in range(64):
+        version,seq,configuration,generation,process,state,status,flags=struct.unpack_from('<8Q',raw,offset+index*64)
+        settings.check(version==1 and flags==0,'event version/flags differs')
+        if seq:
+            settings.check(max(1,sequence-63)<=seq<=sequence and (seq-1)%64==index
+                           and configuration<18 and generation>0 and 0<(process>>8)<=0x0fffffff
+                           and 1<=(process&255)<=16 and state in (2,3,4,5),
+                           'event ring sequence/slot/configuration/state differs')
+            events.append(dict(sequence=seq,configuration=configuration,generation=generation,
+                               process=process,state=state,status=status))
+    events.sort(key=lambda event:event['sequence'])
+    settings.check([e['sequence'] for e in events]==list(range(max(1,sequence-63),sequence+1)),
+                   'event ring has gaps or duplicate logical sequences')
+    return dict(sequence=sequence,configs=configs,snapshots=snapshots,slots=slots,
+                incarnations=incarnations,configurations=configurations,events=events,
+                raw_sha256=hashlib.sha256(raw).hexdigest())
+
 def validate(s, control=False):
     check(s['identity']==0x10421af4 and s['lease']['pages']==32,'wrong controller/whole lease')
     check(s['lease']['physical']>0 and s['lease']['physical']%131072==0
           and s['lease']['state']==2 and s['lease']['mapped']==32
           and s['lease']['attempted']==32 and s['lease']['root']==s['root'] and s['root']>0
+          and s['lease']['generation']==s['memory_generation'] and s['memory_generation']>0
           and s['pinned']==1 and s['memory_ready']==1,'DMA no longer completely held')
     if control:
         check(s['reset_state']==0 and s['reset_owner']==0 and s['reset_token']==0
@@ -94,6 +162,10 @@ class ResetGuest(life.ProcessGuest):
                 for f in t['fields'] if f['size']<=8}
     def global_record(self,module,name,typ,index=0):
         return self.record(typ,self.ksym(module,name),index)
+    def catalog(self):
+        pointer=self.kval('user.services','CATALOG')
+        check(pointer>=0xffff800000000000 and pointer%8==0,'Catalog is not a trusted aligned kernel pointer')
+        return decode_catalog(self.virtual_kernel(pointer,life.CATALOG_BYTES,'actual kernel-owned lifecycle catalog'))
     def snapshot(self):
         self.pause();catalog=self.catalog()
         lease=self.global_record('user.memory','DMA_LEASES','user.memory.DmaLease',2)
@@ -133,7 +205,7 @@ class ResetGuest(life.ProcessGuest):
         queue_thread=self.record('sched.multicore.Thread',domain['engine']+engine_fields['threads'],2)
         owner=self.kval('user.device_host','PCI_OWNERS')
         check(owner==((3<<32)|catalog['incarnations'][2]),'owner differs from real Catalog incarnation')
-        return dict(fault_rip=frame['rip'],expected_fault_rip=expected_fault_rip,fault_instruction=instruction,
+        return dict(memory_generation=struct.unpack('<Q',self.kernel(self.ksym('user.memory','GENERATIONS')+16,8,'block memory generation'))[0],fault_rip=frame['rip'],expected_fault_rip=expected_fault_rip,fault_instruction=instruction,
             pending=self.record('sched.user_bridge.Pending',bridge['pending'],2),identity=identity,command=command,status=status,lease=lease,root=p['root'],memory_ready=p['ready'],
             pinned=self.kernel(self.ksym('user.memory','PINNED')+2,1,'block PINNED')[0],
             quarantined=self.kernel(self.ksym('user.devices','BLOCK_QUARANTINED'),1,'quarantine')[0],
