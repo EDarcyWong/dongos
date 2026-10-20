@@ -1,0 +1,316 @@
+{
+  "project": "dongos",
+  "source": {
+    "head": "f54c35cd80343c6841b687294f4a95496cbad69f",
+    "tree": "394874cfe8ec7e4b0b4a9c857535781f88a957c6",
+    "base": "244b18c737495fc1acc4a39520a69a5b77fa5f67",
+    "branch": "codex/g6-two-boot-ci",
+    "clean_in_ci": true
+  },
+  "pr": "https://github.com/EDarcyWong/dongos/pull/11",
+  "g6_gate": {
+    "passed": true,
+    "scope": "Existing runtime5/compiler_job profile and canonical 49-module self-host closure; does not close G5/full L3, P5 recovery, P2 or local P5CTX1 changes",
+    "run": 39467503226,
+    "attempt": 1,
+    "job": 118782620170,
+    "conclusion": "success",
+    "artifact": {
+      "artifact_id": 12285254639,
+      "run_id": 39467503226,
+      "attempt": 1,
+      "head": "f54c35cd80343c6841b687294f4a95496cbad69f",
+      "github_digest": "sha256:1e586755e91260783ec5589c345b1a50abf637c370b4e6a6de9c9acdf240b623",
+      "download_sha256": "1e586755e91260783ec5589c345b1a50abf637c370b4e6a6de9c9acdf240b623",
+      "archive_bytes": 13735467,
+      "zip_crc": "PASS",
+      "safe_paths": "PASS",
+      "members": 2078,
+      "uncompressed_bytes": 165946071,
+      "archive": "D:\\projects\\2026\\dongos\\coordination\\.local\\g6-ci-20261020\\run39467503226-attempt1-artifact12285254639\\artifact12285254639.zip",
+      "extracted": "D:\\projects\\2026\\dongos\\coordination\\.local\\g6-ci-20261020\\run39467503226-attempt1-artifact12285254639\\extracted",
+      "executed_downloaded_binaries": false
+    },
+    "boots": {
+      "seed": {
+        "passed": true,
+        "actual_qemu_executed": true,
+        "errors": [],
+        "elapsed_seconds": 304.83439801800006,
+        "qemu_shutdown_returncode": 0,
+        "retirement": {
+          "slot_retired": true,
+          "tables_cleared": true,
+          "controller_resumed": true,
+          "source_loan_withdrawn": true
+        },
+        "live": {
+          "managed_frames": 16228,
+          "limit": 16384,
+          "arena_pages": 14336,
+          "stack_pages": 16,
+          "guards": 4,
+          "source_sha256": "1d97c57e1f6cbd5cfd795bce687f854e6ad00c59d86751871644c35099b33e48",
+          "image_sha256": "e7f2424dc2010cf5b66e32c14faafec87f1f0f76051c04bd4e9eee050d34c9f2",
+          "source_readonly": true,
+          "code_wx": true,
+          "no_capabilities": true
+        },
+        "serial_sha256": "8ac943062a7a58bf64aa91bde11b9c89707402ecf77c7dfa4abc233e147769ac"
+      },
+      "reboot": {
+        "passed": true,
+        "actual_qemu_executed": true,
+        "errors": [],
+        "elapsed_seconds": 307.19329456599996,
+        "qemu_shutdown_returncode": 0,
+        "retirement": {
+          "slot_retired": true,
+          "tables_cleared": true,
+          "controller_resumed": true,
+          "source_loan_withdrawn": true
+        },
+        "live": {
+          "managed_frames": 16228,
+          "limit": 16384,
+          "arena_pages": 14336,
+          "stack_pages": 16,
+          "guards": 4,
+          "source_sha256": "1d97c57e1f6cbd5cfd795bce687f854e6ad00c59d86751871644c35099b33e48",
+          "image_sha256": "e7f2424dc2010cf5b66e32c14faafec87f1f0f76051c04bd4e9eee050d34c9f2",
+          "source_readonly": true,
+          "code_wx": true,
+          "no_capabilities": true
+        },
+        "serial_sha256": "f2c522c85d988add12fa4d3fbecc26bafaa7d0e1a6cc2a2b92c25d795b9485d8"
+      }
+    },
+    "source_modules": 49,
+    "source_blob_bytes": 441261,
+    "source_blob_sha256": "1d97c57e1f6cbd5cfd795bce687f854e6ad00c59d86751871644c35099b33e48",
+    "elf_bytes": 1892648,
+    "elf_sha256": "e7f2424dc2010cf5b66e32c14faafec87f1f0f76051c04bd4e9eee050d34c9f2",
+    "three_disk_elfs_byte_identical_to_host": true,
+    "disk_sha256": "0dc0c7fd40a8c1c4b061205e6407c5c029b72eba5c3280729d882edccb6f47c8",
+    "build_sources_verified": 432,
+    "frozen_inputs_verified": 453,
+    "independent_audits": [
+      {
+        "kind": "git-fat-fixedpoint-offline-replay",
+        "passed": true,
+        "path": "coordination/.local/g6-ci-20261020/run39467503226-attempt1-artifact12285254639/independent-acceptance-audit/independent-audit.json",
+        "sha256": "aa32bd4ff4c3e1b62df72ce52df9049ae1c1902d624335b4ac1a8aea131864c6",
+        "auditor_executed_guest_or_downloaded_binary": false
+      },
+      {
+        "kind": "independent-raw-physical",
+        "passed": true,
+        "path": "coordination/.local/g6-ci-20261020/independent-third-run-physical-audit.json",
+        "sha256": "001a6449840ced41fcac99d895e4fca658b3dec1b06e094667fb44e961ea5f5b",
+        "auditor_executed_guest_or_downloaded_binary": false
+      }
+    ],
+    "all_physical_dumps": 1810,
+    "all_physical_dump_bytes": 9554564,
+    "retired_table_pages_each_boot": 128
+  },
+  "prior_failures": [
+    {
+      "run": 39451983630,
+      "artifact": 12282558083,
+      "archive_sha256": "dcb949cda0f6be39606c488e95e49a60eeb436ea888973ed09225a05b2806fda",
+      "core_result": [
+        0,
+        3,
+        0,
+        0
+      ],
+      "stage1_bytes": 1044480,
+      "second_boot": false,
+      "g6_accepted": false
+    },
+    {
+      "head": "672085caa476114446f550e6aba49fe8597842db",
+      "run": 39464189505,
+      "attempt": 1,
+      "artifact": 12284318777,
+      "archive_sha256": "39188007495294d109389deeb38d9dde22191a2412d29270b78d3be9b00c534f",
+      "seed_seconds": 533.094055,
+      "stage1_bytes": 1892648,
+      "stage1_exact": true,
+      "fat_clean": true,
+      "second_boot": false,
+      "g6_accepted": false,
+      "failure": "Production serial used test-mode EBS retry parser; no final retirement capture or reboot evidence"
+    }
+  ],
+  "repairs": [
+    "FAT32 sector-scanned allocation and per-grow cursor bound true I/O while preserving mirrored writes/zero/dirty/FLUSH/error behavior",
+    "Strict production lifecycle parser accepts actual firmware retry range 0..7 without changing serial or prior gates",
+    "Failure diagnostics use physical addresses under user CR3; preserve partial hashed manifests"
+  ],
+  "validation": {
+    "ci_harness": {
+      "tests": 17,
+      "skips": 0,
+      "seconds": 13.195,
+      "passed": true
+    },
+    "local_runner_acpi_runtime": {
+      "tests": 33,
+      "skips": 0,
+      "seconds": 2.489,
+      "passed": true
+    },
+    "local_fat_controls": {
+      "root_tests": 15,
+      "root_skips": 0,
+      "root_seconds": 47.167,
+      "existing_fat_path_tests": 10,
+      "existing_skips": 0,
+      "existing_seconds": 123.405,
+      "read_callbacks_2mib": 20586,
+      "bad_body_budget_rejection": 24001,
+      "independent_review": "no blockers"
+    },
+    "independent_source_review": "no blockers; production finish/destroy paths reviewed"
+  },
+  "other_ci": {
+    "general": {
+      "run": 39467503240,
+      "head": "f54c35cd80343c6841b687294f4a95496cbad69f",
+      "conclusion": "success",
+      "status": "completed",
+      "attempt": 1,
+      "jobs_success": 20,
+      "jobs_total": 20,
+      "host_tests": 712,
+      "host_skips": 0,
+      "language_tests": 931,
+      "language_skips": 1,
+      "language_skip_reason": "Existing full-assembly conditional test requires DONG_ASSEMBLER_FULL_INPUT",
+      "actual_checkout": "b905c1e1cbcac9612406d3d96c60097b768d37d6",
+      "actual_checkout_tree": "394874cfe8ec7e4b0b4a9c857535781f88a957c6",
+      "actual_checkout_verified_execution_jobs": 19,
+      "aggregate_job": 118803542588,
+      "boot_groups_success": 9,
+      "functional_failures": 0,
+      "retries": 0
+    },
+    "p5": {
+      "run": 39467503250,
+      "head": "f54c35cd80343c6841b687294f4a95496cbad69f",
+      "conclusion": "success",
+      "status": "completed",
+      "attempt": 1,
+      "actual_checkout": "b905c1e1cbcac9612406d3d96c60097b768d37d6",
+      "jobs_success": 2,
+      "authority_job": 118782619922,
+      "authority_tests": 10,
+      "authority_seconds": 17.265,
+      "reset_job": 118782619963,
+      "controls": 9,
+      "controls_seconds": 0.1,
+      "skips": 0,
+      "real_control_and_fault_guests_passed": true
+    },
+    "input": {
+      "run": 39467503280,
+      "head": "f54c35cd80343c6841b687294f4a95496cbad69f",
+      "conclusion": "success",
+      "status": "completed",
+      "attempt": 1,
+      "actual_checkout": "b905c1e1cbcac9612406d3d96c60097b768d37d6",
+      "job": 118782620258,
+      "tests": 12,
+      "seconds": 217.013,
+      "skips": 0
+    }
+  },
+  "integration": {
+    "merged": true,
+    "local_synced": true,
+    "remaining": [],
+    "merge_sha": "19e1a1982de0d7ebc57eea0b851d968e01b40e07",
+    "merge_tree": "394874cfe8ec7e4b0b4a9c857535781f88a957c6",
+    "merged_at": "2026-10-20T18:20:34Z",
+    "local_synced_at": "2026-10-20T18:21:50.421029+00:00",
+    "local_head": "19e1a1982de0d7ebc57eea0b851d968e01b40e07",
+    "local_tree": "394874cfe8ec7e4b0b4a9c857535781f88a957c6",
+    "sync": {
+      "before_head": "244b18c737495fc1acc4a39520a69a5b77fa5f67",
+      "after_head": "19e1a1982de0d7ebc57eea0b851d968e01b40e07",
+      "after_tree": "394874cfe8ec7e4b0b4a9c857535781f88a957c6",
+      "changed_by_git": [
+        ".github/workflows/l3-guest-selfhost.yml",
+        "code/docs/l3-guest-compiler.md",
+        "code/services/fs/fat32.dg",
+        "code/tests/fat32_allocation_exports.dg.inc",
+        "code/tests/fat32_allocation_probe.c",
+        "code/tests/run_compiler_job_qemu.py",
+        "code/tests/test_compiler_guest_runner.py",
+        "code/tests/test_fat32_allocation.py"
+      ],
+      "protected_paths": 307,
+      "protected_bytes_unchanged": true,
+      "changed_during_sync": [],
+      "new_dirty_during_sync": [],
+      "cached_diff_unchanged": true,
+      "g6_files_clean": true,
+      "reset_stash_or_restore_used": false
+    }
+  },
+  "preservation": {
+    "backup": "D:\\projects\\2026\\dongos\\coordination\\.local\\g6-local-preservation-20261020T175310Z",
+    "manifest": "D:\\projects\\2026\\dongos\\coordination\\.local\\g6-local-preservation-20261020T175310Z\\manifest.json"
+  },
+  "coordination_task_mutations": [],
+  "p2_work": "Claude is handling P2 separately; no P2 implementation or task state modified by this run",
+  "local_p5ctx1": "Other thread integrated rev7 locally; keep its dirty source/tests and original task history, not covered by this CI commit",
+  "post_merge_ci": {
+    "snapshot_at": "2026-10-20T18:20:41Z",
+    "head": "19e1a1982de0d7ebc57eea0b851d968e01b40e07",
+    "scope": "Automatically started push checks on the same content tree; distinct from verified candidate checks and later documentation-only push",
+    "runs": [
+      {
+        "id": 39473893535,
+        "name": "Build and boot",
+        "status": "in_progress",
+        "conclusion": null
+      },
+      {
+        "id": 39473893647,
+        "name": "P6 input IRQ regression",
+        "status": "in_progress",
+        "conclusion": null
+      }
+    ]
+  },
+  "coordination_backup": {
+    "project": "dongos",
+    "backup": "D:\\projects\\2026\\dongos\\coordination\\dongos_works\\.local\\backups\\2026-10-20T18-16-20+00-00-c58e924c",
+    "database_sha256": "ba611b6def4cb1b1dfe33f6980c35515d4e0358cfafd92a7ca986b39906011ec",
+    "integrity_check": "ok",
+    "table_counts": {
+      "tasks": 138,
+      "events": 1152,
+      "jobs": 123,
+      "settings": 1
+    },
+    "official_backup_api": "Store.backup",
+    "state_sync_enabled": false,
+    "no_restore_or_task_mutation": true
+  },
+  "shutdown_request": {
+    "authorized_by_user": true,
+    "execute_after": "G6 code merge, documentation publication, final local preservation and GitHub verification",
+    "status_at_code_integration_checkpoint": "not_yet_issued",
+    "final_receipt": "coordination/.local/g6-ci-20261020/final-shutdown-receipt.json"
+  },
+  "documentation_publication": {
+    "scope": "Roadmap, handoff and referenced review evidence in a separate documentation commit after the verified G6 code merge",
+    "user_authorized": true,
+    "excludes": "P2/P5 implementation, task database/index/state and unrelated UI changes",
+    "commit_identity_record": "coordination/.local/g6-ci-20261020/final-shutdown-receipt.json"
+  }
+}

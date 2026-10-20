@@ -1,0 +1,158 @@
+{
+  "schema_version": 1,
+  "checked_at": "2026-10-20T15:28:28.666Z",
+  "project": "dongos",
+  "baseline": "244b18c737495fc1acc4a39520a69a5b77fa5f67",
+  "purpose": "优先P5，准备并行G6；正常原编号正式验收，不覆盖异机身份或旧失败历史",
+  "completed": [
+    {
+      "id": "claude:C52",
+      "status": "integrated",
+      "rev": 14,
+      "review_note": "独立源码/契约复核通过：R1对所有函数先做module/item 1..64及IR<=64数量/描述符检查，再读取名字/IR；保留真实C48预检与失败原子性。正式隔离job c00f7299f5fb453a9d16d91ab5164d79：6tests/0skip、149.843s，source_stable/process_stopped/execution_exited均true，四文件指纹重算匹配。独立复核713产物SHA，好体读取正控及删除数量检查的正常返回坏体在7个多函数拒绝用例中被提前读取观察拒绝；RAX/RBX/重复/容量负控均保持。主线永久测试另有24读取用例、19坏体多函数拒绝，源/产物回执已核对；仅限本组件，不授予整个L3或G6完成。旧interrupted作业与原任务时间线完整保留，本次为新正式复验。",
+      "integration_note": "真实文件集成已通过PR#8进入main244b18c并同步本地。code/lang/bootstrap/nasm_u64_module.dg与C52 R1 owner实现按LF规范化逐字一致；code/lang/bootstrap/nasm_u64_module.md和lang/tests/test_bootstrap_nasm_u64_module.py保持路径映射、Linux feature宏和更严格读取观察/原子性检查。独立核对主线16输入/713产物回执均匹配，原准确head50ab完整CI通过且合并树相同。声明的四个ownerworks文件与本次正式验收指纹完全一致，不覆盖原任务/交付历史，不把工具链或G6验收混入本组件。",
+      "verification": {
+        "passed": true,
+        "checks": [
+          {
+            "spec": "discover:claude-works/tests:test_nasm_u64_module.py",
+            "passed": true,
+            "tests": 6,
+            "skips": 0,
+            "returncode": 0,
+            "cancelled": false,
+            "timed_out": false,
+            "process_stopped": true,
+            "execution_exited": true,
+            "elapsed_seconds": 149.843
+          }
+        ],
+        "process_stopped": true,
+        "execution_exited": true,
+        "source_stable": true,
+        "fingerprint": {
+          "claude-works/src/bootstrap/nasm_u64_module.dg": "925e8da8dbe6cf8b06fb38e5e95e4cee8a70d6fbaec67193a339706207f328d8",
+          "claude-works/src/bootstrap/nasm_u64_module.md": "51955a5a2d5cc366d5de1ad4471e42bd7f8e7fecc776a2aff0cadbe5bfdbcb6d",
+          "claude-works/tests/test_nasm_u64_module.py": "35a218d4bd9a83d212204f90004658358c659f2fdcdc72e39fbc61dabfccdbf7",
+          "claude-works/deliveries/C52.md": "d4db6be6c1b976115846f47efddcfc04213a150947e870e9ace35fc4cc2b555a"
+        },
+        "summary": "定向复验通过，等待源码/契约审查",
+        "finished_at": "2026-10-20T15:22:51+00:00",
+        "job": "c00f7299f5fb453a9d16d91ab5164d79"
+      }
+    },
+    {
+      "id": "codex:CXNASM3",
+      "status": "integrated",
+      "rev": 6,
+      "review_note": "独立源码/契约及真实负控审查通过。正式隔离job4628b48597ad4fa4a0edb758628cc8a5：10tests/0skip、2.859s，source_stable/process_stopped/execution_exited均true，三文件指纹匹配。旧平铺/新分组仅在帮助明示分组选项时追加-h -w，两探测check=True错误传播、完整warning名独立匹配；实际NASM3.02 ELF64/COFF均验证两合法重定位的原warning失败→能力探测成功，同时number-overflow仍严格失败。未据mock声称安装过旧NASM，身份与异机CX6分开。",
+      "integration_note": "声明的lang/tests/test_dongc.py、test_nasm_compatibility.py已实际位于本地主线并随PR8/main244b18c集成；交付保留CXNASM3独立身份。三文件与新正式验收指纹完全一致，主线14项桥/NASM/启动联合回归已通过，正常记录集成，不导入或替换异机CX6任务。",
+      "verification": {
+        "passed": true,
+        "checks": [
+          {
+            "spec": "module:lang.tests.test_nasm_compatibility",
+            "passed": true,
+            "tests": 10,
+            "skips": 0,
+            "returncode": 0,
+            "cancelled": false,
+            "timed_out": false,
+            "process_stopped": true,
+            "execution_exited": true,
+            "elapsed_seconds": 2.859
+          }
+        ],
+        "process_stopped": true,
+        "execution_exited": true,
+        "source_stable": true,
+        "fingerprint": {
+          "lang/tests/test_dongc.py": "8a38a0b223e7b5eb4035b00558ddfe4d70cb9963cb51877fbe33b876eae75bb1",
+          "lang/tests/test_nasm_compatibility.py": "e51d2e3f1e5d825ab64b68b035ec31e23416b71e994b17c4a4727c8295f85e4d",
+          "codex-works/deliveries/CXNASM3.md": "55982b984d17c2bad4f69d00bee10d2c4347eeb9ed74ddf0280b268ba8ff1de5"
+        },
+        "summary": "定向复验通过，等待源码/契约审查",
+        "finished_at": "2026-10-20T15:23:03+00:00",
+        "job": "4628b48597ad4fa4a0edb758628cc8a5"
+      }
+    }
+  ],
+  "new_task": {
+    "id": "cursor:P5CTX1",
+    "status": "todo",
+    "rev": 1,
+    "title": "[P5] 接入真实DMA申请与退休路径的精确持有上下文",
+    "owner": "cursor",
+    "document": "cursor-works/tasks/P5CTX1-board.md",
+    "write_paths": [
+      "cursor-works/src/p5/user/device_host.dg",
+      "cursor-works/src/p5/user/services.dg",
+      "cursor-works/src/p5/recovery-context.md",
+      "cursor-works/tests/p5_recovery_context_fixture.dg",
+      "cursor-works/tests/p5_recovery_context_probe.c",
+      "cursor-works/tests/test_p5_recovery_context.py",
+      "cursor-works/deliveries/P5CTX1.md"
+    ],
+    "checks": [
+      "discover:cursor-works/tests:test_p5_recovery_context.py"
+    ],
+    "execution": "Cursor本人客户端手动worker MCP读最新rev、原任务书、领取后执行；未启动AI CLI",
+    "integration": "worker仅写本人works候选；独立复验后由Codex映射真实kernel与永久测试"
+  },
+  "local_task_counts": {
+    "active": 122,
+    "integrated": 102,
+    "accepted": 19,
+    "todo": 1,
+    "submitted": 0,
+    "archived": 16,
+    "total": 138
+  },
+  "foreign_history": {
+    "records": 161,
+    "imported_this_turn": 0,
+    "collisions_preserved": [
+      "codex:CX6",
+      "cursor:CR43"
+    ]
+  },
+  "pre_change_backup": "coordination/dongos_works/.local/backups/2026-10-20T15-20-11+00-00-4434c9d4",
+  "source_modifications_this_turn": [],
+  "g6": {
+    "status": "preparation only; guest acceptance not run",
+    "existing_runner": "code/tests/run_compiler_job_qemu.py",
+    "independent_of_full_p5_recovery": true,
+    "missing": "固定新源码快照生成新kernel与完整fixture，并接入专用CI调用既有真实双启runner",
+    "workflow_proposal": "2026-10-20-l3-g6-workflow-proposal.yml",
+    "workflow_installed": false,
+    "guest_run_locally": false,
+    "guest_run_remotely_this_turn": false,
+    "requires_new_fixtures": true,
+    "fixture_must_include": [
+      "receipt.json",
+      "sources.bin",
+      "stage1.elf"
+    ],
+    "per_boot_seconds": 3600,
+    "proposed_ci_minutes": 180
+  },
+  "p5": {
+    "status": "partial",
+    "next_step": "可信精确恢复上下文及持有回执",
+    "not_authorized_by_this_receipt": [
+      "DMA drain proven",
+      "unpin/free/reuse",
+      "new token publication",
+      "driver restart"
+    ],
+    "existing_smp_retirement": "已有全核owner退休，不重写；未来post-unmap全核翻译退休仍另验",
+    "reset_result": "RESET_CONFIRMED仍DRAIN_UNKNOWN"
+  },
+  "post_merge_ci": {
+    "id": 39444684378,
+    "status": "in_progress",
+    "conclusion": null,
+    "head": "244b18c737495fc1acc4a39520a69a5b77fa5f67",
+    "url": "https://github.com/EDarcyWong/dongos/actions/runs/39444684378"
+  }
+}

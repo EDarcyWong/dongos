@@ -1,0 +1,49 @@
+name: L3 actual guest self-host acceptance
+# Proposal only. Copy to .github/workflows/ only during an explicitly reviewed integration.
+# Manual dispatch avoids silently starting a long guest acceptance for every code change.
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  same-disk-two-boot:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    defaults:
+      run:
+        working-directory: code
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Install disposable guest and native tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends nasm gcc python3 lld qemu-system-x86 ovmf make mtools gdb
+      - name: Record immutable source revision
+        run: |
+          mkdir -p build/g6
+          git rev-parse HEAD > build/g6/source-commit.txt
+          test -z "$(git status --porcelain)"
+      - name: Generate fresh complete native compiler fixture
+        run: python3 -m tools.compiler_job --output build/g6/fixture --mode release
+      - name: Build fresh isolated compiler profile
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          from tools.build import build
+          print(build(stage="p1", runtime_level=5, compiler_job=True, test=False,
+                      output=Path("build/g6/kernel").resolve()))
+          PY
+      - name: Execute existing actual same-disk two-boot acceptance
+        run: python3 tests/run_compiler_job_qemu.py --esp build/g6/kernel/esp --fixture build/g6/fixture --source-root "$PWD"
+      - name: Preserve exact success and failure evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: l3-actual-guest-selfhost-evidence
+          path: |
+            code/build/g6/
+            code/build/test/l3-guest/
+          if-no-files-found: error
+          retention-days: 14

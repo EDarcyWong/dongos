@@ -1,0 +1,344 @@
+{
+  "checked_at": "2026-10-20T14:51:20+00:00",
+  "timezone": "Asia/Shanghai",
+  "github_main": "d7468a17481a6c55c9add7035aff5e67c577de51",
+  "local": {
+    "head": "d7468a17481a6c55c9add7035aff5e67c577de51",
+    "origin_main": "d7468a17481a6c55c9add7035aff5e67c577de51",
+    "behind": 0,
+    "preservation_files": 53,
+    "original_files_unchanged_before_map_update": true,
+    "fast_forward_reflog_at": "2026-10-20T22:12:24+08:00"
+  },
+  "pull_requests": {
+    "3": {
+      "url": "https://github.com/EDarcyWong/dongos/pull/3",
+      "head": "288d65ce768c3e2f91b54ebd01453ac6617c9271",
+      "base": "main",
+      "base_sha": "4aaf195c8a68b6549382d2490c6fc746052f8d4e",
+      "state": "open",
+      "draft": true,
+      "merged": false,
+      "merged_at": null,
+      "merge_commit_sha": "298e14d787de156c0510603b847574bb1b374e92"
+    },
+    "7": {
+      "url": "https://github.com/EDarcyWong/dongos/pull/7",
+      "head": "3a5c773bf2f7bb276a7b9430e60800b827357ffd",
+      "base": "main",
+      "base_sha": "208029b090c722e881e327daef94b3500bb269b8",
+      "state": "closed",
+      "draft": false,
+      "merged": true,
+      "merged_at": "2026-10-20T13:29:25Z",
+      "merge_commit_sha": "1dfebe18a96f48c9b864ab0407c5a32b141c4bd4"
+    },
+    "8": {
+      "url": "https://github.com/EDarcyWong/dongos/pull/8",
+      "head": "50ab7cf9cde101691774a8480bdb7fcc07c766be",
+      "base": "main",
+      "base_sha": "d7468a17481a6c55c9add7035aff5e67c577de51",
+      "state": "open",
+      "draft": false,
+      "merged": false,
+      "merged_at": null,
+      "merge_commit_sha": "ec3d99571150687229023d282aa9f068b20df244"
+    },
+    "10": {
+      "url": "https://github.com/EDarcyWong/dongos/pull/10",
+      "head": "1c00a6f007e2349ab9b68f23bf0d30f36aaacbec",
+      "base": "main",
+      "base_sha": "1dfebe18a96f48c9b864ab0407c5a32b141c4bd4",
+      "state": "closed",
+      "draft": false,
+      "merged": true,
+      "merged_at": "2026-10-20T13:30:43Z",
+      "merge_commit_sha": "d7468a17481a6c55c9add7035aff5e67c577de51"
+    }
+  },
+  "branches": [
+    {
+      "name": "codex/p5-dma-alias-refusal",
+      "sha": "1c00a6f007e2349ab9b68f23bf0d30f36aaacbec"
+    },
+    {
+      "name": "codex/p5-recovery-dma-journal",
+      "sha": "b4c82369907953b7eaf9cafbf250be241f35c470"
+    },
+    {
+      "name": "codex/p5-virtio-reset-hold",
+      "sha": "3a5c773bf2f7bb276a7b9430e60800b827357ffd"
+    },
+    {
+      "name": "codex/p6-input-irq-fix",
+      "sha": "18543a2986034893da4536c3b45ff98f73549742"
+    },
+    {
+      "name": "codex/p6-input-irq-kvm-validation",
+      "sha": "288d65ce768c3e2f91b54ebd01453ac6617c9271"
+    },
+    {
+      "name": "docs/p5-p6-engineering-handoff",
+      "sha": "ea659324a702679c9b9494695d5359a8f583095f"
+    },
+    {
+      "name": "docs/p5-p6-merged-checkpoint",
+      "sha": "e8544614c2b1d95550951008fd3c5a479521241c"
+    },
+    {
+      "name": "dot/l3-host-checkpoint-20261020",
+      "sha": "a6be50705d3e51a915842eaff542228f2c313479"
+    },
+    {
+      "name": "dot/verified-components-console-20261020",
+      "sha": "9033b51327dd8c18104b373a4951b1f709aac9c8"
+    },
+    {
+      "name": "main",
+      "sha": "d7468a17481a6c55c9add7035aff5e67c577de51"
+    },
+    {
+      "name": "tasks/2026-10-20-c0-c2-integration",
+      "sha": "50ab7cf9cde101691774a8480bdb7fcc07c766be"
+    }
+  ],
+  "workflow_runs": {
+    "8": [
+      {
+        "id": 39436523413,
+        "name": "Build and boot",
+        "url": "https://github.com/EDarcyWong/dongos/actions/runs/39436523413",
+        "status": "completed",
+        "conclusion": "success",
+        "head": "50ab7cf9cde101691774a8480bdb7fcc07c766be",
+        "attempt": 1
+      },
+      {
+        "id": 39436520689,
+        "name": "P5 recovery prerequisites",
+        "url": "https://github.com/EDarcyWong/dongos/actions/runs/39436520689",
+        "status": "completed",
+        "conclusion": "success",
+        "head": "50ab7cf9cde101691774a8480bdb7fcc07c766be",
+        "attempt": 1
+      },
+      {
+        "id": 39436523449,
+        "name": "P6 input IRQ regression",
+        "url": "https://github.com/EDarcyWong/dongos/actions/runs/39436523449",
+        "status": "completed",
+        "conclusion": "success",
+        "head": "50ab7cf9cde101691774a8480bdb7fcc07c766be",
+        "attempt": 1
+      }
+    ]
+  },
+  "full_ci_jobs": [
+    {
+      "id": 118675046187,
+      "name": "language-tests (5)",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 118675046347,
+      "name": "language-tests (4)",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 118675046375,
+      "name": "host-tests (0)",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 118675046379,
+      "name": "host-tests (3)",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 118675046435,
+      "name": "language-tests (0)",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 118675046455,
+      "name": "boot-tests (hardening, tests/run_hardening_qemu.py --all)",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 118675046468,
+      "name": "boot-tests (p0, tests/run_qemu.py --stage p0)",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 118675046507,
+      "name": "boot-tests (p1, tests/run_qemu.py --stage p1 --all)",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 118675046508,
+      "name": "host-tests (1)",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 118675046589,
+      "name": "language-tests (1)",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 118675046685,
+      "name": "language-tests (2)",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 118675046696,
+      "name": "host-tests (2)",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 118675046697,
+      "name": "boot-tests (acpi, tests/run_acpi_qemu.py --all)",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 118675046698,
+      "name": "boot-tests (cpu, tests/run_cpu_qemu.py --all)",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 118675046714,
+      "name": "boot-tests (cache, tests/run_cache_qemu.py --all)",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 118675046746,
+      "name": "boot-tests (permission, tests/run_permission_qemu.py --all)",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 118675046752,
+      "name": "boot-tests (runtime, tests/run_runtime_qemu.py --all)",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 118675046809,
+      "name": "boot-tests (memory, tests/run_memory_qemu.py --all)",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 118675046816,
+      "name": "language-tests (3)",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "id": 118696165275,
+      "name": "build-and-boot",
+      "status": "completed",
+      "conclusion": "success"
+    }
+  ],
+  "verification": {
+    "verified_head": "50ab7cf9cde101691774a8480bdb7fcc07c766be",
+    "full_fixedpoint_ci_passed": true,
+    "artifact_id": 12272786821,
+    "artifact_sha256": "b666cccba586fee8dfedcd62aed9f0d2f240cf45aa97beab9b5fc164869464a3",
+    "run_id": 39436523413,
+    "fixedpoint_receipts": [
+      {
+        "mode": "debug",
+        "exact_fixedpoint": true,
+        "source_stable": true,
+        "source_identity_verified": true,
+        "source_files": 49,
+        "blob_sha256": "1d97c57e1f6cbd5cfd795bce687f854e6ad00c59d86751871644c35099b33e48",
+        "elf_bytes": 1892648,
+        "elf_sha256": "e7f2424dc2010cf5b66e32c14faafec87f1f0f76051c04bd4e9eee050d34c9f2",
+        "receipt_zip_path": "compiler-job/run-ed4aa5e43ebe/debug/receipt.json",
+        "arena_bytes": 58720256,
+        "stack_bytes": 65536
+      },
+      {
+        "mode": "release",
+        "exact_fixedpoint": true,
+        "source_stable": true,
+        "source_identity_verified": true,
+        "source_files": 49,
+        "blob_sha256": "1d97c57e1f6cbd5cfd795bce687f854e6ad00c59d86751871644c35099b33e48",
+        "elf_bytes": 1892648,
+        "elf_sha256": "e7f2424dc2010cf5b66e32c14faafec87f1f0f76051c04bd4e9eee050d34c9f2",
+        "receipt_zip_path": "compiler-job/run-ed4aa5e43ebe/release/receipt.json",
+        "arena_bytes": 58720256,
+        "stack_bytes": 65536
+      }
+    ],
+    "all_four_elf_identical": true,
+    "guest_executed": false,
+    "artifact_executed_locally": false,
+    "local_tests": {
+      "coordination": {
+        "tests": 149,
+        "skips": 0,
+        "passed": true,
+        "seconds": 95.401
+      },
+      "launch": {
+        "tests": 3,
+        "skips": 0,
+        "passed": true,
+        "seconds": 18.116
+      },
+      "nasm": {
+        "tests": 10,
+        "skips": 0,
+        "passed": true,
+        "seconds": 0.469
+      },
+      "bridge": {
+        "tests": 1,
+        "skips": 0,
+        "passed": true,
+        "seconds": 0.967
+      }
+    },
+    "windows_full_fixedpoint": {
+      "passed": false,
+      "attempt_seconds": [
+        318.56,
+        321.43
+      ],
+      "reason": "Fixed guest ELF address occupied before seed execution; temporary linker experiments reverted."
+    }
+  },
+  "local_tasks": {
+    "project": "dongos",
+    "active": 121,
+    "counts": {
+      "accepted": 19,
+      "integrated": 100,
+      "submitted": 2
+    }
+  },
+  "scope": {
+    "pr8_merged": false,
+    "guest_g6_accepted": false,
+    "local_pr8_task_state_imported": false
+  }
+}

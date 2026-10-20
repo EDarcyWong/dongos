@@ -1,0 +1,38 @@
+{
+  "verified_head": "50ab7cf9cde101691774a8480bdb7fcc07c766be",
+  "full_fixedpoint_ci_passed": true,
+  "artifact_id": 12272786821,
+  "artifact_sha256": "b666cccba586fee8dfedcd62aed9f0d2f240cf45aa97beab9b5fc164869464a3",
+  "run_id": 39436523413,
+  "fixedpoint_receipts": [
+    {
+      "mode": "debug",
+      "exact_fixedpoint": true,
+      "source_stable": true,
+      "source_identity_verified": true,
+      "source_files": 49,
+      "blob_sha256": "1d97c57e1f6cbd5cfd795bce687f854e6ad00c59d86751871644c35099b33e48",
+      "elf_bytes": 1892648,
+      "elf_sha256": "e7f2424dc2010cf5b66e32c14faafec87f1f0f76051c04bd4e9eee050d34c9f2",
+      "receipt_zip_path": "compiler-job/run-ed4aa5e43ebe/debug/receipt.json",
+      "arena_bytes": 58720256,
+      "stack_bytes": 65536
+    },
+    {
+      "mode": "release",
+      "exact_fixedpoint": true,
+      "source_stable": true,
+      "source_identity_verified": true,
+      "source_files": 49,
+      "blob_sha256": "1d97c57e1f6cbd5cfd795bce687f854e6ad00c59d86751871644c35099b33e48",
+      "elf_bytes": 1892648,
+      "elf_sha256": "e7f2424dc2010cf5b66e32c14faafec87f1f0f76051c04bd4e9eee050d34c9f2",
+      "receipt_zip_path": "compiler-job/run-ed4aa5e43ebe/release/receipt.json",
+      "arena_bytes": 58720256,
+      "stack_bytes": 65536
+    }
+  ],
+  "all_four_elf_identical": true,
+  "guest_executed": false,
+  "artifact_executed_locally": false
+}

@@ -1,5 +1,18 @@
 # Pure bounded compiler job
 
+Latest acceptance — 2026-10-21: G6 PASSED for the existing runtime5/compiler_job
+profile and canonical 49-module closure. Run `39467503226` attempt1 on
+`f54c35c` actually booted twice; the same disk's SEED/STAGE1/STAGE2 ELF bytes
+equal the host fixed point (1,892,648 bytes, SHA256
+`e7f2424dc2010cf5b66e32c14faafec87f1f0f76051c04bd4e9eee050d34c9f2`). Two independent audits checked source/fixture binding,
+physical isolation, FLUSH and final retirement. PR11 code merged/synced at
+`19e1a1982de0d7ebc57eea0b851d968e01b40e07`, tree `394874cfe8ec7e4b0b4a9c857535781f88a957c6`. This is a code checkpoint; later documentation
+commits may advance HEAD. Full language G5 remains incomplete. See the
+[execution and integration receipt](../../coordination/dongos_works/reviews/2026-10-21-g6-ci-execution.md).
+The Historical24-byte section below, including its pending-G6 sentences, records
+the earlier snapshot and does not describe current acceptance.
+
+
 `bootstrap.compiler_job.run(blob, catalog, arena, result)` is an unsafe borrowed
 memory API. The caller supplies stable readable blob bytes, writable storage for
 64 `modules.Source` records (2560 bytes), exactly 56 MiB of writable 8-byte aligned

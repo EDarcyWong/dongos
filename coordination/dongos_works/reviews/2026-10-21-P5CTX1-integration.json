@@ -1,0 +1,866 @@
+{
+  "project": "dongos",
+  "task_id": "cursor:P5CTX1",
+  "owner": "codex",
+  "baseline_head": "244b18c737495fc1acc4a39520a69a5b77fa5f67",
+  "component_scope": "DMA hold context only; P5 remains incomplete",
+  "source_mapping": [
+    {
+      "source": "cursor-works/src/p5/user/device_host.dg",
+      "target": "code/kernel/user/device_host.dg",
+      "source_sha256": "823fc27763560ff880dd26b9e4da236a92cf55174d3e4a86bf0b234592ba95ce",
+      "target_sha256": "823fc27763560ff880dd26b9e4da236a92cf55174d3e4a86bf0b234592ba95ce",
+      "byte_identical": true
+    },
+    {
+      "source": "cursor-works/src/p5/user/services.dg",
+      "target": "code/kernel/user/services.dg",
+      "source_sha256": "548c6dafa0f2e515bcefeba51ae28c754e68273c979275862c32b60b6a76fa65",
+      "target_sha256": "548c6dafa0f2e515bcefeba51ae28c754e68273c979275862c32b60b6a76fa65",
+      "byte_identical": true
+    },
+    {
+      "source": "cursor-works/src/p5/recovery-context.md",
+      "target": "code/docs/p5-recovery-context.md",
+      "source_sha256": "c664037393f5b40b4e8c3b93b7186b1eedf0c49af96315272903b2bf5944e4bb",
+      "target_sha256": "69ff9f6a32ac2a2bf726b300bf0aedf59b0f292046e9ab6e0e133d5f31a6f82f",
+      "byte_identical": false
+    },
+    {
+      "source": "cursor-works/tests/p5_recovery_context_fixture.dg",
+      "target": "code/tests/p5_recovery_context_fixture.dg",
+      "source_sha256": "caf529fef8b79aca3487baf23c0e6e20859cc6f60ec1c354b775bc53723f23eb",
+      "target_sha256": "caf529fef8b79aca3487baf23c0e6e20859cc6f60ec1c354b775bc53723f23eb",
+      "byte_identical": true
+    },
+    {
+      "source": "cursor-works/tests/p5_recovery_context_probe.c",
+      "target": "code/tests/p5_recovery_context_probe.c",
+      "source_sha256": "99f99218f7764ae98e5d5f8a3eaa94ae5bcbe03bfca6774bd25154e4b55487fe",
+      "target_sha256": "99f99218f7764ae98e5d5f8a3eaa94ae5bcbe03bfca6774bd25154e4b55487fe",
+      "byte_identical": true
+    },
+    {
+      "source": "cursor-works/tests/test_p5_recovery_context.py",
+      "target": "code/tests/test_p5_recovery_context.py",
+      "source_sha256": "832e27b61707a27673cc1aa1b239e212cc32a6e328a5be5e5a35b0ed5cd0ba45",
+      "target_sha256": "832e27b61707a27673cc1aa1b239e212cc32a6e328a5be5e5a35b0ed5cd0ba45",
+      "byte_identical": true
+    }
+  ],
+  "unchanged_production": {
+    "code/kernel/user/memory.dg": "5ab902cd8b469cbefab0491810dfbc67029b3153bfaa5a048c17474444a3e121",
+    "code/kernel/user/devices.dg": "ba3db81e2dfbdfb092419e8b4c34e7527bf34bb7c632e7f772325c6a06575088",
+    "code/kernel/user/device_manager.dg": "981e2175a05309c06742c239623cc38f9fcbd4fedda46a1766c0bde212f38529"
+  },
+  "full_graph": {
+    "modules": 86,
+    "sources": [
+      {
+        "path": "code/lang/std/arch/x86_64.dg",
+        "sha256": "37017e455c655ed54373ba6dbb8128e0e493ccecf70e752ebd07a40cec603a26"
+      },
+      {
+        "path": "code/lang/examples/boot/abi.dg",
+        "sha256": "8bd368a377bb9f623aaf188b8f029e5e9b58148bd23af5cd04e14f9dcf4226d7"
+      },
+      {
+        "path": "code/kernel/boot/acpi_startup.dg",
+        "sha256": "3c5f6ecf67e5d5431649bd545011e2c26967dbbeb90bfb8534f6906a954d7ed9"
+      },
+      {
+        "path": "code/kernel/boot/arena_fit.dg",
+        "sha256": "6b113e3e9ca214ad382ad593dd9892723968b38063023e24cc504697e0c43c46"
+      },
+      {
+        "path": "code/kernel/boot/device_memory.dg",
+        "sha256": "0c57d2265c9fadaf59b65816b70e9a2df501245f7bef240cb4036a4d442b320c"
+      },
+      {
+        "path": "code/kernel/boot/device_policy.dg",
+        "sha256": "93de400959ee05166d0b2035f1ba6126565a4dc55df099a0e6e99bc68583a104"
+      },
+      {
+        "path": "code/kernel/boot/ist_layout.dg",
+        "sha256": "7414718bbd9dac1e126de082e265a78d9e58d28578684912db742273ef612076"
+      },
+      {
+        "path": "code/kernel/boot/memory_policy.dg",
+        "sha256": "c59c9a5711e3001c9479dac05bb1398b881c68cc690a55e3bf68f0a921ed16a2"
+      },
+      {
+        "path": "code/kernel/boot/memory_resources.dg",
+        "sha256": "d64d327437fa910e0f2183ec6bec28adf9cadf02e699ff27a044faf2ddd37e32"
+      },
+      {
+        "path": "code/kernel/boot/memory_startup.dg",
+        "sha256": "826ced8fd0e652af7c0ab6c7af6c0a820046f3e76da6594eedfa42a0efb53963"
+      },
+      {
+        "path": "code/kernel/boot/power_startup.dg",
+        "sha256": "94ff41b48c22bb2dc1c672d56e96ea5fc8fc8207114a24a2246b8a25eb9e03e9"
+      },
+      {
+        "path": "code/kernel/boot/preflight.dg",
+        "sha256": "455901cb026e0e1ceac97b50b97faa5554281f47498cbd010a5e7c7f8b2d8714"
+      },
+      {
+        "path": "code/kernel/boot/resource_errors.dg",
+        "sha256": "b516b5c2d8e859bcc0f81862839555865d321694843d981bae23bb828478cb58"
+      },
+      {
+        "path": "code/kernel/boot/runtime_errors.dg",
+        "sha256": "57c015232ad6155b861a3f475bf4636efea059dd33bbb78e63395bd0587468bf"
+      },
+      {
+        "path": "code/kernel/boot/runtime_view.dg",
+        "sha256": "40ee48606131f7e8a24e2f323106c87168351ee9c7d7b79827637c32ab1d7c46"
+      },
+      {
+        "path": "code/kernel/boot/service_memory.dg",
+        "sha256": "3d8c78c229bc3d354c49cd63a4cc86ac955ee14f53c312acbb7d5ee3937fab55"
+      },
+      {
+        "path": "code/kernel/boot/service_resources.dg",
+        "sha256": "1c7857163aa8209dc76972db3cd0d66eb8e606373767c9b69c2bc18d076beb83"
+      },
+      {
+        "path": "code/kernel/boot/startup_errors.dg",
+        "sha256": "47929e3a1a6a25acf86bb9f0c0a2a99824e39437c682037bf4f10f0225c7c510"
+      },
+      {
+        "path": "code/kernel/boot/trace.dg",
+        "sha256": "c9a39fe8d71dffe4ee869c9745cfc920277ece576d2752f7b9406efdbc4c7e1a"
+      },
+      {
+        "path": "code/kernel/boot/trace_handoff.dg",
+        "sha256": "0f9475ae5e0ae9fbbdc5c2136482c7e3463262da5f4d068f49a592b0a577a66b"
+      },
+      {
+        "path": "code/kernel/boot/trace_runtime.dg",
+        "sha256": "91e3806dbaac384f341d336866c32b5c8e6fc880dffc3b7f1149d812701f84fc"
+      },
+      {
+        "path": "code/lang/std/core/errors.dg",
+        "sha256": "d92ba88e8c3553e7c6ae986ccd6c6079861015524587ca1e29aaff7dd04d8bec"
+      },
+      {
+        "path": "code/kernel/cpu/capabilities.dg",
+        "sha256": "9221506f9195ae053e8263714ddc44e67a55f77bdf369395e6aec330d3c3c76f"
+      },
+      {
+        "path": "code/kernel/cpu/capability_errors.dg",
+        "sha256": "fac20f56e983bd9c1c30c2f2f594a8d5eee836f8c70f20695809bf6135e31ecc"
+      },
+      {
+        "path": "code/services/drivers/ahci_authority.dg",
+        "sha256": "d9bf19e82d4a37c2d341b0b8d30d6fccf18f4695abfd5a573a8c5e2878fc26d1"
+      },
+      {
+        "path": "code/services/drivers/device_policy.dg",
+        "sha256": "3b6aef6de8de7b9d71db6f48c88936624cd519879e5d1761c3eef8170d638925"
+      },
+      {
+        "path": "code/services/drivers/nvme_authority.dg",
+        "sha256": "b9005802d8a6c39273f34abaa64709d13bca6abd95f4e00e3c01fa20b575ac0a"
+      },
+      {
+        "path": "code/services/drivers/nvme_core.dg",
+        "sha256": "be7f06028a34055f82ad22889a34d14b9a041f3d46461e5dfecf190e66e6b62c"
+      },
+      {
+        "path": "code/services/drivers/pci.dg",
+        "sha256": "87f9a0084d225be3914740b0469375467fb01966af9fdb3a45cdd5dc28dbbf54"
+      },
+      {
+        "path": "code/services/drivers/pci_msi.dg",
+        "sha256": "c29a879f32c1b9016456910c8ce95b34af275819fd376c0bf4f1ea50f7235b29"
+      },
+      {
+        "path": "code/services/drivers/virtio_blk.dg",
+        "sha256": "b6416bfd9c6e023d4f12faa98ffdd834b356f7d72469692f0d0ca112190530d3"
+      },
+      {
+        "path": "code/services/drivers/virtio_pci.dg",
+        "sha256": "6e6926f9654b71df4e990d981c305104a31c7be4ab736a85607ccd3166af5d10"
+      },
+      {
+        "path": "code/services/drivers/xhci_authority.dg",
+        "sha256": "e6d1a395cd3905d349c7097e6d28f500a49f471deda0d5e2884a81f1e317d281"
+      },
+      {
+        "path": "code/kernel/exec/bundle.dg",
+        "sha256": "95b95d049b3ba64a8281ca80d2d4e3541358c03ecf967f8757a90cdfa315926d"
+      },
+      {
+        "path": "code/kernel/exec/elf.dg",
+        "sha256": "17b6a0aae385f7a47e6f29433a22c736e24b2652f3c8b67bcc34c725b655d820"
+      },
+      {
+        "path": "code/kernel/exec/sha256.dg",
+        "sha256": "b1658b76b20ecc71fccc037506756ffb61fa2a35034934c98e777a6f4c241a46"
+      },
+      {
+        "path": "code/kernel/firmware/acpi.dg",
+        "sha256": "36f9ccf0d766f179055387462c3a5ed0b3ad57a23b04ff2873599c812ffd0dcb"
+      },
+      {
+        "path": "code/kernel/firmware/acpi_errors.dg",
+        "sha256": "ed288b2f4cfcc854b5561f093537bd8951d918714648d6fdca0becf65fa53986"
+      },
+      {
+        "path": "code/kernel/firmware/power.dg",
+        "sha256": "127befd0dc69d675afa09d25a81e138dffb0fe63ca03938d28415e190e725e79"
+      },
+      {
+        "path": "code/kernel/firmware/power_runtime.dg",
+        "sha256": "30314b6a93644189001296b4185275ec496b30293e46ba424e4529a281330c5b"
+      },
+      {
+        "path": "code/services/gfx/atlas.dg",
+        "sha256": "aadb5f22605a41f5f95de8e89a9d659341fd593aa337de65915e3406e345343f"
+      },
+      {
+        "path": "code/services/gfx/errors.dg",
+        "sha256": "29fa5d27ad1dbe9e13bf1488da030c462190a55d2be2ac71cfe91367240f5b06"
+      },
+      {
+        "path": "code/services/gfx/geometry.dg",
+        "sha256": "68640a44c7818df969a78111d75cf6251303755a04b05dc38cda1fe78b0f5111"
+      },
+      {
+        "path": "code/services/gfx/raster.dg",
+        "sha256": "79861b7bd715571d87e508b0b528ed03653a8415ab2a4c624b8007f8ee6025d1"
+      },
+      {
+        "path": "code/services/input/console.dg",
+        "sha256": "ec6215a1b2a81705f1cada738fe02efbd0941a137d70b3aafa108f2bf0b1111e"
+      },
+      {
+        "path": "code/services/input/events.dg",
+        "sha256": "2bbf1c2a8d934105bd958f389389775b1eb76d2d02660cb536862aedb5229e98"
+      },
+      {
+        "path": "code/kernel/ipc/cap_notify.dg",
+        "sha256": "e1cb59f09b3e016f8d91358c7ce429c592f2e55591e7d454688d0c58fb369f13"
+      },
+      {
+        "path": "code/kernel/ipc/core.dg",
+        "sha256": "7d859405c690f94505969d58dcce92bcfef3dfdf9b2b7d99357300d26d33d5df"
+      },
+      {
+        "path": "code/kernel/ipc/handles.dg",
+        "sha256": "f4495577ffc729ffcfee97d8e762eb85c459628b9b0fa1e0090402bbc01532f8"
+      },
+      {
+        "path": "code/kernel/ipc/shared_core.dg",
+        "sha256": "05b0bb2e8edeca31f9a7f29dd4cd71449aad6ce94140d2e944f57ecf343ead5a"
+      },
+      {
+        "path": "code/kernel/irq/clock_calibration.dg",
+        "sha256": "2d485285200996070956b6cefd4d54b687fad0797e31d4958281ed2a12e573e1"
+      },
+      {
+        "path": "code/kernel/irq/platform.dg",
+        "sha256": "ab749cd2c769599ca90ea2fb1d613a6e99cecc6243937bcd5a2ac8fbf7be40bc"
+      },
+      {
+        "path": "code/services/lib/abi.dg",
+        "sha256": "35fe2d446d14ab5125fd2970b2f0d3ffe3527521e13a37a6ac32042aa702d7e4"
+      },
+      {
+        "path": "code/services/lib/cap_notify_abi.dg",
+        "sha256": "18e98924a81023f864b05aaee3f57936e3e556b3a010ac74e63baf8b3c512bc7"
+      },
+      {
+        "path": "code/services/lib/desktop.dg",
+        "sha256": "e45e5cd203226ccbd9c037bb28797889e9fe44e021dafb705bd97e6644666ba3"
+      },
+      {
+        "path": "code/services/lib/device_abi.dg",
+        "sha256": "3d4632146ecc803dc9f3b1573de86e551ebb3f5538a23212dcecb5f8fd406888"
+      },
+      {
+        "path": "code/services/lib/pci_inventory_abi.dg",
+        "sha256": "83d6cf2e8080c91f8b24b9e1b757fc136bf8158df628360b7aeae717409de815"
+      },
+      {
+        "path": "code/services/lib/process_abi.dg",
+        "sha256": "0f2e3ef8bb6c3a4ac8374c2f611490fc509dc52e8035e2b81329658bf8da6568"
+      },
+      {
+        "path": "code/services/lib/shared_abi.dg",
+        "sha256": "baf7680246bd810c9021b16d37805f92f95b53d92f3785bcf4872a13c4d337d7"
+      },
+      {
+        "path": "code/services/lib/window_abi.dg",
+        "sha256": "bb390d829e29741bb2af0f4510dc029b8c65a488b1291a71cf01775aa69340b1"
+      },
+      {
+        "path": "code/services/lib/window_broker_abi.dg",
+        "sha256": "4742de7ac7e36e5367e61f88f1020389b951be76afbfff1f5ab81bdccaae75fc"
+      },
+      {
+        "path": "code/kernel/mm/errors.dg",
+        "sha256": "76bace871091759b38ab89a86adc3089b5085dd6fa626f424b6106c3beb08fcc"
+      },
+      {
+        "path": "code/kernel/mm/huge_page_plan.dg",
+        "sha256": "1cb1b7d09fc657f9a7198ec966c4c969775f56129381c5646321dea293481c70"
+      },
+      {
+        "path": "code/kernel/mm/memory_map.dg",
+        "sha256": "be26e52c2cc20d6e83e235d0346874d8d73d1c9e787e99280078226cd6402caf"
+      },
+      {
+        "path": "code/kernel/mm/paging.dg",
+        "sha256": "811b44983d014d783c70a42735d8f513020ce81e334dd83913125032cae312b1"
+      },
+      {
+        "path": "code/kernel/mm/paging_errors.dg",
+        "sha256": "915dc279886329e05e58ef393ef280f4cd68a1b61a4e44ab8c45eaa5cccf62b2"
+      },
+      {
+        "path": "code/kernel/mm/phys_buddy.dg",
+        "sha256": "0dcc56d879bf404d473fd2b251718ddb8bad080946bb22abfdaf177cb7914978"
+      },
+      {
+        "path": "code/kernel/sched/multicore.dg",
+        "sha256": "ae9ccc94c32289d21af636a0c9a03d9424c2530891cdfc45b416d99d7311ba02"
+      },
+      {
+        "path": "code/kernel/sched/user_bridge.dg",
+        "sha256": "3c607934fd5a4b43c843a864a0638059d1faf7ec649aa52715824f7a2617bcde"
+      },
+      {
+        "path": "code/kernel/sched/user_domain.dg",
+        "sha256": "8e488963e449626fbd5838b383c9dd950be4d6a99a0eb48f84420129c939afbe"
+      },
+      {
+        "path": "code/kernel/sched/user_entry_plan.dg",
+        "sha256": "f014d3d0eba6e9f989565b3ca42c714f3b8d71fae3a87293bf7496a7d6f40457"
+      },
+      {
+        "path": "code/kernel/user/abi.dg",
+        "sha256": "97040729a8cb192312a76cd11e071e01d08d7a374fa5bc446fb090703c5ed57d"
+      },
+      {
+        "path": "code/kernel/user/compiler_job.dg",
+        "sha256": "9b11796e1a219968c203d8e6bb54dcba96415f470a53c68ce08b53ecfa1341f3"
+      },
+      {
+        "path": "code/kernel/user/compiler_stack.dg",
+        "sha256": "8308a791bcd6b133477b37a179c56ac8b491cc25dc89074ce4af555a8a0c5b55"
+      },
+      {
+        "path": "code/kernel/user/desktop.dg",
+        "sha256": "c1e54eb31fa911606272151b9518be2699786d7fc9eb769a0b66ad597ad8fe2f"
+      },
+      {
+        "path": "code/kernel/user/device_host.dg",
+        "sha256": "823fc27763560ff880dd26b9e4da236a92cf55174d3e4a86bf0b234592ba95ce"
+      },
+      {
+        "path": "code/kernel/user/device_manager.dg",
+        "sha256": "981e2175a05309c06742c239623cc38f9fcbd4fedda46a1766c0bde212f38529"
+      },
+      {
+        "path": "code/kernel/user/devices.dg",
+        "sha256": "ba3db81e2dfbdfb092419e8b4c34e7527bf34bb7c632e7f772325c6a06575088"
+      },
+      {
+        "path": "code/kernel/user/entropy.dg",
+        "sha256": "06d24c7a34dc90e946a973ab28ea5ad327d2a5430c69128a7ff29fab3b9293d1"
+      },
+      {
+        "path": "code/kernel/user/memory.dg",
+        "sha256": "5ab902cd8b469cbefab0491810dfbc67029b3153bfaa5a048c17474444a3e121"
+      },
+      {
+        "path": "code/kernel/user/pci_inventory.dg",
+        "sha256": "fd78dea234a99fdbd02651377884e5840da47ad792d53c14462e0c46f837117c"
+      },
+      {
+        "path": "code/kernel/user/processes.dg",
+        "sha256": "f9780e227ac2722b60e52c96f6b0f519e754e518df66c73d7f77be33fcff9783"
+      },
+      {
+        "path": "code/kernel/user/services.dg",
+        "sha256": "548c6dafa0f2e515bcefeba51ae28c754e68273c979275862c32b60b6a76fa65"
+      },
+      {
+        "path": "code/kernel/user/shared_objects.dg",
+        "sha256": "61058e79c597d73fe688d02ea1c79ea66a61108ce32cd0e57266c0ba16b2096c"
+      },
+      {
+        "path": "code/kernel/user/virtio_quiesce.dg",
+        "sha256": "ff486cba2f5e4ea3e52eec7aab0c08791bdcae547478eb7c07fc74d568751c2c"
+      },
+      {
+        "path": "code/kernel/user/window_broker.dg",
+        "sha256": "6474dbd396256d7b3380ad24883747a74802e2e290acd5adca3bc1131756a8fa"
+      }
+    ],
+    "compilations": [
+      {
+        "mode": "debug",
+        "files": [
+          "lang\\std\\arch\\x86_64.dg",
+          "lang\\examples\\boot\\abi.dg",
+          "kernel\\boot\\acpi_startup.dg",
+          "kernel\\boot\\arena_fit.dg",
+          "kernel\\boot\\device_memory.dg",
+          "kernel\\boot\\device_policy.dg",
+          "kernel\\boot\\ist_layout.dg",
+          "kernel\\boot\\memory_policy.dg",
+          "kernel\\boot\\memory_resources.dg",
+          "kernel\\boot\\memory_startup.dg",
+          "kernel\\boot\\power_startup.dg",
+          "kernel\\boot\\preflight.dg",
+          "kernel\\boot\\resource_errors.dg",
+          "kernel\\boot\\runtime_errors.dg",
+          "kernel\\boot\\runtime_view.dg",
+          "kernel\\boot\\service_memory.dg",
+          "kernel\\boot\\service_resources.dg",
+          "kernel\\boot\\startup_errors.dg",
+          "kernel\\boot\\trace.dg",
+          "kernel\\boot\\trace_handoff.dg",
+          "kernel\\boot\\trace_runtime.dg",
+          "lang\\std\\core\\errors.dg",
+          "kernel\\cpu\\capabilities.dg",
+          "kernel\\cpu\\capability_errors.dg",
+          "services\\drivers\\ahci_authority.dg",
+          "services\\drivers\\device_policy.dg",
+          "services\\drivers\\nvme_authority.dg",
+          "services\\drivers\\nvme_core.dg",
+          "services\\drivers\\pci.dg",
+          "services\\drivers\\pci_msi.dg",
+          "services\\drivers\\virtio_blk.dg",
+          "services\\drivers\\virtio_pci.dg",
+          "services\\drivers\\xhci_authority.dg",
+          "kernel\\exec\\bundle.dg",
+          "kernel\\exec\\elf.dg",
+          "kernel\\exec\\sha256.dg",
+          "kernel\\firmware\\acpi.dg",
+          "kernel\\firmware\\acpi_errors.dg",
+          "kernel\\firmware\\power.dg",
+          "kernel\\firmware\\power_runtime.dg",
+          "services\\gfx\\atlas.dg",
+          "services\\gfx\\errors.dg",
+          "services\\gfx\\geometry.dg",
+          "services\\gfx\\raster.dg",
+          "services\\input\\console.dg",
+          "services\\input\\events.dg",
+          "kernel\\ipc\\cap_notify.dg",
+          "kernel\\ipc\\core.dg",
+          "kernel\\ipc\\handles.dg",
+          "kernel\\ipc\\shared_core.dg",
+          "kernel\\irq\\clock_calibration.dg",
+          "kernel\\irq\\platform.dg",
+          "services\\lib\\abi.dg",
+          "services\\lib\\cap_notify_abi.dg",
+          "services\\lib\\desktop.dg",
+          "services\\lib\\device_abi.dg",
+          "services\\lib\\pci_inventory_abi.dg",
+          "services\\lib\\process_abi.dg",
+          "services\\lib\\shared_abi.dg",
+          "services\\lib\\window_abi.dg",
+          "services\\lib\\window_broker_abi.dg",
+          "kernel\\mm\\errors.dg",
+          "kernel\\mm\\huge_page_plan.dg",
+          "kernel\\mm\\memory_map.dg",
+          "kernel\\mm\\paging.dg",
+          "kernel\\mm\\paging_errors.dg",
+          "kernel\\mm\\phys_buddy.dg",
+          "kernel\\sched\\multicore.dg",
+          "kernel\\sched\\user_bridge.dg",
+          "kernel\\sched\\user_domain.dg",
+          "kernel\\sched\\user_entry_plan.dg",
+          "kernel\\user\\abi.dg",
+          "kernel\\user\\compiler_job.dg",
+          "kernel\\user\\compiler_stack.dg",
+          "kernel\\user\\desktop.dg",
+          "kernel\\user\\device_host.dg",
+          "kernel\\user\\device_manager.dg",
+          "kernel\\user\\devices.dg",
+          "kernel\\user\\entropy.dg",
+          "kernel\\user\\memory.dg",
+          "kernel\\user\\pci_inventory.dg",
+          "kernel\\user\\processes.dg",
+          "kernel\\user\\services.dg",
+          "kernel\\user\\shared_objects.dg",
+          "kernel\\user\\virtio_quiesce.dg",
+          "kernel\\user\\window_broker.dg"
+        ],
+        "elapsed_seconds": 1.7650000000139698,
+        "assembly_sha256": "6ff2b97cfd375265f79fbed561212b57a2d58d55a3ad8e36f824b0d0249b2299"
+      },
+      {
+        "mode": "release",
+        "files": [
+          "lang\\std\\arch\\x86_64.dg",
+          "lang\\examples\\boot\\abi.dg",
+          "kernel\\boot\\acpi_startup.dg",
+          "kernel\\boot\\arena_fit.dg",
+          "kernel\\boot\\device_memory.dg",
+          "kernel\\boot\\device_policy.dg",
+          "kernel\\boot\\ist_layout.dg",
+          "kernel\\boot\\memory_policy.dg",
+          "kernel\\boot\\memory_resources.dg",
+          "kernel\\boot\\memory_startup.dg",
+          "kernel\\boot\\power_startup.dg",
+          "kernel\\boot\\preflight.dg",
+          "kernel\\boot\\resource_errors.dg",
+          "kernel\\boot\\runtime_errors.dg",
+          "kernel\\boot\\runtime_view.dg",
+          "kernel\\boot\\service_memory.dg",
+          "kernel\\boot\\service_resources.dg",
+          "kernel\\boot\\startup_errors.dg",
+          "kernel\\boot\\trace.dg",
+          "kernel\\boot\\trace_handoff.dg",
+          "kernel\\boot\\trace_runtime.dg",
+          "lang\\std\\core\\errors.dg",
+          "kernel\\cpu\\capabilities.dg",
+          "kernel\\cpu\\capability_errors.dg",
+          "services\\drivers\\ahci_authority.dg",
+          "services\\drivers\\device_policy.dg",
+          "services\\drivers\\nvme_authority.dg",
+          "services\\drivers\\nvme_core.dg",
+          "services\\drivers\\pci.dg",
+          "services\\drivers\\pci_msi.dg",
+          "services\\drivers\\virtio_blk.dg",
+          "services\\drivers\\virtio_pci.dg",
+          "services\\drivers\\xhci_authority.dg",
+          "kernel\\exec\\bundle.dg",
+          "kernel\\exec\\elf.dg",
+          "kernel\\exec\\sha256.dg",
+          "kernel\\firmware\\acpi.dg",
+          "kernel\\firmware\\acpi_errors.dg",
+          "kernel\\firmware\\power.dg",
+          "kernel\\firmware\\power_runtime.dg",
+          "services\\gfx\\atlas.dg",
+          "services\\gfx\\errors.dg",
+          "services\\gfx\\geometry.dg",
+          "services\\gfx\\raster.dg",
+          "services\\input\\console.dg",
+          "services\\input\\events.dg",
+          "kernel\\ipc\\cap_notify.dg",
+          "kernel\\ipc\\core.dg",
+          "kernel\\ipc\\handles.dg",
+          "kernel\\ipc\\shared_core.dg",
+          "kernel\\irq\\clock_calibration.dg",
+          "kernel\\irq\\platform.dg",
+          "services\\lib\\abi.dg",
+          "services\\lib\\cap_notify_abi.dg",
+          "services\\lib\\desktop.dg",
+          "services\\lib\\device_abi.dg",
+          "services\\lib\\pci_inventory_abi.dg",
+          "services\\lib\\process_abi.dg",
+          "services\\lib\\shared_abi.dg",
+          "services\\lib\\window_abi.dg",
+          "services\\lib\\window_broker_abi.dg",
+          "kernel\\mm\\errors.dg",
+          "kernel\\mm\\huge_page_plan.dg",
+          "kernel\\mm\\memory_map.dg",
+          "kernel\\mm\\paging.dg",
+          "kernel\\mm\\paging_errors.dg",
+          "kernel\\mm\\phys_buddy.dg",
+          "kernel\\sched\\multicore.dg",
+          "kernel\\sched\\user_bridge.dg",
+          "kernel\\sched\\user_domain.dg",
+          "kernel\\sched\\user_entry_plan.dg",
+          "kernel\\user\\abi.dg",
+          "kernel\\user\\compiler_job.dg",
+          "kernel\\user\\compiler_stack.dg",
+          "kernel\\user\\desktop.dg",
+          "kernel\\user\\device_host.dg",
+          "kernel\\user\\device_manager.dg",
+          "kernel\\user\\devices.dg",
+          "kernel\\user\\entropy.dg",
+          "kernel\\user\\memory.dg",
+          "kernel\\user\\pci_inventory.dg",
+          "kernel\\user\\processes.dg",
+          "kernel\\user\\services.dg",
+          "kernel\\user\\shared_objects.dg",
+          "kernel\\user\\virtio_quiesce.dg",
+          "kernel\\user\\window_broker.dg"
+        ],
+        "elapsed_seconds": 1.9690000000409782,
+        "assembly_sha256": "e84e2d68d95e7b5c1f6a52bc214aa3b3980016757dd97af78defad30ab20a268"
+      }
+    ]
+  },
+  "formal_native_runs": [
+    {
+      "path": "coordination\\dongos_works\\.local\\runs\\5ed94c53b4b84458a0a53b052c63b8c9\\workspace\\build\\test\\p5-recovery-context\\run-015aa6dabf3b",
+      "mode": "release",
+      "mutation": "lost-error-snapshot",
+      "returncodes": {
+        "compile": 0,
+        "assemble": 0,
+        "link": 0,
+        "execute": 1
+      },
+      "stdout": "",
+      "stderr": "P5 context check failed scenario 1 line 78: c->snapshot_status==2\n",
+      "source_stable": true
+    },
+    {
+      "path": "coordination\\dongos_works\\.local\\runs\\5ed94c53b4b84458a0a53b052c63b8c9\\workspace\\build\\test\\p5-recovery-context\\run-0ddf942e1d94",
+      "mode": "release",
+      "mutation": "replace-old-owner-root",
+      "returncodes": {
+        "compile": 0,
+        "assemble": 0,
+        "link": 0,
+        "execute": 1
+      },
+      "stdout": "",
+      "stderr": "P5 context check failed scenario 4 line 96: p5_call(131072,4096)==BUSY\n",
+      "source_stable": true
+    },
+    {
+      "path": "coordination\\dongos_works\\.local\\runs\\5ed94c53b4b84458a0a53b052c63b8c9\\workspace\\build\\test\\p5-recovery-context\\run-239dcdaa6a2f",
+      "mode": "release",
+      "mutation": null,
+      "returncodes": {
+        "compile": 0,
+        "assemble": 0,
+        "link": 0,
+        "execute": 0
+      },
+      "stdout": "P5 context native checks passed 1081 scenarios 73; real 0x63, retire_one, revoke_owner and manager revoke; drain UNKNOWN\n",
+      "stderr": "",
+      "source_stable": true
+    },
+    {
+      "path": "coordination\\dongos_works\\.local\\runs\\5ed94c53b4b84458a0a53b052c63b8c9\\workspace\\build\\test\\p5-recovery-context\\run-68bc7b00acfb",
+      "mode": "debug",
+      "mutation": "lost-error-snapshot",
+      "returncodes": {
+        "compile": 0,
+        "assemble": 0,
+        "link": 0,
+        "execute": 1
+      },
+      "stdout": "",
+      "stderr": "P5 context check failed scenario 1 line 78: c->snapshot_status==2\n",
+      "source_stable": true
+    },
+    {
+      "path": "coordination\\dongos_works\\.local\\runs\\5ed94c53b4b84458a0a53b052c63b8c9\\workspace\\build\\test\\p5-recovery-context\\run-ad3fea80ebf8",
+      "mode": "debug",
+      "mutation": null,
+      "returncodes": {
+        "compile": 0,
+        "assemble": 0,
+        "link": 0,
+        "execute": 0
+      },
+      "stdout": "P5 context native checks passed 1081 scenarios 73; real 0x63, retire_one, revoke_owner and manager revoke; drain UNKNOWN\n",
+      "stderr": "",
+      "source_stable": true
+    },
+    {
+      "path": "coordination\\dongos_works\\.local\\runs\\5ed94c53b4b84458a0a53b052c63b8c9\\workspace\\build\\test\\p5-recovery-context\\run-e7e2ac83d071",
+      "mode": "debug",
+      "mutation": "replace-old-owner-root",
+      "returncodes": {
+        "compile": 0,
+        "assemble": 0,
+        "link": 0,
+        "execute": 1
+      },
+      "stdout": "",
+      "stderr": "P5 context check failed scenario 4 line 96: p5_call(131072,4096)==BUSY\n",
+      "source_stable": true
+    }
+  ],
+  "main_native_runs": [
+    {
+      "path": "code\\build\\test\\p5-recovery-context\\run-a9e65ebc1176",
+      "mode": "debug",
+      "mutation": null,
+      "actual_production": "D:\\projects\\2026\\dongos\\code\\kernel\\user"
+    },
+    {
+      "path": "code\\build\\test\\p5-recovery-context\\run-83bee0d91b20",
+      "mode": "debug",
+      "mutation": "lost-error-snapshot",
+      "actual_production": "D:\\projects\\2026\\dongos\\code\\kernel\\user"
+    },
+    {
+      "path": "code\\build\\test\\p5-recovery-context\\run-9358010c8b55",
+      "mode": "debug",
+      "mutation": "replace-old-owner-root",
+      "actual_production": "D:\\projects\\2026\\dongos\\code\\kernel\\user"
+    },
+    {
+      "path": "code\\build\\test\\p5-recovery-context\\run-60706da02a43",
+      "mode": "release",
+      "mutation": null,
+      "actual_production": "D:\\projects\\2026\\dongos\\code\\kernel\\user"
+    },
+    {
+      "path": "code\\build\\test\\p5-recovery-context\\run-143dd5a41558",
+      "mode": "release",
+      "mutation": "lost-error-snapshot",
+      "actual_production": "D:\\projects\\2026\\dongos\\code\\kernel\\user"
+    },
+    {
+      "path": "code\\build\\test\\p5-recovery-context\\run-22a5529229ca",
+      "mode": "release",
+      "mutation": "replace-old-owner-root",
+      "actual_production": "D:\\projects\\2026\\dongos\\code\\kernel\\user"
+    }
+  ],
+  "integration_tests": {
+    "unique_tests": 21,
+    "skips": 0,
+    "first_run": {
+      "evidence": "code\\build\\test\\p5ctx1-integration\\20261020-235500\\evidence.json",
+      "sha256": "708b741e525e3f1cdcd166f12f6fb1385256df712cd23ae95800abda9cd47fa6",
+      "returncode": 1,
+      "tests": 21,
+      "passed_methods": [
+        "tests.test_dma_lease.DmaLeaseTests.test_frontend_actual_fragment_both_modes",
+        "tests.test_dma_alias.DmaAliasTests.test_frontend_actual_fragment_both_modes",
+        "tests.test_dma_alias.DmaAliasTests.test_native_actual_share_and_real_mutations",
+        "tests.test_device_manager.DeviceManagerTests.test_actual_recovery_mutations_are_rejected",
+        "tests.test_device_manager.DeviceManagerTests.test_actual_replaced_identity_and_stale_ack_are_rejected",
+        "tests.test_device_manager.DeviceManagerTests.test_independent_authority_irq_and_actual_launcher",
+        "tests.test_device_manager.DeviceManagerTests.test_recovery_frontend_both_modes",
+        "tests.test_virtio_quiesce.VirtioQuiesceTests.test_frontend_and_production_connection",
+        "tests.test_dma_release.DmaHoldContractTests.test_compiler_stack_profiles_survive_integration",
+        "tests.test_dma_release.DmaHoldContractTests.test_destroy_and_unshare_keep_valid_rejection_guards",
+        "tests.test_dma_release.DmaHoldContractTests.test_no_unproven_release_export_or_legacy_range",
+        "tests.test_user_domain.Tests.test_capture_retirement_per_cpu_tags_and_if0_mailbox_progress",
+        "tests.test_user_smp_services.Tests.test_actual_service_callbacks_and_retirement_before_withdrawal",
+        "tests.test_user_smp_fault_isolation.Tests.test_actual_bad_return_capture_deferred_retirement",
+        "tests.test_service_gui_wiring.Tests.test_exact_dispatch_scope_output_and_teardown",
+        "tests.test_service_preload.Tests.test_failed_provider_retires_unstarted_dependents_and_rebinds",
+        "tests.test_usb_departed.UsbDepartedTests.test_real_retirement_query_authority_and_mutants",
+        "tests.test_usb_ready.UsbReadyTests.test_actual_query_checks_real_identity_ready_and_incarnation",
+        "tests.test_p5_recovery_context.P5RecoveryContextTests.test_debug_release_production_paths_and_real_mutants"
+      ],
+      "failed_native_subcases": 18,
+      "elapsed_seconds": 508.60899999993853,
+      "source_stable": true,
+      "reason": "Two existing MinGW C probes failed printf %llu format compilation under -Werror"
+    },
+    "repair": {
+      "evidence": "code\\build\\test\\p5ctx1-integration\\printf-portability-recheck\\evidence.json",
+      "sha256": "c52b5d079696feba16ec254b729a0e12c876a65998bccb3c0c23f9f366866cca",
+      "returncode": 0,
+      "tests": 2,
+      "passed_methods": [
+        "tests.test_dma_lease.DmaLeaseTests.test_native_partial_allocation_and_real_mutations",
+        "tests.test_virtio_quiesce.VirtioQuiesceTests.test_native_reset_and_actual_mutations"
+      ],
+      "elapsed_seconds": 12.875,
+      "source_stable": true
+    },
+    "all_required_methods_passed": true
+  },
+  "compatibility_changes": [
+    {
+      "path": "code/tests/test_user_smp_services.py",
+      "before_sha256": "ca5ee1db541825ced6ee43f935b64e1032ce06d98a9d2b5454bd8373e06a1f51",
+      "after_sha256": "db69ba151854667fdd4780c869753552b7b88e751769d8abae1d578430b984cb",
+      "purpose": "Explicit no-context retirement observation boundary / preserved mutation anchor"
+    },
+    {
+      "path": "code/tests/service_gui_memory.dg",
+      "before_sha256": "92c5aae21af729f50a870d3177ab007c1ca207ce4d856d11eb6967282246e26c",
+      "after_sha256": "24133f4913fe68cce5314555ae0944e7661bafe583f9c928bcf02d11a0b40dac",
+      "purpose": "Explicit no-context retirement observation boundary / preserved mutation anchor"
+    },
+    {
+      "path": "code/tests/test_service_gui_wiring.py",
+      "before_sha256": "0b651fced4e8e93e0a972b713bfefdb569b24b25349dd2d83880759887cac866",
+      "after_sha256": "c76fea31a13149f47eef8e396841af7816ab8c677047c6cbd64c416a198588b6",
+      "purpose": "Explicit no-context retirement observation boundary / preserved mutation anchor"
+    },
+    {
+      "path": "code/tests/service_preload_adapter.dg",
+      "before_sha256": "47551f113f427aed2665fd88c4f9c4bd1c9cc5bb1610e957208c11f9b86296ae",
+      "after_sha256": "9030caf3b9ad58e21bc5d3faf812a1f2652b8ba136da98e1233486211b0ff0b5",
+      "purpose": "Explicit no-context retirement observation boundary / preserved mutation anchor"
+    },
+    {
+      "path": "code/tests/usb_departed_probe.dg.in",
+      "before_sha256": "daa80efc10e86367b83a57b6e6f95b340832d801996029a7c2c6b933dd49ac21",
+      "after_sha256": "d43ac0f006c36f2797af0b557def5025ac168d0dfb81c79d94ad467d001455d1",
+      "purpose": "Explicit no-context retirement observation boundary / preserved mutation anchor"
+    },
+    {
+      "path": "code/tests/test_usb_departed.py",
+      "before_sha256": "dfb8cdbfc138e6b92244400b7cc36601ae3ff6a81011b83a5f1e03fabafb2291",
+      "after_sha256": "d7af6bcf1e4a9d119be434612cfc406c517fd3c2784c9448f9b394dfe7c0487f",
+      "purpose": "Explicit no-context retirement observation boundary / preserved mutation anchor"
+    },
+    {
+      "path": "code/tests/dma_lease_probe.c",
+      "before_sha256": "55fe52928b0454c8d5dd4f14975ffab01623479c72401541af29ab99df406602",
+      "after_sha256": "4e3826bfe577f5d454a845af9cd8789b5fef707315b93ef71cb699701b517f0c",
+      "purpose": "ANSI stdio for strict Windows GCC format checking"
+    },
+    {
+      "path": "code/tests/virtio_quiesce_probe.c",
+      "before_sha256": "d040c7f14b7ff6433fc3858e5c50ad4cb0db24e601940f49ea9c45568de2c1e3",
+      "after_sha256": "46fa261de98607471dbc6ccb2eb4533d52c54e76c26fe9f08ace03c722fd3318",
+      "purpose": "ANSI stdio for strict Windows GCC format checking"
+    }
+  ],
+  "limits": [
+    "No guest OS/VM run",
+    "SMP ACK is pre-unmap stop/detach only",
+    "DMA drain UNKNOWN even after RESET_CONFIRMED",
+    "No recovery/reclaim/token reissue/driver restart",
+    "No git commit or push"
+  ],
+  "acceptance": {
+    "rev": 6,
+    "independent_review": true,
+    "verification": {
+      "passed": true,
+      "checks": [
+        {
+          "spec": "discover:cursor-works/tests:test_p5_recovery_context.py",
+          "passed": true,
+          "tests": 1,
+          "skips": 0,
+          "returncode": 0,
+          "cancelled": false,
+          "timed_out": false,
+          "process_stopped": true,
+          "execution_exited": true,
+          "elapsed_seconds": 8.281
+        }
+      ],
+      "process_stopped": true,
+      "execution_exited": true,
+      "source_stable": true,
+      "fingerprint": {
+        "cursor-works/src/p5/user/device_host.dg": "823fc27763560ff880dd26b9e4da236a92cf55174d3e4a86bf0b234592ba95ce",
+        "cursor-works/src/p5/user/services.dg": "548c6dafa0f2e515bcefeba51ae28c754e68273c979275862c32b60b6a76fa65",
+        "cursor-works/src/p5/recovery-context.md": "c664037393f5b40b4e8c3b93b7186b1eedf0c49af96315272903b2bf5944e4bb",
+        "cursor-works/tests/p5_recovery_context_fixture.dg": "caf529fef8b79aca3487baf23c0e6e20859cc6f60ec1c354b775bc53723f23eb",
+        "cursor-works/tests/p5_recovery_context_probe.c": "99f99218f7764ae98e5d5f8a3eaa94ae5bcbe03bfca6774bd25154e4b55487fe",
+        "cursor-works/tests/test_p5_recovery_context.py": "832e27b61707a27673cc1aa1b239e212cc32a6e328a5be5e5a35b0ed5cd0ba45",
+        "cursor-works/deliveries/P5CTX1.md": "631592e65792338d5b323196818ac61cb443f82b5af777e0d91dddce821f7de8"
+      },
+      "summary": "定向复验通过，等待源码/契约审查",
+      "finished_at": "2026-10-20T15:53:56+00:00",
+      "job": "5ed94c53b4b84458a0a53b052c63b8c9"
+    }
+  },
+  "registration": {
+    "status": "integrated",
+    "accepted_rev": 6,
+    "integrated_rev": 7,
+    "updated_at": "2026-10-20T16:08:39+00:00",
+    "review_note": "独立源码/契约审查通过：真实0x63前校验Catalog双向slot/process/incarnation、原host角色/硬件identity与独立memory root/generation；ok/err均在copy_out前保存完整真实DmaLease（含physical0 HELD/partial/无快照区别），首身份/租约不可后次接管。真实retire_one、owner/manager revoke非抛错观察保留原隔离控制流；合法原代际/撤权后+1，隔离后续失败sticky。SMP ACK保持撤映射前stop/detach原范围，reset confirmed仍drain UNKNOWN，无回收。两完整生产候选86模块debug/release闭包编译通过；独立代理native复验1test/0skip、每mode1081断言73场景，两个真实坏源正常构建运行后指定断言exit1。正式隔离job5ed94c53b4b84458a0a53b052c63b8c9：1test/0skip、8.281s，source_stable/process_stopped/execution_exited均true，7文件SHA一致。验收为候选组件，尚待主线真实复制及相关回归后登记集成。",
+    "integration_note": "已完成真实本地主线文件集成：验收的两个完整模块复制到code/kernel/user/{device_host,services}.dg，三个P5测试复制到code/tests/，五文件与已验收副本逐字节一致；文档复制到code/docs/p5-recovery-context.md并仅补主线位置说明。正式隔离复验job5ed94c53b4b84458a0a53b052c63b8c9通过1test/0skip及全部稳定/退出标志，7文件指纹未改。集成后完整86模块依赖图debug/release编译通过；13模块21个不同测试方法均已通过（首轮19项通过，旧DMA/VirtIO两native因Windows printf格式构建失败，仅加ANSI stdio宏后定向2项/0skip通过，首失败与重跑证据分别保留）。SMP/故障/GUI/preload/USB旧fixture兼容及负控锚点已独立审查，无弱化原oracle；新P5 native实际绑定主线源码。memory/devices/device_manager及生产Process/Frame未改，不回收DMA，drain未知，P5整体未完成。具体映射/SHA和真实证据见coordination/dongos_works/reviews/2026-10-21-P5CTX1-integration.md及同名JSON；未运行OS/VM、提交或推送。"
+  }
+}

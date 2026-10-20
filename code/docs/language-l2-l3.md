@@ -1,33 +1,51 @@
 # L2 / L3 实施与验收记录
 
-## L3 完成路径与当前门禁（2026-10-19）
+最新接续（2026-10-21）：G6代码合并/同步检查点19e1a19（PR#11于2026-10-21 02:20:34合并、2026-10-21 02:21:50本地快进同步），完整SHA `19e1a1982de0d7ebc57eea0b851d968e01b40e07`。G6在现有runtime5/compiler_job隔离profile及49模块自编译闭包内通过真实同盘双启及两份独审；L3C该范围complete，整体L3/L3A因G5仍partial。详见[执行/合并报告](../../coordination/dongos_works/reviews/2026-10-21-g6-ci-execution.md)及[整体任务图](../../coordination/dongos_works/progress-map.md)。该SHA是代码检查点，后续文档提交可推进HEAD。
+
+## L3 完成路径与当前门禁（2026-10-21）
 
 本节沿用 `PLAN.md` 的 L3 验收和本文末尾的客体固定点门槛，不另设一个较弱的“完成”定义。
-用户要求继续完成 L3；此前的组件集成和定向测试不等于完整编译器或自举。所有状态只凭本轮可复现证据更新。
+当前按[P5/P6工程交接](p5-p6-engineering-handoff.md#接手顺序与停止条件)分别推进系统剩余门禁与G5。P5CTX1已由另一线程本地集成、正式integrated rev7，但其未提交代码不属于本轮GitHub CI覆盖；P2由Claude单独处理。异机原任务及161条档案保持，不自动导入或改写CX14/CX15历史身份；已完成的读取、专用栈、入口桥和本profile G6不重派。
 
 | 门禁 | 可交付结果与通过依据 | 当前状态 |
 | --- | --- | --- |
-| G1 原生语义正确性 | 保留实际类型和不返回流程事实，宿主/原生正反例一致；所有未支持构造明确拒绝。实际运行编译器源码闭包；更广的完整语言缺口继续明确拒绝 | 不返回传播修复及独立复验进行中；现有13模块语义检查器闭包已原生检查通过，完整语义未完成 |
-| G2 原生前端入口 | 源码目录由 Dong 连续执行 modules.load → names.collect → binding.check → analyze_program；有界调用方内存，成功图可供后端使用，诊断准确定位源码/行列 | frontend/diagnostics 与POSIX文件系统CLI已打通，API和CLI最终复验进行中 |
-| G3 通用源码到后端 | 同一成功语义图降为类型化 IR，再由 Dong 生成完整 NASM；先完整编译现有 artifact_compare.dg，再扩展到真实 bootstrap 闭包；未支持语法失败，不借宿主生成 IR/汇编正文 | 通用 IR/lowering/NASM 纵向接线实现中；现有组件尚未替代活动后端 |
-| G4 宿主编译器固定点 | seed 编译董编译器得 stage1；stage1 再编译自身得 stage2，再生成下一代；同源、同选项、规范路径下规定 NASM/布局/清单逐字一致，并运行生成的编译器与差分语言测试 | 未运行；依赖 G1–G3 及 I/O 驱动 |
-| G5 完整语言覆盖 | 对既有活动编译器支持的语言、ABI、诊断、检查模式逐项有可执行差分证据；首个能自编译的子集不能代替完整功能 | 未完成；方法/错误/枚举、完整静态聚合、defer lowering 等须按实际缺口补齐 |
-| G6 DongOS 自编译 | 从 FAT32 读取真实源码，客体生成并 FLUSH 新 ELF，运行下一阶段，独立比较规定产物，同盘重启后核对持久结果 | 已实际运行并暴露SYSRET消耗RCX的入口ABI缺陷；PR8接续修复27字节桥，新的不可变快照与真实双启验收仍待完成 |
+| G1 原生语义正确性 | 保留实际类型和不返回流程事实，宿主/原生正反例一致；所有未支持构造明确拒绝。实际运行编译器源码闭包；更广的完整语言缺口继续明确拒绝 | 主线 semantic_types 已保留 NORETURN/NEVER 与实际类型，由 frontend 调用 analyze_program；PR8 另保存 CR47 语义栈优化的独审、正式复验及集成记录。闭包语义与完整语言覆盖分开，G5 继续保留 |
+| G2 原生前端入口 | 源码目录由 Dong 连续执行 modules.load → names.collect → binding.check → analyze_program；有界调用方内存，成功图可供后端使用，诊断准确定位源码/行列 | 主线宿主 frontend/diagnostics/CLI 已接通；PR8 已有 GUEST1/2、CR45/46、CX6 的客体输入、目录、诊断与真实 H_READ 适配，并保存独审和正式复验。实现已随PR#8合入并同步本机；异机任务记录仍单独保留，不自动导入当前调度库 |
+| G3 通用源码到后端 | 同一成功语义图降为类型化 IR，再由 Dong 生成完整 NASM；未支持语法失败，不借宿主生成 IR/汇编正文 | 主线 compiler_driver 已接通 program_ir → lower_program → nasm_program；PR8 的 GUEST4、CX12、CX13 又接通原生汇编器和完整单 arena 编译作业，已有独审、正式复验及分支集成历史。当前为显式语言子集，未关闭 G5 |
+| G4 宿主编译器固定点 | seed 编译董编译器得 stage1；stage1 再编译自身得 stage2，再生成下一代；同源、同选项、规范路径下规定 NASM/布局/清单逐字一致，并运行生成的编译器与差分语言测试 | 主线已有 clean-debug/packed-debug 宿主固定点记录；PR8 的 CX13 保存两种 seed 模式下原生 ELF 固定点、独审与正式通过记录，历史四份 ELF 均为 1,892,632 字节且逐字一致；新27字节入口桥在50ab7cf的Linux CI中复验，两seed模式四份ELF均1,892,648字节且逐字一致（SHA256 e7f2424dc2010cf5b66e32c14faafec87f1f0f76051c04bd4e9eee050d34c9f2）。CX15 最终宿主修正也已正式复验通过，状态仍 submitted 待登记。恢复原证据与任务历史，不因本机缺 build 回执退回未实现；更广语言差分仍归 G5 |
+| G5 完整语言覆盖 | 对既有活动编译器支持的语言、ABI、诊断、检查模式逐项有可执行差分证据；首个能自编译的子集不能代替完整功能 | 未完成；lower_program 明确拒绝可变全局、方法、错误/枚举声明、外部声明及未支持构造；try/orelse、defer lowering、原子/asm、完整 ABI 与诊断等仍需逐项差分验证。部分静态 struct/array 已支持，完整聚合覆盖另验 |
+| G6 DongOS 自编译 | 从 FAT32 读取真实源码，客体生成并 FLUSH 新 ELF，运行下一阶段，独立比较规定产物，同盘重启后核对持久结果 | 已通过，仅限现有runtime5/compiler_job隔离profile及49模块自编译闭包：run39467503226 attempt1真实两启，完整SEED/STAGE1/STAGE2各1,892,648字节且与宿主逐字一致；Git/source/fixture绑定、物理隔离、FLUSH、128页表退休和持久性均经双独审。PR#11已合并/同步为代码检查点19e1a19，G5仍未完成；旧run-cc7、首轮超时及第二轮解析失败保留历史 |
 
 G4 的固定点是同一 Dong 编译器不同代之间的规定产物一致，不要求两个结构不同的 Python/Dong 后端未经规范就输出相同汇编文本。Python seed 与 Dong 后端的语言行为一致仍须单独差分验证。客体 NASM 文本一致是有用的中间证据，不能代替 G6 的 ELF、执行、FLUSH 和重启门禁。
+
+宿主证据分为两组。主线 `tools/bootstrap_native_compiler.py` 让 Dong 生成每代 NASM，再调用宿主 NASM 和 C 链接器接入文件系统/CLI 适配层；空 PATH 只约束原生 emit/check 子进程，记录见 [早期原生自举进度](l3-native-selfhost-progress.md)。PR8 的 `bootstrap.compiler_job` 则在同一 56 MiB arena 内依次执行 frontend、graph_compact、compiler_driver、native_assembler，生成含客体入口桥的静态 ELF；宿主执行 seed/native 核心得到精确 ELF 固定点。其历史24字节桥的 debug/release 四份 ELF SHA256 为 `cf19cd58e244835e142f5abc40c1ced98da3666b3ba4855080623bc638b606bc`；新27字节桥的宿主/客体完整ELF为1,892,648字节，SHA256 `e7f2424dc2010cf5b66e32c14faafec87f1f0f76051c04bd4e9eee050d34c9f2`。宿主固定点已完成的历史与客体入口桥失败分开记录，不能互相替代。
+
+当前接续入口是本地[L3-RESUME.md](../../L3-RESUME.md)。其中pre-merge/original shutdown部分保留异机修复计划和旧失败；R10→RCX桥、24→27字节解码及真实机器负控已随PR8完成，之后的新不可变内核/fixture已在本轮G6真实两启通过，旧fixture仍不能作为新证据。
+
+PR8 保存的原任务完成历史快照如下；状态指原开发机/分支归档，保持不改。相关代码后来已合入；当前G6新验收以顶部报告为准，不将新结果回填为旧任务状态：
+
+| 原任务 | 已有实现与历史状态 |
+| --- | --- |
+| GUEST1～GUEST5 | 输入路径、读取回调、阶段内存规划、原生汇编流水线、写入/FLUSH 状态机，均已 integrated |
+| CR45 / CR46 / CX6 | 源码目录、诊断发送、真实 H_READ 适配，均已 integrated |
+| CX7 / CX10 / CR47 | 64 KiB 编译器栈、既有 64 MiB 共享帧表、语义递归栈优化，均已 integrated |
+| CX8 / CX12 / CX13 | 真实 H_WRITE/H_SYNC 适配、紧凑 x86 编码、56 MiB 完整编译作业与宿主 ELF 固定点，均已 integrated |
+| CX14 / CX15 | CX14 启动与持久化控制服务已有实现和宿主生命周期独审，仍 in_progress，真实客体失败未闭合；CX15 正式作业 ccb0e44cff144b4d9da302e0a34b3fcd 已通过，仍 submitted 待协调登记 |
+
+以上任务的源码、原任务书、交付、独审和 verification 指纹均应随分支恢复并逐项核对后继修改，不重新派发相同开发。本机本轮临时 NASM 修复曾误用 CX6，与异机已完成的源码适配 CX6 不同，临时记录已归档，后续使用独立编号 CXNASM3；不得把两个定义合并成同一任务或覆盖旧历史。状态恢复通过协调器支持的迁移/协调入口完成，不手改数据库或派生索引。
 
 实现分工限定在独立文件：原生前端/诊断拥有 `lang/bootstrap/frontend*` 与对应测试；通用后端拥有 `program_ir`、`lower_program`、`nasm_program` 与端到端测试；既有语义生产修复单独审查。协作控制台的并行 UI 改动不进入编译器检查的结论，也不覆盖其工作区。历史任务交付和协调器状态保留，不手改数据库或派生索引。
 
 ### 当前实证约束
 
-- 实际 semantic_types 宿主闭包为 13 个模块、224 个函数。binding.check 的 SysV 参数展开为 20 字，modules.load/analyze_program 为 18 字，analyze 为 17 字；既有部分整函数组合限制 16 字。通用后端应使用无此固定上限的 `sysv_integer_args.plan` 和调用方工作区，不把受限组合误当通用 ABI。
-- 该闭包有静态聚合与字符串地址重定位；原生前端已实际接受其完整源码，不能因标量constant辅助函数不处理聚合而误判整程序拒绝。首轮自编译的后端还需结构体/数组构造及复制、重复数组、切片/字符串、完整整数运算。其没有方法、枚举、try/orelse、defer、原子或 Win64；可先建立固定点，再补齐全语言，不能遗漏 G5。
-- 表达式临时值应按生命周期复用，不能给每个 AST 表达式永久分配栈槽。现 seed 后端的 analyze_program 栈帧已为 3592 字节，analyze 为 3016 字节；4096 字节函数帧门槛继续有效。
-- 当前动态 EXEC 文件上限是 **2 MiB**，以 `services/lib/process_abi.dg:MAX_EXEC_IMAGE` 和 `kernel/user/services.dg` 的执行检查为准；下文旧审计的 256 KiB 是历史快照。用户栈为 4 页（16 KiB，`kernel/user/memory.dg`），共享对象上限 64 KiB、每进程最多 4 个映射（`services/lib/shared_abi.dg`）；大池必须测量峰值，不能搬进函数栈或未经预算放大。
-- 普通 EXEC 的 FS_RIGHTS=395，仅 STAT/READ/LIST/DUP/OPEN；当前可写作用域受 GUI 角色约束（`kernel/user/services.dg:install_identity`、`services/fs/handles.dg`、`services/fs/service.dg`）。直接给编译器全盘写权限不是可接受接线；需要独立的最小输出能力设计和授权，当前跳过这项安全敏感变更。
-- 启动参数目前只有一个 u64；可先设计有界作业文件选择器，不把通用 argv 当作现成接口。文件服务暂无 rename/原子替换，不能直接声称具备宿主多产物原子发布语义。
-- `elf64_image` 包装的是已经解析的机器码，`rel32_patch` 只修补位移，二者都不是 NASM 汇编器或链接器。目标可执行自举需要真正的客体工具链或等价机器码/ELF 后端；未完成前保持 G6 未通过。
-- 发布仍跳过：GitHub 写入已明确返回 403，用户随后拒绝重试。所有本地提交、补丁和证据保留；不据此声称远端或 CI 已更新。
+- 旧 semantic_types 闭包的 13 模块、224 函数是此前范围；主线早期记录扩展为 49 模块编译器闭包，PR8 的 CX13 又覆盖完整编译作业闭包。binding.check 的 SysV 参数展开为 20 字，modules.load/analyze_program 为 18 字，analyze 为 17 字；当前 nasm_program 已使用无 16 字固定上限的 `sysv_integer_args.plan` 与调用方工作区，不能把旧整函数组合限制套到通用后端。
+- lower_program/nasm_program 已支持受限结构体/数组构造及复制、重复数组、切片/字符串、只读静态 scalar/struct/array 和地址重定位。聚合局部对齐仍限 16，未支持的静态初始化明确拒绝；可变全局、方法、错误/枚举、外部声明及其他完整语言缺口仍按 G5 保留，不能把能自编译的闭包当作全语言覆盖。
+- lower_program 按生命周期复用临时槽，nasm_program 把函数帧与 outgoing 区合计限制在 4080 字节内。主线早期 16 KiB 栈失败记录仍是当时事实；PR8 已通过 CX7 的 64 KiB 专用栈和 CR47 优化处理该开发缺口，CX13 的 seed/native 全流水线均在受保护 64 KiB 栈及单 56 MiB arena 内执行通过。其记录的 frontend/retained/backend 字节分别为 57,144,296 / 27,228,976 / 20,702,968，按阶段独占复用，不能相加当作同时峰值。
+- 动态 EXEC 文件上限仍为 **2 MiB**（`services/lib/process_abi.dg:MAX_EXEC_IMAGE`）；下文 256 KiB 是历史快照。本地主线普通用户栈仍为 4 页（16 KiB），PR8 的 `memory.stage_compiler`/`stage_compiler_random` 固定使用 16 页（64 KiB）及双 guard，普通路径不变。CX10 启用既有 16384 帧（64 MiB）用户配额，专用栈也计入其中；本轮两启已实际核验16栈页、14336 arena页与源码/ELF/元数据物理不重叠，每启633份live转储独审通过。
+- 普通 EXEC 的 FS_RIGHTS=395 仍仅 STAT/READ/LIST/DUP/OPEN。PR8 已用显式 P5 compiler profile 解决专用启动和输出接线：controller slot0 使用已有文件根授权，core slot3 无文件、进程、电源 handle，借入源码只读 NX，执行期间 controller 阻塞；core 仅允许退出 syscall 255。`compiler_artifact` 使用已授权 token 发 H_WRITE/H_SYNC，不能再把“普通 EXEC 只读”误写成该专用实现不存在。
+- 通用启动参数仍仅一个 u64；PR8 专用 0x8a 门已接收六字段受限请求，内核校验并发布六字 SysV 作业参数，不提供通用 argv 或用户可选栈/内存配额。controller 使用已存在的 STAGE1.ELF/STAGE2.ELF，第二启选取持久化 stage1 并逐字比较输出；文件服务仍无 rename/原子替换，I/O 失败可能留下部分文件，不承诺回滚。
+- 主线早期原生 ELF 为 1,978,856 字节；PR8 的 CX12/CX13 固定点 ELF 为 1,892,632 字节，均低于同一个 2 MiB 上限。后者已有客体入口与 kernel/compiler_job 接线；SYSRET后R10→RCX恢复是旧失败，27字节桥已修复；本轮完整ELF为1,892,648字节，真实G6两启与隔离已验收。
+- 本机缺少旧 ignored build 回执，但 PR8 保存正式 verification、独审、指纹和集成记录；应迁移恢复证据及原状态，不据此抹去历史通过。本次本机 C52 曾因 NASM 3.02 帮助分组的能力漏探在初始化阶段失败（0 tests），这是此前本机复验兼容失败，后续C52与独立CXNASM3已通过新正式复验并分别登记integrated rev14/rev6；旧失败不覆盖，见[原任务收尾报告](../../coordination/dongos_works/reviews/2026-10-20-p5-g6-next-actions.md)。下文旧运行与发布限制保留当时历史，远端/CI 当前结论须按精确提交核验。
 
 每个增量必须保存通过、失败和未运行阶段，真实编译/链接/执行的负控与独立复验，以及冻结源码和产物指纹。不要以少数组件通过或环境缺口被跳过来勾选 `PLAN.md` 的 L3 完成项。
 

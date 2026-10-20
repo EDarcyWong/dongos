@@ -1,0 +1,206 @@
+{
+  "schema_version": 1,
+  "checked_at": "2026-10-20T15:13:08.301065+00:00",
+  "project": "dongos",
+  "github": {
+    "checked_at": "2026-10-20T15:13:07.810Z",
+    "repository": "EDarcyWong/dongos",
+    "pull_request": {
+      "number": 8,
+      "url": "https://github.com/EDarcyWong/dongos/pull/8",
+      "merged": true,
+      "merged_at": "2026-10-20T15:02:01Z",
+      "head": "50ab7cf9cde101691774a8480bdb7fcc07c766be",
+      "merge_commit": "244b18c737495fc1acc4a39520a69a5b77fa5f67"
+    },
+    "pre_merge_checks": [
+      {
+        "name": "Build and boot",
+        "id": 39436523413,
+        "jobs": 20,
+        "status": "completed",
+        "conclusion": "success",
+        "head": "50ab7cf9cde101691774a8480bdb7fcc07c766be"
+      },
+      {
+        "name": "P5 recovery prerequisites",
+        "id": 39436520689,
+        "status": "completed",
+        "conclusion": "success",
+        "head": "50ab7cf9cde101691774a8480bdb7fcc07c766be"
+      },
+      {
+        "name": "P6 input IRQ regression",
+        "id": 39436523449,
+        "status": "completed",
+        "conclusion": "success",
+        "head": "50ab7cf9cde101691774a8480bdb7fcc07c766be"
+      }
+    ],
+    "post_merge_checks": [
+      {
+        "id": 39444684378,
+        "name": "Build and boot",
+        "status": "in_progress",
+        "conclusion": null,
+        "head": "244b18c737495fc1acc4a39520a69a5b77fa5f67",
+        "url": "https://github.com/EDarcyWong/dongos/actions/runs/39444684378"
+      },
+      {
+        "id": 39444684432,
+        "name": "P6 input IRQ regression",
+        "status": "completed",
+        "conclusion": "success",
+        "head": "244b18c737495fc1acc4a39520a69a5b77fa5f67",
+        "url": "https://github.com/EDarcyWong/dongos/actions/runs/39444684432"
+      }
+    ],
+    "tree_identity": {
+      "merge_commit": "244b18c737495fc1acc4a39520a69a5b77fa5f67",
+      "verified_head": "50ab7cf9cde101691774a8480bdb7fcc07c766be",
+      "identical": true
+    }
+  },
+  "local": {
+    "head": "244b18c737495fc1acc4a39520a69a5b77fa5f67",
+    "origin_main": "244b18c737495fc1acc4a39520a69a5b77fa5f67",
+    "behind": 0,
+    "ahead": 0,
+    "production_code_matches_verified_tree": true,
+    "independent_source_audit": {
+      "code_paths": 1409,
+      "byte_identical": 680,
+      "line_endings_only": 727,
+      "documentation_overlays": 2,
+      "production_or_test_differences": 0
+    },
+    "service": "running updated code",
+    "automation": false
+  },
+  "preservation": {
+    "backup_directory": "D:\\projects\\2026\\dongos\\coordination\\.local\\pr8-main-sync-20261020T150259Z",
+    "git_stash": "2f286e8981a8283c65ce0a9dc9648ee9771e3bb8",
+    "original_dirty_files": 56,
+    "protected_files_before_service_export": 534,
+    "unchanged_records_after_service_restart_excluding_index": 533,
+    "index": "Coordinator regenerated derived metadata normally; never edited manually",
+    "foreign_live_paths_isolated": 91,
+    "foreign_archive_sha256": "ca6221950a9ec45f432ed3e00645ac36d07a06dc94b841c660dd06569569e0c1",
+    "local_archive_sha256": "166eea8e0a89d2597618e63d9073cd9525ea159bd3bd403903f3600aa7f52026",
+    "works_archive_sha256": "11a4c3156bd99f058e8cbbe63a84e860972270e27ecf206d837d64a2266cd080",
+    "official_database_backup": "coordination/dongos_works/.local/backups/2026-10-20T15-01-08+00-00-ffbe7085",
+    "official_backup_sha256": "ecf3f91a37d1cd2e59d6fd9f45478aab0b5f31b170315fb87f03353005d6a4c0",
+    "database_comparison": "logical rows unchanged; physical database hash may differ after SQLite housekeeping",
+    "database_tables_before": {
+      "tasks": {
+        "rows": 137,
+        "sha256": "c8743196d6aef75326f73af6ac6ac78a8e08229cc9e6a36b28277c892eb52126"
+      },
+      "events": {
+        "rows": 1129,
+        "sha256": "07b433486921b20a1ea6b13b841eabfa68c7c56a7dcc6df33ca5bb05b8db27d5"
+      },
+      "jobs": {
+        "rows": 120,
+        "sha256": "a508116b054fcc55d79f792be3e6358dc36039cc7c944d1d43a3318990167955"
+      },
+      "settings": {
+        "rows": 1,
+        "sha256": "b4c3a4a3bbcb00f9b66a2ea9ddaf2dde34efe938a1d06bfaa9bbb2e7e8912742"
+      }
+    },
+    "database_tables_after": {
+      "tasks": {
+        "rows": 137,
+        "sha256": "c8743196d6aef75326f73af6ac6ac78a8e08229cc9e6a36b28277c892eb52126"
+      },
+      "events": {
+        "rows": 1129,
+        "sha256": "07b433486921b20a1ea6b13b841eabfa68c7c56a7dcc6df33ca5bb05b8db27d5"
+      },
+      "jobs": {
+        "rows": 120,
+        "sha256": "a508116b054fcc55d79f792be3e6358dc36039cc7c944d1d43a3318990167955"
+      },
+      "settings": {
+        "rows": 1,
+        "sha256": "b4c3a4a3bbcb00f9b66a2ea9ddaf2dde34efe938a1d06bfaa9bbb2e7e8912742"
+      }
+    }
+  },
+  "task_records": {
+    "local_total": 137,
+    "local_active": 121,
+    "local_archived": 16,
+    "local_active_statuses": {
+      "accepted": 19,
+      "integrated": 100,
+      "submitted": 2
+    },
+    "foreign_history": 161,
+    "foreign_records_imported": 0,
+    "same_identifier_different_contract": [
+      "codex:CX6",
+      "cursor:CR43"
+    ],
+    "independent_histories_preserved": [
+      "claude:C52",
+      "cursor:CR40",
+      "codex:CXNASM3"
+    ]
+  },
+  "verification": {
+    "startup_simulation": {
+      "startup_simulation": "passed",
+      "database_tables_unchanged": true,
+      "tasks": 121,
+      "all_records": 137,
+      "automation": false,
+      "added_tasks": [],
+      "changed_tasks": [],
+      "issues": []
+    },
+    "live_service": {
+      "service": "running updated code",
+      "active_tasks": 121,
+      "statuses": {
+        "accepted": 19,
+        "integrated": 100,
+        "submitted": 2
+      },
+      "issues": [],
+      "automation": false,
+      "database_logically_unchanged": true,
+      "unchanged_record_files_excluding_derived_index": 533,
+      "foreign_paths_absent": 91
+    },
+    "host_python_coordination": {
+      "tests": 149,
+      "skips": 0,
+      "seconds": 81.274,
+      "result": "passed",
+      "log": "D:\\projects\\2026\\dongos\\coordination\\.local\\pr8-main-sync-20261020T150259Z\\coordination-regression.log"
+    },
+    "javascript_api_and_dom": {
+      "tests": 11,
+      "skips": 0,
+      "result": "passed"
+    },
+    "compiler_bridge_nasm_and_launch": {
+      "tests": 14,
+      "skips": 0,
+      "seconds": 17.529,
+      "result": "passed"
+    },
+    "os_or_vm_run_locally": false,
+    "full_fixedpoint_rerun_locally": false,
+    "p5_contracts": "independently verified unchanged; reset/hold does not grant DMA reclaim/reuse or device restart"
+  },
+  "remaining": [
+    "G6 new immutable kernel/compiler fixtures, real same-disk two-boot, exact ELF comparison, physical isolation and durable output",
+    "P5 trusted DMA drain, precise reclaim and device recovery",
+    "G5 complete language and ABI differential coverage",
+    "Per-task audited coordinator reconciliation of foreign history; do not overwrite by rev or union unlike events",
+    "PR3 remains independently deferred; post-merge push CI status is recorded separately from the verified identical tree"
+  ]
+}

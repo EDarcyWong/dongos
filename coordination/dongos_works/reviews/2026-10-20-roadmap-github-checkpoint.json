@@ -1,0 +1,351 @@
+{
+  "checked_at_utc": "2026-10-20 13:31:18 UTC",
+  "timezone": "Asia/Shanghai",
+  "github_main": "1dfebe18a96f48c9b864ab0407c5a32b141c4bd4",
+  "branches": [
+    {
+      "name": "codex/p5-dma-alias-refusal",
+      "sha": "1c00a6f007e2349ab9b68f23bf0d30f36aaacbec"
+    },
+    {
+      "name": "codex/p5-recovery-dma-journal",
+      "sha": "b4c82369907953b7eaf9cafbf250be241f35c470"
+    },
+    {
+      "name": "codex/p5-virtio-reset-hold",
+      "sha": "3a5c773bf2f7bb276a7b9430e60800b827357ffd"
+    },
+    {
+      "name": "codex/p6-input-irq-fix",
+      "sha": "18543a2986034893da4536c3b45ff98f73549742"
+    },
+    {
+      "name": "codex/p6-input-irq-kvm-validation",
+      "sha": "288d65ce768c3e2f91b54ebd01453ac6617c9271"
+    },
+    {
+      "name": "docs/p5-p6-engineering-handoff",
+      "sha": "ea659324a702679c9b9494695d5359a8f583095f"
+    },
+    {
+      "name": "docs/p5-p6-merged-checkpoint",
+      "sha": "e8544614c2b1d95550951008fd3c5a479521241c"
+    },
+    {
+      "name": "dot/l3-host-checkpoint-20261020",
+      "sha": "a6be50705d3e51a915842eaff542228f2c313479"
+    },
+    {
+      "name": "dot/verified-components-console-20261020",
+      "sha": "9033b51327dd8c18104b373a4951b1f709aac9c8"
+    },
+    {
+      "name": "main",
+      "sha": "1dfebe18a96f48c9b864ab0407c5a32b141c4bd4"
+    },
+    {
+      "name": "tasks/2026-10-20-c0-c2-integration",
+      "sha": "2a1a28622f7b5344e5d38e153e8683806bb8e7b1"
+    }
+  ],
+  "pull_requests": {
+    "3": {
+      "number": 3,
+      "state": "open",
+      "merged": false,
+      "merged_at": null,
+      "merge_commit_sha": "298e14d787de156c0510603b847574bb1b374e92",
+      "draft": true,
+      "head_sha": "288d65ce768c3e2f91b54ebd01453ac6617c9271",
+      "head_branch": "codex/p6-input-irq-kvm-validation",
+      "base": "main",
+      "url": "https://github.com/EDarcyWong/dongos/pull/3"
+    },
+    "7": {
+      "number": 7,
+      "state": "closed",
+      "merged": true,
+      "merged_at": "2026-10-20T13:29:25Z",
+      "merge_commit_sha": "1dfebe18a96f48c9b864ab0407c5a32b141c4bd4",
+      "draft": false,
+      "head_sha": "3a5c773bf2f7bb276a7b9430e60800b827357ffd",
+      "head_branch": "codex/p5-virtio-reset-hold",
+      "base": "main",
+      "url": "https://github.com/EDarcyWong/dongos/pull/7"
+    },
+    "8": {
+      "number": 8,
+      "state": "open",
+      "merged": false,
+      "merged_at": null,
+      "merge_commit_sha": "8633e68c172592bd8e9402182c9cf2facdede0e1",
+      "draft": true,
+      "head_sha": "2a1a28622f7b5344e5d38e153e8683806bb8e7b1",
+      "head_branch": "tasks/2026-10-20-c0-c2-integration",
+      "base": "main",
+      "url": "https://github.com/EDarcyWong/dongos/pull/8"
+    },
+    "10": {
+      "number": 10,
+      "state": "open",
+      "merged": false,
+      "merged_at": null,
+      "merge_commit_sha": "a5c4940592d4fbe6e71b82f8dd4f2c0722482ec9",
+      "draft": true,
+      "head_sha": "1c00a6f007e2349ab9b68f23bf0d30f36aaacbec",
+      "head_branch": "codex/p5-dma-alias-refusal",
+      "base": "main",
+      "url": "https://github.com/EDarcyWong/dongos/pull/10"
+    }
+  },
+  "workflow_runs": {
+    "3": [
+      {
+        "id": 39425166086,
+        "name": "P5 recovery prerequisites",
+        "status": "completed",
+        "conclusion": "success",
+        "head_sha": "288d65ce768c3e2f91b54ebd01453ac6617c9271",
+        "url": "https://github.com/EDarcyWong/dongos/actions/runs/39425166086"
+      },
+      {
+        "id": 39425166114,
+        "name": "P6 input IRQ regression",
+        "status": "completed",
+        "conclusion": "success",
+        "head_sha": "288d65ce768c3e2f91b54ebd01453ac6617c9271",
+        "url": "https://github.com/EDarcyWong/dongos/actions/runs/39425166114"
+      },
+      {
+        "id": 39425166059,
+        "name": "Build and boot",
+        "status": "in_progress",
+        "conclusion": null,
+        "head_sha": "288d65ce768c3e2f91b54ebd01453ac6617c9271",
+        "url": "https://github.com/EDarcyWong/dongos/actions/runs/39425166059"
+      },
+      {
+        "id": 39425166102,
+        "name": "P6 focused validation",
+        "status": "completed",
+        "conclusion": "failure",
+        "head_sha": "288d65ce768c3e2f91b54ebd01453ac6617c9271",
+        "url": "https://github.com/EDarcyWong/dongos/actions/runs/39425166102"
+      }
+    ],
+    "7": [
+      {
+        "id": 39422980613,
+        "name": "P6 input IRQ regression",
+        "status": "completed",
+        "conclusion": "success",
+        "head_sha": "3a5c773bf2f7bb276a7b9430e60800b827357ffd",
+        "url": "https://github.com/EDarcyWong/dongos/actions/runs/39422980613"
+      },
+      {
+        "id": 39422980556,
+        "name": "P5 recovery prerequisites",
+        "status": "completed",
+        "conclusion": "success",
+        "head_sha": "3a5c773bf2f7bb276a7b9430e60800b827357ffd",
+        "url": "https://github.com/EDarcyWong/dongos/actions/runs/39422980556"
+      },
+      {
+        "id": 39422980582,
+        "name": "Build and boot",
+        "status": "completed",
+        "conclusion": "success",
+        "head_sha": "3a5c773bf2f7bb276a7b9430e60800b827357ffd",
+        "url": "https://github.com/EDarcyWong/dongos/actions/runs/39422980582"
+      }
+    ],
+    "8": [
+      {
+        "id": 39428785789,
+        "name": "P5 recovery prerequisites",
+        "status": "completed",
+        "conclusion": "success",
+        "head_sha": "2a1a28622f7b5344e5d38e153e8683806bb8e7b1",
+        "url": "https://github.com/EDarcyWong/dongos/actions/runs/39428785789"
+      },
+      {
+        "id": 39428785754,
+        "name": "P6 input IRQ regression",
+        "status": "completed",
+        "conclusion": "success",
+        "head_sha": "2a1a28622f7b5344e5d38e153e8683806bb8e7b1",
+        "url": "https://github.com/EDarcyWong/dongos/actions/runs/39428785754"
+      },
+      {
+        "id": 39428786301,
+        "name": "Build and boot",
+        "status": "in_progress",
+        "conclusion": null,
+        "head_sha": "2a1a28622f7b5344e5d38e153e8683806bb8e7b1",
+        "url": "https://github.com/EDarcyWong/dongos/actions/runs/39428786301"
+      }
+    ],
+    "10": [
+      {
+        "id": 39423326913,
+        "name": "P5 recovery prerequisites",
+        "status": "completed",
+        "conclusion": "success",
+        "head_sha": "1c00a6f007e2349ab9b68f23bf0d30f36aaacbec",
+        "url": "https://github.com/EDarcyWong/dongos/actions/runs/39423326913"
+      },
+      {
+        "id": 39423326930,
+        "name": "Build and boot",
+        "status": "completed",
+        "conclusion": "success",
+        "head_sha": "1c00a6f007e2349ab9b68f23bf0d30f36aaacbec",
+        "url": "https://github.com/EDarcyWong/dongos/actions/runs/39423326930"
+      }
+    ]
+  },
+  "pr8_jobs": [
+    {
+      "id": 118648057160,
+      "name": "host-tests (0)",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/EDarcyWong/dongos/actions/runs/39428786301/job/118648057160"
+    },
+    {
+      "id": 118648057165,
+      "name": "host-tests (1)",
+      "status": "in_progress",
+      "conclusion": null,
+      "url": "https://github.com/EDarcyWong/dongos/actions/runs/39428786301/job/118648057165"
+    },
+    {
+      "id": 118648057301,
+      "name": "language-tests (2)",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/EDarcyWong/dongos/actions/runs/39428786301/job/118648057301"
+    },
+    {
+      "id": 118648057313,
+      "name": "language-tests (5)",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/EDarcyWong/dongos/actions/runs/39428786301/job/118648057313"
+    },
+    {
+      "id": 118648057375,
+      "name": "host-tests (2)",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/EDarcyWong/dongos/actions/runs/39428786301/job/118648057375"
+    },
+    {
+      "id": 118648057397,
+      "name": "boot-tests (cpu, tests/run_cpu_qemu.py --all)",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/EDarcyWong/dongos/actions/runs/39428786301/job/118648057397"
+    },
+    {
+      "id": 118648057482,
+      "name": "language-tests (3)",
+      "status": "in_progress",
+      "conclusion": null,
+      "url": "https://github.com/EDarcyWong/dongos/actions/runs/39428786301/job/118648057482"
+    },
+    {
+      "id": 118648057530,
+      "name": "host-tests (3)",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/EDarcyWong/dongos/actions/runs/39428786301/job/118648057530"
+    },
+    {
+      "id": 118648057537,
+      "name": "boot-tests (p0, tests/run_qemu.py --stage p0)",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/EDarcyWong/dongos/actions/runs/39428786301/job/118648057537"
+    },
+    {
+      "id": 118648057592,
+      "name": "language-tests (4)",
+      "status": "in_progress",
+      "conclusion": null,
+      "url": "https://github.com/EDarcyWong/dongos/actions/runs/39428786301/job/118648057592"
+    },
+    {
+      "id": 118648057646,
+      "name": "language-tests (0)",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/EDarcyWong/dongos/actions/runs/39428786301/job/118648057646"
+    },
+    {
+      "id": 118648057647,
+      "name": "boot-tests (permission, tests/run_permission_qemu.py --all)",
+      "status": "completed",
+      "conclusion": "failure",
+      "url": "https://github.com/EDarcyWong/dongos/actions/runs/39428786301/job/118648057647"
+    },
+    {
+      "id": 118648057699,
+      "name": "boot-tests (cache, tests/run_cache_qemu.py --all)",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/EDarcyWong/dongos/actions/runs/39428786301/job/118648057699"
+    },
+    {
+      "id": 118648057729,
+      "name": "language-tests (1)",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/EDarcyWong/dongos/actions/runs/39428786301/job/118648057729"
+    },
+    {
+      "id": 118648057730,
+      "name": "boot-tests (p1, tests/run_qemu.py --stage p1 --all)",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/EDarcyWong/dongos/actions/runs/39428786301/job/118648057730"
+    },
+    {
+      "id": 118648057801,
+      "name": "boot-tests (acpi, tests/run_acpi_qemu.py --all)",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/EDarcyWong/dongos/actions/runs/39428786301/job/118648057801"
+    },
+    {
+      "id": 118648057888,
+      "name": "boot-tests (hardening, tests/run_hardening_qemu.py --all)",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/EDarcyWong/dongos/actions/runs/39428786301/job/118648057888"
+    },
+    {
+      "id": 118648058017,
+      "name": "boot-tests (runtime, tests/run_runtime_qemu.py --all)",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/EDarcyWong/dongos/actions/runs/39428786301/job/118648058017"
+    },
+    {
+      "id": 118648058052,
+      "name": "boot-tests (memory, tests/run_memory_qemu.py --all)",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/EDarcyWong/dongos/actions/runs/39428786301/job/118648058052"
+    }
+  ],
+  "local_tasks": {
+    "total": 121,
+    "counts": {
+      "accepted": 19,
+      "integrated": 100,
+      "submitted": 2
+    }
+  },
+  "basis": "Live GitHub API; local worktree not merged or reset. Historical completed work remains indexed at 3a4704d; current PR8 head is 2a1a286."
+}

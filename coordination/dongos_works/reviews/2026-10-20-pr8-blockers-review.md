@@ -1,5 +1,30 @@
 # PR10 / PR8 接续处理
 
+## 最终GitHub门禁（2026-10-20 22:51）
+
+PR10已合入main d7468a1；PR8候选50ab7cf已完成阻塞修复、独审和完整CI，已转为可评审，尚未合入main。
+[最新门禁快照](2026-10-20-pr10-pr8-integration-checkpoint.json)。本地主线已包含PR7/10；PR8源码与异机状态的本地同步仍是合入后的独立工作。
+
+## Linux固定点实物复核
+
+准确候选为 `50ab7cf9cde101691774a8480bdb7fcc07c766be`。language-0 job
+118675046435已成功；准确head完整CI20个job全部成功，P5/输入专项也全部通过；PR8已转为ready，尚未合入main。
+
+从GitHub下载artifact12272786821并独立校验ZIP摘要与CRC；两份receipt的49模块
+源码指纹及输入blob均匹配该提交。debug/release两seed路径的四份ELF逐字节一致：
+
+- 大小：1,892,648字节。
+- SHA256：`e7f2424dc2010cf5b66e32c14faafec87f1f0f76051c04bd4e9eee050d34c9f2`。
+- 输入blob SHA256：`1d97c57e1f6cbd5cfd795bce687f854e6ad00c59d86751871644c35099b33e48`。
+- ZIP SHA256：`b666cccba586fee8dfedcd62aed9f0d2f240cf45aa97beab9b5fc164869464a3`。
+
+两模式全部构建/执行命令rc0，实际native-generated startup bridge检查通过；
+56MiB arena、64KiB guard栈及既有32预检、语义/容量负控全部保留。
+下载产物只做数据核对，未在本机执行。此处为宿主固定点与桥检查，G6客体双启仍未验收。
+
+[固定点核验记录](2026-10-20-pr8-fixedpoint-proof.json)；
+[准确head完整CI](https://github.com/EDarcyWong/dongos/actions/runs/39436523413)。
+
 本轮按用户要求先核对 PR10，再处理 PR8 阻塞。PR10 已正常合并，merge
 `d7468a17481a6c55c9add7035aff5e67c577de51`。PR8 接续基线是
 `15eb695c2bab44b8e20a4018ef46cd5bea1672a1`，已包含该主线；不重复合并 PR10。
@@ -32,14 +57,14 @@
   保留全部失败实物，不放宽ELF固定地址、RX/RW或段/入口验证。最终源码机器桥快测
   在本机独立再次通过（1项、0skip），完整ELF证据由Linux CI及新增产物回执提供。
 
-新head的完整CI和P5/输入专项仍须按准确提交检查。此前15eb695的权限job
+准确head的完整CI和P5/输入专项已全部成功，原53文件在本地主线快进后仍逐字节匹配保全清单。此前15eb695的权限job
 118659084287已实际通过12个权限客体场景；旧 `lld-link --version` 探针超时不是
 权限生产缺陷，也不需要通过修改权限断言解决。
 
 ## 本机文件与阶段边界
 
-主工作区保持HEAD `345570f`，在干净隔离worktree处理远端修复。53个脏文件已做
-ZIP与逐文件SHA保全，官方数据库备份SHA已核验；没有checkout/reset主目录，
+保全时主工作区HEAD为 `345570f`；最终reflog核对22:12已快进至 `d7468a1`，当前本地与远端主线一致并已包含PR7/10。PR8修复在干净隔离worktree处理。53个脏文件已做
+ZIP与逐文件SHA保全，官方数据库备份SHA已核验；本轮修复未checkout/reset主目录，
 没有覆盖本地五个UI/测试文件、任务图、DB、index或任务状态。
 
 异机161条历史任务与本机137条记录（121活动、16归档）并非同一份状态：本机
@@ -49,3 +74,14 @@ CX6/CR43与异机同号不同义，C52/CR40也有独立后续记录，不能按�
 PR8是已有开发及本轮修复的集成检查点。新桥宿主验证不会关闭G6：仍需新的不可变
 内核快照、编译器fixture、真实同盘双启、逐字节ELF固定点、物理隔离和持久输出。
 历史 `source-64ec14668c` / `run-3383cd152203` 与cf19 ELF指纹不作为新桥证据。
+
+## 任务图与本机保全复核
+
+整体图同步为3条轨道、22个环节：PR10 complete，PR8 partial待合，P5 partial、
+L3B complete、L3C partial。9项任务图回归全部通过，0skip，9.949秒。
+JSON schema、显式 `X-Coordination-Project: dongos` 的HTTP读取与磁盘一致、
+Markdown相对链接及diff空白检查均通过。
+
+原53文件中仅3个授权任务图文件更新；其余50个文件仍逐字节匹配保全清单，
+包括本地UI、测试、派生索引及任务状态。当前本地主线d7468a1已包含PR7/10；
+PR8仍在候选分支，本轮未将其历史state导入当前协调库。
