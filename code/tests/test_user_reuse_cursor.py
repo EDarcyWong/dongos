@@ -22,7 +22,7 @@ pub unsafe fn reserve(pages:usize,alignment:usize,out:*Block)!void{unsafe{
  if pages!=1||alignment!=1{return error.Invalid;}*out=Block{physical:NEXT,virtual:0,pages:1};NEXT+=4096;
 }return;}
 pub unsafe fn allocate(pages:usize,alignment:usize,out:*Block)!void{unsafe{
- if pages!=11||alignment!=1||SCRATCH==0{return error.Invalid;}*out=Block{physical:0x20000000,virtual:SCRATCH,pages:pages};
+ if pages!=13||alignment!=1||SCRATCH==0{return error.Invalid;}*out=Block{physical:0x20000000,virtual:SCRATCH,pages:pages};
 }return;}
 '''
 DEVICES='''module boot.device_memory;pub unsafe extern "sysv64" fn runtime_invalidate(address:u64)void;

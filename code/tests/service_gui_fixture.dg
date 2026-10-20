@@ -14,6 +14,8 @@ import user.devices as devices;import user.device_host as device_host;
 import boot.service_memory as resources;import exec.bundle as bundle;import arch.x86_64 as arch;
 const COUNT:usize=16;const NONE:usize=16;const BOOT_ADDRESS:u64=0x7000_0000;
 const MANAGER_OBJECT:u64=0x500;const DEVICE_MANAGER_OBJECT:u64=0x501;
+// GUI wiring uses the ordinary service profile, never compiler mode.
+var COMPILER:bool=false;
 var ACTIVE:usize=16;var CURRENT:usize=0;var GRAPHICS:bool=true;var CLOCK_HZ:u64=1000000000;
 var MODEL:procs.Catalog=procs.Catalog{ready:0,count:0,sequence:0,
  configs:[proc.EMPTY_CONFIG;32],states:[proc.EMPTY_SNAPSHOT;32],slot:[0;32],

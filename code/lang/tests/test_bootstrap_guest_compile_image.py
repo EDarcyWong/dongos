@@ -183,8 +183,8 @@ static uint64_t call_entry(const uint8_t*image,uint64_t written,const Plan*plan,
  }
  for(uint64_t i=0;i<plan->segment_count;i++){
   const Seg*s=&plan->segments[i];
-  uint32_t prot;
 #ifdef _WIN32
+  uint32_t prot;
   DWORD old;
   if(s->flags&1)prot=PAGE_EXECUTE_READ;else prot=PAGE_READWRITE;
   if(!VirtualProtect((void*)(uintptr_t)s->map_start,(SIZE_T)s->map_size,prot,&old)){

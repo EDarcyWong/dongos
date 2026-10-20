@@ -5,7 +5,7 @@ var SCRATCH:u64=0;var CALLS:u64=0;var RESERVED:u64=0;
 export("unshare_resources_setup") fn setup(pointer:u64)void{unsafe{SCRATCH=pointer;CALLS=0;RESERVED=0;}return;}
 export("unshare_resources_calls") fn calls()u64{unsafe{return CALLS;}}
 pub unsafe fn allocate(pages:usize,alignment:usize,out:*Block)!void{unsafe{
-    if SCRATCH==0||pages!=11||alignment!=1||CALLS!=0{return error.Exhausted;}
+    if SCRATCH==0||pages!=13||alignment!=1||CALLS!=0{return error.Exhausted;}
     CALLS+=1;*out=Block{physical:0x90_0000,virtual:SCRATCH,pages:pages};
 }return;}
 pub unsafe fn reserve(pages:usize,alignment:usize,out:*Block)!void{unsafe{

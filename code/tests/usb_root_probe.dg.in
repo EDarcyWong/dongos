@@ -7,6 +7,8 @@ import user.device_host as device_host;import user.processes as procs;
 import boot.power_startup as power;import input.console as console;
 const COUNT:usize=16;const ACTIVE:usize=16;const BOOT_ADDRESS:u64=0x70000000;
 const MANAGER_OBJECT:u64=0x500;const DEVICE_MANAGER_OBJECT:u64=0x501;
+// This fixture exercises the ordinary, non-compiler service root.
+var COMPILER:bool=false;
 var CURRENT:usize=0;var GRAPHICS:bool=true;var CLOCK_HZ:u64=1000;
 struct State{table:handles.Table,reply_pointer:u64,receive_pointer:u64,ticket:u64,waiting:u64,started:u64}
 const EMPTY_STATE:State=State{table:handles.EMPTY_TABLE,reply_pointer:0,receive_pointer:0,ticket:0,waiting:0,started:0};

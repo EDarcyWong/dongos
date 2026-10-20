@@ -1,3 +1,6 @@
+// 768 retirement receipts (64 bytes) plus u16 frame indices, rounded to pages.
+#define SCRATCH_PAGES ((768u * (64u + 2u) + 4095u) / 4096u)
+_Static_assert(SCRATCH_PAGES == 13, "Retired scratch ABI");
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -40,14 +43,14 @@ void ABI unshare_reclaim_event(uint64_t pending,uint64_t count,uint64_t root){
 }
 static int setup(unsigned count,unsigned shared,unsigned ro){
  memset((void*)(uintptr_t)alias,0xa5,1024*4096);
- memset((void*)(uintptr_t)scratch,0,11*4096);memset((void*)(uintptr_t)(scratch+11*4096),0xcd,4096);
+ memset((void*)(uintptr_t)scratch,0,SCRATCH_PAGES*4096);memset((void*)(uintptr_t)(scratch+SCRATCH_PAGES*4096),0xcd,4096);
  current_root=0;watch=flushes=reclaims=zero_receipts=injection=injected=withdrawn=0;
  unshare_resources_setup(scratch);CHECK(!unshare_setup(alias,count,shared,ro));CHECK(!unshare_kernel_setup(alias,count,ro));return 0;
 }
 static void observe(unsigned id,uint64_t base,unsigned count){watch=1;watched_id=id;watched_base=base;watched_pages=count;withdrawn=0;}
 static int zero(unsigned index){for(unsigned b=0;b<4096;b++)CHECK(!*((unsigned char*)(uintptr_t)alias+index*4096+b));return 0;}
 static int marker(unsigned index){for(unsigned b=0;b<4096;b++)CHECK(*((unsigned char*)(uintptr_t)alias+index*4096+b)==0xa5);return 0;}
-static int guard(void){for(unsigned b=0;b<4096;b++)CHECK(*((unsigned char*)(uintptr_t)scratch+11*4096+b)==0xcd);return 0;}
+static int guard(void){for(unsigned b=0;b<4096;b++)CHECK(*((unsigned char*)(uintptr_t)scratch+SCRATCH_PAGES*4096+b)==0xcd);return 0;}
 static int sharing(void){
  CHECK(!setup(4,1,0));observe(0,0x44000000,4);CHECK(!unshare_run(0,0x44000000,4));
  CHECK(reclaims==4&&zero_receipts==3&&unshare_resources_calls()==1);
@@ -114,9 +117,9 @@ static int allocation(void){
 }
 int main(void){
 #ifdef _WIN32
- void*ram=_aligned_malloc(1024*4096,4096),*storage=_aligned_malloc(12*4096,4096);
+ void*ram=_aligned_malloc(1024*4096,4096),*storage=_aligned_malloc((SCRATCH_PAGES+1)*4096,4096);
 #else
- void*ram=aligned_alloc(4096,1024*4096),*storage=aligned_alloc(4096,12*4096);
+ void*ram=aligned_alloc(4096,1024*4096),*storage=aligned_alloc(4096,(SCRATCH_PAGES+1)*4096);
 #endif
  CHECK(ram&&storage);alias=(uint64_t)(uintptr_t)ram;scratch=(uint64_t)(uintptr_t)storage;
  if(sharing()||rejected()||failures()||allocation())return 1;

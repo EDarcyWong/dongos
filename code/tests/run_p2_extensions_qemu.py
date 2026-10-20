@@ -26,7 +26,7 @@ MUTANTS = {
     # The split builds the page table but never links it: the CPU keeps using
     # the 2 MiB leaf, so replacing one 4 KiB entry has no visible effect.
     "split-not-linked": ("mm/paging.dg",
-        "        atomic_store(&(*directory).entries[path.slots[2]], ((*space).pool_physical + (child as u64) * 4096) | PARENT_BITS);\r\n",
+        "        atomic_store(&(*directory).entries[path.slots[2]], ((*space).pool_physical + (child as u64) * 4096) | PARENT_BITS);\n",
         ""),
     # The alias planner forgets to revoke the writable alias before granting
     # execute, so W^X is violated in the middle of the transition.

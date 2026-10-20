@@ -80,9 +80,12 @@ def build(directory, source_root, label, mode, cc, nasm):
     shim.write_text(SHIM, encoding='utf-8')
     subprocess.run([nasm, '-f', 'win64' if os.name == 'nt' else 'elf64', *nasm_flags(nasm), '-o', str(obj), str(asm)],
                    check=True, capture_output=True, timeout=120)
-    flags = [] if os.name == 'nt' else ['-fPIC']
-    subprocess.run([cc, '-std=gnu11', '-O2', '-shared', *flags, str(shim), str(obj), '-o', str(dll)],
-                   check=True, capture_output=True, timeout=120)
+    # Bind direct assembly calls to local shim symbols in ELF shared objects.
+    flags = [] if os.name == 'nt' else ['-fPIC', '-Wl,-Bsymbolic']
+    linked = subprocess.run([cc, '-std=gnu11', '-O2', '-shared', *flags, str(shim), str(obj), '-o', str(dll)],
+                            capture_output=True, text=True, timeout=120)
+    if linked.returncode:
+        raise AssertionError((name, linked.returncode, linked.stdout, linked.stderr))
     return Native(dll)
 
 

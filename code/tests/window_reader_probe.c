@@ -1,3 +1,6 @@
+// 768 retirement receipts (64 bytes) plus u16 frame indices, rounded to pages.
+#define SCRATCH_PAGES ((768u * (64u + 2u) + 4095u) / 4096u)
+_Static_assert(SCRATCH_PAGES == 13, "Retired scratch ABI");
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -29,11 +32,11 @@ static int zero(const unsigned char*ram,unsigned index){for(unsigned b=0;b<4096;
 static int mapped(uint64_t id,uint64_t va,unsigned first,unsigned count){for(unsigned i=0;i<count;i++)CHECK(reader_leaf(id,va+i*4096)==0x200000+(first+i)*4096+3);return 0;}
 int main(void){
 #ifdef _WIN32
- unsigned char*ram=_aligned_malloc(16*4096,4096),*scratch=_aligned_malloc(12*4096,4096);
+ unsigned char*ram=_aligned_malloc(16*4096,4096),*scratch=_aligned_malloc((SCRATCH_PAGES+1)*4096,4096);
 #else
- unsigned char*ram=aligned_alloc(4096,16*4096),*scratch=aligned_alloc(4096,12*4096);
+ unsigned char*ram=aligned_alloc(4096,16*4096),*scratch=aligned_alloc(4096,(SCRATCH_PAGES+1)*4096);
 #endif
- CHECK(ram&&scratch);memset(ram,0xa5,16*4096);memset(scratch,0,11*4096);memset(scratch+11*4096,0xcd,4096);
+ CHECK(ram&&scratch);memset(ram,0xa5,16*4096);memset(scratch,0,SCRATCH_PAGES*4096);memset(scratch+SCRATCH_PAGES*4096,0xcd,4096);
  unshare_resources_setup((uint64_t)(uintptr_t)scratch);CHECK(!reader_setup((uint64_t)(uintptr_t)ram));CHECK(!reader_kernel_setup((uint64_t)(uintptr_t)ram));
  CHECK(!reader_unshare_seed());for(unsigned i=0;i<12;i++){CHECK(reader_state(i)==1);CHECK(!zero(ram,i));}
  CHECK(!reader_initialize(1));Lease a={0},b={0},sentinel,output;uint64_t ownerA=(UINT64_C(8)<<32)|1,ownerB=(UINT64_C(8)<<32)|2;
@@ -59,6 +62,6 @@ int main(void){
  CHECK(!reader_initialize(2));CHECK(reader_revoke(1,b.lease)==0x07430002);
  // destroy() may retain dirty reusable RAM; every later fresh() must zero it.
  for(unsigned i=0;i<12;i++){CHECK(reader_fresh()==i);CHECK(!zero(ram,i));}
- CHECK(unshare_resources_calls()==1&&flushes>10&&invalidations>4);for(unsigned i=0;i<4096;i++)CHECK(scratch[11*4096+i]==0xcd);
+ CHECK(unshare_resources_calls()==1&&flushes>10&&invalidations>4);for(unsigned i=0;i<4096;i++)CHECK(scratch[SCRATCH_PAGES*4096+i]==0xcd);
  printf("window reader real memory/paging checks passed %u; STATIC3 dynamic compositor128 and slot7, last-reader retention, same-slot reuse, zeroed reuse\n",checks);return 0;
 }
