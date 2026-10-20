@@ -1,0 +1,80 @@
+// Production native graph -> lowering -> NASM driver, with one caller-owned
+// arena. Input must be a still-live successful frontend.Graph. No host IR.
+module bootstrap.compiler_driver;
+import bootstrap.frontend as front;
+import bootstrap.program_ir as ir;
+import bootstrap.lower_program as lower;
+import bootstrap.nasm_program as nasm;
+import bootstrap.sysv_integer_args as abi;
+import core.arena as arena;
+pub const OK:u64=0;pub const INVALID:u64=1;pub const CAPACITY:u64=2;
+pub const UNSUPPORTED:u64=3;pub const FRAME:u64=4;pub const INTERNAL:u64=5;
+pub const WORKSPACE:u64=0;pub const LOWER:u64=1;pub const EMIT:u64=2;
+const MAX:usize=0xffff_ffff_ffff_ffff;
+pub struct Limits{pub functions:usize,pub instructions:usize,pub arguments:usize,
+ pub text:usize,pub piece:usize,pub parameters:usize,pub locations:usize}
+pub struct Result{pub status:u64,pub stage:u64,pub code:u64,pub unit:usize,
+ pub node:usize,pub detail:u64,pub used:usize,pub written:usize}
+struct Region{p:u64,n:usize}
+fn span(p:u64,n:usize)bool{return n==0||(p!=0&&n<=MAX-p);}
+fn overlap(a:*const Region,b:*const Region)bool{unsafe{
+ return (*a).n!=0&&(*b).n!=0&&(*a).p<(*b).p+(*b).n&&(*b).p<(*a).p+(*a).n;
+}}
+unsafe fn valid(g:*const front.Graph,l:*const Limits,storage:[]u8,out:[]u8,r:*Result)bool{unsafe{
+ if g==null||l==null||r==null||(g as u64&7)!=0||(l as u64&7)!=0||(r as u64&7)!=0
+  ||!span(g as u64,sizeof(front.Graph))||!span(l as u64,sizeof(Limits))||!span(r as u64,sizeof(Result)){return false;}
+ if (*g).sources.len>MAX/40||(*g).nodes.len>MAX/8||(*l).functions>MAX/sizeof(ir.Function)
+  ||(*l).instructions>MAX/sizeof(ir.Instruction)||(*l).arguments>MAX/sizeof(ir.Argument)||(*l).locations>MAX/16{return false;}
+ let inputs=[Region{p:g as u64,n:sizeof(front.Graph)},Region{p:l as u64,n:sizeof(Limits)},
+  Region{p:(*g).arena.ptr as u64,n:(*g).arena.len},Region{p:(*g).sources.ptr as u64,n:(*g).sources.len*40}];
+ let outputs=[Region{p:storage.ptr as u64,n:storage.len},Region{p:out.ptr as u64,n:out.len},Region{p:r as u64,n:sizeof(Result)}];
+ var i:usize=0;while i<inputs.len{if !span(inputs[i].p,inputs[i].n){return false;}i+=1;}
+ i=0;while i<outputs.len{if !span(outputs[i].p,outputs[i].n){return false;}
+  var j:usize=0;while j<inputs.len{if overlap(&outputs[i],&inputs[j]){return false;}j+=1;}
+  j=0;while j<i{if overlap(&outputs[i],&outputs[j]){return false;}j+=1;}i+=1;
+ }
+ if (*g).sources.len!=0&&((*g).sources.ptr as u64&7)!=0{return false;}
+ i=0;while i<(*g).sources.len{let s=(*g).sources[i];let p=Region{p:s.path.ptr as u64,n:s.path.len};let b=Region{p:s.bytes.ptr as u64,n:s.bytes.len};
+  if !span(p.p,p.n)||!span(b.p,b.n){return false;}var j:usize=0;while j<outputs.len{
+   if overlap(&outputs[j],&p)||overlap(&outputs[j],&b){return false;}j+=1;
+  }i+=1;
+ }return true;
+}}
+unsafe fn publish(r:*Result,status:u64,stage:u64,code:u64,unit:usize,node:usize,detail:u64,used:usize,written:usize)u64{unsafe{
+ *r=Result{status:status,stage:stage,code:code,unit:unit,node:node,detail:detail,used:used,written:written};return status;
+}}
+unsafe fn take(a:*arena.Arena,n:usize,width:usize,alignment:usize,p:*usize)bool{unsafe{return arena.allocate(a,n*width,alignment,p);}}
+pub unsafe fn compile(g:*const front.Graph,l:*const Limits,mode:u64,storage:[]u8,out:[]u8,r:*Result)u64{unsafe{
+ if mode>1||!valid(g,l,storage,out,r){return INVALID;}
+ var a=arena.Arena{base:null,capacity:0,used:0};if !arena.init(&a,storage){return INVALID;}
+ var p:usize=0;
+ var w=ir.Workspace{functions:slice_from_raw_parts(null as *ir.Function,0),
+  instructions:slice_from_raw_parts(null as *ir.Instruction,0),arguments:slice_from_raw_parts(null as *ir.Argument,0),
+  node_slots:slice_from_raw_parts(null as *usize,0)};
+ var e=nasm.Workspace{text:slice_from_raw_parts(null as *u8,0),piece:slice_from_raw_parts(null as *u8,0),
+  kinds:slice_from_raw_parts(null as *u8,0),locations:slice_from_raw_parts(null as *abi.Location,0)};
+ if !take(&a,(*l).functions,sizeof(ir.Function),8,&p){return publish(r,CAPACITY,WORKSPACE,0,MAX,MAX,0,a.used,0);}w.functions=slice_from_raw_parts(p as *ir.Function,(*l).functions);
+ if !take(&a,(*l).instructions,sizeof(ir.Instruction),8,&p){return publish(r,CAPACITY,WORKSPACE,0,MAX,MAX,1,a.used,0);}w.instructions=slice_from_raw_parts(p as *ir.Instruction,(*l).instructions);
+ if !take(&a,(*l).arguments,sizeof(ir.Argument),8,&p){return publish(r,CAPACITY,WORKSPACE,0,MAX,MAX,2,a.used,0);}w.arguments=slice_from_raw_parts(p as *ir.Argument,(*l).arguments);
+ if !take(&a,(*g).nodes.len,8,8,&p){return publish(r,CAPACITY,WORKSPACE,0,MAX,MAX,3,a.used,0);}w.node_slots=slice_from_raw_parts(p as *usize,(*g).nodes.len);
+ if !take(&a,(*l).text,1,1,&p){return publish(r,CAPACITY,WORKSPACE,0,MAX,MAX,4,a.used,0);}e.text=slice_from_raw_parts(p as *u8,(*l).text);
+ if !take(&a,(*l).piece,1,1,&p){return publish(r,CAPACITY,WORKSPACE,0,MAX,MAX,5,a.used,0);}e.piece=slice_from_raw_parts(p as *u8,(*l).piece);
+ if !take(&a,(*l).parameters,1,1,&p){return publish(r,CAPACITY,WORKSPACE,0,MAX,MAX,6,a.used,0);}e.kinds=slice_from_raw_parts(p as *u8,(*l).parameters);
+ if !take(&a,(*l).locations,16,8,&p){return publish(r,CAPACITY,WORKSPACE,0,MAX,MAX,7,a.used,0);}e.locations=slice_from_raw_parts(p as *abi.Location,(*l).locations);
+ var lowered=ir.Result{status:0,unit:0,node:0,detail:0,program:ir.Program{graph:null,
+  functions:slice_from_raw_parts(null as *const ir.Function,0),instructions:slice_from_raw_parts(null as *const ir.Instruction,0),
+  arguments:slice_from_raw_parts(null as *const ir.Argument,0),block_count:0,mode:mode}};
+ let lowered_status=lower.lower(g,&w,mode,&lowered);
+ if lowered_status!=0{var status=lowered_status;if status==INVALID||status>FRAME{status=INTERNAL;}
+  return publish(r,status,LOWER,lowered_status,lowered.unit,lowered.node,lowered.detail,a.used,0);
+ }
+ var written:usize=0;let emitted=nasm.emit(&lowered.program,&e,out,&written);
+ if emitted!=0{var status=emitted;if status==INVALID||status>FRAME{status=INTERNAL;}
+  return publish(r,status,EMIT,emitted,MAX,MAX,0,a.used,0);
+ }
+ return publish(r,OK,EMIT,0,MAX,MAX,0,a.used,written);
+}}
+export("dong_native_emit") pub unsafe fn compile_raw(g:*const front.Graph,l:*const Limits,mode:u64,
+ storage:*u8,capacity:usize,out:*u8,out_capacity:usize,r:*Result)u64{unsafe{
+ return compile(g,l,mode,slice_from_raw_parts(storage,capacity),slice_from_raw_parts(out,out_capacity),r);
+}}

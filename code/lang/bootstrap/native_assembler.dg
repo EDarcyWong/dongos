@@ -1,0 +1,201 @@
+// Restricted two-pass assembler for the native compiler's explicit NASM dialect.
+// No macros, external symbols, host assembler invocation or silent fallback.
+module bootstrap.native_assembler;
+import bootstrap.x86_encode as x86;
+import bootstrap.elf64_image as elf;
+pub const OK:u64=0;pub const INVALID:u64=1;pub const CAPACITY:u64=2;pub const SYNTAX:u64=3;pub const SYMBOL:u64=4;pub const RANGE:u64=5;
+const NONE:usize=0xffff_ffff_ffff_ffff;
+pub struct Label{pub start:usize,pub length:usize,pub section:u64,pub offset:usize}
+pub struct Workspace{pub labels:[]Label,pub table:[]usize,pub text:[]u8,pub data:[]u8}
+pub struct Result{pub status:u64,pub line:usize,pub detail:u64,pub text_bytes:usize,pub data_bytes:usize,pub labels:usize,pub written:usize}
+struct State{source:[]const u8,w:*const Workspace,status:u64,line:usize,detail:u64,pass:u64,section:u64,text:usize,data:usize,label_count:usize,text_size:usize,at:usize,end:usize,conditional:bool,metadata:bool}
+struct Operand{kind:u64,reg:u64,width:u64,base:u64,disp:u64,value:u64,start:usize,length:usize}
+fn span(p:u64,n:usize)bool{return n==0||(p!=0&&n<=NONE-p);}
+fn overlap(a:u64,n:usize,b:u64,m:usize)bool{return n!=0&&m!=0&&a<b+m&&b<a+n;}
+fn equal(a:[]const u8,b:[]const u8)bool{if a.len!=b.len{return false;}var i:usize=0;while i<a.len{if a[i]!=b[i]{return false;}i+=1;}return true;}
+unsafe fn fail(s:*State,status:u64,detail:u64)bool{unsafe{if (*s).status==0{(*s).status=status;(*s).detail=detail;}return false;}}
+fn space(b:u8)bool{return b==32||b==9||b==13;}
+fn namechar(b:u8)bool{return (b>=65&&b<=90)||(b>=97&&b<=122)||(b>=48&&b<=57)||b==95||b==46;}
+fn identifier(name:[]const u8)bool{return name.len!=0&&((name[0]>=65&&name[0]<=90)||(name[0]>=97&&name[0]<=122)||name[0]==95);}
+unsafe fn skip(s:*State)void{unsafe{while (*s).at<(*s).end&&space((*s).source[(*s).at]){(*s).at+=1;}}}
+unsafe fn view(s:*const State,start:usize,length:usize)[]const u8{unsafe{return slice_from_raw_parts((*s).source.ptr+start,length);}}
+unsafe fn word(s:*State)[]const u8{unsafe{skip(s);let first=(*s).at;while (*s).at<(*s).end&&namechar((*s).source[(*s).at]){(*s).at+=1;}return view(s,first,(*s).at-first);}}
+unsafe fn token(s:*State,b:u8)bool{unsafe{skip(s);if (*s).at<(*s).end&&(*s).source[(*s).at]==b{(*s).at+=1;return true;}return false;}}
+unsafe fn end(s:*State)bool{unsafe{skip(s);return (*s).at==(*s).end;}}
+unsafe fn number(s:*State,out:*u64)bool{unsafe{
+ skip(s);var negative=false;if token(s,45){negative=true;}else{token(s,43);}skip(s);let first=(*s).at;var radix:u64=10;
+ if (*s).end-(*s).at>=2&&(*s).source[(*s).at]==48&&((*s).source[(*s).at+1]==120||(*s).source[(*s).at+1]==88){radix=16;(*s).at+=2;}
+ let digits=(*s).at;var value:u64=0;while (*s).at<(*s).end{let b=(*s).source[(*s).at];var d:u64=NONE;
+  if b>=48&&b<=57{d=(b-48)as u64;}else if b>=65&&b<=70{d=(b-55)as u64;}else if b>=97&&b<=102{d=(b-87)as u64;}
+  if d>=radix{break;}if value>(NONE-d)/radix{return fail(s,RANGE,1);}value=value*radix+d;(*s).at+=1;
+ }if (*s).at==digits{(*s).at=first;return false;}if negative{if value>0x8000_0000_0000_0000{return fail(s,RANGE,2);}value=wrapping_sub(0 as u64,value);}*out=value;return true;
+}}
+fn register(name:[]const u8,out:*Operand)bool{unsafe{
+ let r64=["rax","rcx","rdx","rbx","rsp","rbp","rsi","rdi","r8","r9","r10","r11","r12","r13","r14","r15"];
+ let r32=["eax","ecx","edx","ebx","esp","ebp","esi","edi","r8d","r9d","r10d","r11d","r12d","r13d","r14d","r15d"];
+ let r16=["ax","cx","dx","bx","sp","bp","si","di","r8w","r9w","r10w","r11w","r12w","r13w","r14w","r15w"];
+ let r8=["al","cl","dl","bl","spl","bpl","sil","dil","r8b","r9b","r10b","r11b","r12b","r13b","r14b","r15b"];
+ var i:usize=0;while i<16{var width:u64=0;if equal(name,r64[i]){width=64;}else if equal(name,r32[i]){width=32;}else if equal(name,r16[i]){width=16;}else if equal(name,r8[i]){width=8;}
+  if width!=0{(*out).kind=1;(*out).reg=i;(*out).width=width;return true;}i+=1;}return false;
+}}
+unsafe fn hash(s:*const State,start:usize,length:usize)u64{unsafe{var h:u64=14695981039346656037;var i:usize=0;while i<length{h=wrapping_mul(h^((*s).source[start+i]as u64),1099511628211);i+=1;}return h;}}
+unsafe fn lookup(s:*State,start:usize,length:usize,insert:bool)usize{unsafe{
+ if !identifier(view(s,start,length)){fail(s,SYNTAX,56);return NONE;}
+ if length==0||(*(*s).w).table.len==0{fail(s,CAPACITY,3);return NONE;}var at=(hash(s,start,length)%(*(*s).w).table.len)as usize;var probes:usize=0;
+ while probes<(*(*s).w).table.len{let index=(*(*s).w).table[at];if index==NONE{
+   if !insert{return NONE;}if (*s).label_count==(*(*s).w).labels.len{fail(s,CAPACITY,4);return NONE;}
+   let id=(*s).label_count;var offset=(*s).text;if (*s).section==2{offset=(*s).data;}
+   (*(*s).w).labels[id]=Label{start:start,length:length,section:(*s).section,offset:offset};(*(*s).w).table[at]=id;(*s).label_count+=1;return id;
+  }
+  let label=(*(*s).w).labels[index];if equal(view(s,start,length),view(s,label.start,label.length)){if insert{fail(s,SYMBOL,5);return NONE;}return index;}
+  at+=1;if at==(*(*s).w).table.len{at=0;}probes+=1;
+ }if insert{fail(s,CAPACITY,6);}return NONE;
+}}
+unsafe fn address(s:*State,start:usize,length:usize,out:*u64)bool{unsafe{
+ if (*s).pass==0{*out=0;return true;}let index=lookup(s,start,length,false);if index==NONE{return fail(s,SYMBOL,7);}let label=(*(*s).w).labels[index];
+ var base=elf.BASE+elf.TEXT_OFFSET;if label.section==2{base=elf.BASE+((elf.TEXT_OFFSET+(*s).text_size+4095)&~(4095 as usize));}
+ *out=base+label.offset;return true;
+}}
+unsafe fn operand(s:*State,out:*Operand)bool{unsafe{
+ *out=Operand{kind:0,reg:0,width:0,base:0,disp:0,value:0,start:0,length:0};skip(s);let begin=(*s).at;let name=word(s);var width:u64=0;
+ if equal(name,"byte"){width=8;}else if equal(name,"word"){width=16;}else if equal(name,"dword"){width=32;}else if equal(name,"qword"){width=64;}
+ if width==0{(*s).at=begin;}
+ if token(s,91){(*out).kind=3;(*out).width=width;let first=(*s).at;let base=word(s);
+  if equal(base,"rel"){let label_start=(*s).at;let label=word(s);(*out).base=16;(*out).start=(*s).at-label.len;(*out).length=label.len;
+   if label.len==0{return fail(s,SYNTAX,label_start);}if !token(s,93){return fail(s,SYNTAX,8);}return true;
+  }
+  var reg=Operand{kind:0,reg:0,width:0,base:0,disp:0,value:0,start:0,length:0};if !register(base,&reg)||reg.width!=64{return fail(s,SYNTAX,first);}(*out).base=reg.reg;
+  skip(s);let before_index=(*s).at;if token(s,43){let index_name=word(s);var index=Operand{kind:0,reg:0,width:0,base:0,disp:0,value:0,start:0,length:0};
+   if register(index_name,&index)&&index.width==64{(*out).kind=5;(*out).reg=index.reg;(*out).value=1;if token(s,42){if !number(s,&(*out).value){return fail(s,SYNTAX,54);}}}
+   else{(*s).at=before_index;}
+  }
+  skip(s);if (*s).at<(*s).end&&(*s).source[(*s).at]!=93{if (*s).source[(*s).at]!=43&&(*s).source[(*s).at]!=45{return fail(s,SYNTAX,57);}var d:u64=0;if !number(s,&d){return fail(s,SYNTAX,9);}(*out).disp=d;}
+  if !token(s,93){return fail(s,SYNTAX,10);}return true;
+ }
+ if width!=0{return fail(s,SYNTAX,11);}(*s).at=begin;let regname=word(s);if register(regname,out){return true;}
+ (*s).at=begin;var value:u64=0;if number(s,&value){(*out).kind=2;(*out).value=value;return true;}
+ if (*s).status!=0{return false;}(*s).at=begin;let label=word(s);if label.len==0{return fail(s,SYNTAX,12);}(*out).kind=4;(*out).start=(*s).at-label.len;(*out).length=label.len;return true;
+}}
+unsafe fn bytes(s:*State,input:[]const u8)bool{unsafe{
+ if (*s).section!=1&&(*s).section!=2{return fail(s,SYNTAX,13);}var at=(*s).text;var out=(*(*s).w).text;if (*s).section==2{at=(*s).data;out=(*(*s).w).data;}
+ if at>out.len||input.len>out.len-at{return fail(s,CAPACITY,14);}if (*s).pass!=0{var i:usize=0;while i<input.len{out[at+i]=input[i];i+=1;}}
+ if (*s).section==1{(*s).text+=input.len;}else{(*s).data+=input.len;}return true;
+}}
+unsafe fn value_bytes(s:*State,value:u64,width:usize)bool{unsafe{var raw:[8]u8=[0;8];var i:usize=0;while i<width{raw[i]=(value>>(i*8))as u8;i+=1;}return bytes(s,slice_from_raw_parts(&raw[0],width));}}
+fn operation(name:[]const u8)u64{
+ if equal(name,"mov"){return x86.MOV;}if equal(name,"add"){return x86.ADD;}if equal(name,"sub"){return x86.SUB;}
+ if equal(name,"and"){return x86.AND;}if equal(name,"or"){return x86.OR;}if equal(name,"xor"){return x86.XOR;}if equal(name,"cmp"){return x86.CMP;}if equal(name,"test"){return x86.TEST;}
+ if equal(name,"lea"){return x86.LEA;}if equal(name,"movzx"){return x86.MOVZX;}if equal(name,"movsx"){return x86.MOVSX;}if equal(name,"movsxd"){return x86.MOVSXD;}
+ if equal(name,"neg"){return x86.NEG;}if equal(name,"not"){return x86.NOT;}if equal(name,"mul"){return x86.MUL;}if equal(name,"div"){return x86.DIV;}if equal(name,"idiv"){return x86.IDIV;}if equal(name,"imul"){return x86.IMUL;}
+ if equal(name,"shl"){return x86.SHL;}if equal(name,"shr"){return x86.SHR;}if equal(name,"sar"){return x86.SAR;}
+ if equal(name,"push"){return x86.PUSH;}if equal(name,"pop"){return x86.POP;}if equal(name,"call"){return x86.CALL;}if equal(name,"jmp"){return x86.JMP;}
+ if equal(name,"syscall"){return x86.SYSCALL;}if equal(name,"cqo"){return x86.CQO;}if equal(name,"ret"){return x86.RET;}if equal(name,"ud2"){return x86.UD2;}if equal(name,"cld"){return x86.CLD;}if equal(name,"std"){return x86.STD;}return 0;
+}
+fn condition(name:[]const u8)u64{
+ if equal(name,"o"){return 0;}if equal(name,"no"){return 1;}if equal(name,"b")||equal(name,"c"){return 2;}if equal(name,"ae")||equal(name,"nc"){return 3;}
+ if equal(name,"e")||equal(name,"z"){return 4;}if equal(name,"ne")||equal(name,"nz"){return 5;}if equal(name,"be"){return 6;}if equal(name,"a"){return 7;}
+ if equal(name,"s"){return 8;}if equal(name,"ns"){return 9;}if equal(name,"p"){return 10;}if equal(name,"np"){return 11;}
+ if equal(name,"l"){return 12;}if equal(name,"ge"){return 13;}if equal(name,"le"){return 14;}if equal(name,"g"){return 15;}return NONE;
+}
+unsafe fn instruction(s:*State,name:[]const u8)bool{unsafe{
+ if (*s).section!=1{return fail(s,SYNTAX,15);}var ins=x86.Instruction{op:operation(name),form:0,width:0,dst:0,src:0,base:0,disp:0,imm:0,src_width:0,cc:0,reserved:0};
+ if name.len>1&&name[0]==106&&ins.op==0{ins.op=x86.JCC;ins.cc=condition(slice_from_raw_parts(name.ptr+1,name.len-1));}
+ if name.len>3&&name[0]==115&&name[1]==101&&name[2]==116{ins.op=x86.SETCC;ins.cc=condition(slice_from_raw_parts(name.ptr+3,name.len-3));}
+ if equal(name,"rep"){let which=word(s);if equal(which,"movsb"){ins.op=x86.MOVSB;}else if equal(which,"stosb"){ins.op=x86.STOSB;}}
+ if ins.op==0||ins.cc==NONE{return fail(s,SYNTAX,16);}var a=Operand{kind:0,reg:0,width:0,base:0,disp:0,value:0,start:0,length:0};var b=a;
+ if !end(s){if !operand(s,&a){return false;}if token(s,44){if !operand(s,&b){return false;}}}
+ if !end(s){return fail(s,SYNTAX,17);}var reference_start:usize=0;var reference_length:usize=0;
+ if a.kind==0{ins.form=x86.NONE;}
+ else if ins.op==x86.CALL||ins.op==x86.JMP||ins.op==x86.JCC{
+  if b.kind!=0{return fail(s,SYNTAX,18);}if a.kind==4{ins.form=x86.REL;reference_start=a.start;reference_length=a.length;}
+  else if a.kind==1{ins.form=x86.REG;ins.width=a.width;ins.dst=a.reg;}else{return fail(s,SYNTAX,19);}
+ }else if b.kind==0{if ins.op==x86.SHL||ins.op==x86.SHR||ins.op==x86.SAR{return fail(s,SYNTAX,59);}if a.kind!=1{return fail(s,SYNTAX,20);}ins.form=x86.REG;ins.width=a.width;ins.dst=a.reg;}
+ else if ins.op==x86.SHL||ins.op==x86.SHR||ins.op==x86.SAR{
+  if a.kind!=1||b.kind!=1||b.reg!=1||b.width!=8{return fail(s,SYNTAX,21);}ins.form=x86.REG;ins.width=a.width;ins.dst=a.reg;
+ }else if a.kind==1&&b.kind==5{if ins.op!=x86.LEA||a.width!=64{return fail(s,SYNTAX,55);}ins.form=x86.INDEX;ins.width=64;ins.dst=a.reg;ins.src=b.reg;ins.base=b.base;ins.disp=b.disp;ins.imm=b.value;
+ }else if a.kind==1&&b.kind==1{ins.form=x86.RR;ins.width=a.width;ins.dst=a.reg;ins.src=b.reg;
+  if ins.op==x86.MOVZX||ins.op==x86.MOVSX||ins.op==x86.MOVSXD{ins.src_width=b.width;}else if a.width!=b.width{return fail(s,SYNTAX,22);}
+ }else if a.kind==1&&b.kind==2{ins.form=x86.RI;ins.width=a.width;ins.dst=a.reg;ins.imm=b.value;}
+ else if a.kind==1&&b.kind==3{ins.form=x86.LOAD;ins.width=a.width;ins.dst=a.reg;ins.base=b.base;ins.disp=b.disp;
+  if ins.op==x86.MOVZX||ins.op==x86.MOVSX||ins.op==x86.MOVSXD{ins.src_width=b.width;}else if b.width!=0&&b.width!=a.width{return fail(s,SYNTAX,23);}
+  reference_start=b.start;reference_length=b.length;
+ }else if a.kind==3&&b.kind==1{ins.form=x86.STORE;ins.width=b.width;ins.src=b.reg;ins.base=a.base;ins.disp=a.disp;if a.width!=0&&a.width!=b.width{return fail(s,SYNTAX,24);}reference_start=a.start;reference_length=a.length;}
+ else{return fail(s,SYNTAX,25);}
+ var code:[15]u8=[0;15];var n:usize=0;let buffer=slice_from_raw_parts(&code[0],15);var status=x86.encode(buffer,&ins,&n);if status!=0{return fail(s,SYNTAX,100+status);}
+ if reference_length!=0&&(*s).pass!=0{var target:u64=0;if !address(s,reference_start,reference_length,&target){return false;}let current=elf.BASE+elf.TEXT_OFFSET+(*s).text+n;
+  let relative=wrapping_sub(target,current);if ins.form==x86.REL{ins.imm=relative;}else{ins.disp=relative;}status=x86.encode(buffer,&ins,&n);if status!=0{return fail(s,RANGE,26);}
+ }return bytes(s,slice_from_raw_parts(&code[0],n));
+}}
+unsafe fn data_values(s:*State,width:usize)bool{unsafe{
+ if (*s).section!=2{return fail(s,SYNTAX,27);}var count:usize=0;while true{var value:u64=0;let first=(*s).at;
+  if !number(s,&value){if (*s).status!=0{return false;}(*s).at=first;let label=word(s);if width!=8||label.len==0{return fail(s,SYNTAX,28);}if !address(s,(*s).at-label.len,label.len,&value){return false;}}
+  if width<8{let limit=(1 as u64)<<(width*8);if value>=limit&&value<NONE-limit/2+1{return fail(s,RANGE,29);}}
+  if !value_bytes(s,value,width){return false;}count+=1;if !token(s,44){break;}
+ }return count!=0&&end(s);
+}}
+unsafe fn line(s:*State)bool{unsafe{
+ skip(s);if end(s){return true;}let first=(*s).at;
+ if (*s).source[first]==37{
+  let rest=view(s,first,(*s).end-first);if equal(rest,"%ifidn __OUTPUT_FORMAT__,elf64"){if (*s).conditional||(*s).metadata{return fail(s,SYNTAX,50);}(*s).conditional=true;(*s).at=(*s).end;return true;}if equal(rest,"%endif"){if !(*s).conditional||!(*s).metadata{return fail(s,SYNTAX,51);}(*s).conditional=false;(*s).at=(*s).end;return true;}return fail(s,SYNTAX,30);
+ }
+ if (*s).metadata{return fail(s,SYNTAX,58);}
+ var name=word(s);if name.len==0{return fail(s,SYNTAX,31);}let start=(*s).at-name.len;
+ if token(s,58){if (*s).section!=1&&(*s).section!=2{return fail(s,SYNTAX,32);}
+  if (*s).pass==0{if lookup(s,start,name.len,true)==NONE{return false;}}
+  else{let index=lookup(s,start,name.len,false);if index==NONE{return fail(s,SYMBOL,33);}let label=(*(*s).w).labels[index];var offset=(*s).text;if (*s).section==2{offset=(*s).data;}if label.offset!=offset||label.section!=(*s).section{return fail(s,INVALID,34);}}
+  if end(s){return true;}name=word(s);if name.len==0{return fail(s,SYNTAX,35);}
+ }
+ if equal(name,"bits"){var value:u64=0;if !number(s,&value)||value!=64||!end(s){return fail(s,SYNTAX,36);}return true;}
+ if equal(name,"default"){if !equal(word(s),"rel")||!end(s){return fail(s,SYNTAX,37);}return true;}
+ if equal(name,"section"){let section=word(s);if equal(section,".text"){(*s).section=1;}else if equal(section,".rodata"){(*s).section=2;}
+  else if equal(section,".note.GNU"){return fail(s,SYNTAX,38);}else{return fail(s,SYNTAX,39);}if !end(s){return fail(s,SYNTAX,40);}return true;
+ }
+ if equal(name,"global"){let label=word(s);let label_start=(*s).at-label.len;if !identifier(label)||!end(s){return fail(s,SYNTAX,41);}if (*s).pass!=0&&lookup(s,label_start,label.len,false)==NONE{return fail(s,SYMBOL,42);}return true;}
+ if equal(name,"align"){var alignment:u64=0;if !number(s,&alignment)||alignment==0||alignment>4096||(alignment&(alignment-1))!=0||!end(s){return fail(s,SYNTAX,43);}
+  var at=(*s).text;if (*s).section==2{at=(*s).data;}let pad=(alignment-at%alignment)%alignment;var i:usize=0;while i<pad{if !value_bytes(s,0x90,1){return false;}i+=1;}return true;
+ }
+ if equal(name,"db"){if !data_values(s,1){if (*s).status==0{fail(s,SYNTAX,44);}return false;}return true;}
+ if equal(name,"dw"){return data_values(s,2);}if equal(name,"dd"){return data_values(s,4);}if equal(name,"dq"){return data_values(s,8);}
+ if equal(name,"times"){var count:u64=0;var value:u64=0;if !number(s,&count)||!equal(word(s),"db")||!number(s,&value)||value>255||!end(s)||(*s).section!=2{return fail(s,SYNTAX,45);}
+  if count>(*(*s).w).data.len-(*s).data{return fail(s,CAPACITY,46);}var i:u64=0;while i<count{if !value_bytes(s,value,1){return false;}i+=1;}return true;
+ }
+ return instruction(s,name);
+}}
+unsafe fn pass(s:*State)bool{unsafe{
+ (*s).line=0;(*s).at=0;(*s).text=0;(*s).data=0;(*s).section=0;(*s).conditional=false;(*s).metadata=false;var first:usize=0;
+ while first<(*s).source.len{var finish=first;while finish<(*s).source.len&&(*s).source[finish]!=10{finish+=1;}
+  var content_end=finish;var scan=first;while scan<finish{if (*s).source[scan]==59{content_end=scan;break;}scan+=1;}
+  while content_end>first&&space((*s).source[content_end-1]){content_end-=1;}var content_start=first;while content_start<content_end&&space((*s).source[content_start]){content_start+=1;}
+  (*s).at=content_start;(*s).end=content_end;(*s).line+=1;
+  // The native output's final ELF metadata is non-loadable, not assembler input.
+  let tail=view(s,content_start,content_end-content_start);
+  if equal(tail,"section .note.GNU-stack noalloc noexec nowrite progbits"){if !(*s).conditional||(*s).metadata{return fail(s,SYNTAX,52);}(*s).metadata=true;(*s).section=3;}else{
+   if !line(s){if (*s).status==0{fail(s,SYNTAX,47);}return false;}
+  }
+  first=finish;if first<(*s).source.len{first+=1;}
+ }if (*s).conditional{return fail(s,SYNTAX,53);}return (*s).status==0;
+}}
+struct Region{p:u64,n:usize}
+unsafe fn valid(source:[]const u8,entry:[]const u8,w:*const Workspace,out:[]u8,r:*Result)bool{unsafe{
+ if w==null||r==null||(w as u64&7)!=0||(r as u64&7)!=0||!span(w as u64,sizeof(Workspace))||!span(r as u64,sizeof(Result)){return false;}
+ if (*w).labels.len>NONE/sizeof(Label)||(*w).table.len>NONE/8{return false;}
+ let inputs=[Region{p:source.ptr as u64,n:source.len},Region{p:entry.ptr as u64,n:entry.len},Region{p:w as u64,n:sizeof(Workspace)}];
+ let outputs=[Region{p:(*w).labels.ptr as u64,n:(*w).labels.len*sizeof(Label)},Region{p:(*w).table.ptr as u64,n:(*w).table.len*8},Region{p:(*w).text.ptr as u64,n:(*w).text.len},Region{p:(*w).data.ptr as u64,n:(*w).data.len},Region{p:out.ptr as u64,n:out.len},Region{p:r as u64,n:sizeof(Result)}];
+ if ((*w).labels.ptr as u64&7)!=0||((*w).table.ptr as u64&7)!=0{return false;}
+ var i:usize=0;while i<inputs.len{if !span(inputs[i].p,inputs[i].n){return false;}i+=1;}
+ i=0;while i<outputs.len{if !span(outputs[i].p,outputs[i].n){return false;}var j:usize=0;while j<inputs.len{if overlap(outputs[i].p,outputs[i].n,inputs[j].p,inputs[j].n){return false;}j+=1;}
+  j=0;while j<i{if overlap(outputs[i].p,outputs[i].n,outputs[j].p,outputs[j].n){return false;}j+=1;}i+=1;}
+ return true;
+}}
+pub unsafe fn assemble(source:[]const u8,entry:[]const u8,w:*const Workspace,out:[]u8,r:*Result)u64{unsafe{
+ if !valid(source,entry,w,out,r){return INVALID;}
+ var s=State{source:source,w:w,status:0,line:0,detail:0,pass:0,section:0,text:0,data:0,label_count:0,text_size:0,at:0,end:0,conditional:false,metadata:false};
+ var i:usize=0;while i<(*w).table.len{(*w).table[i]=NONE;i+=1;}
+ var entry_offset:usize=NONE;if pass(&s){s.text_size=s.text;i=0;while i<s.label_count{let label=(*w).labels[i];if equal(view(&s,label.start,label.length),entry){if label.section!=1{fail(&s,SYMBOL,48);}else{entry_offset=label.offset;}break;}i+=1;}
+  if entry_offset==NONE{fail(&s,SYMBOL,49);}if s.status==0{s.pass=1;pass(&s);}
+ }
+ var written:usize=0;if s.status==0{let status=elf.emit(slice_from_raw_parts((*w).text.ptr,s.text),slice_from_raw_parts((*w).data.ptr,s.data),0,entry_offset,out,&written);
+  if status==elf.CAPACITY{s.status=CAPACITY;}else if status!=0{s.status=RANGE;}s.detail=status;
+ }
+ *r=Result{status:s.status,line:s.line,detail:s.detail,text_bytes:s.text,data_bytes:s.data,labels:s.label_count,written:written};return s.status;
+}}

@@ -1,0 +1,144 @@
+// Stable diagnostic categories over native frontend results. Single-line mode.
+module bootstrap.frontend_diagnostics;
+import bootstrap.frontend as front;
+import bootstrap.modules as modules;
+import bootstrap.lexer as lex;
+import bootstrap.names as names;
+import bootstrap.binding as binding;
+import bootstrap.semantic_types as semantic;
+import bootstrap.source_position as position;
+import bootstrap.diagnostic_format as format;
+import core.utf8 as utf8;
+pub const OK:u64=0;pub const INVALID:u64=1;pub const CAPACITY:u64=2;
+const MAX:usize=0xffff_ffff_ffff_ffff;
+fn span(p:u64,n:usize)bool{return n==0||(p!=0&&n<=MAX-p);}
+fn overlap(a:u64,n:usize,b:u64,m:usize)bool{return n!=0&&m!=0&&a<b+m&&b<a+n;}
+fn safe_path(path:[]const u8)bool{
+ if path.len==0||!utf8.validate(path){return false;}
+ var i:usize=0;while i<path.len{if path[i]<32||path[i]==127{return false;}i+=1;}return true;
+}
+pub fn error_code(stage:u64,code:u64,detail:u64)[]const u8{
+ if stage==front.WORKSPACE{return "E0601";}
+ if stage==front.MODULES{
+  if code==modules.LEX{return "E0001";}if code==modules.SYNTAX{return "E0101";}
+  if code==modules.DUP_ALIAS{return "E0201";}
+  if code==modules.CAPACITY||code==modules.DEPTH{return "E0601";}
+  if code==modules.INVALID{return "E0901";}return "E0202";
+ }
+ if stage==front.NAMES{
+  if code==names.INVALID||code==names.BAD_GRAPH{return "E0901";}
+  if code==names.CAPACITY{return "E0601";}return "E0201";
+ }
+ if stage==front.BINDING{
+  if code==binding.INVALID||code==binding.BAD_TREE{return "E0901";}
+  if code==binding.CAPACITY||code==binding.DEPTH{return "E0601";}
+  if code==binding.CONTROL{return "E0501";}if code==binding.KIND{return "E0301";}return "E0201";
+ }
+ if stage==front.SEMANTIC{
+  if code==semantic.INVALID||code==semantic.BAD_GRAPH{return "E0901";}
+  if code==semantic.CAPACITY||code==semantic.DEPTH||code==semantic.UNSUPPORTED{return "E0601";}
+  if code==semantic.CYCLE||code==semantic.CONSTANT||code==semantic.LAYOUT{return "E0302";}
+  if code==semantic.PRIVATE{return "E0201";}if code==semantic.UNINITIALIZED{return "E0401";}
+  if code==semantic.IMMUTABLE||code==semantic.RETURN_PATH{return "E0402";}
+  if code==semantic.UNSAFE{return "E0501";}
+  if code==semantic.FLOW{if detail==1||detail==2{return "E0403";}return "E0501";}
+  return "E0301";
+ }
+ return "E0901";
+}
+pub fn message(stage:u64,code:u64,detail:u64)[]const u8{
+ if stage==front.WORKSPACE{return "frontend workspace capacity exceeded";}
+ if stage==front.MODULES{
+  if code==modules.LEX{
+   if detail==lex.BAD_UTF8{return "source is not valid UTF-8";}
+   if detail==lex.BLOCK_COMMENT{return "unterminated block comment";}
+   if detail==lex.UNTERMINATED_STRING{return "unterminated string";}
+   if detail==lex.STRING_NEWLINE{return "newline in string";}
+   if detail==lex.HEX_ESCAPE||detail==lex.STRING_ESCAPE{return "invalid string escape";}
+   if detail==lex.INTEGER_LITERAL{return "invalid integer literal";}return "invalid source character";
+  }
+  if code==modules.SYNTAX{return "invalid syntax";}
+  if code==modules.MISSING{return "module not found in explicit source roots";}
+  if code==modules.AMBIGUOUS{return "module is present in multiple source roots";}
+  if code==modules.PATH{return "module declaration does not match source path";}
+  if code==modules.CYCLE{return "cyclic module import";}
+  if code==modules.ROOT_REQUIRED{return "module imports require explicit source roots";}
+  if code==modules.DUP_ALIAS{return "duplicate import alias";}
+  if code==modules.CAPACITY{return "module workspace capacity exceeded";}
+  if code==modules.DEPTH{return "module or syntax depth limit exceeded";}
+ }
+ if stage==front.NAMES{
+  if code==names.DUPLICATE{return "duplicate declaration";}
+  if code==names.UNKNOWN{return "unknown name";}if code==names.PRIVATE{return "private declaration";}
+  if code==names.CAPACITY{return "name workspace capacity exceeded";}
+ }
+ if stage==front.BINDING{
+  if code==binding.UNKNOWN{return "unknown name";}if code==binding.PRIVATE{return "private declaration";}
+  if code==binding.KIND{return "name has the wrong declaration kind";}
+  if code==binding.DUPLICATE{return "duplicate local declaration";}
+  if code==binding.CONTROL{return "invalid control transfer or defer context";}
+  if code==binding.CAPACITY{return "binding workspace capacity exceeded";}
+  if code==binding.DEPTH{return "binding depth limit exceeded";}
+ }
+ if stage==front.SEMANTIC{
+  if code==semantic.TYPE{return "type mismatch or invalid type";}
+  if code==semantic.CYCLE{return "cyclic type or constant dependency";}
+  if code==semantic.CONSTANT{return "invalid constant expression";}
+  if code==semantic.LAYOUT{return "invalid type layout";}
+  if code==semantic.PRIVATE{return "private declaration";}
+  if code==semantic.UNINITIALIZED{return "variable may be uninitialized";}
+  if code==semantic.IMMUTABLE{return "cannot assign to immutable value";}
+  if code==semantic.UNSAFE{return "operation requires unsafe";}
+  if code==semantic.RETURN_PATH{return "invalid or missing return path";}
+  if code==semantic.FLOW{
+   if detail==1{return "duplicate or invalid match pattern";}if detail==2{return "non-exhaustive match";}
+   return "invalid control transfer, try, or defer context";
+  }
+  if code==semantic.UNSUPPORTED{return "unsupported language construct";}
+  if code==semantic.CAPACITY{return "semantic workspace capacity exceeded";}
+  if code==semantic.DEPTH{return "semantic depth limit exceeded";}
+ }
+ return "internal frontend contract failure";
+}
+pub unsafe fn render(sources:[]const modules.Source,r:*const front.Result,out:[]u8,written:*usize)u64{unsafe{
+ let rp=r as u64;let sp=sources.ptr as u64;let op=out.ptr as u64;let wp=written as u64;
+ if r==null||written==null||(rp&7)!=0||(wp&7)!=0||!span(rp,sizeof(front.Result))||!span(wp,8)
+  ||sources.len>MAX/sizeof(modules.Source)||!span(sp,sources.len*sizeof(modules.Source))||(sp&7)!=0||!span(op,out.len){return INVALID;}
+ let sn=sources.len*sizeof(modules.Source);
+ if overlap(op,out.len,wp,8)||overlap(op,out.len,rp,sizeof(front.Result))||overlap(wp,8,rp,sizeof(front.Result))
+  ||overlap(op,out.len,sp,sn)||overlap(wp,8,sp,sn){return INVALID;}
+ var i:usize=0;while i<sources.len{
+  let p=sources[i].path;let b=sources[i].bytes;
+  if !span(p.ptr as u64,p.len)||!span(b.ptr as u64,b.len)
+   ||overlap(op,out.len,p.ptr as u64,p.len)||overlap(op,out.len,b.ptr as u64,b.len)
+   ||overlap(wp,8,p.ptr as u64,p.len)||overlap(wp,8,b.ptr as u64,b.len){return INVALID;}i+=1;
+ }
+ if (*r).status<front.CAPACITY||(*r).status>front.INTERNAL||(*r).stage>front.SEMANTIC{return INVALID;}
+ var path:[]const u8="<input>";var line:usize=1;var column:usize=1;
+ if (*r).source!=front.NONE{
+  if (*r).source>=sources.len{return INVALID;}
+  let source=sources[(*r).source];if safe_path(source.path){path=source.path;}
+  let raw=source.bytes;var skip:usize=0;if raw.len>=3&&raw[0]==239&&raw[1]==187&&raw[2]==191{skip=3;}
+  let bytes=slice_from_raw_parts(raw.ptr+skip,raw.len-skip);
+  if (*r).offset>bytes.len{return INVALID;}
+  var view=bytes;
+  // BAD_UTF8 has already identified the first malformed scalar. Only that
+  // known-valid prefix is passed to C6; unrelated malformed suffixes stay unread.
+  if (*r).stage==front.MODULES&&(*r).code==modules.LEX&&(*r).detail==lex.BAD_UTF8{
+   view=slice_from_raw_parts(bytes.ptr,(*r).offset);
+  }
+  // Arena/module-depth failures can precede the lexer for this catalog entry.
+  // Their conventional 1:1 location does not require decoding that source.
+  if (*r).stage!=front.WORKSPACE&&!((*r).stage==front.MODULES&&(*r).code==modules.DEPTH&&(*r).detail==0){
+   var located=position.Position{line:0,column:0,line_start:0,line_end:0};
+   let status=position.locate(view,(*r).offset,&located);
+   if status!=position.OK{return INVALID;}
+   line=located.line;column=located.column;
+  }
+ }
+ return format.render(path,line,column,error_code((*r).stage,(*r).code,(*r).detail),
+  message((*r).stage,(*r).code,(*r).detail),out,written);
+}}
+export("dong_frontend_diagnostic") pub unsafe fn render_raw(sources:*const modules.Source,count:usize,r:*const front.Result,
+ out:*u8,capacity:usize,written:*usize)u64{unsafe{return render(slice_from_raw_parts(sources,count),r,slice_from_raw_parts(out,capacity),written);}}
+

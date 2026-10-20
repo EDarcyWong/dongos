@@ -1,0 +1,263 @@
+// Native bounded frontend. No filesystem, host parser, or implicit allocation.
+module bootstrap.frontend;
+import bootstrap.modules as modules;
+import bootstrap.lexer as lex;
+import bootstrap.expression as ast;
+import bootstrap.names as names;
+import bootstrap.binding as binding;
+import bootstrap.semantic_types as semantic;
+import bootstrap.type_layout as layout;
+import core.arena as arena;
+pub const NONE:usize=0xffff_ffff_ffff_ffff;
+pub const OK:u64=0;pub const INVALID:u64=1;pub const CAPACITY:u64=2;
+pub const SOURCE:u64=3;pub const UNSUPPORTED:u64=4;pub const INTERNAL:u64=5;
+pub const WORKSPACE:u64=0;pub const MODULES:u64=1;pub const NAMES:u64=2;
+pub const BINDING:u64=3;pub const SEMANTIC:u64=4;
+pub struct Options{pub entry:usize,pub roots:usize,pub max_depth:usize}
+pub struct Limits{pub tokens:usize,pub nodes:usize,pub strings:usize,pub edges:usize,
+ pub types:usize,pub fields:usize,pub limbs:usize,pub text:usize,pub math_limbs:usize,pub math_work:usize}
+pub struct Graph{
+ pub arena:[]const u8,
+ pub sources:[]const modules.Source,
+ pub units:[]const modules.Unit,
+ pub tokens:[]const lex.Token,
+ pub strings:[]const u8,
+ pub nodes:[]const ast.Node,
+ pub edges:[]const modules.Edge,
+ pub symbols:[]const names.Symbol,
+ pub refs:[]const binding.Ref,
+ pub types:[]const semantic.Type,
+ pub fields:[]const semantic.Field,
+ pub node_types:[]const usize,
+ pub values:[]const semantic.Value,
+ pub value_states:[]const u8,
+ pub limbs:[]const u32,
+ pub layouts:[]const layout.Layout,
+ pub field_offsets:[]const usize,
+ pub info:[]const semantic.Info,
+ pub entry:usize
+}
+pub struct Result{pub status:u64,pub exit_code:u64,pub stage:u64,pub code:u64,pub detail:u64,
+ pub source:usize,pub offset:usize,pub used:usize,pub graph:Graph}
+struct Work{
+ pub units:[]modules.Unit,
+ pub tokens:[]lex.Token,
+ pub strings:[]u8,
+ pub nodes:[]ast.Node,
+ pub edges:[]modules.Edge,
+ pub states:[]u8,
+ pub symbols:[]names.Symbol,
+ pub names_work:[]names.Symbol,
+ pub refs:[]binding.Ref,
+ pub refs_work:[]binding.Ref,
+ pub locals:[]binding.Local,
+ pub semantic:semantic.Workspace,pub runtime:semantic.RuntimeWorkspace
+}
+fn flow_stride(count:usize)usize{var stride=count/8;if count%8!=0{stride+=1;}return stride;}
+fn span(p:u64,n:usize)bool{return n==0||(p!=0&&n<=NONE-p);}
+fn overlap(a:u64,n:usize,b:u64,m:usize)bool{return n!=0&&m!=0&&a<b+m&&b<a+n;}
+fn canonical(path:[]const u8)bool{
+ if path.len<4||path[0]==47||path[path.len-3]!=46||path[path.len-2]!=100||path[path.len-1]!=103{return false;}
+ var at:usize=0;var first:usize=0;
+ while at<path.len{let c=path[at];if c==0||c==92||c==58{return false;}
+  if c==47{let n=at-first;if n==0||(n==1&&path[first]==46)||(n==2&&path[first]==46&&path[first+1]==46){return false;}first=at+1;}at+=1;
+ }return first<path.len-3;
+}
+unsafe fn blank(r:*Result)void{unsafe{
+ (*r).status=OK;(*r).exit_code=0;(*r).stage=WORKSPACE;(*r).code=0;(*r).detail=0;
+ (*r).source=NONE;(*r).offset=0;(*r).used=0;
+ (*r).graph.arena=slice_from_raw_parts(null as *const u8,0);
+ (*r).graph.sources=slice_from_raw_parts(null as *const modules.Source,0);
+ (*r).graph.units=slice_from_raw_parts(null as *const modules.Unit,0);
+ (*r).graph.tokens=slice_from_raw_parts(null as *const lex.Token,0);
+ (*r).graph.strings=slice_from_raw_parts(null as *const u8,0);
+ (*r).graph.nodes=slice_from_raw_parts(null as *const ast.Node,0);
+ (*r).graph.edges=slice_from_raw_parts(null as *const modules.Edge,0);
+ (*r).graph.symbols=slice_from_raw_parts(null as *const names.Symbol,0);
+ (*r).graph.refs=slice_from_raw_parts(null as *const binding.Ref,0);
+ (*r).graph.types=slice_from_raw_parts(null as *const semantic.Type,0);
+ (*r).graph.fields=slice_from_raw_parts(null as *const semantic.Field,0);
+ (*r).graph.node_types=slice_from_raw_parts(null as *const usize,0);
+ (*r).graph.values=slice_from_raw_parts(null as *const semantic.Value,0);
+ (*r).graph.value_states=slice_from_raw_parts(null as *const u8,0);
+ (*r).graph.limbs=slice_from_raw_parts(null as *const u32,0);
+ (*r).graph.layouts=slice_from_raw_parts(null as *const layout.Layout,0);
+ (*r).graph.field_offsets=slice_from_raw_parts(null as *const usize,0);
+ (*r).graph.info=slice_from_raw_parts(null as *const semantic.Info,0);
+ (*r).graph.entry=NONE;
+}}
+unsafe fn preflight(o:*const Options,s:[]const modules.Source,l:*const Limits,b:[]u8,r:*Result)bool{unsafe{
+ let op=o as u64;let lp=l as u64;let rp=r as u64;let sp=s.ptr as u64;let bp=b.ptr as u64;
+ if o==null||l==null||r==null||(op&7)!=0||(lp&7)!=0||(rp&7)!=0
+  ||!span(op,sizeof(Options))||!span(lp,sizeof(Limits))||!span(rp,sizeof(Result))
+  ||s.len>NONE/sizeof(modules.Unit)||!span(sp,s.len*sizeof(modules.Source))||(sp&7)!=0||!span(bp,b.len){return false;}
+ let sn=s.len*sizeof(modules.Source);
+ if overlap(bp,b.len,rp,sizeof(Result))||overlap(bp,b.len,op,sizeof(Options))||overlap(bp,b.len,lp,sizeof(Limits))
+  ||overlap(bp,b.len,sp,sn)||overlap(rp,sizeof(Result),op,sizeof(Options))
+  ||overlap(rp,sizeof(Result),lp,sizeof(Limits))||overlap(rp,sizeof(Result),sp,sn){return false;}
+ if (*o).entry>=s.len||(*o).max_depth==0||(*o).max_depth>256{return false;}
+ // Check every multiplication before allocation or reading any source bytes.
+ if (*l).tokens>NONE/56||(*l).nodes>NONE/64||(*l).edges>NONE/32||(*l).types>NONE/72
+  ||(*l).fields>NONE/24||(*l).limbs>NONE/4||(*l).math_limbs>NONE/4||(*l).math_work>NONE/4
+  ||flow_stride((*l).nodes)>NONE/(*o).max_depth/2{return false;}
+ var i:usize=0;while i<s.len{
+  let p=s[i].path;let raw=s[i].bytes;
+  if !span(p.ptr as u64,p.len)||!span(raw.ptr as u64,raw.len)||raw.len==NONE
+   ||((*o).roots==0&&s[i].root!=NONE)||((*o).roots!=0&&s[i].root>=(*o).roots){return false;}
+  if overlap(bp,b.len,p.ptr as u64,p.len)||overlap(bp,b.len,raw.ptr as u64,raw.len)
+   ||overlap(rp,sizeof(Result),p.ptr as u64,p.len)||overlap(rp,sizeof(Result),raw.ptr as u64,raw.len){return false;}i+=1;
+ }
+ i=0;while i<s.len{if !canonical(s[i].path){return false;}i+=1;}return true;
+}}
+unsafe fn take(a:*arena.Arena,n:usize,width:usize,alignment:usize,p:*usize)bool{unsafe{
+ return arena.allocate(a,n*width,alignment,p);
+}}
+unsafe fn prepare(a:*arena.Arena,w:*Work,limits:*const Limits,sources:usize,depth:usize)bool{unsafe{
+ let l=*limits;var p:usize=0;
+ if !take(a,sources,72,8,&p){return false;}(*w).units=slice_from_raw_parts(p as *modules.Unit,sources);
+ if !take(a,l.tokens,56,8,&p){return false;}(*w).tokens=slice_from_raw_parts(p as *lex.Token,l.tokens);
+ if !take(a,l.strings,1,1,&p){return false;}(*w).strings=slice_from_raw_parts(p as *u8,l.strings);
+ if !take(a,l.nodes,64,8,&p){return false;}(*w).nodes=slice_from_raw_parts(p as *ast.Node,l.nodes);
+ if !take(a,l.edges,32,8,&p){return false;}(*w).edges=slice_from_raw_parts(p as *modules.Edge,l.edges);
+ if !take(a,sources,1,1,&p){return false;}(*w).states=slice_from_raw_parts(p as *u8,sources);
+ if !take(a,l.nodes,48,8,&p){return false;}(*w).symbols=slice_from_raw_parts(p as *names.Symbol,l.nodes);
+ if !take(a,l.nodes,48,8,&p){return false;}(*w).names_work=slice_from_raw_parts(p as *names.Symbol,l.nodes);
+ if !take(a,l.nodes,32,8,&p){return false;}(*w).refs=slice_from_raw_parts(p as *binding.Ref,l.nodes);
+ if !take(a,l.nodes,32,8,&p){return false;}(*w).refs_work=slice_from_raw_parts(p as *binding.Ref,l.nodes);
+ if !take(a,l.nodes,40,8,&p){return false;}(*w).locals=slice_from_raw_parts(p as *binding.Local,l.nodes);
+ if !take(a,l.types,72,8,&p){return false;}(*w).semantic.types=slice_from_raw_parts(p as *semantic.Type,l.types);
+ if !take(a,l.fields,24,8,&p){return false;}(*w).semantic.fields=slice_from_raw_parts(p as *semantic.Field,l.fields);
+ if !take(a,l.nodes,8,8,&p){return false;}(*w).semantic.node_types=slice_from_raw_parts(p as *usize,l.nodes);
+ if !take(a,l.nodes,40,8,&p){return false;}(*w).semantic.values=slice_from_raw_parts(p as *semantic.Value,l.nodes);
+ if !take(a,l.nodes,1,1,&p){return false;}(*w).semantic.value_states=slice_from_raw_parts(p as *u8,l.nodes);
+ if !take(a,l.nodes,1,1,&p){return false;}(*w).semantic.type_states=slice_from_raw_parts(p as *u8,l.nodes);
+ if !take(a,l.limbs,4,4,&p){return false;}(*w).semantic.limbs=slice_from_raw_parts(p as *u32,l.limbs);
+ if !take(a,l.text,1,1,&p){return false;}(*w).semantic.text=slice_from_raw_parts(p as *u8,l.text);
+ if !take(a,8,56,8,&p){return false;}(*w).semantic.math_tokens=slice_from_raw_parts(p as *lex.Token,8);
+ if !take(a,8,64,8,&p){return false;}(*w).semantic.math_nodes=slice_from_raw_parts(p as *ast.Node,8);
+ if !take(a,l.math_limbs,4,4,&p){return false;}(*w).semantic.eval_out=slice_from_raw_parts(p as *u32,l.math_limbs);
+ if !take(a,l.math_work,4,4,&p){return false;}(*w).semantic.eval_work=slice_from_raw_parts(p as *u32,l.math_work);
+ if !take(a,l.types,8,8,&p){return false;}(*w).semantic.layout_ids=slice_from_raw_parts(p as *usize,l.types);
+ if !take(a,l.types,8,8,&p){return false;}(*w).semantic.layout_map=slice_from_raw_parts(p as *usize,l.types);
+ if !take(a,l.types,56,8,&p){return false;}(*w).semantic.layout_types=slice_from_raw_parts(p as *layout.Type,l.types);
+ if !take(a,l.fields,8,8,&p){return false;}(*w).semantic.layout_fields=slice_from_raw_parts(p as *layout.Field,l.fields);
+ if !take(a,l.types,16,8,&p){return false;}(*w).semantic.layout_out=slice_from_raw_parts(p as *layout.Layout,l.types);
+ if !take(a,l.fields,8,8,&p){return false;}(*w).semantic.layout_offsets=slice_from_raw_parts(p as *usize,l.fields);
+ if !take(a,l.types,16,8,&p){return false;}(*w).semantic.layout_work=slice_from_raw_parts(p as *layout.Layout,l.types);
+ if !take(a,l.fields,8,8,&p){return false;}(*w).semantic.layout_work_offsets=slice_from_raw_parts(p as *usize,l.fields);
+ if !take(a,l.types,1,1,&p){return false;}(*w).semantic.layout_states=slice_from_raw_parts(p as *u8,l.types);
+ if !take(a,l.types,16,8,&p){return false;}(*w).semantic.layouts=slice_from_raw_parts(p as *layout.Layout,l.types);
+ if !take(a,l.fields,8,8,&p){return false;}(*w).semantic.field_offsets=slice_from_raw_parts(p as *usize,l.fields);
+ if !take(a,l.types,1,1,&p){return false;}(*w).semantic.layout_ready=slice_from_raw_parts(p as *u8,l.types);
+ if !take(a,l.nodes,24,8,&p){return false;}(*w).runtime.info=slice_from_raw_parts(p as *semantic.Info,l.nodes);
+ if !take(a,l.nodes,1,1,&p){return false;}(*w).runtime.initialized=slice_from_raw_parts(p as *u8,l.nodes);
+ let flow_bytes=flow_stride(l.nodes)*depth;
+ if !take(a,flow_bytes*2,1,1,&p){return false;}(*w).runtime.snapshots=slice_from_raw_parts(p as *u8,flow_bytes*2);
+ if !take(a,flow_bytes,1,1,&p){return false;}(*w).runtime.breaks=slice_from_raw_parts(p as *u8,flow_bytes);
+ if !take(a,depth,1,1,&p){return false;}(*w).runtime.loop_seen=slice_from_raw_parts(p as *u8,depth);
+ return true;
+}}
+unsafe fn failure(r:*Result,stage:u64,code:u64,detail:u64,source:usize,offset:usize,used:usize)u64{unsafe{
+ blank(r);(*r).stage=stage;(*r).code=code;(*r).detail=detail;(*r).source=source;(*r).offset=offset;(*r).used=used;
+ var status=SOURCE;var exit_code:u64=1;
+ if stage==WORKSPACE||(stage==MODULES&&code==modules.CAPACITY)||(stage==NAMES&&code==names.CAPACITY)
+  ||(stage==BINDING&&code==binding.CAPACITY)||(stage==SEMANTIC&&code==semantic.CAPACITY){status=CAPACITY;exit_code=2;}
+ else if (stage==MODULES&&code==modules.DEPTH)||(stage==BINDING&&code==binding.DEPTH)
+  ||(stage==SEMANTIC&&(code==semantic.DEPTH||code==semantic.UNSUPPORTED)){status=UNSUPPORTED;}
+ else if code==1||(stage==NAMES&&code==names.BAD_GRAPH)||(stage==BINDING&&code==binding.BAD_TREE)
+  ||(stage==SEMANTIC&&code==semantic.BAD_GRAPH){status=INTERNAL;exit_code=2;}
+ (*r).status=status;(*r).exit_code=exit_code;return status;
+}}
+unsafe fn located_failure(r:*Result,w:*const Work,stage:u64,code:u64,detail:u64,unit:usize,token:usize,count:usize,used:usize)u64{unsafe{
+ var source:usize=NONE;var offset:usize=0;
+ if unit<count{
+  let u=(*w).units[unit];source=u.source_index;
+  if token<u.token_count{offset=(*w).tokens[u.token_start+token].start;}
+ }
+ return failure(r,stage,code,detail,source,offset,used);
+}}
+pub unsafe fn check(o:*const Options,sources:[]const modules.Source,l:*const Limits,storage:[]u8,r:*Result)u64{unsafe{
+ if !preflight(o,sources,l,storage,r){return INVALID;}
+ var a=arena.Arena{base:null,capacity:0,used:0};let initialized=arena.init(&a,storage);
+ if !initialized{return INVALID;}
+ var w=Work{
+ units:slice_from_raw_parts(null as *modules.Unit,0),
+ tokens:slice_from_raw_parts(null as *lex.Token,0),
+ strings:slice_from_raw_parts(null as *u8,0),
+ nodes:slice_from_raw_parts(null as *ast.Node,0),
+ edges:slice_from_raw_parts(null as *modules.Edge,0),
+ states:slice_from_raw_parts(null as *u8,0),
+ symbols:slice_from_raw_parts(null as *names.Symbol,0),
+ names_work:slice_from_raw_parts(null as *names.Symbol,0),
+ refs:slice_from_raw_parts(null as *binding.Ref,0),
+ refs_work:slice_from_raw_parts(null as *binding.Ref,0),
+ locals:slice_from_raw_parts(null as *binding.Local,0),
+ semantic:semantic.Workspace{
+ types:slice_from_raw_parts(null as *semantic.Type,0),
+ fields:slice_from_raw_parts(null as *semantic.Field,0),
+ node_types:slice_from_raw_parts(null as *usize,0),
+ values:slice_from_raw_parts(null as *semantic.Value,0),
+ value_states:slice_from_raw_parts(null as *u8,0),
+ type_states:slice_from_raw_parts(null as *u8,0),
+ limbs:slice_from_raw_parts(null as *u32,0),
+ text:slice_from_raw_parts(null as *u8,0),
+ math_tokens:slice_from_raw_parts(null as *lex.Token,0),
+ math_nodes:slice_from_raw_parts(null as *ast.Node,0),
+ eval_out:slice_from_raw_parts(null as *u32,0),
+ eval_work:slice_from_raw_parts(null as *u32,0),
+ layout_ids:slice_from_raw_parts(null as *usize,0),
+ layout_map:slice_from_raw_parts(null as *usize,0),
+ layout_types:slice_from_raw_parts(null as *layout.Type,0),
+ layout_fields:slice_from_raw_parts(null as *layout.Field,0),
+ layout_out:slice_from_raw_parts(null as *layout.Layout,0),
+ layout_offsets:slice_from_raw_parts(null as *usize,0),
+ layout_work:slice_from_raw_parts(null as *layout.Layout,0),
+ layout_work_offsets:slice_from_raw_parts(null as *usize,0),
+ layout_states:slice_from_raw_parts(null as *u8,0),
+ layouts:slice_from_raw_parts(null as *layout.Layout,0),
+ field_offsets:slice_from_raw_parts(null as *usize,0),
+ layout_ready:slice_from_raw_parts(null as *u8,0)
+ },runtime:semantic.RuntimeWorkspace{
+ info:slice_from_raw_parts(null as *semantic.Info,0),
+ initialized:slice_from_raw_parts(null as *u8,0),
+ snapshots:slice_from_raw_parts(null as *u8,0),
+ breaks:slice_from_raw_parts(null as *u8,0),
+ loop_seen:slice_from_raw_parts(null as *u8,0)
+ }};
+ if !prepare(&a,&w,l,sources.len,(*o).max_depth){return failure(r,WORKSPACE,CAPACITY,0,(*o).entry,0,a.used);}
+ var mr=modules.Result{count:0,token_used:0,string_used:0,node_used:0,edge_used:0,code:0,error_source:0,error_start:0,detail:0};
+ let loaded=modules.load((*o).entry,(*o).roots,sources,w.units,w.tokens,w.strings,w.nodes,w.edges,w.states,(*o).max_depth,&mr);
+ if loaded!=0{return failure(r,MODULES,loaded,mr.detail,mr.error_source,mr.error_start,a.used);}
+ let units=slice_from_raw_parts(w.units.ptr as *const modules.Unit,mr.count);
+ let tokens=slice_from_raw_parts(w.tokens.ptr as *const lex.Token,mr.token_used);
+ let nodes=slice_from_raw_parts(w.nodes.ptr as *const ast.Node,mr.node_used);
+ let edges=slice_from_raw_parts(w.edges.ptr as *const modules.Edge,mr.edge_used);
+ var nr=names.Result{code:0,count:0,unit:0,token:0,detail:0};
+ let named=names.collect(sources,units,tokens,nodes,edges,w.symbols,w.names_work,&nr);
+ if named!=0{return located_failure(r,&w,NAMES,named,nr.detail,nr.unit,nr.token,mr.count,a.used);}
+ let symbols=slice_from_raw_parts(w.symbols.ptr as *const names.Symbol,nr.count);
+ var br=binding.Result{code:0,count:0,unit:0,token:0,detail:0};
+ let bound=binding.check(sources,units,tokens,nodes,edges,symbols,w.refs,w.refs_work,w.locals,(*o).max_depth,&br);
+ if bound!=0{return located_failure(r,&w,BINDING,bound,br.detail,br.unit,br.token,mr.count,a.used);}
+ let refs=slice_from_raw_parts(w.refs.ptr as *const binding.Ref,br.count);
+ var sr=semantic.Result{code:0,types:0,fields:0,limbs:0,unchecked_initializers:0,unit:0,token:0,detail:0};
+ let checked=semantic.analyze_program(sources,units,tokens,nodes,edges,symbols,refs,&w.semantic,&w.runtime,(*o).max_depth,&sr);
+ if checked!=0{return located_failure(r,&w,SEMANTIC,checked,sr.detail,sr.unit,sr.token,mr.count,a.used);}
+ if sr.unchecked_initializers!=0{return failure(r,SEMANTIC,semantic.BAD_GRAPH,sr.unchecked_initializers,NONE,0,a.used);}
+ blank(r);(*r).used=a.used;(*r).graph.arena=storage;(*r).graph.sources=sources;(*r).graph.units=units;(*r).graph.tokens=tokens;
+ (*r).graph.strings=slice_from_raw_parts(w.strings.ptr as *const u8,mr.string_used);
+ (*r).graph.nodes=nodes;(*r).graph.edges=edges;(*r).graph.symbols=symbols;(*r).graph.refs=refs;
+ (*r).graph.types=slice_from_raw_parts(w.semantic.types.ptr as *const semantic.Type,sr.types);
+ (*r).graph.fields=slice_from_raw_parts(w.semantic.fields.ptr as *const semantic.Field,sr.fields);
+ (*r).graph.node_types=slice_from_raw_parts(w.semantic.node_types.ptr as *const usize,mr.node_used);
+ (*r).graph.values=slice_from_raw_parts(w.semantic.values.ptr as *const semantic.Value,mr.node_used);
+ (*r).graph.value_states=slice_from_raw_parts(w.semantic.value_states.ptr as *const u8,mr.node_used);
+ (*r).graph.limbs=slice_from_raw_parts(w.semantic.limbs.ptr as *const u32,sr.limbs);
+ (*r).graph.layouts=slice_from_raw_parts(w.semantic.layouts.ptr as *const layout.Layout,sr.types);
+ (*r).graph.field_offsets=slice_from_raw_parts(w.semantic.field_offsets.ptr as *const usize,sr.fields);
+ (*r).graph.info=slice_from_raw_parts(w.runtime.info.ptr as *const semantic.Info,mr.node_used);
+ (*r).graph.entry=0;return OK;
+}}
+export("dong_frontend_check") pub unsafe fn check_raw(o:*const Options,sources:*const modules.Source,count:usize,l:*const Limits,
+ storage:*u8,capacity:usize,r:*Result)u64{unsafe{return check(o,slice_from_raw_parts(sources,count),l,slice_from_raw_parts(storage,capacity),r);}}
+

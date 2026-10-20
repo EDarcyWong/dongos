@@ -47,13 +47,14 @@ RuntimeWorkspace { info:[]Info, initialized:[]u8, snapshots:[]u8,
  breaks:[]u8, loop_seen:[]u8 } // 80字节、对齐8
 ```
 
-前七项与声明入口同型，同样要求成功绑定的同一张图。原24池ABI和Result不变，新增5池全部由调用者拥有；`info`/`initialized`长度至少为全局节点池长度N，`snapshots`至少2×N×max_depth字节、`breaks`至少N×max_depth字节、`loop_seen`至少max_depth字节。尺寸乘法溢出为INVALID；合法但不足为CAPACITY。池与输入、源码/路径、两个工作区描述符、Result及其它可写池必须不重叠。先完成描述符与别名预检，INVALID不改任何scratch或Result；容量及其它失败不发布部分计数，允许已声明的scratch部分改变。两个工作区描述符均只读，不分配、不读写文件、不调用宿主语义器。
+前七项与声明入口同型，同样要求成功绑定的同一张图。原24池ABI和Result不变，新增5池全部由调用者拥有；`info`/`initialized`长度至少为全局节点池长度N，`snapshots`至少2×ceil(N/8)×max_depth字节、`breaks`至少ceil(N/8)×max_depth字节、`loop_seen`至少max_depth字节。尺寸乘法溢出为INVALID；合法但不足为CAPACITY。池与输入、源码/路径、两个工作区描述符、Result及其它可写池必须不重叠。先完成描述符与别名预检，INVALID不改任何scratch或Result；容量及其它失败不发布部分计数，允许已声明的scratch部分改变。两个工作区描述符均只读，不分配、不读写文件、不调用宿主语义器。
 
 成功发布类型/字段/limb计数，`unchecked_initializers==0`；不支持的构造返回UNSUPPORTED，不能忽略后继续发布成功。新增状态：UNINITIALIZED11、IMMUTABLE12、UNSAFE13、RETURN_PATH14、FLOW15。Info以全局节点索引访问；flags位1=place、2=可写、4=已知标量值、8=表达式不正常返回、16=已知长度、32=已知标签；length在位16时为长度，在位32时为标签（optional 0/1、当前成功result为0），两位互斥。初始化位图为分析scratch，最终内容属于最后分析的函数，不是所有函数的持久流程图。入口尚未生成可供后端使用的lowered IR。
 
 已实现的范围：
 
 - 局部推导、整数/布尔运算及cast、显式整数范围、wrapping物化、静态除零/移位/有符号最小值除负一拒绝；底类型传播及逻辑短路的可达性，死代码仍检查类型。
+- wrapping_add/sub/mul、slice_from_raw_parts、结构体字段初始化、固定数组各元素和重复数组的值表达式保留子表达式的不返回标志；经字段、索引或外层运算组合后仍可用于必经短路路径判断。`true && rhs` / `false || rhs` 的必经右侧可终止外层，跳过或未知条件的右侧不能使外层无条件终止。所有后续子表达式仍检查类型、初始化和unsafe约束；重复次数仍是原有的正常量要求。`NEVER`是流程事实，不能把已有类型的父表达式当成任意目标类型；只有实际noreturn值具有底类型转换。wrapping在上下文整数物化前拒绝原始noreturn操作数，保留有整数类型的`g(die())`以及既有的窄整数范围、嵌套wrapping和位宽相关运算约束。
 - 普通调用和结构化函数指针签名、参数/返回兼容、unsafe函数/间接调用；指针读写、索引/算术和重新解释cast需要unsafe，参数/let/const及只读指针/切片不可写。
 - volatile_load/store、read/write_unaligned、atomic_load/store/compare_exchange/fetch_add及compiler_fence：按各自0/1/2/3个参数检查，所有操作（包括屏障）要求unsafe。volatile/非对齐只允许八种整数元素指针，原子只允许u32/u64；写操作拒绝只读指针，值参数按精确元素类型检查。store/屏障返回void，load/CAS/fetch_add返回元素类型（CAS不是bool）。参数按顺序分析并传播不返回状态；局部/全局同名函数继续按普通调用处理。这些是语义约束，不在分析阶段执行或重排访存，也不代替目标后端代码生成。
 - 结构体字面量完整性与私有字段、固定数组/重复数组、字段/索引/长度及切片指针；已知常量索引检查固定数组和直接字符串的UTF-8字节长度。
@@ -67,3 +68,7 @@ RuntimeWorkspace { info:[]Info, initialized:[]u8, snapshots:[]u8,
 仍未完成：方法接收者与错误码专项、枚举构造/成员及枚举match、some/ok/err等尚未落实语言契约的带标签构造调用、完整聚合常量求值与所有常量长度传播（含全局静态切片物化）、defer清理lowering。方法/error声明即使未被使用也明确UNSUPPORTED；带载荷枚举禁止直接相等比较。**这仍是受限语义子集，不是完整编译器或L3验收。** 目标I/O、后端/CLI、stage1/stage2及真正DongOS自编译仍待完成。
 
 运行时定向测试：`python -m unittest lang.tests.test_bootstrap_semantic_runtime -v`。实际模块加载/名称/绑定后由Dong原生检查，宿主编译器独立核对可接受性；两模式、双格式组装，输入及描述符真实只读页，29池双端guard与20类INVALID预检。删除真实类型拒绝及把分支交集改为并集的董副本必须完成编译、链接、执行，再被状态断言拒绝。
+
+不返回传播回归覆盖三种wrapping的两个参数位置、raw-slice指针和长度、结构体/数组/重复数组及嵌套组合，以及必经/跳过/未知短路、类型不匹配、未初始化读取、defer边界；另覆盖return、局部绑定和函数参数上下文中单侧/双侧直接noreturn操作数的拒绝。分别回滚wrapping、raw-slice、数组及结构体标志传播、恢复上下文提前物化和错误的按NEVER任意类型转换的真实董副本，先运行正确实现，再以debug/release完成坏副本编译、链接和正常退出执行，仅由语义状态差异判定回归；数组回滚分别验证普通和重复数组。
+
+流程快照和break出口使用每节点一位的独立槽，位序为节点ID低三位；每槽最后不足八位的尾字节在写入时清零。initialized仍每节点一字节。旧的大容量调用者仍有效；前端只预留压缩后的容量，不复用Graph.arena内任何存活池，也不改变图生命周期或只读契约。N=100000、max_depth=128时三组快照从38,400,000降到4,800,000字节，节省33,600,000字节；这不是完整编译器在64MiB共享预算内可运行的证明。

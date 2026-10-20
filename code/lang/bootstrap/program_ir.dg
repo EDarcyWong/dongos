@@ -1,0 +1,50 @@
+// Typed, slot-based native compiler IR. Offsets name objects in the current
+// RBP frame; temporary lifetimes may reuse offsets, so this is not SSA.
+module bootstrap.program_ir;
+import bootstrap.frontend as frontend;
+import bootstrap.semantic_types as semantic;
+pub const NONE:usize=0xffff_ffff_ffff_ffff;
+pub const OK:u64=0;pub const INVALID:u64=1;pub const CAPACITY:u64=2;
+pub const UNSUPPORTED:u64=3;pub const FRAME:u64=4;pub const BAD_GRAPH:u64=5;
+pub const CONSTANT:u64=1;pub const COPY:u64=2;pub const ADDRESS:u64=3;
+pub const LOAD:u64=4;pub const STORE:u64=5;pub const OFFSET:u64=6;
+pub const INDEX:u64=7;pub const BINARY:u64=8;pub const UNARY:u64=9;
+pub const CAST:u64=10;pub const LABEL:u64=11;pub const JUMP:u64=12;
+pub const BRANCH:u64=13;pub const CALL:u64=14;pub const RETURN:u64=15;
+pub const ZERO:u64=16;pub const STRING:u64=17;pub const PAIR:u64=18;pub const STATIC_ADDRESS:u64=19;pub const SUBSLICE:u64=20;
+// value/extra are operation-specific immediates. typ is the input arithmetic
+// type for BINARY/UNARY, the stored type for LOAD/STORE/COPY, and the return
+// type for CALL/RETURN. source coordinates remain available for diagnostics.
+pub struct Instruction{pub operation:u64,pub typ:usize,pub destination:usize,
+ pub a:usize,pub b:usize,pub value:u64,pub extra:u64,pub unit:usize,pub node:usize}
+pub struct Argument{pub typ:usize,pub offset:usize}
+pub struct Function{pub symbol:usize,pub first:usize,pub count:usize,
+ pub parameter_first:usize,pub parameter_count:usize,pub frame_bytes:usize,
+ pub returns:usize,pub trap_block:usize}
+pub struct Program{pub graph:*const frontend.Graph,pub functions:[]const Function,
+ pub instructions:[]const Instruction,pub arguments:[]const Argument,
+ pub block_count:usize,pub mode:u64}
+pub struct Workspace{pub functions:[]Function,pub instructions:[]Instruction,
+ pub arguments:[]Argument,pub node_slots:[]usize}
+pub struct Result{pub status:u64,pub unit:usize,pub node:usize,pub detail:u64,
+ pub program:Program}
+pub fn scalar_kind(kind:u64)bool{return (kind>=1&&kind<=9)||kind==semantic.POINTER||kind==semantic.FUNCTION;}
+pub unsafe fn words(g:*const frontend.Graph,typ:usize)usize{unsafe{
+ if typ==semantic.VOID||typ==semantic.NORETURN{return 0;}
+ if typ==0xffff_ffff_ffff_fffc{return 1;}
+ if typ>=(*g).types.len{return NONE;}
+ let kind=(*g).types[typ].kind;if scalar_kind(kind){return 1;}
+ if kind==semantic.SLICE{return 2;}
+ if aggregate(g,typ){let size=(*g).layouts[typ].size;if size>4080{return NONE;}return (size+7)/8;}return NONE;
+}}
+pub unsafe fn width(g:*const frontend.Graph,typ:usize)usize{unsafe{
+ if typ==0xffff_ffff_ffff_fffc{return 64;}
+ if typ>=(*g).types.len{return 0;}let kind=(*g).types[typ].kind;
+ if kind==1||kind==5||kind==9{return 8;}if kind==2||kind==6{return 16;}
+ if kind==3||kind==7{return 32;}if scalar_kind(kind){return 64;}return 0;
+}}
+pub unsafe fn signed(g:*const frontend.Graph,typ:usize)bool{unsafe{
+ return typ<(*g).types.len&&(*g).types[typ].kind>=5&&(*g).types[typ].kind<=8;
+}}
+
+pub unsafe fn aggregate(g:*const frontend.Graph,t:usize)bool{unsafe{return t<(*g).types.len&&((*g).types[t].kind==semantic.STRUCT||(*g).types[t].kind==semantic.ARRAY);}}

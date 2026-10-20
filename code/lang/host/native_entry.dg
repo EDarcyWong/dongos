@@ -1,0 +1,5 @@
+// Stable entry closure for native compiler bootstrap/fixed-point checks.
+module host.native_entry;
+import bootstrap.frontend as frontend;
+import bootstrap.frontend_diagnostics as diagnostics;
+import bootstrap.compiler_driver as compiler;
