@@ -76,3 +76,23 @@ owner/incarnation、旧 DMA lease 与传入的旧 device token/撤权后 generat
 并提供跳过退休/复用旧 token 的真实坏源负控。当前仅完成 debug/release 编译和
 C fixture 严格语法检查；本云环境缺 NASM，native 链接执行与坏源负控尚未运行，
 更不代表真实 DMA 安全证明或完整 P5 验收。
+
+### DMA 部分申请记录
+
+`user.memory.contiguous` 现在在调用任一物理分配器之前保留每槽唯一记录并
+设置 PINNED。记录包括完整向上取整块的页数、DMA VA、页表根、内存代际、
+已开始登记页数和已完成 USER 映射页数。分配成功后，在首次 `own_frame`
+之前记录整块物理地址，故后续映射失败时尚未遍历的尾部也有归属记录。
+物理地址为零表示分配器未成功返回；失败不会擦除记录或允许重试覆盖。
+只有全部映射和根失效完成才标记 COMPLETE；COMPLETE 同样不表示允许回收。
+
+`dma_snapshot` 仅为内核内部只读快照，不增加公共 syscall。该记录中的代际
+是内存根的代际，不能替代 Catalog owner/incarnation 绑定。后续恢复仍必须
+由可信 host 把二者关联，提供硬件停止/排空和全核退休证明。没有新增释放、
+清除 PINNED 或 DMA 重用路径，现有 Process/Frame 布局不变。
+
+`tests.test_dma_lease` 直接抽取实际 `contiguous` 与记录定义执行，独立模型
+覆盖 buddy/arena 两种边界、1–32页申请取整、整块每页 own_frame/USER map
+失败、分配失败、重复/重入申请、容量不足与地址范围；三个真实坏源负控分别
+丢失取整尾部、分配时未 PIN 和提前 COMPLETE。宿主模型不证明真实 DMA 已停止。
+专用 P5 CI 保存实际原生执行及坏源拒绝证据，正式检查仍包括仓库原有全量门禁。
