@@ -1,5 +1,27 @@
 # L3 shutdown checkpoint — 2026-10-20
 
+## PR8 continuation
+
+PR10 is merged at main `d7468a1`; PR8's integration base `15eb695` preserves
+the P5 DMA alias guard and reset/hold path while retaining the compiler stack.
+The continuation repairs the compiler entry bridge to restore `RCX <- R10`
+before its call and updates the host decoder from 24 to 27 bytes. The dedicated
+machine regression executes that bridge with poisoned RCX rather than inferring
+its behavior from direct calls to the compiler core.
+
+The original shutdown records below remain historical evidence. The new bridge
+requires freshly generated host fixtures. Full guest L3 / G6 remains unaccepted:
+use a NEW immutable kernel snapshot and compiler fixture for real two-boot,
+byte-identical ELF, physical isolation and durable output checks. The old
+`source-64ec14668c` / `run-3383cd152203` fixtures cannot prove this fix.
+
+PR8 fixes are isolated in a separate worktree. The primary Windows checkout has
+uncommitted UI, roadmap and task history changes; it has not been replaced or
+state-synced. Its CX6/CR43 identities require explicit reconciliation, not a
+higher-revision overwrite. Existing CX15 and CX14 task statuses are unchanged.
+
+## Original shutdown checkpoint
+
 User requested immediate stop and GitHub backup. Work is saved as an unfinished checkpoint, not final L3 acceptance.
 
 - CX7, CX10, CX12, CX13 and CR47 were integrated after independent review and formal verification.

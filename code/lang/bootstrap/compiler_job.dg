@@ -57,8 +57,9 @@ export("dong_compile_job") pub unsafe fn run(blob:[]const u8,catalog:*modules.So
  var er=driver.Result{status:0,stage:0,code:0,unit:0,node:0,detail:0,used:0,written:0};
  let emitted=driver.compile(&(*fr).graph,&el,1,arena[cr.retained_bytes..end],arena[end..56*M],&er);
  if emitted!=0{return publish(r,3,2,emitted,er.detail,0,0,(*fr).used,cr.retained_bytes,er.used);}
- // The return bridge is instruction-only and introduces no I/O authority.
- let bridge="\nsection .text\ndong_compiler_entry:\nsub rsp, 8\ncall dong_compile_job\nmov rdi, rax\nmov eax, 255\nsyscall\nud2\n";
+ // SYSRET uses RCX for RIP. Trusted startup preserves argument four in R10.
+ // The entry bridge restores the SysV argument before calling the pure job.
+ let bridge="\nsection .text\ndong_compiler_entry:\nsub rsp, 8\nmov rcx, r10\ncall dong_compile_job\nmov rdi, rax\nmov eax, 255\nsyscall\nud2\n";
  if er.written>9*M||bridge.len>9*M-er.written{return publish(r,2,3,0,0,0,0,(*fr).used,cr.retained_bytes,er.used);}
  // Metadata is terminal in the accepted assembler dialect. Insert the bridge
  // before that exact trailer, preserving the established assembler contract.

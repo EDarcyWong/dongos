@@ -27,11 +27,13 @@ zero). The source blob is never modified; catalog records borrow its bytes.
 
 Backend uses release emission and the existing compiler_driver; no reachability
 filter or DCE is introduced. ELF output remains at most 2 MiB. It includes a
-24-byte `dong_compiler_entry` bridge that aligns the initial stack, calls the
+27-byte `dong_compiler_entry` bridge that aligns the initial stack, restores
+the fourth argument with `mov rcx, r10`, calls the
 six-integer-word job ABI and reports its status via the existing syscall 255.
 The bridge is inserted before the exact terminal GNU-stack metadata trailer;
 the native assembler acceptance contract is unchanged. The kernel must supply
-the six arguments and a SysV entry stack whose RSP is 8 modulo 16.
+the six arguments and a SysV entry stack whose RSP is 8 modulo 16. The fourth
+argument must be in R10 at guest entry because SYSRET consumes RCX for RIP.
 
 Result contains nine u64 fields: status, stage, code, detail, written, offset,
 frontend bytes, retained graph bytes, backend bytes. Status 0 is success, 1 is
@@ -43,11 +45,17 @@ is retained. These are compilation results, not a filesystem durability receipt.
 formats, and executes seed and native compiler code on a guarded 64 KiB stack
 with one guarded 56 MiB arena and read-only source blob. It strictly validates
 the host ELF table/segments before loading RX/RW pages. It checks the complete
-bridge bytes and calls its RX target directly, without executing a guest exit
-syscall on the host. The permanent test includes 32 atomic preflight rejections,
+bridge bytes and calls its RX target directly for the full compiler fixed point,
+without executing a guest exit syscall on the host. A separate machine test
+executes the emitted bridge's real prefix and call with poisoned RCX and the
+correct R10, observes all six arguments and stack alignment, and rejects the
+actual bridge with its argument-restoration instruction removed. The permanent
+test also includes 32 atomic preflight rejections,
 a real small ELF returning 37, native invalid semantics, a real 1101-function
 backend capacity failure, and exact full self-compiler ELF fixed points for both
 seed modes. No guest execution is inferred from this host test.
+
+## Historical 24-byte bridge evidence
 
 Independent review found and reproduced the original trailer placement defect
 and a 25-versus-24 host entry length error. Both were corrected. Independent
@@ -55,4 +63,8 @@ debug/release runs of the repaired source produced identical 1,892,632-byte ELF
 files, SHA256 cf19cd58e244835e142f5abc40c1ced98da3666b3ba4855080623bc638b606bc.
 Measured frontend 57,144,296 bytes, retained graph 27,228,976 bytes, backend
 20,702,968 bytes. Final test and formal receipts are stored separately from
-these independent measurements; the old failures are preserved.
+these independent measurements; the old failures are preserved. This hash is
+for the historical bridge and is not a fixture for the 27-byte bridge. New
+source-bound host receipts are required after the ABI repair. G6 still requires
+a new immutable kernel/fixture and actual same-disk two-boot, physical isolation
+and durable output evidence; host execution alone does not close it.

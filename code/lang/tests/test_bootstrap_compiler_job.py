@@ -17,4 +17,5 @@ class CompilerJobTests(unittest.TestCase):
             self.assertIn('32 atomic preflights',row['stdout'])
             self.assertIn('native semantic rejection',row['stdout'])
             self.assertIn('native backend capacity rejection',row['stdout'])
+            self.assertIn('native-generated startup prefix/call RCX poison and R10 arguments',row['stdout'])
 if __name__=='__main__':unittest.main()
