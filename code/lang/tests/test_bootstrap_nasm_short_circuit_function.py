@@ -4,8 +4,7 @@ from pathlib import Path
 ROOT=Path(__file__).resolve().parents[2]
 sys.path.insert(0,str(ROOT))
 from lang.dongc import compile_file
-from lang.tests.test_dongc import tool,nasm_flags as _nasm_flags
-def nasm_flags(nasm):return [*_nasm_flags(nasm),'-w-reloc-rel-dword']
+from lang.tests.test_dongc import tool,nasm_flags
 PREFLIGHTS=55
 TASK='CR39';MODULE='nasm_short_circuit_function';NT=6
 SOURCE=ROOT/'lang/bootstrap'/ (MODULE+'.dg')

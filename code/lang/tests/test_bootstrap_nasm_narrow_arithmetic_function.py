@@ -5,8 +5,7 @@ ROOT=Path(__file__).resolve().parents[2]
 WORKS=ROOT
 sys.path.insert(0,str(ROOT))
 from lang.dongc import compile_file
-from lang.tests.test_dongc import tool,nasm_flags as _nasm_flags
-def nasm_flags(nasm):return [*_nasm_flags(nasm),'-w-reloc-rel-dword']
+from lang.tests.test_dongc import tool,nasm_flags
 PREFLIGHTS=24
 TASK='CR41';MODULE='nasm_narrow_arithmetic_function';NT=2
 SOURCE=ROOT/'lang/bootstrap'/ (MODULE+'.dg')

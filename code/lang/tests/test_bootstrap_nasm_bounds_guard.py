@@ -16,15 +16,8 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0,str(ROOT))
 
 from lang.dongc import compile_file
-from lang.tests.test_dongc import tool,nasm_flags as _nasm_flags
+from lang.tests.test_dongc import tool,nasm_flags
 
-def nasm_flags(nasm):
-    # NASM 2.16+ also emits reloc-rel-dword under -Werror for RIP-relative refs;
-    # keep the same suppression the shared helper applies for NASM 3.
-    flags=list(_nasm_flags(nasm))
-    if '-w-reloc-rel-dword' not in flags:
-        flags.append('-w-reloc-rel-dword')
-    return flags
 
 SOURCE=ROOT/'lang/bootstrap/nasm_bounds_guard.dg'
 DOC=ROOT/'lang/bootstrap/nasm_bounds_guard.md'

@@ -200,7 +200,7 @@ int main(int argc,char **argv){
         memset(&gw,0xa5,sizeof(gw)); *written=UINT64_C(0x9999999999999999);
         CHECK(u8_encode(0x10ffff,(struct Bytes){o,4},written)); CHECK(*written==4 && !memcmp(o,"\xf4\x8f\xbf\xbf",4));
         for(int k=4;k<8;k++)CHECK(o[k]==0xa5);
-        for(int g=0;g<8;g++)CHECK(ob[g]==0xa5&&ob[8+8+g]==0xa5); WG(gw);
+        for(int g=0;g<8;g++){CHECK(ob[g]==0xa5&&ob[8+8+g]==0xa5);} WG(gw);
         memset(ob,0xa5,sizeof(ob)); memset(&gw,0xa5,sizeof(gw)); *written=UINT64_C(0x9999999999999999);
         { uint8_t b2[8+8+8]; memcpy(b2,ob,sizeof(ob)); uint64_t wb=*written;
           CHECK(!u8_encode(0x10ffff,(struct Bytes){o,3},written)); CHECK(*written==wb); CHECK(!memcmp(ob,b2,sizeof(ob))); WG(gw); }
@@ -234,7 +234,7 @@ int main(int argc,char **argv){
             memset(ob,0xa5,sizeof(ob)); memset(&gw,0xa5,sizeof(gw)); *written=0;
             CHECK(u8_encode(sc,(struct Bytes){o,w},written)); CHECK(*written==w);
             CHECK(!memcmp(o,wsc[k].bytes,w));
-            for(int kk=(int)w;kk<8;kk++)CHECK(o[kk]==0xa5); WG(gw);
+            for(int kk=(int)w;kk<8;kk++){CHECK(o[kk]==0xa5);} WG(gw);
             for(int g=0;g<8;g++)CHECK(ob[g]==0xa5&&ob[8+8+g]==0xa5);
             memset(ob,0xa5,sizeof(ob)); memset(&gw,0xa5,sizeof(gw)); *written=UINT64_C(0x9999999999999999);
             { uint8_t b2[8+8+8]; memcpy(b2,ob,sizeof(ob)); uint64_t wb=*written;

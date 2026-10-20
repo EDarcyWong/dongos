@@ -1,4 +1,5 @@
 """Actual Dong static symbol pointer datum emitter (CR3 + CR4): exact text, ELF64/COFF 64-bit relocations, native link."""
+import ast
 import hashlib
 import json
 import os
@@ -8,6 +9,7 @@ import struct
 import subprocess
 import sys
 import unittest
+from unittest import mock
 import uuid
 
 ROOT=Path(__file__).resolve().parents[2]
@@ -152,8 +154,45 @@ DEREF={3:NEIGHBOUR_AFTER,4:NEIGHBOUR_BEFORE,12:NEIGHBOUR_AFTER}
 
 
 def data_flags(nasm):
-    """-Wall makes NASM 3 warn on every 64-bit absolute relocation, which is exactly what a dq pointer datum needs; only that warning is relaxed."""
-    return nasm_flags(nasm)+['-w-reloc-abs-qword']
+    """Use only relocation warning options supported by this NASM."""
+    return nasm_flags(nasm)
+
+
+class BootstrapNasmFlagCompatibilityTests(unittest.TestCase):
+    def check_fixture_flags(self, advertised):
+        """Exercise local flag helpers without building every native fixture."""
+        help_text=''.join('       '+name+' optional warning [off]\n' for name in advertised)
+        expected=['-Wall','-Werror']+['-w-'+name for name in advertised]
+        checked=0
+        for path in sorted(Path(__file__).parent.glob('test_bootstrap*.py')):
+            tree=ast.parse(path.read_text(encoding='utf-8'),filename=str(path))
+            imports=[node for node in tree.body if isinstance(node,ast.ImportFrom)
+                     and node.module=='lang.tests.test_dongc'
+                     and any(alias.name=='nasm_flags' for alias in node.names)]
+            if not imports:continue
+            namespace={}
+            for node in imports:
+                for alias in node.names:
+                    if alias.name=='nasm_flags':namespace[alias.asname or alias.name]=nasm_flags
+            helpers=[node for node in tree.body if isinstance(node,ast.FunctionDef)
+                     and node.name in ('nasm_flags','data_flags')]
+            exec(compile(ast.Module(body=helpers,type_ignores=[]),str(path),'exec'),namespace)
+            names={'nasm_flags'}|{node.name for node in helpers}
+            for name in names:
+                with self.subTest(fixture=path.name,helper=name,warnings=advertised):
+                    with mock.patch('lang.tests.test_dongc.subprocess.run',
+                                    return_value=subprocess.CompletedProcess([],0,stdout=help_text,stderr='')):
+                        self.assertEqual(namespace[name]('test-nasm'),expected)
+                    checked+=1
+        self.assertGreaterEqual(checked,28)
+
+    def test_old_nasm_without_optional_relocation_warnings(self):
+        self.check_fixture_flags(())
+
+    def test_optional_relocation_warnings_are_detected_independently(self):
+        for advertised in (('reloc-rel-dword',),('reloc-abs-qword',),
+                           ('reloc-rel-dword','reloc-abs-qword')):
+            self.check_fixture_flags(advertised)
 
 
 def elf_relocations(data):
