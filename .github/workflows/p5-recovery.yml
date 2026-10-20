@@ -1,0 +1,43 @@
+name: P5 recovery prerequisites
+on:
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  authority-and-dma-journal:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: code
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Install native test tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends nasm gcc python3
+      - name: Execute real ledger and DMA allocation fragments
+        run: python3 -m unittest tests.test_device_manager tests.test_dma_lease -v
+      - name: Compile full production memory dependency graph
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          from lang.dongc import compile_file
+          root = Path.cwd()
+          for mode in ('debug', 'release'):
+              result = compile_file(root / 'kernel/user/memory.dg', roots=[root/'kernel', root/'services', root/'lang/std', root/'lang/examples'], mode=mode)
+              print(mode, len(result.assembly), 'assembly characters generated')
+          PY
+      - name: Save exact native evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: p5-native-evidence
+          path: |
+            code/build/test/device-manager/
+            code/build/test/dma-lease/
+          if-no-files-found: error
+          retention-days: 14

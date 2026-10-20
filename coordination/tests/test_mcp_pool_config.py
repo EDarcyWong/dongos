@@ -44,9 +44,7 @@ def _build_overlay():
 
 
 _PKG = _build_overlay()
-for _name in list(sys.modules):
-    if _name == 'dongos_coordination' or _name.startswith('dongos_coordination.'):
-        del sys.modules[_name]
+# Preserve shared module identity across complete unittest discovery.
 sys.path.insert(0, str(_PKG))
 
 from dongos_coordination.mcp_config import (  # noqa: E402

@@ -1,0 +1,20 @@
+module dma_lease_adapter;
+pub const USER_MIN:u64=0x1_0000;pub const USER_LIMIT:u64=0x0000_0080_0000_0000;
+pub const USER:u64=4;pub const WRITE:u64=2;
+pub struct Space {pub unused:u64}
+pub struct Block {pub physical:u64,pub virtual:u64,pub pages:usize}
+pub error Failed=0x052a_0001;
+unsafe extern "sysv64" fn dma_event(stage:u64,a:u64,b:u64,c:u64)u64;
+pub unsafe fn event(stage:u64,a:u64,b:u64,c:u64)u64 {unsafe{return dma_event(stage,a,b,c);}}
+pub unsafe fn reserve(pages:usize,alignment:usize,out:*Block)!void {unsafe{
+ if dma_event(1,pages as u64,alignment as u64,1)!=0{return error.Failed;}
+ *out=Block{physical:0x200000,virtual:0,pages:pages};
+}return;}
+pub unsafe fn alloc(allocator:u64,order:usize)!u64 {unsafe{
+ if dma_event(1,1<<order,1<<order,0)!=0{return error.Failed;}return 0x200000;
+}}
+pub fn allocator_pointer()u64{return 1;}
+pub unsafe fn map_live(space:*Space,virtual:u64,physical:u64,flags:u64)!void {unsafe{
+ if dma_event(3,virtual,physical,flags)!=0{return error.Failed;}
+}return;}
+pub unsafe fn runtime_invalidate(virtual:u64)void {unsafe{let ignored=dma_event(4,virtual,0,0);}return;}

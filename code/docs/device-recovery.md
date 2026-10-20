@@ -68,30 +68,25 @@ ACTIVE ──fault──► FAULTED ──confirm_safe──► SAFE ──quies
 
 角色常量与 `lib.device_abi` 一致（BLOCK=1、TABLET=2、PS2=3、XHCI=4）；PS2 无 DMA，但仍走同一恢复门禁。
 
-## 已落盘的 DMA 释放原语（2026-10-20）
+## DMA 整合状态（2026-10-20）
 
-`kernel/user/memory.dg` 新增 `release_dma(id)`，作为“故障 DMA 安全回收”的底层原语：
+旧检查点的 `release_dma(id)` 只验证内存侧条件，不能证明设备 reset/drain、owner 退休和所有别名/TLB 失效。
+整合时移除该未接入生产的释放接口和 `PINNED_BASE/PINNED_PAGES`，保留 P5 的 `DmaLease` 全块日志与 fail-closed hold。
+`contiguous()` 在分配前 pin 并记录完整舍入块；每页 own/map 的尝试与完成分开记录，失败不解 pin、不回收。
+`dma_snapshot()` 仅提供内核诊断快照，不授予回收权限。编译器专用栈配置和 staging API 保持不变。
 
-- `contiguous()` 现在记录每个进程唯一的 pinned 连续区间（`PINNED_BASE/PINNED_PAGES`），并拒绝重复 pin；
-- `release_dma` 只接受该记录中的区间，要求进程 ready、非当前根、确实 pinned；
-- 参数检查通过后才清除 `PINNED`，随后复用既有 `unshare_range`：逐页复核 USER/可写/内核别名、unmap、等待翻译屏障、清零、标记可复用；
-- 任一失败置 fail-stop（`UNSHARE_FAILED`），进程不销毁、页不复用；成功后才清空区间记录；
-- 该函数已通过真实 Dong 的 debug/release 原生测试与真实坏实现负控，但**尚未被 `services.revoke_loaded` 调用**，因此故障路径仍保持“只隔离、不回收”。
-
-## 测试
+## 测试及旧覆盖映射
 
 ```text
 cd code
-python -m unittest tests.test_device_recovery -v
-python -m unittest tests.test_dma_release -v
+python -m unittest tests.test_device_recovery tests.test_dma_lease tests.test_dma_release tests.test_compiler_stack -v
 ```
 
-`tests/test_dma_release.py` 把测试夹具追加到 `memory.dg` 的私有副本，真实执行生产 `release_dma`：
-
-- 4 个 owned 帧映射到 `0x6800_0000`，填入 0xA5；先验证当前根/未 ready/非 pinned 拒绝且不改变状态；
-- 成功释放后逐字节检查 4 页全零、`recycled=1`、`PINNED` 与区间记录清零，随后 `destroy` 才能成功；
-- 再次释放被拒绝；
-- debug/release 双模式，2 个真实坏实现负控（保留 pin、释放前丢失区间）。
+- `tests/test_dma_lease.py` 取生产日志/分配片段，debug/release 原生执行，覆盖舍入尾部、逐页失败、重复分配拒绝和真实坏实现负控。
+- `tests/test_dma_release.py` 改为源契约回归：旧释放接口不能重新导出；destroy/unshare 保留当前根、未 ready、越界及 pinned 拒绝门；编译器栈 API 不得丢失。这些静态检查不是运行时释放证明。
+- 旧释放 probe 的“清零后复用、随后 destroy 成功”和“重复释放”断言依赖未证明的释放能力，因此不再作为受支持行为；对应三份源夹具已由日志测试取代，历史仍保留在 Git。
+- 旧无效 id/未 ready/当前根拒绝的独立约束保留为源契约检查；日志运行时另覆盖无效快照、重复申请及门禁失败不改输出。
+- `tests/test_compiler_stack.py` 原有生产 loader、guard、容量和回滚的原生测试保持不变，必须随最终整合提交在 CI 运行。
 
 `tests/device_recovery_probe.dg` 由真实 dongc 以 debug/release 编译，NASM 汇编后与 C shim 链接为 DLL，
 Python 通过 ctypes 调用 SysV 导出。表/设备/租约布局在测试中固定核对为 568/80/56 字节。
@@ -109,11 +104,10 @@ Python 通过 ctypes 调用 SysV 导出。表/设备/租约布局在测试中固
 
 ## 未完成与限制
 
-- **未接入内核调用点**：`services.revoke_loaded` 仍在 `dma_pinned` 时只 quarantine 后 return；`release_dma`
-  已就绪但尚未调用。CX10 已集成，接线会改变其已验收指纹，需作为新的审查/复验变更处理。
+- **未接入内核调用点**：`services.revoke_loaded` 仍在 `dma_pinned` 时只 quarantine 后 return；内存侧仍只记录并持有 DMA。CX10 已集成，接线会改变其已验收指纹，需作为新的审查/复验变更处理。
 - **未运行故障注入**：没有执行 QEMU/VMware 启动、真实 AHCI/NVMe/xHCI 故障注入或同盘重启；
   生产 P5 镜像可以构建，但本文不宣称故障路径已验收。
-- 真正完成还需要：确认 quarantine 后调用 `release_dma` 并 `destroy`；处理驱动进程 relaunch/重授权
+- 真正完成还需要：建立可信设备 reset/drain、owner/映射/TLB 退休的完整证明后再设计回收；处理驱动进程 relaunch/重授权
   （block/fs/shell 为静态 preload，当前没有通用故障后重启）；然后跑实际 driver-exit/双启动门禁。
 - 不覆盖热拔插/设备替换：`register` 角色唯一，替换设备必须先走终止与新的启动代登记流程（当前未实现）。
 - P5 阶段仍未关闭；本记录不改变 P5 的 `partial` 状态。

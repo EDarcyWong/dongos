@@ -47,10 +47,9 @@ def _build_overlay():
 
 
 _PKG = _build_overlay()
-# Prefer overlay over any already-imported formal package.
-for _name in list(sys.modules):
-    if _name == 'dongos_coordination' or _name.startswith('dongos_coordination.'):
-        del sys.modules[_name]
+# Do not evict shared package modules during unittest discovery. Earlier tests
+# retain their Conflict class and patched providers references; re-importing
+# them here creates incompatible identities across the complete suite.
 sys.path.insert(0, str(_PKG))
 
 from dongos_coordination.client import CoordinationClient  # noqa: E402

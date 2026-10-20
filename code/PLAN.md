@@ -438,7 +438,7 @@ P4压测里程碑：XSAVE/FXSAVE均完成1,000,000次实际CPL3往返、2,000,01
 
 ### P5 基础服务
 
-- [ ] 设备管理：受控32项PCIe ECAM目录、独立devmgr/四角色匹配、寄存器句柄、IRQ1/12及AHCI单MSI、owner退出撤权均已实测；同boot通用设备恢复与DMA安全回收/重授权仍待完成（离线恢复契约与 `memory.release_dma` 原语已实现并测试，见 docs/device-recovery.md，尚未接入调用点/QEMU验收；故障时持有DMA，不冒充已恢复，见docs/process-integration.md）
+- [ ] 设备管理：受控32项PCIe ECAM目录、独立devmgr/四角色匹配、寄存器句柄、IRQ1/12及AHCI单MSI、owner退出撤权均已实测；同boot通用设备恢复与DMA安全回收/重授权仍待完成（离线恢复契约与 DMA 全块日志已实现；旧未证明释放原语已移除，继续 hold，见 docs/device-recovery.md，尚未接入调用点/QEMU验收；故障时持有DMA，不冒充已恢复，见docs/process-integration.md）
 - [x] 键盘驱动（i8042，独立CPL3、Set2/RESEND/错误字节与有界回退、IRQ1/12 owner/incarnation/sequence ACK；实际40次控制台循环及400+IRQ通过，见docs/process-integration.md）
 - [x] 存储驱动：virtio-blk → AHCI → NVMe（受控子集的实际读写/FLUSH与同盘双启动均通过；NVMe为NSID1/512B轮询，AHCI另有VMware双启动，见 docs/nvme.md、docs/ahci.md。通用设备生命周期和物理盘另验）
 - [x] FAT32 文件系统服务（根目录8.3、子目录/LFN/UTF-8、按文件能力授权/代际/退出drain与FS重启撤权，实际读写/FLUSH及同盘双启动通过；全树审计、66个写/FLUSH故障点及GUI文件持久化通过。不承诺journal、rename或任意断电恢复，见docs/fat32.md、docs/process-integration.md）

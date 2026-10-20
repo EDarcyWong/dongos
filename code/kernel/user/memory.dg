@@ -55,11 +55,22 @@ var RECYCLED: [FRAME_LIMIT]u8 = [0;FRAME_LIMIT];
 var EXTENDED_RECYCLED: *u8 = null;
 var GENERATIONS: [LIMIT]u64 = [0;LIMIT];
 var PINNED: [LIMIT]bool = [false;LIMIT];
-// The exact contiguous range a process currently holds for DMA. release_dma
-// consumes this record, so an unpinned or partially tracked process can never
-// name an arbitrary virtual range for withdrawal.
-var PINNED_BASE: [LIMIT]u64 = [0;LIMIT];
-var PINNED_PAGES: [LIMIT]usize = [0;LIMIT];
+// Exact whole-block ownership survives partial mapping. Reserved before the
+// allocator call; physical=0 means no successful allocation was returned.
+// This is memory-root generation, NOT a Catalog owner/incarnation receipt.
+pub struct DmaLease {pub physical:u64,pub virtual:u64,pub pages:usize,pub root:u64,
+    pub generation:u64,pub attempted:usize,pub mapped:usize,pub state:u64}
+pub const EMPTY_DMA:DmaLease=DmaLease {physical:0,virtual:0,pages:0,root:0,
+    generation:0,attempted:0,mapped:0,state:0};
+pub const DMA_HELD:u64=1;
+pub const DMA_COMPLETE:u64=2;
+var DMA_LEASES:[LIMIT]DmaLease=[EMPTY_DMA;LIMIT];
+// Trusted kernel diagnostics only; no user-supplied identity or reclaim API.
+pub unsafe fn dma_snapshot(id:usize,out:*DmaLease)!void {unsafe{
+    if id>=LIMIT||out==null||DMA_LEASES[id].state==0{return error.InvalidState;}
+    *out=DMA_LEASES[id];
+}return;}
+
 // One exclusive BSP loader transaction. A journal includes fresh RAM before
 // either supervisor or USER publication can fail, including unmapped orphans.
 // The desktop journal lives in the arena, keeping the raw kernel bounded.
@@ -595,33 +606,6 @@ pub unsafe fn unshare_range(id:usize,base:u64,pages:usize)!void{unsafe{
     match detached{ok=>{},err(code)=>{UNSHARE_FAILED=true;return detached;},}
     UNSHARE_ACTIVE=false;
 }return;}
-// Release the single contiguous DMA lease after the trusted device broker has
-// verified that the faulting device is no longer able to write (MSI/BME off and
-// the old owner retired). The range comes only from contiguous(), never from a
-// caller argument. unshare_range revalidates every leaf, unmaps it, waits for
-// the translation barrier, zeroes each frame and only then marks it reusable.
-// A failure sets fail-stop state: the process is not destroyed and no page is
-// reused. Callers must not invoke this for a healthy or still-busy device.
-pub unsafe fn release_dma(id:usize)!void {
-    unsafe {
-        if UNSHARE_FAILED||STAGE_FAILED||UNSHARE_ACTIVE||STAGE_ID!=LIMIT||id>=LIMIT
-            ||PROCESSES[id].ready!=1||!PINNED[id]||user_current_root()==PROCESSES[id].root {
-            return error.InvalidState;
-        }
-        let base=PINNED_BASE[id];let pages=PINNED_PAGES[id];
-        if base==0||pages==0||pages>UNSHARE_LIMIT||base<elf.USER_MIN||base>=elf.USER_LIMIT
-            ||(base&4095)!=0||(pages as u64)>(elf.USER_LIMIT-base)/4096 {
-            return error.InvalidAddress;
-        }
-        // Clear the pin only after every argument check. unshare_range checks it
-        // again and performs the whole withdrawal; on any error UNSHARE_FAILED
-        // keeps scheduling stopped and the remaining pages unreused.
-        PINNED[id]=false;
-        let released=unshare_range(id,base,pages);
-        match released{ok=>{},err(code)=>{UNSHARE_FAILED=true;return released;},}
-        PINNED_BASE[id]=0;PINNED_PAGES[id]=0;
-    }return;
-}
 
 pub fn dma_pinned(id:usize)bool { unsafe { return id>=LIMIT || PINNED[id]; } }
 pub fn generation(id:usize)u64 { unsafe { if id>=LIMIT { return 0; }return GENERATIONS[id]; } }
@@ -870,29 +854,39 @@ pub unsafe fn map_resource(id:usize,virtual:u64,physical:u64,bytes:u64)!void {
 // held for the service lifetime; no page can be recycled behind a live device.
 pub unsafe fn contiguous(id: usize, virtual: u64, requested: usize) !u64 {
     unsafe {
-        if id >= LIMIT || PROCESSES[id].ready == 0 || requested == 0 || requested > 32
+        if id >= LIMIT || PROCESSES[id].ready == 0 || PINNED[id] || DMA_LEASES[id].state!=0
+            || PROCESSES[id].root==0 || GENERATIONS[id]==0 || requested == 0 || requested > 32
             || virtual < elf.USER_MIN || virtual >= elf.USER_LIMIT || (virtual & 4095) != 0 {
             return error.InvalidAddress;
         }
-        if PINNED[id] { return error.InvalidState; }
         var order: usize = 0; var pages: usize = 1;
         while pages < requested { pages *= 2; order += 1; }
-        if pages > capacity() - FRAME_COUNT || (pages as u64) * 4096 > elf.USER_LIMIT - virtual { return error.Capacity; }
+        if FRAME_COUNT>capacity() || pages > capacity() - FRAME_COUNT || (pages as u64) * 4096 > elf.USER_LIMIT - virtual { return error.Capacity; }
+        // Reserve metadata and pin before any allocator side effect. Even an
+        // allocation failure is retained; a retry must not overwrite evidence.
+        DMA_LEASES[id]=DmaLease {physical:0,virtual:virtual,pages:pages,root:PROCESSES[id].root,
+            generation:GENERATIONS[id],attempted:0,mapped:0,state:DMA_HELD};
+        PINNED[id]=true;
         var physical:u64=0;
         if EXTENDED!=null {
             var held=resources.Block { physical:0,virtual:0,pages:0 };
             try resources.reserve(pages,pages,&held);physical=held.physical;
         } else { physical=try buddy.alloc(startup.allocator_pointer(),order); }
+        DMA_LEASES[id].physical=physical;
         var offset: usize = 0;
-        PINNED[id]=true;PINNED_BASE[id]=virtual;PINNED_PAGES[id]=pages;
         while offset < pages {
+            // own_frame itself can fail after publishing supervisor metadata.
+            // Record the attempted page before entering it, not just successes.
+            DMA_LEASES[id].attempted=offset+1;
             let index = try own_frame(physical + offset as u64 * 4096);
             *recycled(index)=2;
             try paging.map_live(&SPACES[id],virtual + offset as u64 * 4096,(*record(index)).physical,paging.USER | paging.WRITE);
+            DMA_LEASES[id].mapped=offset+1;
             devices.runtime_invalidate(virtual + offset as u64 * 4096);
             offset += 1;
         }
         user_pcid_invalidate_root(PROCESSES[id].root);
+        DMA_LEASES[id].state=DMA_COMPLETE;
         return physical;
     }
 }
