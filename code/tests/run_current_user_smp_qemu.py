@@ -84,6 +84,118 @@ def identity(esp, negative=False):
 
 
 class UserGuest(life.ProcessGuest):
+    def __init__(self, *args, **kwargs):
+        self._constructing = True
+        self._early_failure_capture = False
+        self._constructor_cleanup_attempted = False
+        try:
+            super().__init__(*args, **kwargs)
+        except BaseException:
+            # The underlying constructor normally calls our close itself. If
+            # it failed before that handler, clean up only resources it owns.
+            if not self._constructor_cleanup_attempted:
+                try:
+                    self.close()
+                except Exception:
+                    # Cleanup must not replace the original constructor error.
+                    pass
+            raise
+        finally:
+            self._constructing = False
+
+    def close(self):
+        constructing = getattr(self, '_constructing', False)
+        if constructing:
+            self._constructor_cleanup_attempted = True
+        try:
+            process = getattr(self, 'process', None)
+            if (constructing and not getattr(self, '_early_failure_capture', False)
+                    and getattr(self, 'qmp', None) is not None
+                    and process is not None and process.poll() is None):
+                self._early_failure_capture = True
+                try:
+                    self.capture_failure()
+                except Exception as exc:
+                    try:
+                        storage.write_json(self.state / 'failure-capture-error.json',
+                                           {'error': type(exc).__name__ + ': ' + str(exc)})
+                    except Exception:
+                        # Full disks and failed diagnostic writes cannot keep
+                        # an owned guest alive or mask the boot failure.
+                        pass
+        finally:
+            super().close()
+
+    def capture_failure(self):
+        """Capture actual read-only state even before desktop initialization.
+
+        No source fixture supplies observations. Unpublished pointers and
+        unavailable reads are individually reported, not replaced with zeros.
+        physical() records the raw-file/hash receipts for successful reads.
+        """
+        report = {'constructor_failure': bool(getattr(self, '_constructing', False)),
+                  'historical_acceptance': False, 'diagnostic_only': True}
+
+        def observe(label, action):
+            try:
+                value = action()
+                report[label] = value
+                return value
+            except Exception as exc:
+                report[label] = type(exc).__name__ + ': ' + str(exc)
+                return None
+
+        observe('pause', lambda: (self.pause(), 'completed')[1])
+        if not hasattr(self, 'chunks'):
+            self.chunks = []
+        if not hasattr(self, 'symbols'):
+            symbols = observe('symbols', lambda: settings.acpi.validation_symbols(self.esp.parent / 'kernel.elf'))
+            if symbols is not None:
+                self.symbols = symbols
+        if not hasattr(self, 'boot'):
+            def bootstrap():
+                values = re.findall(rb'^memory_runtime_boot_info=0x([0-9a-fA-F]{16})\r?$',
+                                    bytes(getattr(self, 'raw', b'')), re.MULTILINE)
+                check(bool(values) and len(set(values)) == 1,
+                      'missing or conflicting actual runtime BootInfo address')
+                physical = int(values[0], 16) - settings.acpi.HHDM
+                check(0 < physical < 1 << 48, 'invalid early BootInfo physical address')
+                return struct.unpack('<20Q', self.physical(physical, 160, 'early failure BootInfo'))
+            boot = observe('boot_info', bootstrap)
+            if boot is not None:
+                self.boot = boot
+
+        def smp_report():
+            address = self.kval('sched.user_boot', 'INFO')
+            check(address != 0, 'user SMP report not published')
+            return self.readwords(address, 10)
+        smp = observe('smp', smp_report)
+        # Four is the existing owned QEMU command's topology. Before a valid
+        # publication it is only a diagnostic request count, not proof that
+        # four CPUs were online. Missing CPU responses stay explicit errors.
+        count = smp[3] if isinstance(smp, list) and len(smp) == 10 and 1 <= smp[3] <= 16 else 4
+        report['requested_cpu_indices'] = list(range(count))
+        for cpu in range(count):
+            observe('cpu_' + str(cpu) + '_registers', lambda cpu=cpu: self.hmp(cpu, 'info registers'))
+            observe('cpu_' + str(cpu) + '_lapic', lambda cpu=cpu: self.hmp(cpu, 'info lapic'))
+        for label, module, name, size in (
+                ('processes', 'user.memory', 'PROCESSES', 16 * 1288),
+                ('current', 'user.services', 'CURRENT', 8),
+                ('faults', 'user.services', 'USER_FAULTS', 8),
+                ('irqs', 'user.services', 'USER_IRQS', 8)):
+            observe(label, lambda module=module, name=name, size=size:
+                    oracle.words(self.kernel(self.ksym(module, name), size, 'failure ' + module + '.' + name), size // 8))
+        for name, size in (('user_active_frame', 200), ('user_context_cpu', 64),
+                           ('user_context_last_error', 8)):
+            observe(name, lambda name=name, size=size:
+                    oracle.words(self.kernel(self.symbols[name], size, 'failure ' + name), size // 8))
+        observe('exception', lambda: oracle.words(self.kernel(
+            self.symbols['cpu_exception_stack_top'] - 184, 184, 'failure hardware exception context'), 23))
+        report['physical_reads'] = list(self.chunks)
+        report['serial_sha256'] = hashlib.sha256(bytes(getattr(self, 'raw', b''))).hexdigest()
+        storage.write_json(self.state / 'failure.json', report)
+        return report
+
     def hmp(self, cpu, command):
         check(type(cpu) is int and 0 <= cpu < 16, 'invalid CPU index')
         return self.qmp.request('human-monitor-command', {'command-line': command, 'cpu-index': cpu})
