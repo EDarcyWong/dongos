@@ -298,7 +298,7 @@ smp_key_%1: db "smp_",%str(%1),"=",0
 %endmacro
 SMP_FIELDS SMP_KEY
 section .bss
-alignb 64
+align 64, resb 1
 smp_saved_xstate: resb 1024
 smp_stress_data: resb 16*SmpStress_size
 smp_stress_go: resq 1

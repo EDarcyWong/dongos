@@ -1,4 +1,4 @@
-"""Compile the complete isolated CPL3 union and every architectural object.
+"""Compile the complete tracked-current CPL3 graph and every architectural object.
 
 No full OS link, loader build or virtual machine is executed.
 """
@@ -8,17 +8,16 @@ from unittest import mock
 from lang.dongc import compile_file
 from lang.tests.test_dongc import tool,nasm_flags
 from tools.gen_offsets import generate
-ROOT=Path(__file__).resolve().parents[1];BASE=ROOT/'build/test/p6-cpl3-integration-candidate'
+ROOT=Path(__file__).resolve().parents[1];BASE=ROOT
 def builder():
- spec=importlib.util.spec_from_file_location('p6_cpl3_build',BASE/'tools/build.py');m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m);return m
+ from tests import current_smp_staging
+ return current_smp_staging
 def native_prepare(b):
- # Explicitly pinned historical source union, never an OS-build override. The
- # parent is promoting independent P6 changes; preserve the e63/786c contract.
- snapshot=ROOT/'build/test/p6-cpl3-integration-native/run-dfe2da3bac0e'
- return lambda output:b.prepare_frozen_native(output,snapshot)
+ # Current source only. The unavailable e63/786c historical replay is retired.
+ return b.prepare
 class Tests(unittest.TestCase):
  def test_complete_graph_and_privileged_architecture_objects(self):
-  b=builder();out=ROOT/'build/test/p6-cpl3-integration-native'/('run-'+uuid.uuid4().hex[:12]);stage,manifest,hashes=native_prepare(b)(out);before=hashes();candidate=b.candidate_inputs();nasm=tool('nasm','NASM');self.assertTrue(nasm);evidence={}
+  b=builder();out=ROOT/'build/test/p6-cpl3-integration-native'/('run-'+uuid.uuid4().hex[:12]);stage,manifest,hashes=native_prepare(b)(out);before=hashes();candidate=b.source_inputs();nasm=tool('nasm','NASM');self.assertTrue(nasm);evidence={}
   for inc in (BASE/'include').glob('*.inc'):(out/inc.name).write_bytes(inc.read_bytes())
   for mode in ('debug','release'):
    c=compile_file(stage/'smp_probe.dg',roots=[stage,ROOT/'services',ROOT/'lang/examples',ROOT/'lang/std'],mode=mode);(out/(mode+'.asm')).write_text(c.assembly);(out/(mode+'-layout.json')).write_text(json.dumps(c.layout_manifest,indent=2)+'\n')
@@ -35,44 +34,41 @@ class Tests(unittest.TestCase):
     label=Path(relative).stem+'-'+fmt;args=[nasm,'-f',fmt,*nasm_flags(nasm),'-I',str(out)+os.sep,'-I',str(ROOT/'include')+os.sep,'-DP1_TEST=1','-DRUNTIME_LEVEL=7','-DP6_USER_SMP=1',stage/relative,'-o',out/(label+'.o')];r=run(args,label);self.assertEqual(0,r.returncode,r.stderr)
   for fmt in('win64','elf64'):
    r=run([nasm,'-f',fmt,*nasm_flags(nasm),'-I',str(out)+os.sep,'-I',str(ROOT/'include')+os.sep,'-DP1_TEST=1','-DRUNTIME_LEVEL=7','-DUSER_SMP_TEST_NO_XSTATE=1',stage/'sched/user_arch.asm','-o',out/('user-negative-'+fmt+'.o')],'user-negative-'+fmt);self.assertEqual(0,r.returncode,r.stderr)
-  # The source selector defaults off. An explicit non-test or non-desktop
-  # selector is a compile-time error, not a silently enabled production mode.
-  for label,defines in [('default-off',['-DP1_TEST=0','-DRUNTIME_LEVEL=7']),('non-test',['-DP1_TEST=0','-DRUNTIME_LEVEL=7','-DP6_USER_SMP=1']),('non-desktop',['-DP1_TEST=1','-DRUNTIME_LEVEL=6','-DP6_USER_SMP=1'])]:
-   r=run([nasm,'-f','elf64',*nasm_flags(nasm),'-I',str(out)+os.sep,'-I',str(ROOT/'include')+os.sep,*defines,stage/'services_run.asm','-o',out/(label+'.o')],label);self.assertEqual(0 if label=='default-off'else 1,r.returncode,r.stderr)
-   if label!='default-off':self.assertIn('isolated test desktop',r.stderr)
-  self.assertEqual(before,hashes());self.assertEqual(candidate,b.candidate_inputs());(out/'validation-summary.json').write_text(json.dumps(dict(passed=True,candidate_only=True,full_dg_graph_compiled=True,all_architecture_elf_and_coff_assembled=True,os_link_executed=False,vm_executed=False,native_only_frozen_snapshot=manifest['native_only_frozen_snapshot'],actual_ap_cpl3_executed=False,candidate_sha256=candidate,production_kernel_sha256=manifest['production_kernel_sha256'],evidence=evidence),indent=2)+'\n');print('USER_SMP_INTEGRATION_EVIDENCE',out)
- def test_isolated_prepare_and_explicit_user_selector_routing(self):
-  b=builder();out=ROOT/'build/test/p6-cpl3-routing'/('run-'+uuid.uuid4().hex[:12]);commands=[];assembled=[]
-  def execute(command):
-   command=list(map(str,command));commands.append(command)
-   if 'lang.dongc'in command:
-    path=Path(command[command.index('--emit-layout')+1]);types=[]if command[-1].endswith('trace_loader.dg')else[dict(name='Report',full_name='sched.parallel_live.Report',kind='struct',size=8,alignment=8,fields=[dict(name='version',offset=0,size=8)])];path.write_text(json.dumps(dict(schema=1,target='x86_64-dongos-elf',types=types)))
-  def assembly(source,output,**kwargs):assembled.append((str(source),kwargs));return Path(output)/(Path(source).stem+'.o')
-  def build(**kwargs):
-   o=kwargs['output'];b.production.execute([os.sys.executable,'-m','lang.dongc','--root',str(ROOT/'boot'),'--emit-layout',str(o/'trace-layout.json'),str(ROOT/'boot/trace_loader.dg')]);b.production.execute([os.sys.executable,'-m','lang.dongc','--root',str(ROOT/'kernel'),'--emit-layout',str(o/'layout.json'),str(ROOT/'kernel/smp_probe.dg')]);b.production.assemble(ROOT/'kernel/services_run.asm',o,fmt='elf64',test=True,stage='p1',defines={'RUNTIME_LEVEL':7});b.production.execute(['ld.lld','-nostdlib','-o',str(o/'kernel.elf'),'original.o']);return o/'esp'
-  with mock.patch.object(b,'prepare',side_effect=native_prepare(b)),mock.patch.object(b.production,'execute',execute),mock.patch.object(b.production,'assemble',assembly),mock.patch.object(b.production,'build',build):
-   esp=b.build(out,user_smp=True)
-  self.assertEqual(out.resolve()/'esp',esp);self.assertEqual(9,len(assembled));self.assertEqual(1,assembled[0][1]['defines']['P6_USER_SMP']);self.assertTrue(all(Path(p).is_relative_to(out.resolve()/'source/kernel')for p,_ in assembled));self.assertEqual(8,len([p for p in commands[-1]if p.endswith('.o')])-1)
-  self.assertIn(str(ROOT/'boot'),commands[0]);self.assertEqual(str(ROOT/'boot/trace_loader.dg'),commands[0][-1]);self.assertFalse(any('source/kernel'in s for s in commands[0]))
-  for kwargs in (dict(user_smp=True,test=False),dict(user_smp=True,runtime_level=6),dict(user_workload=True),dict(user_smp=True,user_case='omit-xstate'),dict(user_smp=True,user_workload=True,user_case='other')):
-   with self.assertRaises(ValueError):b.build(out,**kwargs)
+  # Current production intentionally enables SMP at runtime7, including normal
+  # builds; only an explicit non-desktop selection must be rejected.
+  for label,defines in [('default-runtime7',['-DP1_TEST=0','-DRUNTIME_LEVEL=7']),('explicit-normal',['-DP1_TEST=0','-DRUNTIME_LEVEL=7','-DP6_USER_SMP=1']),('non-desktop',['-DP1_TEST=1','-DRUNTIME_LEVEL=6','-DP6_USER_SMP=1'])]:
+   r=run([nasm,'-f','elf64',*nasm_flags(nasm),'-I',str(out)+os.sep,'-I',str(ROOT/'include')+os.sep,*defines,stage/'services_run.asm','-o',out/(label+'.o')],label);self.assertEqual(1 if label=='non-desktop'else 0,r.returncode,r.stderr)
+   if label=='non-desktop':self.assertIn('requires desktop runtime7',r.stderr)
+  self.assertEqual(before,hashes());self.assertEqual(candidate,b.source_inputs());(out/'validation-summary.json').write_text(json.dumps(dict(passed=True,current_source_only=True,historical_replay=False,full_dg_graph_compiled=True,all_architecture_elf_and_coff_assembled=True,os_link_executed=False,vm_executed=False,source_contract=manifest['contract'],actual_ap_cpl3_executed=False,current_source_sha256=candidate,staged_sha256=manifest['staged_sha256'],evidence=evidence),indent=2)+'\n');print('USER_SMP_INTEGRATION_EVIDENCE',out)
+ def test_current_production_selector_and_architecture_routing(self):
+  b=builder()
+  for level in (6,7):
+   out=ROOT/'build/test/current-cpl3-routing'/('run-'+uuid.uuid4().hex[:12]);plan=b.production_plan(out,runtime_level=level,test=False)
+   names={Path(a['source']).name:a for a in plan['assemblies']}
+   for name in ('services_run','user_entry','user_arch','user_bridge_arch','user_legacy','user_boot'):
+    record=names[name+'.asm'];self.assertEqual(int(level==7),record['defines']['P6_USER_SMP']);self.assertIn(record['output'],plan['commands'][-1])
+   self.assertIn(str(ROOT/'kernel/smp_probe.dg'),plan['commands'][0]);self.assertFalse(plan['built']);self.assertFalse((out/'kernel.elf').exists())
  def test_workload_source_and_negative_object_routing(self):
-  from tools import user_services
-  b=builder();out=ROOT/'build/test/p6-cpl3-routing'/('run-'+uuid.uuid4().hex[:12]);selected=[];roots_seen=[];assembled=[]
-  def execute(command):
-   if '-pie'in command:
-    p=Path(command[command.index('-o')+1]);p.parent.mkdir(parents=True,exist_ok=True);p.write_bytes(b'recorded-test-elf-'+p.parent.name.encode())
-  def assembly(source,output,**kwargs):assembled.append((Path(source),kwargs));return Path(output)/(Path(source).stem+'.o')
-  def compile_service(source,*,roots,**kwargs):roots_seen.append((Path(source),list(roots)));return None
-  def service(source,output,**kwargs):
-   selected.append((Path(source),Path(output)));user_services.compile_file(source,roots=[ROOT/'services']);user_services.execute(['ld.lld','-pie','-o',str(output/'program.elf'),'program.o']);return output/'program.elf'
-  def build(**kwargs):
-   for name in('echo','fault','waiter','ipc_peer','fs_reader','terminal'):
-    user_services.build_service(ROOT/'services/apps'/(name+'.dg'),kwargs['output']/'services'/name.replace('_','-'))
-   b.production.execute(['ld.lld','-nostdlib','-o',str(kwargs['output']/'kernel.elf'),'original.o']);return kwargs['output']/'esp'
-  with mock.patch.object(b,'prepare',side_effect=native_prepare(b)),mock.patch.object(b.production,'execute',execute),mock.patch.object(b.production,'assemble',assembly),mock.patch.object(b.production,'build',build),mock.patch.object(user_services,'build_service',service),mock.patch.object(user_services,'compile_file',compile_service):
-   b.build(out,user_smp=True,user_workload=True,user_case='omit-xstate')
-  self.assertEqual([BASE/'services/apps/user_smp_worker.dg']*5,[p for p,_ in selected[:5]]);self.assertEqual(ROOT/'services/apps/terminal.dg',selected[5][0]);self.assertTrue(all(roots[0]==BASE/'services'for _,roots in roots_seen[:5]));self.assertEqual(ROOT/'services',roots_seen[5][1][0])
-  self.assertEqual(5,sum(p.name=='user_smp_worker.asm'for p,_ in assembled));arch=[kw for p,kw in assembled if p.name=='user_arch.asm'];self.assertEqual(1,len(arch));self.assertEqual(1,arch[0]['defines']['USER_SMP_TEST_NO_XSTATE']);self.assertEqual(7,arch[0]['defines']['RUNTIME_LEVEL'])
-  m=json.loads((out/'p6-cpl3-source.json').read_text());self.assertEqual({'echo','fault','waiter','ipc-peer','fs-reader'},set(m['workload_elf_sha256']));self.assertEqual('omit-xstate',m['user_case'])
+  from tests import current_user_smp_workload as workload
+  expected={7:78117,8:88219,9:99323,10:104729,11:115249}
+  for case in (None,'omit-xstate'):
+   out=ROOT/'build/test/current-cpl3-workload-routing'/('run-'+uuid.uuid4().hex[:12])
+   plan=workload.workload_plan(out,test=True,runtime_level=7,user_smp=True,user_case=case)
+   routes=plan['workloads'];self.assertEqual(expected,{r['configuration']:r['argument']for r in routes})
+   self.assertEqual({'echo','fault','waiter','ipc-peer','fs-reader'},{r['name']for r in routes})
+   for route in routes:
+    self.assertEqual(workload.FIXTURE/'services/apps/user_smp_worker.dg',Path(route['source']))
+    self.assertEqual(workload.FIXTURE/'services/apps/user_smp_worker.asm',Path(route['assembly']))
+    self.assertEqual(str(workload.FIXTURE/'services'),route['roots'][0]);self.assertFalse(Path(route['output']).exists())
+   self.assertEqual(str(ROOT/'services/apps/gui_terminal.dg'),plan['unchanged_terminal']['source'])
+   arch=plan['architecture'];self.assertEqual(str(ROOT/'kernel/sched/user_arch.asm'),arch['source'])
+   self.assertEqual(dict(P1_TEST=1,RUNTIME_LEVEL=7,P6_USER_SMP=1,USER_SMP_TEST_NO_XSTATE=int(case=='omit-xstate')),arch['defines'])
+   self.assertTrue(plan['synthetic_test_workload']);self.assertFalse(plan['historical_replay']);self.assertFalse(plan['built'])
+   self.assertFalse(plan['os_link_executed']);self.assertFalse(plan['vm_executed']);self.assertFalse((out/'kernel.elf').exists())
+   self.assertNotIn('workload_elf_sha256',plan) # A routing plan is not a built ELF receipt.
+   for name,digest in plan['source_sha256'].items():self.assertEqual(digest,hashlib.sha256((ROOT/name).read_bytes()).hexdigest())
+   self.assertEqual(plan,json.loads((out/'current-user-workload-plan.json').read_text()))
+  for changes in ({'test':False},{'runtime_level':6},{'user_smp':False},{'user_case':'unknown'}):
+   options=dict(test=True,runtime_level=7,user_smp=True);options.update(changes)
+   with self.assertRaises(ValueError):workload.workload_plan(out,**options)
 if __name__=='__main__':unittest.main(verbosity=2)

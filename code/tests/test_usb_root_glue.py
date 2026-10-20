@@ -1,4 +1,6 @@
-"""Exact USB root/selection/manager functions, real capability table, host I/O model."""
+"""Current-source regression, not a replay of unavailable candidate snapshots.
+
+Exact USB root/selection/manager functions, real capability table, host I/O model."""
 import hashlib
 import json
 import os
@@ -13,7 +15,7 @@ from tests.test_service_ipc_cancellation import block
 from tests.test_service_gui_wiring import copy_graph
 
 ROOT = Path(__file__).resolve().parents[1]
-CANDIDATE = ROOT / 'build/test/p8-usb-root-candidate'
+SOURCE_ROOT = ROOT
 
 
 def overrides(kernel, manager, selection):
@@ -28,12 +30,14 @@ export("ur_manager") fn probe_start()u64{unsafe{
 '''
     setup = block(selection, 'unsafe fn setup()')
     prefix = setup[:setup.index('        if sys.svc_call(0x61')]
+    next_configuration = '\n'.join(block(selection, 'unsafe fn ' + name + '(') for name in ('inventory_read', 'next_configuration'))
     select = '''module usb_selection_fixture;import lib.sys as sys;import fs.protocol as protocol;
 import drivers.pci as pci;import drivers.usb_block_proxy as usb;
+import drivers.pci_inventory as pci_inventory;import lib.pci_inventory_abi as pci_inventory_abi;
 var BOOT:*const sys.Boot=null;var USB:usb.State=usb.EMPTY;var BACKEND:u64=0;var SELECTED:pci.Function=pci.EMPTY_FUNCTION;
 pub error Setup=0x05060001;
 unsafe fn configuration(context:u64,address:u64,out:*u32)u64{return 1;}
-''' + prefix + '''        SELECTED=function;
+''' + next_configuration + '\n' + prefix + '''        SELECTED=function;
     }return;
 }
 export("ur_select") fn probe_select()u64{unsafe{USB=usb.EMPTY;BACKEND=0;SELECTED=pci.EMPTY_FUNCTION;
@@ -53,8 +57,13 @@ pub unsafe fn next(reader:Read32,context:u64,regions:[]const Region,cursor:*Curs
         'usb_root_probe': fixture + '\nimport usb_selection_fixture as selection;import drivers.device_manager as manager;',
         'usb_selection_fixture': select,
         'drivers.device_manager': manager,
-        'drivers.usb_block_proxy': (CANDIDATE / 'services/drivers/usb_block_proxy.dg').read_text(encoding='utf-8'),
+        'drivers.usb_block_proxy': (SOURCE_ROOT / 'services/drivers/usb_block_proxy.dg').read_text(encoding='utf-8'),
         'drivers.pci': pci,
+        'usb_root_shared': '''module usb_root_shared;pub error Invalid=0x09000002;
+// Identity publication is an exercised boundary: reject malformed owners.
+pub unsafe fn bind_owner(id:usize,owner:u64)!void{
+ if id>=16||(owner>>32)!=id as u64+1||(owner&0xffff_ffff)==0||(owner&0xffff_ffff)>0x0fff_ffff{return error.Invalid;}return;
+}''',
         'user.processes': '''module user.processes;import lib.process_abi as abi;
 pub const CONFIGS:usize=18;pub struct Catalog{pub states:[32]abi.Snapshot,pub slot:[32]u64}
 pub const EMPTY:Catalog=Catalog{states:[abi.EMPTY_SNAPSHOT;32],slot:[0;32]};''',
@@ -81,8 +90,9 @@ pub unsafe fn map_client_font(id:usize)!void{return;}pub unsafe fn recreate(id:u
 
 class UsbRootGlueTests(unittest.TestCase):
     def test_exact_root_caps_channel_selection_and_xhci_only_manager(self):
-        paths = [CANDIDATE / 'kernel/user/services.dg', CANDIDATE / 'services/drivers/device_manager.dg',
-                 CANDIDATE / 'services/drivers/block_service.dg', CANDIDATE / 'services/drivers/usb_block_proxy.dg',
+        paths = [SOURCE_ROOT / 'kernel/user/services.dg', SOURCE_ROOT / 'services/drivers/device_manager.dg',
+                 SOURCE_ROOT / 'services/drivers/block_service.dg', SOURCE_ROOT / 'services/drivers/usb_block_proxy.dg',
+                 ROOT / 'services/drivers/pci_inventory.dg', ROOT / 'services/lib/pci_inventory_abi.dg',
                  ROOT / 'tests/usb_root_probe.dg.in', ROOT / 'tests/usb_root_probe.c', Path(__file__)]
         before = {str(p): hashlib.sha256(p.read_bytes()).hexdigest() for p in paths}
         kernel, manager, selection = [p.read_text(encoding='utf-8') for p in paths[:3]]

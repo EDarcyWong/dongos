@@ -45,7 +45,8 @@ SYMBOLS.update({"permission_report_" + name: SYMBOLS["permission_report"] + inde
 def prior_capture(profile):
     resources = old.resources()
     next(item for item in resources if item["kind"] == 11)["length"] = SYMBOLS["__kernel_bss_end"] - SYMBOLS["__kernel_bss_start"]
-    serial = old.capture(manifest=resources, values={"mapped_pages": 402})
+    # The permission BSS adds 12 pages to the 454-page base fixture.
+    serial = old.capture(manifest=resources, values={"mapped_pages": 466})
     hard_block = b"\r\n".join([*hard.hardening_lines(profile), runner.hardening.READY]) + b"\r\n"
     serial = serial.replace(runner.memory.ACTIVATION_READY + b"\r\n", runner.memory.ACTIVATION_READY + b"\r\n" + hard_block)
     cache_block = b"\r\n".join([*fixture.cache_lines(cr4=0x620 | hard.RAW[profile][2]), runner.cache.READY]) + b"\r\n"

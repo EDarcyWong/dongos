@@ -151,7 +151,7 @@ cw_b: dw 0x077f
 mxcsr_a: dd 0x1f80
 mxcsr_b: dd 0x3f80
 section .bss
-alignb 64
+align 64, resb 1
 probe_initial: resb 1024
 probe_a: resb 1024
 probe_b: resb 1024

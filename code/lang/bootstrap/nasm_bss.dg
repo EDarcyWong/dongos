@@ -9,7 +9,7 @@ const MAX:u64=0xffff_ffff_ffff_ffff;
 const PREFIX:usize=7;
 const MIN_LABEL:usize=8;
 const MAX_LABEL:usize=128;
-const FIXED:usize=16; // "alignb " + LF + ": resb " + LF
+const FIXED:usize=23; // "align " + ", resb 1" + LF + ": resb " + LF
 fn span(p:u64,n:u64)bool{return n==0||(p!=0&&n<=MAX-p);}
 fn overlap(a:u64,n:u64,b:u64,m:u64)bool{return n!=0&&m!=0&&a<b+m&&b<a+n;}
 fn label_ok(label:[]const u8)bool{
@@ -43,9 +43,11 @@ pub unsafe fn emit(label:[]const u8,byte_count:usize,alignment:usize,out:[]u8,wr
  if aw>MAX-base{return INVALID;}let mid=base+aw;
  if cw>MAX-mid{return INVALID;}let total=mid+cw;
  if total>out.len{return CAPACITY;}
- // "alignb "
- out[0]=97;out[1]=108;out[2]=105;out[3]=103;out[4]=110;out[5]=98;out[6]=32;
- var at=copy(out,7,slice_from_raw_parts(&ab[0],aw));
+ // "align " with explicit BSS reservation avoids vendor alignb warning macros.
+ out[0]=97;out[1]=108;out[2]=105;out[3]=103;out[4]=110;out[5]=32;
+ var at=copy(out,6,slice_from_raw_parts(&ab[0],aw));
+ // ", resb 1"
+ out[at]=44;out[at+1]=32;out[at+2]=114;out[at+3]=101;out[at+4]=115;out[at+5]=98;out[at+6]=32;out[at+7]=49;at+=8;
  out[at]=10;at+=1;
  at=copy(out,at,label);
  // ": resb "

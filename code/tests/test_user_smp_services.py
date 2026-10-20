@@ -5,9 +5,15 @@ from lang.dongc import compile_file
 from lang.tests.test_dongc import tool,nasm_flags
 from tests.test_service_ipc_cancellation import block
 from tests.test_service_gui_wiring import copy_graph
-ROOT=Path(__file__).resolve().parents[1];BASE=ROOT/'build/test/p6-cpl3-integration-candidate'
+ROOT=Path(__file__).resolve().parents[1];BASE=ROOT
+def current_files():
+ """Tracked graph identity, not unavailable candidate provenance."""
+ names=subprocess.check_output(['git','ls-files','-z','kernel','include','services','lang/dongc','lang/std'],cwd=ROOT).decode().split('\0')
+ return [ROOT/name for name in names if name and (ROOT/name).is_file()]
+
 PREFIX='''
 import user.abi as abi;
+import boot.trace as trace;import boot.trace_runtime as boot_trace;
 import user.memory as memory;
 import user.processes as procs;
 import lib.process_abi as proc;
@@ -77,13 +83,13 @@ export("us_get") fn get(which:u64)u64{unsafe{
 MEMORY='''module user.memory;import user.abi as abi;
 pub struct Process{pub frame:abi.Frame,pub root:u64,pub ready:u64}
 var P:[16]Process=[Process{frame:abi.EMPTY,root:0,ready:0};16];
-pub var STAGE_FAILED:bool=false;pub var UNSHARE_FAILED:bool=false;pub var RESOURCE_FAILED:bool=false;
+pub var OBJECT_FAILED:bool=false;pub var STAGE_FAILED:bool=false;pub var UNSHARE_FAILED:bool=false;pub var RESOURCE_FAILED:bool=false;
 pub fn processes()*Process{unsafe{return &P[0];}}pub fn frame_count()usize{return 17;}
 '''
 WINDOWS='''module user.window_broker;pub var FAILED:bool=false;pub var EPOCH:u64=0;
 pub unsafe fn owner_gone(owner:u64)!void{return;}pub unsafe fn compositor_gone(epoch:u64)!void{return;}
 '''
-DEVICE='''module user.device_host;pub error Invalid=0x060b_0040;
+DEVICE='''module user.device_host;pub var PCI_FAILED:bool=false;pub error Invalid=0x060b_0040;
 unsafe extern "sysv64" fn smp_service_fixture_irq(vector:u64)u64;
 pub unsafe fn interrupt(vector:u64)!u64{unsafe{let x=smp_service_fixture_irq(vector);}return 0;}
 '''
@@ -108,14 +114,15 @@ int main(int argc,char**argv){C(argc==2);U gui=!strcmp(argv[1],"gui");setup();cp
  else{C(!strcmp(argv[1],"fault"));C(!us_fault()&&us_get(0)==16&&us_get(3)==1&&withdrawn==1&&!us_get(5));}
  C(us_get(7)==UINT64_MAX&&!d->processes[7].token&&!us_get(8)&&!ue_audit());C(!ue_unlock(0));printf("actual services SMP callback checks=%u scenario=%s real-Catalog scope generation frame-authority retire-before-withdraw IRQ-BSP\n",(unsigned)checks,argv[1]);return 0;}
 '''
+MUTATION_POLICY="\nU ABI user_bridge_service_policy(U slot,U event,U frame){(void)slot;(void)event;(void)frame;return 0;}\n"
 class Tests(unittest.TestCase):
  def test_actual_service_callbacks_and_retirement_before_withdrawal(self):
   source=BASE/'kernel/user/services.dg';text=source.read_text(encoding='utf-8')
   actual='\n'.join(block(text,n)for n in ('unsafe fn process(', 'unsafe fn managed(', 'unsafe fn retire_one(', 'pub unsafe fn enable_smp(', 'export("dong_user_smp_project")', 'export("dong_user_smp_service")', 'export("dong_user_smp_interrupt")'))
-  entry=(ROOT/'tests/user_entry_probe.dg').read_text()+PREFIX+actual+TAIL
-  c=(ROOT/'tests/user_entry_probe.c').read_text()
+  entry=(ROOT/'tests/user_current_entry_probe.dg').read_text()+PREFIX+actual+TAIL
+  c=(ROOT/'tests/user_current_entry_probe.c').read_text()
   for needle in ('U ABI dong_user_smp_service(', 'U ABI dong_user_smp_project('):c=c.replace(block(c,needle),'')
-  c=c[:c.index('int main(void)')]+CMAIN
+  c=c[:c.index('int main(void)')]+CMAIN+MUTATION_POLICY
   controls={
    'retire-without-remote-detach':('try smp_bridge.retire(id);',''),
    'missing-test-role-mask':('if cfg>=7&&cfg<=11{SMP_TEST_SLOTS|=1<<slot as u64;}',''),
@@ -128,26 +135,24 @@ class Tests(unittest.TestCase):
    'AP-owner-runs-perform':('if (*d).owner!=0||(*d).lock!=1||(*cpu).mode','if (*d).lock!=1||(*cpu).mode'),
    'duplicate-admission':('if (*p).token==0{\n                let cfg','if true{\n                let cfg'),
   }
-  files=[source,ROOT/'kernel/user/processes.dg',ROOT/'services/lib/process_abi.dg',ROOT/'tests/user_entry_probe.dg',ROOT/'tests/user_entry_probe.c',Path(__file__),*sorted((BASE/'kernel/sched').glob('*.*'))]
+  files=[source,ROOT/'kernel/user/processes.dg',ROOT/'services/lib/process_abi.dg',ROOT/'tests/user_current_entry_probe.dg',ROOT/'tests/user_current_entry_probe.c',Path(__file__),*sorted((BASE/'kernel/sched').glob('*.*'))]
   before={str(p.relative_to(ROOT)):hashlib.sha256(p.read_bytes()).hexdigest()for p in files};out=ROOT/'build/test/p6-cpl3-service-native'/('run-'+uuid.uuid4().hex[:12]);out.mkdir(parents=True);nasm,cc=tool('nasm','NASM'),tool('gcc','CC');evidence={}
   def run(args,d,label):
    args=list(map(str,args));r=subprocess.run(args,cwd=ROOT,capture_output=True,text=True,timeout=60);(d/(label+'.json')).write_text(json.dumps(dict(command=args,returncode=r.returncode,stdout=r.stdout,stderr=r.stderr),indent=2)+'\n');return r
   candidate={}
-  for p in (BASE/'kernel/sched').glob('*.dg'):
-   s=p.read_text();candidate[re.search(r'module\s+([\w.]+);',s)[1]]=s
   for mode in ('debug','release'):
    for variant in ('normal',*controls):
     d=out/(mode+'-'+variant);stage=d/'kernel';s=entry
     if variant!='normal':old,new=controls[variant];self.assertEqual(1,s.count(old));s=s.replace(old,new)
-    overrides={**candidate,'user_entry_probe':s,'user.memory':MEMORY,'user.window_broker':WINDOWS,'user.device_host':DEVICE}
-    copy_graph(stage,['user_entry_probe'],overrides);compiled=compile_file(stage/'user_entry_probe.dg',roots=[stage],mode=mode);(d/'probe.asm').write_text(compiled.assembly);(d/'probe.c').write_text(c)
+    overrides={**candidate,'user_current_entry_probe':s,'user.memory':MEMORY,'user.window_broker':WINDOWS,'user.device_host':DEVICE,'boot.trace_runtime':'module boot.trace_runtime;pub unsafe fn event(a:u64,b:u64,c:u64,d:u64)void{return;}'}
+    copy_graph(stage,['user_current_entry_probe'],overrides);compiled=compile_file(stage/'user_current_entry_probe.dg',roots=[stage],mode=mode);(d/'probe.asm').write_text(compiled.assembly);(d/'probe.c').write_text(c)
     objects=[]
     for name,path in [('dong',d/'probe.asm'),('entry',BASE/'kernel/sched/user_entry.asm'),('legacy',BASE/'kernel/sched/user_legacy.asm')]:
      obj=d/(name+'.o');r=run([nasm,'-f','win64'if os.name=='nt'else'elf64',*nasm_flags(nasm),'-I',str(BASE/'include')+os.sep,'-I',str(ROOT/'include')+os.sep,path,'-o',obj],d,'assemble-'+name);self.assertEqual(0,r.returncode,r.stderr);objects.append(obj)
     exe=d/('probe.exe'if os.name=='nt'else'probe');r=run([cc,'-std=c11','-O2','-Wall','-Wextra','-Werror','-Wno-unused-function',*([]if os.name=='nt'else['-no-pie']),d/'probe.c',*objects,'-o',exe],d,'link');self.assertEqual(0,r.returncode,r.stderr)
     for scenario in ('exit','fault','gui')if variant=='normal'else(('gui',)if variant=='test-mask-includes-normal-GUI'else('exit',)):
      r=run([exe,scenario],d,scenario);self.assertEqual(0 if variant=='normal'else 1,r.returncode,r.stdout+r.stderr)
-     if variant!='normal':self.assertIn('user CPL3 candidate oracle line',r.stderr)
+     if variant!='normal':self.assertIn('user CPL3 current-source oracle line',r.stderr)
      evidence[mode+'-'+variant+'-'+scenario]=dict(returncode=r.returncode,stdout=r.stdout,stderr=r.stderr)
-  after={str(p.relative_to(ROOT)):hashlib.sha256(p.read_bytes()).hexdigest()for p in files};self.assertEqual(before,after);(out/'validation-summary.json').write_text(json.dumps(dict(passed=True,candidate_only=True,actual_services_fragments=True,real_catalog_domain_queue=True,memory_hardware_and_perform_boundary_mocked=True,actual_ap_cpl3_executed=False,source_sha256=after,sources_unchanged=True,evidence=evidence),indent=2)+'\n');print('USER_SMP_SERVICE_EVIDENCE',out)
+  after={str(p.relative_to(ROOT)):hashlib.sha256(p.read_bytes()).hexdigest()for p in files};self.assertEqual(before,after);(out/'validation-summary.json').write_text(json.dumps(dict(passed=True,source_commit=subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip(),contract="tracked-current-cpl3-v1",current_source=True,historical_replay=False,actual_services_fragments=True,real_catalog_domain_queue=True,memory_hardware_and_perform_boundary_mocked=True,actual_ap_cpl3_executed=False,source_sha256=after,sources_unchanged=True,evidence=evidence),indent=2)+'\n');print('USER_SMP_SERVICE_EVIDENCE',out)
 if __name__=='__main__':unittest.main(verbosity=2)

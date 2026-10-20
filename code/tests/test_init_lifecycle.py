@@ -26,7 +26,7 @@ class InitLifecycleTests(unittest.TestCase):
     def test_real_launcher_and_exhaustive_independent_graphs(self):
         self.native()
     def test_actual_dependency_and_generation_regressions_are_rejected(self):
-        for mutation in ('lost-dependency-kill','accepted-stale-generation'):
+        for mutation in ('lost-dependency-kill','accepted-stale-generation','lost-high-ready-bit'):
             with self.subTest(mutation=mutation):self.native(mutation)
     def native(self,mutation=None):
         for mode in ('debug','release'):
@@ -40,14 +40,20 @@ class InitLifecycleTests(unittest.TestCase):
                         (d/'services'/relative).write_bytes((ROOT/'services'/relative).read_bytes())
                     source=(ROOT/'services/init/policy.dg').read_text()
                     needle={'lost-dependency-kill':'if (c.dependencies&~bits)!=0 {reason=0x0511_0006;}',
-                        'accepted-stale-generation':'if value.generation!=n.generation||value.process!=n.process {return false;}'}[mutation]
+                        'accepted-stale-generation':'if value.generation!=n.generation||value.process!=n.process {return false;}',
+                        'lost-high-ready-bit':'bits|=(1 as u64)<<i as u64;'}[mutation]
                     self.assertEqual(1,source.count(needle))
-                    source=source.replace(needle,'if false {return false;}' if mutation=='accepted-stale-generation' else 'if false {reason=0x0511_0006;}')
+                    replacement_text={
+                        'lost-dependency-kill':'if false {reason=0x0511_0006;}',
+                        'accepted-stale-generation':'if false {return false;}',
+                        'lost-high-ready-bit':'if i<16 {bits|=(1 as u64)<<i as u64;}',
+                    }[mutation]
+                    source=source.replace(needle,replacement_text)
                     (replacement/'policy.dg').write_text(source);roots[1]=d/'services'
                     (d/'mutation.json').write_text(json.dumps(dict(mutation=mutation,expected='independent C model rejects actual changed Dong implementation'),indent=2)+'\n')
                 c=compile_file(ROOT/'tests/init_lifecycle_probe.dg',roots=roots,mode=mode)
                 layouts={x['full_name']:x for x in c.layout_manifest['types']}
-                for name,size in {'lib.process_abi.Config':128,'lib.process_abi.Snapshot':64,'lib.process_abi.Event':64,'init.policy.Manager':2840,'init.policy.Action':40}.items():self.assertEqual(size,layouts[name]['size'])
+                for name,size in {'lib.process_abi.Config':128,'lib.process_abi.Snapshot':64,'lib.process_abi.Event':64,'init.policy.Manager':5656,'init.policy.Action':40}.items():self.assertEqual(size,layouts[name]['size'])
                 src=d/'probe.asm';src.write_text(c.assembly);obj=d/'probe.o';fmt='win64' if os.name=='nt' else 'elf64'
                 nasm=tool('nasm','NASM');cc=tool('gcc','CC');self.assertTrue(nasm);self.assertTrue(cc)
                 r=self.command([nasm,'-f',fmt,*nasm_flags(nasm),'-o',str(obj),str(src)],d,'assemble');self.assertEqual(0,r.returncode,r.stderr)

@@ -94,13 +94,14 @@ def assemble(source: Path, output: Path, *, fmt: str, test: bool, stage: str,
     obj = output / (source.stem + (".obj" if fmt == "win64" else ".o"))
     command = [nasm, "-f", fmt, "-Wall", "-Werror", "-I", str(ROOT / "include") + os.sep,
                "-I", str(output) + os.sep, "-l", str(output / (source.stem + ".lst")), "-o", str(obj)]
-    # NASM 3 enables optional relocation diagnostics with -Wall. AMD64 REL32
-    # references across sections are supported by lld-link; older NASM versions
-    # do not know this warning name, so only suppress it for NASM 3 and later.
-    version_text = subprocess.run([nasm, "-v"], check=True, capture_output=True, text=True).stdout
-    version = re.search(r"NASM version (\d+)\.", version_text)
-    if version and int(version.group(1)) >= 3:
-        command.append("-w-reloc-rel-dword")
+    # Valid PC32/REL32 references and 64-bit pointer data are intentional.
+    # Some NASM 2.x distributions backport these optional diagnostics; detect
+    # capabilities rather than guessing from the major version. Every other
+    # warning remains an error, including unsupported relocation widths.
+    help_text = subprocess.run([nasm, "-h"], check=True, capture_output=True, text=True).stdout
+    for warning in ("reloc-rel-dword", "reloc-abs-qword"):
+        if re.search(r"(?m)^\s*" + re.escape(warning) + r"\s", help_text):
+            command.append("-w-" + warning)
     if test:
         command.append(f"-D{stage.upper()}_TEST=1")
     for name, value in (defines or {}).items():

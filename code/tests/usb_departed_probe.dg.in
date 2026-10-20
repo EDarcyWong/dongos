@@ -1,6 +1,11 @@
 module usb_departed_fixture;
 import user.abi as abi;import user.processes as procs;import lib.process_abi as proc;
 import ipc.handles as handles;import usb_departed_windows as windows;
+import usb_departed_smp as smp_bridge;import usb_departed_trace as boot_trace;
+import boot.trace as trace;
+// This native fixture covers the single-core retirement path. The SMP adapter
+// fails closed if reached, rather than simulating successful CPU quiescence.
+var SMP_ENABLED:bool=false;var SMP_TEST_SLOTS:u64=0;
 pub error Protocol=0x050b_0002;pub error InvalidCall=0x050b_0001;
 const COUNT:usize=16;var ACTIVE:usize=16;var CURRENT:usize=4;var GRAPHICS:bool=true;
 struct Process {ready:u64}var PROCESSES:[16]Process=[Process{ready:0};16];
@@ -40,7 +45,17 @@ export("ud_query") unsafe fn query(actor:usize,frame:*abi.Frame)u64 {unsafe{
  CURRENT=actor;match perform(frame){ok(n)=>{if n!=actor{return 0xdead;}return 0;},err(e)=>{return e;},}
 }}
 export("ud_retire") fn retire_test(id:usize,state:u64)u64 {unsafe{
- match retire_one(id,state,0){ok=>{return 0;},err(e)=>{return e;},}
+ let before=boot_trace.COUNT;var cfg:u64=32;
+ if CATALOG!=null&&id<16{cfg=procs.current(CATALOG,id);}
+ match retire_one(id,state,0){
+  ok=>{
+   // Current trace publication observes the actual catalog termination.
+   if boot_trace.BAD||boot_trace.COUNT!=before+1||boot_trace.SUBJECT!=cfg||cfg>=32{return 0x09000003;}
+   if boot_trace.GENERATION!=(*CATALOG).states[cfg as usize].generation{return 0x09000003;}
+   if (*CATALOG).states[cfg as usize].state!=state{return 0x09000003;}return 0;
+  },
+  err(e)=>{if boot_trace.BAD||boot_trace.COUNT!=before{return 0x09000003;}return e;},
+ }
 }}
 export("ud_restart") fn restart()u64 {unsafe{
  match procs.start(CATALOG,13,13,0,&SNAPSHOT){ok=>{},err(e)=>{return e;},}

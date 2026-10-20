@@ -1,9 +1,11 @@
-"""Execute the live candidate's exact idle/drain/time/error fragments."""
+"""Execute the current implementation's exact idle/drain/time/error fragments."""
+# Tests the tracked current implementation, not a replay of unavailable candidate sources.
 import hashlib,json,os,re,subprocess,unittest,uuid
 from pathlib import Path
 from lang.dongc import compile_file
 from lang.tests.test_dongc import tool,nasm_flags
-ROOT=Path(__file__).resolve().parents[1];BASE=ROOT/'build/test/p6-live-integration-candidate/kernel'
+ROOT=Path(__file__).resolve().parents[1];BASE=ROOT/'kernel'
+BASE_REVISION=subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip()
 def block(text,marker):
  a=text.index(marker);b=text.index('{',a);depth=1;i=b+1
  while depth:
@@ -42,5 +44,5 @@ export("gip_get") fn get(which:u64,id:usize)u64{unsafe{if which==0{return (*INFO
      r=command([exe,scenario],d,scenario);self.assertEqual(0 if variant=='normal'else 1,r.returncode,r.stdout+r.stderr)
      if variant!='normal':self.assertIn('parallel idle oracle line',r.stderr)
      evidence[mode+'-'+variant+'-'+scenario]=dict(returncode=r.returncode,stdout=r.stdout,stderr=r.stderr)
-  after={str(p):hashlib.sha256(p.read_bytes()).hexdigest()for p in files};self.assertEqual(before,after);(out/'validation-summary.json').write_text(json.dumps(dict(passed=True,candidate_only=True,exact_live_idle_and_deadline_fragments=True,real_parallel_domain=True,clock_and_async_ticks_and_worker_read_boundary_mocked=True,actual_ap_or_vm_executed=False,source_sha256=after,sources_unchanged=True,evidence=evidence),indent=2)+'\n');print('PARALLEL_IDLE_DRAIN_EVIDENCE',out)
+  after={str(p):hashlib.sha256(p.read_bytes()).hexdigest()for p in files};self.assertEqual(before,after);(out/'validation-summary.json').write_text(json.dumps(dict(passed=True,source_binding='tracked-current-source',historical_candidate_replay=False,base_revision=BASE_REVISION,exact_live_idle_and_deadline_fragments=True,real_parallel_domain=True,clock_and_async_ticks_and_worker_read_boundary_mocked=True,actual_ap_or_vm_executed=False,source_sha256=after,sources_unchanged=True,evidence=evidence),indent=2)+'\n');print('PARALLEL_IDLE_DRAIN_EVIDENCE',out)
 if __name__=='__main__':unittest.main(verbosity=2)

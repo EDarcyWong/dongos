@@ -162,7 +162,7 @@ typedef struct {uint64_t pre;State s;uint64_t post;} GuardState;
 static uint64_t init(GuardState *g,uint64_t mode){reset_model(mode);g->pre=g->post=GUARD;nr_reset(&g->s);uint64_t e=nr_init(&g->s,&bar,&ops,91);
     C(g->pre==GUARD&&g->post==GUARD);guards();return e;}
 static void held(GuardState *g){State *s=&g->s;C(s->info.held&&s->info.faulted&&!s->info.ready&&!s->busy&&s->lease.pointer==dma&&s->lease.token==1);
-    if(s->admin.ready)C(s->admin.held&&s->admin.fault);if(s->io.ready)C(s->io.held&&s->io.fault);
+    if(s->admin.ready){C(s->admin.held&&s->admin.fault);}if(s->io.ready)C(s->io.held&&s->io.fault);
     State before=*s;uint64_t cmd=commands,rd=reads,wr=writes;uint8_t out[512];memset(out,0x87,512);
     C(nr_read(s,0,1,out)==CLEANUP&&nr_write(s,0,1,out)==CLEANUP&&nr_flush(s)==CLEANUP&&nr_init(s,&bar,&ops,91)==ALREADY);
     C(!memcmp(s,&before,sizeof before)&&cmd==commands&&rd==reads&&wr==writes);for(size_t i=0;i<512;i++)C(out[i]==0x87);
@@ -188,7 +188,7 @@ int main(void){uint64_t size[3]={0};nr_sizes(size);C(size[0]==sizeof(State)&&siz
     GuardState g;const uint64_t modes[]={TOZERO,VS2,CRMS,BAD_LEASE,ACQUIRE_FAIL,ENABLE_DENY,DISABLE_STUCK,ENABLE_STUCK,DISABLE_TO2,BAD_CONTROLLER,BAD_NAMESPACE,SHUTDOWN_IN_PROGRESS};
     const uint64_t errors[]={CORE_UNSUP,CORE_UNSUP,CORE_UNSUP,INVALID,IO,IO,TIMEOUT,TIMEOUT,TIMEOUT,CORE_UNSUP,CORE_UNSUP,UNSUP};
     for(size_t i=0;i<sizeof modes/sizeof *modes;i++){C(init(&g,modes[i])==errors[i]);if(g.s.info.held)held(&g);else C(!h.bme&&g.s.info.faulted);
-        if(modes[i]==DISABLE_STUCK)C(h.time-h.disable_start>=500);if(modes[i]==ENABLE_STUCK)C(h.time-h.enable_start>=500);if(modes[i]==DISABLE_TO2)C(h.time-h.disable_start>=1000);}
+        if(modes[i]==DISABLE_STUCK){C(h.time-h.disable_start>=500);}if(modes[i]==ENABLE_STUCK){C(h.time-h.enable_start>=500);}if(modes[i]==DISABLE_TO2){C(h.time-h.disable_start>=1000);}}
     const uint64_t fails[]={HANG,OLD_PHASE,BAD_CID,BAD_SQID,BAD_SQHD,BAD_STATUS,BAD_RESERVED,BAD_RESULT,FATAL,SQ_UNCERTAIN,CQ_UNCERTAIN,CLOCK_BACK};
     for(size_t i=0;i<sizeof fails/sizeof *fails;i++){C(init(&g,NORMAL)==0);h.mode=fails[i];uint8_t out[512];memset(out,0x5b,512);
         uint64_t expected=CORE_BAD;if(fails[i]==HANG||fails[i]==OLD_PHASE)expected=CORE_TIMEOUT;if(fails[i]==FATAL)expected=DEVICE;

@@ -20,7 +20,8 @@ static unsigned checks;
 void SYSV __dong_panic(void){fputs("unexpected process catalog Dong panic\n",stderr);exit(92);}
 #define CHECK(x) do{++checks;if(!(x)){fprintf(stderr,"catalog oracle failed line %u\n",__LINE__);exit(1);}}while(0)
 static const char*const names[18]={"shell","fs","block","compositor","input","init","devmgr","echo","fault","waiter","ipc-peer","fs-reader","file-app","xhci","terminal","files","editor","settings"};
-static const uint64_t deps[18]={2,4,64,18,64,0,32,2,2,2,2,2,2,64,10,10,10,10},flags[18]={7,7,5,7,5,5,7,8,8,8,8,8,8,4,8,8,8,8},retries[18]={3,3,0,3,0,0,3,0,0,0,0,0,0,0,0,0,0,0};
+/* Current desktop applications are AUTOSTART | ORDINARY, independently pinned. */
+static const uint64_t deps[18]={2,4,64,18,64,0,32,2,2,2,2,2,2,64,10,10,10,10},flags[18]={7,7,5,7,5,5,7,8,8,8,8,8,8,4,9,9,9,9},retries[18]={3,3,0,3,0,0,3,0,0,0,0,0,0,0,0,0,0,0};
 static Catalog model;
 static void reference_initialize(uint64_t hz){
  memset(&model,0,sizeof model);model.ready=1;model.count=18;
@@ -59,7 +60,8 @@ static void event(Catalog*c,unsigned actor,uint64_t after){
  for(uint64_t seq=after;seq<model.sequence;){++seq;Event*e=&model.events[(seq-1)%64];if(permitted(actor,(unsigned)e->configuration,1)){expected=seq;break;}}
  CHECK(found==!!expected);
  if(expected)CHECK(!memcmp(&out.item,&model.events[(expected-1)%64],sizeof(Event))&&out.lo==before.lo&&out.hi==before.hi);
- else CHECK(!memcmp(&out,&before,sizeof out));equal(c);
+ else {CHECK(!memcmp(&out,&before,sizeof out));}
+ equal(c);
 }
 static void rejected_start(Catalog*c,unsigned id,unsigned slot,uint64_t code){
  Snapshot out,before;memset(&out,0xa5,sizeof out);before=out;Catalog prior=*c;

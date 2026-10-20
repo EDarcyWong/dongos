@@ -1,4 +1,4 @@
-"""Compile/stage the live AP candidate; no OS link or VM execution."""
+"""Compile/stage the tracked-current live AP graph; no OS link or VM execution."""
 import copy,hashlib,importlib.util,json,os,struct,subprocess,unittest,uuid
 from pathlib import Path
 from unittest import mock
@@ -6,9 +6,10 @@ from lang.dongc import compile_file
 from lang.tests.test_dongc import tool,nasm_flags
 from tools.gen_offsets import generate
 from tests import parallel_live_oracle as oracle
-ROOT=Path(__file__).resolve().parents[1];BASE=ROOT/'build/test/p6-live-integration-candidate'
+ROOT=Path(__file__).resolve().parents[1];BASE=ROOT
 def load_builder():
- spec=importlib.util.spec_from_file_location('p6_isolated_build',BASE/'tools/build.py');m=importlib.util.module_from_spec(spec);spec.loader.exec_module(m);return m
+ from tests import current_smp_staging
+ return current_smp_staging
 def sections(path):
  b=path.read_bytes();count=struct.unpack_from('<H',b,2)[0];opt=struct.unpack_from('<H',b,16)[0];result={}
  for i in range(count):
@@ -38,7 +39,7 @@ class Tests(unittest.TestCase):
   self.assertEqual(0,oracle.supervisor_leaf(root,va,read))
 
  def test_current_production_union_compiles_and_arch_assembles(self):
-  b=load_builder();out=ROOT/'build/test/p6-live-native'/('run-'+uuid.uuid4().hex[:12]);stage,manifest,hashes=b.prepare(out);before=hashes();candidate_before=b.candidate_inputs();nasm=tool('nasm','NASM');self.assertTrue(nasm);evidence={}
+  b=load_builder();out=ROOT/'build/test/p6-live-native'/('run-'+uuid.uuid4().hex[:12]);stage,manifest,hashes=b.prepare(out);before=hashes();candidate_before=b.source_inputs();nasm=tool('nasm','NASM');self.assertTrue(nasm);evidence={}
   def run(args,label):
    args=list(map(str,args));r=subprocess.run(args,cwd=ROOT,capture_output=True,text=True,timeout=300);(out/(label+'.json')).write_text(json.dumps(dict(command=args,returncode=r.returncode,stdout=r.stdout,stderr=r.stderr),indent=2)+'\n');self.assertEqual(0,r.returncode,r.stderr)
   for mode in ('debug','release'):
@@ -53,20 +54,20 @@ class Tests(unittest.TestCase):
   c=compile_file(stage/'sched/parallel_live.dg',roots=[stage,ROOT/'services',ROOT/'lang/examples',ROOT/'lang/std'],mode='release');(out/'added.asm').write_text(c.assembly);run([nasm,'-f','win64',*nasm_flags(nasm),out/'added.asm','-o',out/'added.o'],'assemble-added');evidence['dong_sections']=sections(out/'added.o')
   entry=out/'parallel_size_base.dg';entry.write_text('module parallel_size_base;import smp.runtime;import irq.platform;import boot.service_memory;import arch.x86_64;')
   c=compile_file(entry,roots=[out,stage,ROOT/'services',ROOT/'lang/examples',ROOT/'lang/std'],mode='release');(out/'baseline.asm').write_text(c.assembly);run([nasm,'-f','win64',*nasm_flags(nasm),out/'baseline.asm','-o',out/'baseline.o'],'assemble-baseline');evidence['baseline_sections']=sections(out/'baseline.o');evidence['dong_delta']={n:evidence['dong_sections'][n]-evidence['baseline_sections'][n]for n in evidence['dong_sections']}
-  self.assertEqual(before,hashes());self.assertEqual(candidate_before,b.candidate_inputs());(out/'validation-summary.json').write_text(json.dumps(dict(passed=True,candidate_only=True,actual_compiler_and_assembler=True,os_link_executed=False,vm_executed=False,source_unchanged=True,candidate_sha256=candidate_before,actual_kernel_sha256=before,evidence=evidence),indent=2)+'\n');print('PARALLEL_LIVE_NATIVE_EVIDENCE',out)
- def test_prepare_default_and_build_command_routing_are_isolated(self):
-  b=load_builder();out=ROOT/'build/test/p6-live-routing'/('run-'+uuid.uuid4().hex[:12]);commands=[];assemblies=[]
-  def fake_execute(command):
-   commands.append(list(map(str,command)))
-   if 'lang.dongc'in command:
-    path=Path(command[command.index('--emit-layout')+1]);path.write_text(json.dumps(dict(schema=1,target='x86_64-dongos-elf',types=[dict(name='Report',full_name='sched.parallel_live.Report',kind='struct',size=8,alignment=8,fields=[dict(name='version',offset=0,size=8)])])))
-  def fake_assemble(source,output,**kwargs):
-   self.assertTrue(Path(source).is_file());assemblies.append((str(source),kwargs));return Path(output)/(Path(source).stem+'.o')
-  def fake_build(**kwargs):
-   output=kwargs['output'];b.production.execute([os.sys.executable,'-m','lang.dongc','--root',str(ROOT/'kernel'),'--emit-layout',str(output/'fake-layout.json'),str(ROOT/'kernel/smp_probe.dg')]);b.production.assemble(ROOT/'kernel/smp/bootstrap.asm',output,fmt='elf64',test=True,stage='p1');b.production.execute(['ld.lld','-nostdlib','-o',str(output/'kernel.elf'),'original.o']);return output/'esp'
-  with mock.patch.object(b.production,'execute',fake_execute),mock.patch.object(b.production,'assemble',fake_assemble),mock.patch.object(b.production,'build',fake_build):esp=b.build(out,parallel_case='omit-xstate')
-  self.assertEqual(out.resolve()/'esp',esp);self.assertIn(str(out.resolve()/'source/kernel'),commands[0]);self.assertIn(str(out.resolve()/'source/kernel/smp_probe.dg'),commands[0]);self.assertEqual(4,len(assemblies));self.assertEqual(1,assemblies[1][1]['defines']['P6_TEST_NO_XSTATE']);self.assertTrue(all(Path(n).is_relative_to(out.resolve()/'source/kernel')for n,_ in assemblies));self.assertEqual(3,sum(n.endswith('.o')for n in commands[-1])-1)
-  with self.assertRaises(ValueError):b.build(out,parallel_case='omit-xstate',test=False)
+  self.assertEqual(before,hashes());self.assertEqual(candidate_before,b.source_inputs());(out/'validation-summary.json').write_text(json.dumps(dict(passed=True,current_source_only=True,historical_replay=False,actual_compiler_and_assembler=True,os_link_executed=False,vm_executed=False,source_unchanged=True,current_source_sha256=candidate_before,actual_kernel_sha256=before,evidence=evidence),indent=2)+'\n');print('PARALLEL_LIVE_NATIVE_EVIDENCE',out)
+ def test_current_production_routing_is_observed_without_link_or_vm(self):
+  b=load_builder();out=ROOT/'build/test/current-parallel-routing'/('run-'+uuid.uuid4().hex[:12])
+  plan=b.production_plan(out,runtime_level=7,test=False)
+  self.assertFalse(plan['built']);self.assertFalse(plan['os_link_executed']);self.assertFalse(plan['vm_executed'])
+  names={Path(a['source']).name:a for a in plan['assemblies']}
+  for name in ('bootstrap.asm','smp_runtime.asm','parallel.asm','parallel_probe.asm','parallel_live.asm'):
+   self.assertIn(name,names);self.assertTrue(Path(names[name]['source']).is_relative_to(ROOT/'kernel'))
+   self.assertIn(names[name]['output'],plan['commands'][-1])
+  self.assertIn(str(ROOT/'kernel/smp_probe.dg'),plan['commands'][0])
+  self.assertEqual(1,names['parallel_live.asm']['defines']['P6_USER_SMP'])
+  self.assertFalse((out/'kernel.elf').exists())
+  b.prepare(out)
+  with self.assertRaises(ValueError):b.prepare(out)
  def test_report_oracle_rejects_false_idle_migration_and_partial_frames(self):
   d={n:0 for n in oracle.FIELDS};d.update(version=1,phase=6,cpus=4,count=6,tsc_hz=1000000000,quantum_ns=1000000,domain=0xffffd40000100000,probes=0xffffd40000200000,restart_token=513,restart_bottom=0xffffd40003000000,restart_top=0xffffd40003004000,restart_frame=0xffffd40003003f00,restart_xstate=0xffffd40000010000)
   for i,n in enumerate('started initial_done migrated_done idle_start idle_end wake_start wake_end completed'.split()):d[n]=1+i*100000000

@@ -26,6 +26,7 @@ ABI U svc_call(U number,U a,U b,U c,U d,U e,U f){
  if(number==0x76||number==0x75){CK(a==0x333&&queries==0&&ready==0);port_calls++;return number==0x76?2:0x10000;}
  if(number==0x2f){CK(a==0x101&&!b&&!c&&!d&&!e&&!f&&ready==0);queries++;return usb_ready_inc();}
  if(number==3){CK(!a&&!b&&!c&&!d&&!e&&!f);if(!ready){pre_ready_yields++;return mode==5?0x073100ff:0;}post_ready_yields++;return (mode>=10&&mode<=15)&&post_ready_yields==1?0:0x073100ff;}
+ if(number==0x97){CK(a==0x444&&b==0&&c&&!d&&!e&&!f&&queries>=3);U *entry=(U*)(uintptr_t)c;memset(entry,0,16*sizeof(U));entry[0]=1;return 0;}
  if(number==0x60){CK(a==0x444&&c&&!d&&!e&&!f&&queries>=3);*(uint32_t*)(uintptr_t)c=0xffff;return 0;}
  if(number==0x70){CK(a&&b&&!c&&!d&&!e&&!f);const char*text=(const char*)(uintptr_t)a;if(b==24&&!memcmp(text,"DONGOS_INPUT_USB_READY\r\n",24))usb_ready_logs++;if(b==24&&!memcmp(text,"DONGOS_INPUT_PS2_READY\r\n",24))ps2_logs++;return 0;}
  if(number==0x84){CK(a==0x101&&b==1&&!c&&!d&&!e&&!f&&queries>=3);ready++;return 0;}

@@ -79,7 +79,7 @@ hardening_return:
     ret
 
 section .bss
-alignb 8
+align 8, resb 1
 hardening_features: resb HardeningFeatures_size
 hardening_plan: resb HardeningPlan_size
 hardening_before: resb ControlState_size

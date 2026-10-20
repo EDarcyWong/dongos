@@ -6,7 +6,8 @@ from lang.tests.test_dongc import tool,nasm_flags
 from tests.test_service_ipc_cancellation import block
 from tests.test_service_gui_wiring import copy_graph
 from tests import test_user_smp_services as old
-ROOT=Path(__file__).resolve().parents[1];BASE=ROOT/'build/test/p6-readonly-candidate';ARCH=ROOT/'build/test/p6-cpl3-integration-candidate'
+from tests.test_user_smp_services import current_files
+ROOT=Path(__file__).resolve().parents[1];BASE=ROOT;ARCH=ROOT
 TAIL='''
 export("ro_setup") fn setup()u64{unsafe{
  CATALOG=smp_service_catalog_storage() as *procs.Catalog;try procs.initialize(CATALOG,1000000);
@@ -104,23 +105,23 @@ int main(void){
     obj=d/'probe.o';r=run([nasm,'-f','win64'if os.name=='nt'else'elf64',*nasm_flags(nasm),d/'probe.asm','-o',obj],'assemble');self.assertEqual(0,r.returncode,r.stderr)
     exe=d/('probe.exe'if os.name=='nt'else'probe');r=run([cc,'-std=c11','-O2','-Wall','-Wextra','-Werror',*([]if os.name=='nt'else['-no-pie']),d/'probe.c',obj,'-o',exe],'link');self.assertEqual(0,r.returncode,r.stderr)
     r=run([exe],'native');self.assertEqual(0 if variant=='normal'else 1,r.returncode,r.stdout+r.stderr);evidence[mode+'-'+variant]=dict(returncode=r.returncode,stdout=r.stdout)
-  (out/'validation-summary.json').write_text(json.dumps(dict(passed=True,actual_helper_actual_paging=True,startup_space_pointer_boundary_adapted=True,actual_guest_executed=False,evidence=evidence),indent=2)+'\n');print('ECAM_PREFLIGHT_EVIDENCE',out)
+  (out/'validation-summary.json').write_text(json.dumps(dict(passed=True,source_commit=subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip(),contract="tracked-current-cpl3-v1",actual_helper_actual_paging=True,startup_space_pointer_boundary_adapted=True,actual_guest_executed=False,evidence=evidence),indent=2)+'\n');print('ECAM_PREFLIGHT_EVIDENCE',out)
  def test_actual_policy_bridge_and_real_bad_controls(self):
-  files=[BASE/name for name in json.loads((BASE/'source-sha256.json').read_text())]+[Path(__file__),ROOT/'tests/user_entry_probe.dg',ROOT/'tests/user_entry_probe.c',ROOT/'kernel/user/processes.dg',ROOT/'kernel/ipc/handles.dg']
+  files=current_files()+[Path(__file__),ROOT/'tests/user_current_entry_probe.dg',ROOT/'tests/user_current_entry_probe.c',ROOT/'kernel/user/processes.dg',ROOT/'kernel/ipc/handles.dg']
   before={str(p.relative_to(ROOT)):hashlib.sha256(p.read_bytes()).hexdigest()for p in files}
   text=(BASE/'kernel/user/services.dg').read_text();actual='\n'.join(block(text,n)for n in ('unsafe fn process(', 'unsafe fn managed(', 'pub unsafe fn enable_smp(', 'export("dong_user_smp_project")','export("dong_user_smp_service_policy")','export("dong_user_smp_service")'))
-  prefix=old.PREFIX.replace('import user.device_host as device_host;','import user.device_host as device_host;import user.devices as devices;import ipc.handles as handles;')
+  prefix=old.PREFIX.replace('import user.device_host as device_host;','import user.device_host as device_host;import user.devices as devices;import ipc.handles as handles;import lib.device_abi as dev;')
   prefix=prefix.replace('struct State{waiting:u64,started:u64}','struct State{table:handles.Table,waiting:u64,started:u64}').replace('State{waiting:0,started:0}','State{table:handles.EMPTY_TABLE,waiting:0,started:0}')
   prefix=prefix.replace('var LAUNCH_FAILED:bool=false;','var LAUNCH_FAILED:bool=false;var GRAPHICS:bool=true;')
   prefix=prefix.replace('try retire_one(id,state,status);','').replace('try retire_one(CURRENT,proc.EXITED,73);','')
-  entry=(ROOT/'tests/user_entry_probe.dg').read_text().replace('bridge.initialize(storage,704,','bridge.initialize(storage,1536,')+prefix+actual+TAIL
+  entry=(ROOT/'tests/user_current_entry_probe.dg').read_text()+prefix+actual+TAIL
   # setup uses ! operations inside an ordinary exported result wrapper.
   entry=entry.replace('export("ro_setup") fn setup()u64{unsafe{','unsafe fn setup_inner()!u64{unsafe{')+'\nexport("ro_setup") fn setup()u64{unsafe{match setup_inner(){ok(v)=>{return v;},err(e)=>{return e;},}}}\n'
-  memory=old.MEMORY+'''pub var OBJECT_FAILED:bool=false;unsafe extern "sysv64" fn ro_output(slot:u64,va:u64,size:u64,write:u64)u64;
+  memory=old.MEMORY+'''unsafe extern "sysv64" fn ro_output(slot:u64,va:u64,size:u64,write:u64)u64;
 pub unsafe fn check_range(slot:usize,va:u64,size:usize,write:bool)!void{unsafe{if ro_output(slot as u64,va,size as u64,write as u64)!=1{return error.Invalid;}}return;}pub error Invalid=0x1111;
 '''
   devices='''module user.devices;pub const CONFIGURATION_OBJECT:u64=0x1234;unsafe extern "sysv64" fn ro_stable(physical:u64)u64;pub unsafe fn configuration_read_stable(physical:u64)bool{unsafe{return ro_stable(physical)==1;}}'''
-  c=(ROOT/'tests/user_entry_probe.c').read_text()
+  c=(ROOT/'tests/user_current_entry_probe.c').read_text()
   for needle in ('U ABI user_bridge_service(', 'U ABI user_bridge_project(', 'U ABI dong_user_smp_service(', 'U ABI dong_user_smp_project('):c=c.replace(block(c,needle),'')
   c=c[:c.index('int main(void)')]+CMAIN
   controls={
@@ -136,8 +137,6 @@ pub unsafe fn check_range(slot:usize,va:u64,size:usize,write:bool)!void{unsafe{i
   }
   out=ROOT/'build/test/p6-readonly-native'/('run-'+uuid.uuid4().hex[:12]);out.mkdir(parents=True);evidence={};nasm,cc=tool('nasm','NASM'),tool('gcc','CC')
   candidate={}
-  for p in (ARCH/'kernel/sched').glob('*.dg'):
-   source=p.read_text();candidate[re.search(r'module\s+([\w.]+);',source)[1]]=source
   bridge=(BASE/'kernel/sched/user_bridge.dg').read_text();candidate['sched.user_bridge']=bridge
   for mode in ('debug','release'):
    for variant in ('normal',*controls):
@@ -149,8 +148,8 @@ pub unsafe fn check_range(slot:usize,va:u64,size:usize,write:bool)!void{unsafe{i
      if kind=='services':
       policy=block(s,'export("dong_user_smp_service_policy")');self.assertEqual(1,policy.count(old_s));s=s.replace(policy,policy.replace(old_s,new_s))
      else:self.assertEqual(1,b.count(old_s));b=b.replace(old_s,new_s)
-    overrides={**candidate,'sched.user_bridge':b,'user_entry_probe':s,'user.memory':memory,'user.devices':devices,'user.window_broker':old.WINDOWS,'user.device_host':old.DEVICE}
-    copy_graph(stage,['user_entry_probe'],overrides);compiled=compile_file(stage/'user_entry_probe.dg',roots=[stage],mode=mode);(d/'probe.asm').write_text(compiled.assembly);(d/'probe.c').write_text(c)
+    overrides={**candidate,'sched.user_bridge':b,'user_current_entry_probe':s,'user.memory':memory,'user.devices':devices,'boot.trace_runtime':'module boot.trace_runtime;pub unsafe fn event(a:u64,b:u64,c:u64,d:u64)void{return;}','user.window_broker':old.WINDOWS,'user.device_host':old.DEVICE+'pub unsafe fn irq_poll_readonly(token:u64,owner:u64,after:u64)bool{return false;}'}
+    copy_graph(stage,['user_current_entry_probe'],overrides);compiled=compile_file(stage/'user_current_entry_probe.dg',roots=[stage],mode=mode);(d/'probe.asm').write_text(compiled.assembly);(d/'probe.c').write_text(c)
     objects=[]
     def run(args,label):
      r=subprocess.run(list(map(str,args)),cwd=ROOT,capture_output=True,text=True,timeout=60);(d/(label+'.json')).write_text(json.dumps(dict(command=list(map(str,args)),returncode=r.returncode,stdout=r.stdout,stderr=r.stderr),indent=2)+'\n');return r
@@ -158,8 +157,8 @@ pub unsafe fn check_range(slot:usize,va:u64,size:usize,write:bool)!void{unsafe{i
      obj=d/(name+'.o');r=run([nasm,'-f','win64'if os.name=='nt'else'elf64',*nasm_flags(nasm),'-I',str(ARCH/'include')+os.sep,'-I',str(ROOT/'include')+os.sep,path,'-o',obj],'asm-'+name);self.assertEqual(0,r.returncode,r.stderr);objects.append(obj)
     exe=d/('probe.exe'if os.name=='nt'else'probe');r=run([cc,'-std=c11','-O2','-Wall','-Wextra','-Werror','-Wno-unused-function',*([]if os.name=='nt'else['-no-pie']),d/'probe.c',*objects,'-o',exe],'link');self.assertEqual(0,r.returncode,r.stderr)
     r=run([exe],'native');self.assertEqual(0 if variant=='normal'else 1,r.returncode,r.stdout+r.stderr)
-    if variant!='normal':self.assertIn('user CPL3 candidate oracle line',r.stderr)
+    if variant!='normal':self.assertIn('user CPL3 current-source oracle line',r.stderr)
     evidence[mode+'-'+variant]=dict(returncode=r.returncode,stdout=r.stdout,stderr=r.stderr)
   after={str(p.relative_to(ROOT)):hashlib.sha256(p.read_bytes()).hexdigest()for p in files};self.assertEqual(before,after)
-  (out/'validation-summary.json').write_text(json.dumps(dict(passed=True,source_sha256=after,sources_unchanged=True,real_catalog_handles_queue_domain_bridge=True,hardware_memory_and_perform_boundary_mocked=True,actual_guest_executed=False,evidence=evidence),indent=2)+'\n');print('READONLY_EVIDENCE',out)
+  (out/'validation-summary.json').write_text(json.dumps(dict(passed=True,source_commit=subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip(),contract="tracked-current-cpl3-v1",source_sha256=after,sources_unchanged=True,real_catalog_handles_queue_domain_bridge=True,hardware_memory_and_perform_boundary_mocked=True,actual_guest_executed=False,evidence=evidence),indent=2)+'\n');print('READONLY_EVIDENCE',out)
 if __name__=='__main__':unittest.main(verbosity=2)

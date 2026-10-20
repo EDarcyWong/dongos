@@ -1,4 +1,6 @@
-"""Candidate production xHCI TRB/rings against a DMA-byte hardware consumer."""
+"""Current-source regression, not a replay of unavailable candidate snapshots.
+
+Tracked production xHCI TRB/rings against a DMA-byte hardware consumer."""
 from __future__ import annotations
 import hashlib,json,os,subprocess,unittest,uuid
 from pathlib import Path
@@ -7,7 +9,7 @@ from lang.tests.test_dongc import nasm_flags,tool
 ROOT=Path(__file__).resolve().parents[1]
 def source_root():
     production=ROOT/'services'
-    return production if (production/'usb/xhci_ring.dg').exists() else ROOT/'build/test/p8-xhci-candidate/services'
+    return production
 class XhciCoreTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -17,7 +19,7 @@ class XhciCoreTests(unittest.TestCase):
     @classmethod
     def tearDownClass(cls):
         after={str(p.relative_to(ROOT)):hashlib.sha256(p.read_bytes()).hexdigest() for p in cls.inputs};(cls.out/'source-after.json').write_text(json.dumps(after,indent=2)+'\n')
-        if after!=cls.before:raise AssertionError('candidate xHCI inputs changed during native execution')
+        if after!=cls.before:raise AssertionError('current xHCI inputs changed during native execution')
     def command(self,args,d,n):
         r=subprocess.run(args,cwd=ROOT,capture_output=True,text=True,timeout=90);(d/(n+'.json')).write_text(json.dumps(dict(command=args,returncode=r.returncode,stdout=r.stdout,stderr=r.stderr),indent=2)+'\n');return r
     def native(self,mutation=None):
@@ -31,7 +33,7 @@ class XhciCoreTests(unittest.TestCase):
                     needle={'link-toggle':'((6<<10)|2|(*p).link_cycle) as u32','missing-publication-fence':'let first=barrier(ops,context,1);'}[mutation]
                     self.assertEqual(1,source.count(needle));source=source.replace(needle,'((6<<10)|(*p).link_cycle) as u32' if mutation=='link-toggle' else 'let first=omitted_fence();')
                     if mutation=='missing-publication-fence':source+='\nunsafe fn omitted_fence()!void {return;}\n'
-                    p.write_text(source);(d/'mutation.json').write_text(json.dumps(dict(mutation=mutation,expected='same independent hardware consumer rejects actual changed candidate production source'),indent=2)+'\n')
+                    p.write_text(source);(d/'mutation.json').write_text(json.dumps(dict(mutation=mutation,expected='same independent hardware consumer rejects actual changed current production source'),indent=2)+'\n')
                 c=compile_file(ROOT/'tests/xhci_core_probe.dg',roots=[ROOT/'tests',services],mode=mode)
                 layouts={x['full_name']:x for x in c.layout_manifest['types']}
                 for name,size in {'usb.xhci_trb.Trb':16,'usb.xhci_trb.Event':64,'usb.xhci_ring.Producer':320,'usb.xhci_ring.Plan':320,'usb.xhci_ring.Consumer':88}.items():self.assertEqual(size,layouts[name]['size'])

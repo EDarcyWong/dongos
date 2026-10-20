@@ -7,7 +7,7 @@ from tests.test_service_ipc_cancellation import block
 from tests.test_service_gui_wiring import copy_graph
 from tests import test_user_smp_services as old
 from tests import test_user_smp_poll_fast as policy
-ROOT=Path(__file__).resolve().parents[1];BASE=policy.BASE;R2=policy.R2;ARCH=policy.ARCH
+ROOT=Path(__file__).resolve().parents[1];BASE=ROOT;ARCH=ROOT
 TAIL='''
 var CAP:u64=0;
 unsafe fn started(cfg:usize)!void{unsafe{var s=proc.EMPTY_SNAPSHOT;try procs.start(CATALOG,cfg,cfg,0,&s);try procs.mark_ready(CATALOG,cfg,1);}return;}
@@ -77,27 +77,25 @@ class Tests(unittest.TestCase):
   globals='var WAIT_AFTER:[16]u64=[0;16];var WAIT_POINTER:[16]u64=[0;16];var WAIT_DEADLINE:[16]u64=[0;16];var EVENT:proc.Event=proc.EMPTY_EVENT;var IRQ_TOKEN:[16]u64=[0;16];var IRQ_AFTER:[16]u64=[0;16];var IRQ_POINTER:[16]u64=[0;16];var IRQ_DEADLINE:[16]u64=[0;16];'
   actual='\n'.join(block(text,n)for n in ('unsafe fn process(','unsafe fn managed(','unsafe fn owner_key(','unsafe fn authority(','unsafe fn wake_waiters(','unsafe fn wake_irqs(','unsafe fn runnable(','pub unsafe fn enable_smp(','export("dong_user_smp_project")'))
   perform='unsafe fn perform(frame:*abi.Frame)!usize{unsafe{let code=(*frame).rax;'+block(text,'if code==3 {')+block(block(text,'unsafe fn device_call('),'if code==dev.IRQ_WAIT{')+'}return error.Protocol;}'
-  source=(ROOT/'tests/user_entry_probe.dg').read_text().replace('bridge.initialize(storage,704,','bridge.initialize(storage,1536,')+prefix+globals+actual+perform+TAIL
-  memory=old.MEMORY+'''pub var OBJECT_FAILED:bool=false;pub error Invalid=0x1111;
+  source=(ROOT/'tests/user_current_entry_probe.dg').read_text()+prefix+globals+actual+perform+TAIL
+  memory=old.MEMORY+'''pub error Invalid=0x1111;
 unsafe extern "sysv64" fn pw_check(slot:u64,va:u64,size:u64,write:u64)u64;unsafe extern "sysv64" fn pw_copy(slot:u64,va:u64,ptr:u64,size:u64)u64;
 pub unsafe fn check_range(slot:usize,va:u64,size:usize,write:bool)!void{unsafe{if pw_check(slot as u64,va,size as u64,write as u64)!=1{return error.Invalid;}}return;}
 pub unsafe fn copy_out(slot:usize,va:u64,source:[]const u8)!void{unsafe{if pw_copy(slot as u64,va,source.ptr as u64,source.len as u64)!=1{return error.Invalid;}}return;}
 '''
   host=policy.HOST+block((BASE/'kernel/user/device_host.dg').read_text(),'pub unsafe fn poll_irq(')
   arch='module arch.x86_64;unsafe extern "sysv64" fn arch_read_tsc()u64;pub unsafe fn read_tsc()u64{unsafe{return arch_read_tsc();}}'
-  c=(ROOT/'tests/user_entry_probe.c').read_text().replace(block((ROOT/'tests/user_entry_probe.c').read_text(),'U ABI dong_user_smp_project('),'');c=c[:c.index('int main(void)')]+CMAIN
+  c=(ROOT/'tests/user_current_entry_probe.c').read_text().replace(block((ROOT/'tests/user_current_entry_probe.c').read_text(),'U ABI dong_user_smp_project('),'');c=c[:c.index('int main(void)')]+CMAIN
   controls={'yield-does-not-wake':('try wake_waiters();try wake_irqs();',''), 'IRQ-wakes-do-not-publish':('STATES[id].waiting=0;(*process(id)).frame.rax=0;',''), 'event-wake-omits-output':('if found{try memory.copy_out(id,WAIT_POINTER[id],slice_from_raw_parts((&EVENT) as *const u8,sizeof(proc.Event)));}',''), 'wakes-ignore-output-failure':('try memory.copy_out(id,WAIT_POINTER[id],slice_from_raw_parts((&EVENT) as *const u8,sizeof(proc.Event)));','let ignored=memory.copy_out(id,WAIT_POINTER[id],slice_from_raw_parts((&EVENT) as *const u8,sizeof(proc.Event)));')}
   candidate={}
-  for p in list((R2/'kernel/sched').glob('*.dg'))+list((R2/'services').rglob('*.dg')):
-   s=p.read_text();candidate[re.search(r'module\s+([\w.]+);',s)[1]]=s
   files=[BASE/'kernel/user/services.dg',BASE/'kernel/user/device_host.dg',Path(__file__)];before={str(p.relative_to(ROOT)):hashlib.sha256(p.read_bytes()).hexdigest()for p in files}
   out=ROOT/'build/test/p6-poll-wakes-native'/('run-'+uuid.uuid4().hex[:12]);out.mkdir(parents=True);nasm,cc=tool('nasm','NASM'),tool('gcc','CC');evidence={}
   for mode in ('debug','release'):
    for variant in ('normal',*controls):
     d=out/(mode+'-'+variant);stage=d/'kernel';s=source
     if variant!='normal':a,b=controls[variant];self.assertEqual(1,s.count(a));s=s.replace(a,b)
-    copy_graph(stage,['user_entry_probe'],{**candidate,'user_entry_probe':s,'user.memory':memory,'user.window_broker':old.WINDOWS,'user.device_host':host,'arch.x86_64':arch})
-    result=compile_file(stage/'user_entry_probe.dg',roots=[stage],mode=mode);(d/'probe.asm').write_text(result.assembly);(d/'probe.c').write_text(c)
+    copy_graph(stage,['user_current_entry_probe'],{**candidate,'user_current_entry_probe':s,'user.memory':memory,'boot.trace_runtime':'module boot.trace_runtime;pub unsafe fn event(a:u64,b:u64,c:u64,d:u64)void{return;}','user.window_broker':old.WINDOWS,'user.device_host':host,'arch.x86_64':arch})
+    result=compile_file(stage/'user_current_entry_probe.dg',roots=[stage],mode=mode);(d/'probe.asm').write_text(result.assembly);(d/'probe.c').write_text(c)
     def run(args,label):
      r=subprocess.run(list(map(str,args)),cwd=ROOT,capture_output=True,text=True,timeout=60);(d/(label+'.json')).write_text(json.dumps(dict(command=list(map(str,args)),returncode=r.returncode,stdout=r.stdout,stderr=r.stderr),indent=2)+'\n');return r
     objects=[]
@@ -106,8 +104,8 @@ pub unsafe fn copy_out(slot:usize,va:u64,source:[]const u8)!void{unsafe{if pw_co
     exe=d/('probe.exe'if os.name=='nt'else'probe');r=run([cc,'-std=c11','-O2','-Wall','-Wextra','-Werror','-Wno-unused-function',*([]if os.name=='nt'else['-no-pie']),d/'probe.c',*objects,'-o',exe],'link');self.assertEqual(0,r.returncode,r.stderr)
     for scenario in (0,1,2,3)if variant=='normal'else((3,)if variant=='wakes-ignore-output-failure'else(0,)):
      r=run([exe,str(scenario)],str(scenario));self.assertEqual(0 if variant=='normal'else 1,r.returncode,r.stdout+r.stderr)
-     if variant!='normal':self.assertIn('user CPL3 candidate oracle line',r.stderr)
+     if variant!='normal':self.assertIn('user CPL3 current-source oracle line',r.stderr)
      evidence[mode+'-'+variant+'-'+str(scenario)]=dict(returncode=r.returncode,stdout=r.stdout,stderr=r.stderr)
   after={str(p.relative_to(ROOT)):hashlib.sha256(p.read_bytes()).hexdigest()for p in files};self.assertEqual(before,after)
-  (out/'validation-summary.json').write_text(json.dumps(dict(passed=True,actual_yield_runnable_waiters_irq_wait_and_projection=True,real_catalog_domain_queue_handles_irq_ledger=True,owned_user_ram_and_hardware_adapted=True,no_os_build_or_vm=True,source_sha256=after,sources_unchanged=True,evidence=evidence),indent=2)+'\n');print('POLL_WAKES_EVIDENCE',out)
+  (out/'validation-summary.json').write_text(json.dumps(dict(passed=True,source_commit=subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip(),contract="tracked-current-cpl3-v1",actual_yield_runnable_waiters_irq_wait_and_projection=True,real_catalog_domain_queue_handles_irq_ledger=True,owned_user_ram_and_hardware_adapted=True,no_os_build_or_vm=True,source_sha256=after,sources_unchanged=True,evidence=evidence),indent=2)+'\n');print('POLL_WAKES_EVIDENCE',out)
 if __name__=='__main__':unittest.main(verbosity=2)

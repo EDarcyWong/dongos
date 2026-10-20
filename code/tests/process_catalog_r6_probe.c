@@ -59,7 +59,7 @@ static void event(Catalog*c,unsigned actor,uint64_t after){
  for(uint64_t seq=after;seq<model.sequence;){++seq;Event*e=&model.events[(seq-1)%64];if(permitted(actor,(unsigned)e->configuration,1)){expected=seq;break;}}
  CHECK(found==!!expected);
  if(expected)CHECK(!memcmp(&out.item,&model.events[(expected-1)%64],sizeof(Event))&&out.lo==before.lo&&out.hi==before.hi);
- else CHECK(!memcmp(&out,&before,sizeof out));equal(c);
+ else {CHECK(!memcmp(&out,&before,sizeof out));}equal(c);
 }
 static void rejected_start(Catalog*c,unsigned id,unsigned slot,uint64_t code){
  Snapshot out,before;memset(&out,0xa5,sizeof out);before=out;Catalog prior=*c;

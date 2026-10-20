@@ -30,9 +30,12 @@ SYMBOLS = dict(old.SYMBOLS, object_memory_report_size=192,
 
 def cache_lines(case="all-features", **changes):
     profile = "all-features" if case == "cache-unmap" else case
-    values = dict(zip(runner.FIELDS, (0x800000, 0xffffb00000001000, 0x850000, 0x850000,
+    # The 128-page table pool occupies [0x800000, 0x880000), and the
+    # 16-page stack occupies [0x880000, 0x890000). Use the next free page.
+    # The 1024-page arena therefore has 880 free pages, 879 while held.
+    values = dict(zip(runner.FIELDS, (0x800000, 0xffffb00000001000, 0x890000, 0x890000,
                                      48, 64, 64, 64, 0x02000007, 0x020d0001,
-                                     0xffffb00000001440, 944, 943, 944, 12, 15, 12,
+                                     0xffffb00000001440, 880, 879, 880, 12, 15, 12,
                                      2, 2, 6, 472576, 1023, 0x620 | hard.RAW[profile][2], 2)))
     values.update(changes)
     return [f"cache_{name}=0x{values[name]:016x}".encode() for name in runner.FIELDS]
@@ -123,9 +126,9 @@ class CacheGateTests(unittest.TestCase):
         self.assertTrue(self.check(moved))
 
     def test_page_ownership_reuse_accounting_and_preserved_controls(self):
-        for physical in (0, 0x850001, 0x7ff000, 0xc00000, 0x800000, 0x840000):
+        for physical in (0, 0x890001, 0x7ff000, 0xc00000, 0x800000, 0x840000, 0x850000, 0x880000):
             self.assertTrue(self.check(capture(physical=physical, reused_physical=physical)))
-        self.assertTrue(self.check(capture(reused_physical=0x851000)))
+        self.assertTrue(self.check(capture(reused_physical=0x891000)))
         self.assertTrue(self.check(capture("no-features")))
         self.assertTrue(self.check(capture(), case="no-features"))
         for flags in (0, 0x202, 0x402, 0x20002, 0x40002):
@@ -134,7 +137,7 @@ class CacheGateTests(unittest.TestCase):
         self.assertTrue(self.check(symbols={k: v for k, v in SYMBOLS.items() if k != runner.REPORT_SIZE}))
 
     def test_old_memory_hardening_and_mutation_semantics_remain_required(self):
-        for before, after in ((b"memory_free_pages=0x00000000000003b0", b"memory_free_pages=0x00000000000003b1"),
+        for before, after in ((b"memory_free_pages=0x0000000000000370", b"memory_free_pages=0x0000000000000371"),
                               (b"hardening_cr4_after=0x0000000000300e20", b"hardening_cr4_after=0x0000000000000620"),
                               (b"mutation_invlpg_count=0x0000000000000005", b"mutation_invlpg_count=0x0000000000000004")):
             self.assertIn(before, capture())

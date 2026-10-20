@@ -1,12 +1,14 @@
-"""Actual block2 request boundary, real BOT/xHCI source, independent DMA model."""
+"""Current-source regression, not a replay of unavailable candidate snapshots.
+
+Actual block2 request boundary, real BOT/xHCI source, independent DMA model."""
 from __future__ import annotations
 import hashlib,json,os,subprocess,unittest,uuid,shutil
 from pathlib import Path
 from lang.dongc import compile_file
 from lang.tests.test_dongc import nasm_flags,tool
 ROOT=Path(__file__).resolve().parents[1]
-SOURCE=ROOT/'build/test/p8-rpc-candidate/services/usb/block_proxy.dg'
-ADAPTER=ROOT/'build/test/p8-async-candidate/services/usb/xhci_transport.dg'
+SOURCE=ROOT/'services/usb/block_proxy.dg'
+ADAPTER=ROOT/'services/usb/xhci_transport.dg'
 class XhciBlockProxyTests(unittest.TestCase):
  @classmethod
  def setUpClass(cls):

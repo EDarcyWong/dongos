@@ -12,39 +12,39 @@
     "vscode-oniguruma": "https://github.com/microsoft/vscode-oniguruma"
   },
   "files": {
-    "node_modules/vscode-textmate/LICENSE.md": {
+    "vendor/vscode-textmate/LICENSE.md": {
       "bytes": 1083,
       "sha256": "b5cb7ff7859e7d282d98fc43ab081b0dda5dc659dc3385cf65740c759a7e6a6c"
     },
-    "node_modules/vscode-textmate/package.json": {
+    "vendor/vscode-textmate/package.json": {
       "bytes": 1429,
       "sha256": "985c992fd96fc2b51df49151a4d18c46cc83dff9f4dd381c94ef4a589e9e1828"
     },
-    "node_modules/vscode-textmate/release/main.js": {
+    "vendor/vscode-textmate/release/main.js": {
       "bytes": 61358,
       "sha256": "b19a1d0b8ec9340100a0f793fbdf8d84749a8e36a44136323edfe31b7e515f1e"
     },
-    "node_modules/vscode-oniguruma/LICENSE.txt": {
+    "vendor/vscode-oniguruma/LICENSE.txt": {
       "bytes": 1102,
       "sha256": "ddde8aba8fe72b4830e27901fc78733eb6db7b6c653161075de213a6adeda3fd"
     },
-    "node_modules/vscode-oniguruma/NOTICES.txt": {
+    "vendor/vscode-oniguruma/NOTICES.txt": {
       "bytes": 2273,
       "sha256": "615d94d89eacc046241518c247f6650a5df80d1adf4b284a756f500867620b35"
     },
-    "node_modules/vscode-oniguruma/SECURITY.md": {
+    "vendor/vscode-oniguruma/SECURITY.md": {
       "bytes": 2780,
       "sha256": "81ed58e26769508df9a2f761dad55b52c6c9de62fff06195b2702fcb7a97e883"
     },
-    "node_modules/vscode-oniguruma/package.json": {
+    "vendor/vscode-oniguruma/package.json": {
       "bytes": 1069,
       "sha256": "98a5eb60b6dbcad4e302c877b2d5aff312a890c42bddf32e0585cbd1e3ff0df9"
     },
-    "node_modules/vscode-oniguruma/release/main.js": {
+    "vendor/vscode-oniguruma/release/main.js": {
       "bytes": 11728,
       "sha256": "8eeebfd13b75baaf42e014e8492366e5e28c9a1336b006193a39a0f15bfb0b1e"
     },
-    "node_modules/vscode-oniguruma/release/onig.wasm": {
+    "vendor/vscode-oniguruma/release/onig.wasm": {
       "bytes": 466610,
       "sha256": "fd885c2d12e5951e59d761ebd4a006e06254b1491fd6f530c92b69fb4d8d77d9"
     }

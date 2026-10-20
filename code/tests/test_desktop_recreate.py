@@ -24,6 +24,9 @@ unsafe extern "sysv64" ("dt_alias") fn alias(id:u64,va:u64,rw:u64)u64;
 unsafe extern "sysv64" ("dt_range") fn range(id:u64,va:u64,n:u64,rw:u64)u64;
 unsafe extern "sysv64" ("dt_aperture") fn aperture(id:u64,va:u64,pa:u64,n:u64)u64;
 unsafe extern "sysv64" ("dt_replace") fn replaced(id:u64,va:u64,opa:u64,on:u64,pa:u64,n:u64)u64;
+unsafe extern "sysv64" ("dt_unexpected_gui") fn unexpected_gui()void;
+pub fn staging(id:usize)bool{unsafe{unexpected_gui();}return false;}
+pub unsafe fn gui_resource_aperture(id:usize,old_pa:u64,old_n:u64,pa:u64,n:u64)!void{unsafe{unexpected_gui();}return error.Failed;}
 pub fn processes()*Process{unsafe{return p();}}pub fn generation(id:usize)u64{unsafe{return g(id as u64);}}
 pub unsafe fn map_device(id:usize,va:u64,pa:u64,n:u64)!void{unsafe{if device(id as u64,va,pa,n)!=0{return error.Failed;}}return;}
 pub unsafe fn anonymous(id:usize,va:u64)!u64{unsafe{let v=anon(id as u64,va);if v==0{return error.Failed;}return v;}}
@@ -52,12 +55,13 @@ export("dtr_font") fn native_font(scale:u64)u64{unsafe{match select_font(scale){
 class DesktopRecreateTests(unittest.TestCase):
     def test_actual_generation_gated_recreate_retains_input_descriptor_and_allocates_private_caches(self):
         directory=ROOT/'build/test/desktop-recreate'/('run-'+uuid.uuid4().hex[:12]);directory.mkdir(parents=True)
-        inputs=[ROOT/p for p in ('kernel/user/desktop.dg','services/lib/desktop.dg','tests/desktop_recreate_probe.c','tests/test_desktop_recreate.py')]
+        inputs=[ROOT/p for p in ('kernel/user/desktop.dg','services/lib/desktop.dg','services/lib/window_broker_abi.dg','services/gfx/atlas.dg','services/gfx/geometry.dg','services/gfx/raster.dg','services/gfx/errors.dg','tests/desktop_recreate_probe.c','tests/test_desktop_recreate.py')]
         before={str(p.relative_to(ROOT)):hashlib.sha256(p.read_bytes()).hexdigest() for p in inputs}
         staged=directory/'sources'
         for name,text in STUBS.items():
             target=staged/name;target.parent.mkdir(parents=True,exist_ok=True);target.write_text(text)
-        (staged/'lib').mkdir();(staged/'lib/desktop.dg').write_bytes((ROOT/'services/lib/desktop.dg').read_bytes())
+        for name in ('lib/desktop.dg','lib/window_broker_abi.dg','gfx/atlas.dg','gfx/geometry.dg','gfx/raster.dg','gfx/errors.dg'):
+            target=staged/name;target.parent.mkdir(parents=True,exist_ok=True);target.write_bytes((ROOT/'services'/name).read_bytes())
         original=(ROOT/'kernel/user/desktop.dg').read_bytes();target=staged/'user/desktop.dg';target.write_bytes(original+SUFFIX.encode());self.assertEqual(original,target.read_bytes()[:len(original)])
         bad_sources=directory/'bad-writable-descriptor';shutil.copytree(staged,bad_sources)
         bad_text=original.decode().replace('\r\n','\n').replace('module user.desktop;',

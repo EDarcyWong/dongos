@@ -102,7 +102,7 @@ user_smp_boot_begin:
     add rsp,8
     ret
 section .bss
-alignb 8
+align 8, resb 1
 user_smp_handoff_headers:resq 1
 user_smp_handoff_count:resq 1
 

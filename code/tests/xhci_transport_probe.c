@@ -8,11 +8,14 @@ typedef struct {U value,attributes,power_ma,count;XBinding bindings[8];} XConfig
 typedef struct {U physical;unsigned char*pointer;U bytes;} XBuffer;
 typedef struct {U region_physical,region_bytes,bits,physical;unsigned char*pointer;U dcbaa_physical;U*dcbaa;U context_bytes,port,epoch,hz,timeout;} XEnumSetup;
 typedef struct {U held,ready,fault,busy,phase,slot,speed,packet,last_tsc;const void*ops;U context;XEnumSetup setup;XConfig configuration;XDevice device;Producer ep0,input,output;} XEnum;
-typedef struct {U held,ready,fault,busy,epoch,token,physical;unsigned char*pointer;U bytes,last_tsc;CState*controller;U slots[9],ports[9],bases[9],stalled[9];Plan plan;U commands,transfers,shorts;} XTransport;
+// Current async-compatible state retains the original 720-byte serial prefix.
+// These explicit ABI fields do not replace the independent DMA event oracle.
+typedef struct {U active,asynchronous;Producer*producer;U generation,bytes,inward,control,actual,shortened,done,status,cookie;unsigned char*pointer;U sequence;} XPending;
+typedef struct {U held,ready,fault,busy,epoch,token,physical;unsigned char*pointer;U bytes,last_tsc;CState*controller;U slots[9],ports[9],bases[9],stalled[9];Plan plan;U commands,transfers,shorts;XPending pending[12];U sequence,command_wait,command_generation,command_done,command_slot,resets,dequeues;} XTransport;
 typedef struct {U connected,speed;} XPort;
 typedef ABI U(*XReset)(U,U,U,XPort*);typedef ABI U(*XCommand)(U,const Command*,U,U*);typedef ABI U(*XControl)(U,U,Producer*,const ControlPlan*,const XBuffer*,U,U*);typedef ABI U(*XBulk)(U,U,U,Producer*,const XBuffer*,U,U*);typedef ABI U(*XRecover)(U,U,U,Producer*,U);typedef ABI U(*XNow)(U,U*);typedef ABI U(*XFence)(U);
 typedef struct {XReset reset;XCommand command;XControl control;XBulk bulk;XRecover recover;XNow now;XFence fence;} XOps;
-_Static_assert(sizeof(XTransport)==720&&sizeof(XEnum)==1784&&sizeof(XEnumSetup)==96,"runtime ABI");
+_Static_assert(sizeof(XPending)==112&&sizeof(XTransport)==720+12*112+7*8&&sizeof(XEnum)==1784&&sizeof(XEnumSetup)==96,"runtime ABI");
 extern ABI U xt_init(XTransport*,CState*),xt_ops(void),xt_enum(XEnum*,XTransport*,const XEnumSetup*),xt_control(XTransport*,U,Producer*,const Control*,const XBuffer*,U,U*);
 extern ABI U xt_port(XTransport*,U,XPort*);
 static U xchecks;

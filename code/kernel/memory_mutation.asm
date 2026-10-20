@@ -262,14 +262,14 @@ memory_mutation_probe:
     ret
 
 section .bss
-alignb 8
+align 8, resb 1
 memory_live_before: resb ControlState_size
 memory_live_after: resb ControlState_size
 memory_live_stats: resb LiveStats_size
 memory_live_used_count: resq 1
 memory_live_physical_a: resq 1
 memory_live_physical_b: resq 1
-alignb 4096
+align 4096, resb 1
 memory_live_page_a: resb 4096
 memory_live_page_b: resb 4096
 

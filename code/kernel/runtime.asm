@@ -353,7 +353,7 @@ diagnostic_key: db 'irq_diag_word=',0
 diagnostic_end: db 'DONGOS_IRQ_DIAGNOSTIC_V1_END',13,10,0
 
 section .bss
-alignb 8
+align 8, resb 1
 runtime_state: resb ControlState_size
 runtime_device_views: resb DeviceViews_size
 runtime_platform_report: resb PlatformReport_size

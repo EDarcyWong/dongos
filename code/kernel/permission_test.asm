@@ -412,7 +412,7 @@ permission_inject_message: db "DONGOS_P2_PERMISSION_INJECT", 13, 10, 0
 permission_pass_message: db "DONGOS_P2_PERMISSION_PASS", 13, 10, 0
 
 section .bss
-alignb 8
+align 8, resb 1
 global permission_report, permission_report_end
 permission_report:
 %macro PERMISSION_FIELD 1
@@ -427,12 +427,12 @@ permission_root_address: resq 1
 permission_pdpt_physical: resq 1
 permission_pd_physical: resq 1
 permission_pt_physical: resq 1
-alignb 16
+align 16, resb 1
 permission_descriptor: resb 16
 permission_shadow_gdtr: resb 16
 permission_shadow_gdt: resb 56
 permission_shadow_gdt_end:
-alignb 4096
+align 4096, resb 1
 permission_pdpt: resb 4096
 permission_pd: resb 4096
 permission_pt: resb 4096
