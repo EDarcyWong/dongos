@@ -35,6 +35,14 @@ class DeviceManagerTests(unittest.TestCase):
                     if mutation=='accepted-replaced-device':
                         path=services/'drivers/device_policy.dg';src=path.read_text();needle='return (*a).version==(*b).version&&(*a).kind==(*b).kind&&(*a).ecam==(*b).ecam&&(*a).segment==(*b).segment'
                         self.assertEqual(1,src.count(needle));src=src.replace(needle,'return true||(*a).version==(*b).version&&(*a).kind==(*b).kind&&(*a).ecam==(*b).ecam&&(*a).segment==(*b).segment')
+                    elif mutation in ('skipped-recovery-stop','skipped-recovery-retirement','reused-recovery-token'):
+                        path=kernel/'user/device_manager.dg';src=path.read_text()
+                        needle,replacement={
+                            'skipped-recovery-stop':('if (*ops).stop(context,token,generation)!=0','if false'),
+                            'skipped-recovery-retirement':('if (*ops).retire(context,token,generation)!=0','if false'),
+                            'reused-recovery-token':('fresh.token=(generation<<8)|slot','fresh.token=token'),
+                        }[mutation]
+                        self.assertEqual(1,src.count(needle));src=src.replace(needle,replacement)
                     else:
                         path=kernel/'user/device_manager.dg';src=path.read_text();needle='sequence==0||sequence!=view.sequence||view.flags!=(abi.MASKED|abi.PENDING)'
                         self.assertEqual(1,src.count(needle));src=src.replace(needle,'sequence==0||view.flags!=(abi.MASKED|abi.PENDING)')
@@ -55,3 +63,14 @@ class DeviceManagerTests(unittest.TestCase):
     def test_independent_authority_irq_and_actual_launcher(self):self.native()
     def test_actual_replaced_identity_and_stale_ack_are_rejected(self):
         for mutation in ('accepted-replaced-device','accepted-stale-ack'):self.native(mutation)
+
+    def test_recovery_frontend_both_modes(self):
+        # This is only a compiler/ABI check, not native or hardware execution.
+        for mode in ('debug','release'):
+            c=compile_file(ROOT/'tests/device_manager_probe.dg',roots=[ROOT/'tests',ROOT/'kernel',ROOT/'services',ROOT/'lang/std'],mode=mode)
+            layouts={x['full_name']:x for x in c.layout_manifest['types']}
+            self.assertEqual(4560,layouts['user.device_manager.Table']['size'])
+            self.assertEqual(40,layouts['user.device_manager.RecoveryOps']['size'])
+            self.assertIn('dm_recover',c.assembly)
+    def test_actual_recovery_mutations_are_rejected(self):
+        for mutation in ('skipped-recovery-stop','skipped-recovery-retirement','reused-recovery-token'):self.native(mutation)

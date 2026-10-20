@@ -1,0 +1,37 @@
+module dma_lease_fixture;
+import dma_lease_adapter as resources;import dma_lease_adapter as buddy;
+import dma_lease_adapter as startup;import dma_lease_adapter as paging;
+import dma_lease_adapter as devices;import dma_lease_adapter as elf;
+pub error InvalidState=0x0406_0001;pub error Capacity=0x0406_0002;pub error InvalidAddress=0x0406_0003;
+const LIMIT:usize=16;
+struct Process{ready:u64,root:u64}struct Frame{physical:u64}
+var PROCESSES:[16]Process=[Process{ready:0,root:0};16];
+var GENERATIONS:[16]u64=[0;16];var PINNED:[16]bool=[false;16];
+var SPACES:[16]paging.Space=[paging.Space{unused:0};16];
+var FRAMES:[64]Frame=[Frame{physical:0};64];var RECYCLED:[64]u8=[0;64];
+var EXTENDED:*Frame=null;var FRAME_COUNT:usize=0;var CAPACITY:usize=64;
+fn capacity()usize{unsafe{return CAPACITY;}}
+unsafe fn own_frame(physical:u64)!usize {unsafe{
+ let index=FRAME_COUNT;FRAMES[index].physical=physical;FRAME_COUNT+=1;
+ if resources.event(2,physical,index as u64,0)!=0{return error.resources.Failed;}return index;
+}}
+unsafe fn record(index:usize)*Frame {unsafe{return &FRAMES[index];}}
+unsafe fn recycled(index:usize)*u8 {unsafe{return &RECYCLED[index];}}
+unsafe fn user_pcid_invalidate_root(root:u64)void {unsafe{let ignored=resources.event(5,root,0,0);}return;}
+// PRODUCTION_METADATA
+// PRODUCTION_CONTIGUOUS
+export("dma_reset") fn reset(extended:u64,cap:usize,count:usize)void {unsafe{
+ PROCESSES[2]=Process{ready:1,root:0x9000};GENERATIONS[2]=7;PINNED[2]=false;
+ DMA_LEASES[2]=EMPTY_DMA;DMA_LEASES[3]=DmaLease{physical:0x400000,virtual:0x68000000,pages:1,root:0xa000,generation:9,attempted:1,mapped:1,state:DMA_COMPLETE};CAPACITY=cap;FRAME_COUNT=count;EXTENDED=null;
+ if extended!=0{EXTENDED=&FRAMES[0];}
+}return;}
+export("dma_allocate") fn allocate(requested:usize,virtual:u64,out:*u64)u64 {unsafe{
+ match contiguous(2,virtual,requested){ok(p)=>{*out=p;return 0;},err(e)=>{return e;},}
+}}
+export("dma_get") fn get(out:*DmaLease)u64 {unsafe{match dma_snapshot(2,out){ok=>{return 0;},err(e)=>{return e;},}}}
+export("dma_is_pinned") fn pinned()u64 {unsafe{if PINNED[2]{return 1;}return 0;}}
+export("dma_get_slot") fn get_slot(id:usize,out:*DmaLease)u64 {unsafe{match dma_snapshot(id,out){ok=>{return 0;},err(e)=>{return e;},}}}
+export("dma_guard") fn guard(mode:u64)void {unsafe{
+ if mode==1{PROCESSES[2].root=0;}else if mode==2{GENERATIONS[2]=0;}
+ else if mode==3{PINNED[2]=true;}else if mode==4{DMA_LEASES[2].state=DMA_HELD;}
+}return;}
