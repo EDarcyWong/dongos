@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-10-20T04:20:28+00:00",
+  "generated_at": "2026-10-20T07:42:32+00:00",
   "tasks": [
     {
       "auto_dispatch": false,
@@ -3124,7 +3124,7 @@
         "discover:claude-works/tests:test_nasm_u64_module.py"
       ],
       "claimed_at": "2026-10-19T15:35:14+00:00",
-      "claimed_by": "claude-mcp-7375d33562084f6a",
+      "claimed_by": null,
       "complexity": "standard",
       "created_at": "2026-10-19T14:14:02+00:00",
       "delivery": "claude-works/deliveries/C52.md",
@@ -3139,18 +3139,49 @@
       "legacy_hash": "64f2f3f1eb8c71efd06e8ef71c62b39e17e93366bb955eb5e513a1d1ed5c6500",
       "number": "C52",
       "owner": "claude",
-      "rev": 7,
-      "review_note": "[P2] 源码/契约审查不通过，不能因现有5项测试全过而验收。nasm_u64_module.dg:41-46 的嵌套预检缺少名字1..64和IR<=64等数量限制，57行重复名字same()先读字节，66行后才交C48拒绝非法数量，违反先完整嵌套数量预检、非法数量不读正文的契约。直接链接正式未修改Dong对象的安全PAGE_GUARD读观察证明：debug/release，module/item 65字节单函数INVALID且0次读，双函数同为65字节名字却在INVALID前读1次；64字节单函数读观察正控为1且WORKSPACE，12个观察均正常返回，输出/written/表不变，无崩溃/超时/构建失败。正式作业64634c302d0c434bbf0216f94eb8f495为5tests/0skip/146.640秒/source_stable=true，16输入和672产物SHA一致，130组原生负控审查正常，但未覆盖本缺口。返修仅原四文件：任何名字/IR正文读取前先完成所有函数嵌套名字及IR数量/描述符预检，保留C48实际语义预检；增加能使当前实现因提前读取而失败的安全永久回归，覆盖module/item、多函数/位置，保留现有负控、优先级和原子性。更新说明与交付原编号重新submit；不改C48/他人实现。证据reviews/2026-10-19-C52-evidence.json、-C52-name-preflight.c，详审reviews/2026-10-19-C52-D25-reviewed.md。",
-      "status": "submitted",
+      "rev": 19,
+      "review_note": "R1源码/完整任务契约/永久测试已实际审查；全部函数嵌套名字1..64及IR<=64/描述符先于正文读取，真实C48语义预检保留。正式作业72281b9c169340bd9124bf7eb7a7e7a1通过6tests/0skip，207.660秒，process_stopped=true/source_stable=true；16输入与713产物SHA一致。额外独立解析130组原生调用的RAX、全部callee-saved/RSP/canary及坏Dong数值负控，R1安全读观察正控/去预检坏体灵敏度均通过。当前四交付与正式指纹相同，原P2已关闭。证据reviews/2026-10-20-C52-formal-final-evidence.json。登记组件验收，未实际集成，不宣称完整L3。",
+      "status": "integrated",
       "title": "[L3] 复用C48组装多函数NASM模块及可链接导出",
-      "updated_at": "2026-10-19T15:42:48+00:00",
-      "verification": null,
+      "updated_at": "2026-10-20T07:34:39+00:00",
+      "verification": {
+        "passed": true,
+        "checks": [
+          {
+            "spec": "discover:claude-works/tests:test_nasm_u64_module.py",
+            "passed": true,
+            "tests": 6,
+            "skips": 0,
+            "returncode": 0,
+            "cancelled": false,
+            "timed_out": false,
+            "process_stopped": true,
+            "execution_exited": true,
+            "elapsed_seconds": 207.66
+          }
+        ],
+        "process_stopped": true,
+        "execution_exited": true,
+        "source_stable": true,
+        "fingerprint": {
+          "claude-works/src/bootstrap/nasm_u64_module.dg": "3ef6b5598d30b5a82345f1cdb80b705bcf7e02c49cd8d11a7a5b9adc4e32d2f7",
+          "claude-works/src/bootstrap/nasm_u64_module.md": "fc43f2d553d3ed88ab0df65647a5405487fc9d01a57ecf0ee79a67f9da5ece0c",
+          "claude-works/tests/test_nasm_u64_module.py": "b63dba5d8c9159f4fe5a5a6ae970883ed23b62991e903c607938bc634a75e04b",
+          "claude-works/deliveries/C52.md": "d4db6be6c1b976115846f47efddcfc04213a150947e870e9ace35fc4cc2b555a"
+        },
+        "summary": "定向复验通过，等待源码/契约审查",
+        "finished_at": "2026-10-20T06:06:04+00:00",
+        "job": "72281b9c169340bd9124bf7eb7a7e7a1"
+      },
       "write_paths": [
         "claude-works/src/bootstrap/nasm_u64_module.dg",
         "claude-works/src/bootstrap/nasm_u64_module.md",
         "claude-works/tests/test_nasm_u64_module.py",
         "claude-works/deliveries/C52.md"
-      ]
+      ],
+      "pause_note": "执行器无法确认全部进程已停止；请在原机器停止并明确确认",
+      "claim_token": null,
+      "integration_note": "已集成：主线 code/lang/bootstrap/nasm_u64_module.dg 与已验收交付逐字节相同，.md仅路径/平台措辞调整；2026-10-20主线 lang.tests.test_bootstrap_nasm_u64_module、nasm_pair_cleanup_function、cleanup_module_integration 合计11项通过、0失败、0skip（737.8秒）。未运行OS/VM，不宣称完整L3。"
     },
     {
       "auto_dispatch": false,
@@ -3828,6 +3859,75 @@
         "lang/tests/test_bss_compatibility.py",
         "codex-works/deliveries/CX5.md"
       ]
+    },
+    {
+      "id": "codex:CX6",
+      "number": "CX6",
+      "owner": "codex",
+      "title": "[L3] 将有界源码读取器接入已有DongOS文件句柄",
+      "description": "按用户完成L3授权，新增lib.compiler_source：仅消费已初始化的lib.files.Session和调用者已授权文件token，通过现有H_READ IPC接入bootstrap.guest_source_reader，分块<=61440，检查返回字节数后拷贝，零长度EOF与错误保持；不申请权限、不打开路径、不改内核配置。校验Session/channel与scratch/out/result完整区间不别名，失败预检无IPC与无写入。真实debug/release原生C传输桩检查消息、偏移、短读、EOF、超容量、错误、坏返回及原子性。仅声明文件，不抢GUEST4/5。",
+      "assignment_owner": "codex",
+      "status": "submitted",
+      "rev": 4,
+      "write_paths": [
+        "services/lib/compiler_source.dg",
+        "services/lib/compiler_source.md",
+        "lang/tests/test_guest_files_reader.py",
+        "docs/l3-guest-source-integration.md",
+        "codex-works/deliveries/CX6.md"
+      ],
+      "depends_on": [
+        "pool:GUEST2"
+      ],
+      "checks": [
+        "module:lang.tests.test_guest_files_reader"
+      ],
+      "auto_dispatch": false,
+      "auto_verify": false,
+      "complexity": "standard",
+      "created_at": "2026-10-20T07:03:54+00:00",
+      "updated_at": "2026-10-20T07:10:26+00:00",
+      "historical": false,
+      "document": "codex-works/tasks/CX6-board.md",
+      "delivery": "codex-works/deliveries/CX6.md",
+      "claimed_at": "2026-10-20T07:04:06+00:00",
+      "completed_at": "2026-10-20T07:08:31+00:00",
+      "claimed_by": "codex-mcp-d76b66689d824a70",
+      "candidate": null,
+      "verification": {
+        "passed": true,
+        "checks": [
+          {
+            "spec": "module:lang.tests.test_guest_files_reader",
+            "passed": true,
+            "tests": 1,
+            "skips": 0,
+            "returncode": 0,
+            "cancelled": false,
+            "timed_out": false,
+            "process_stopped": true,
+            "execution_exited": true,
+            "elapsed_seconds": 38.717
+          }
+        ],
+        "process_stopped": true,
+        "execution_exited": true,
+        "source_stable": true,
+        "fingerprint": {
+          "services/lib/compiler_source.dg": "7f60d9c0e1357ea74ca54eaf2da6244a7830123f4a1f27a732fb4d692ccdc522",
+          "services/lib/compiler_source.md": "13c1a60f51c2c26eb4e78fec42d759c0ba291dca585ba889c8c902e509828a0c",
+          "lang/tests/test_guest_files_reader.py": "26ce537dded8a5f2d4867f5c1000dfe248d7198a3a64a896362b2b068c12e5f0",
+          "docs/l3-guest-source-integration.md": "fcc01504cd55128f5470e2062cf33ff89e8842df4283371a73566a6db57e4e23",
+          "codex-works/deliveries/CX6.md": "0b5c33da08f42dbed9e6d50ec77112aea8ab634977548f1a0eceb45f84a51199"
+        },
+        "summary": "定向复验通过，等待源码/契约审查",
+        "finished_at": "2026-10-20T07:10:26+00:00",
+        "job": "425a27aeef594fce946c7d6944844eb8"
+      },
+      "review_note": "",
+      "legacy_hash": "d3124a96642a0379b0f498ef14f12ebf97b36e4d80b306f81b2bf5324e744504",
+      "claim_from_status": "todo",
+      "claim_token": "787b20d07fc94cf3a9abcad276a0a398"
     },
     {
       "auto_dispatch": false,
@@ -5863,8 +5963,8 @@
       "checks": [
         "discover:cursor-works/tests:test_nasm_pair_cleanup_function.py"
       ],
-      "claimed_at": "2026-10-19T15:51:53+00:00",
-      "claimed_by": "codex-direct-cursor",
+      "claimed_at": "2026-10-20T04:51:40+00:00",
+      "claimed_by": null,
       "complexity": "standard",
       "created_at": "2026-10-19T15:04:33+00:00",
       "delivery": "cursor-works/deliveries/CR40.md",
@@ -5884,42 +5984,51 @@
       "legacy_hash": "bc440567c7d40d66d3078e612bd62067615dde47d896fcbbfd2884dd084f1fd3",
       "number": "CR40",
       "owner": "cursor",
-      "rev": 12,
-      "review_note": "Codex最终自审：仅补强测试夹具，总count超限案例应保证每个区间合法，以独立验证C36错误传播；生产实现不变。原queued复验已取消，未中断运行作业。",
-      "status": "submitted",
+      "rev": 24,
+      "review_note": "实际审查PAIR清理函数源码、完整契约和永久测试：复用C44/C36/C42及CR12/13，预检重放后才发布输出，清理后保持真实RAX/RDX，不重装输入掩盖错误。总count超限夹具各区间合法、独立验证C36传播。正式隔离作业0919979e89d041859d477e9a36491e01通过4tests/0skip/returncode0，process_stopped=true/source_stable=true；当前四交付与正式指纹一致。真实debug/release、ELF64/COFF组装及显式SysV桥原生执行；独立pair/清理ID轨迹模型、完整保存寄存器/RSP/canary和安全RBX/RDX/顺序/容量坏董负控均通过。前次等待停止确认已清除，无活动作业。登记组件验收，未实际集成主线。",
+      "status": "integrated",
       "title": "[L3] 作用域清理后保持双字返回值的完整SysV函数",
-      "updated_at": "2026-10-19T15:58:29+00:00",
+      "updated_at": "2026-10-20T07:34:42+00:00",
       "verification": {
+        "passed": true,
         "checks": [
           {
-            "cancelled": false,
-            "elapsed_seconds": 124.406,
-            "passed": true,
-            "returncode": 0,
-            "skips": 0,
             "spec": "discover:cursor-works/tests:test_nasm_pair_cleanup_function.py",
+            "passed": true,
             "tests": 4,
-            "timed_out": false
+            "skips": 0,
+            "returncode": 0,
+            "cancelled": false,
+            "timed_out": false,
+            "process_stopped": true,
+            "execution_exited": true,
+            "elapsed_seconds": 221.623
           }
         ],
+        "process_stopped": true,
+        "execution_exited": true,
+        "source_stable": true,
         "fingerprint": {
-          "cursor-works/deliveries/CR40.md": "e7562486a13f6fec505e0ed68a3bc2266dc383cc58e88fdff39f1e3533a1bf5c",
           "cursor-works/src/bootstrap/nasm_pair_cleanup_function.dg": "22522c485b9650f59d05a6ae3a7237f706a06e3ac6199e55782e1d67b24f6e8e",
           "cursor-works/src/bootstrap/nasm_pair_cleanup_function.md": "65d09a2ca8c5970277b1a4ae3e9d10df77d73e900d84e09d55eb606468ce56e4",
-          "cursor-works/tests/test_nasm_pair_cleanup_function.py": "2145159da40db85d4348c5b437bb8f2fbcac1a887c25e8ef7895f5a71255175e"
+          "cursor-works/tests/test_nasm_pair_cleanup_function.py": "2145159da40db85d4348c5b437bb8f2fbcac1a887c25e8ef7895f5a71255175e",
+          "cursor-works/deliveries/CR40.md": "bd84f24327466b7e2cd2043801b32e9e00078ea7340207c1ccac636043eaa47d"
         },
-        "finished_at": "2026-10-19T15:58:29+00:00",
-        "job": "a848152c07fc46b687edd4b6971c65fa",
-        "passed": true,
-        "source_stable": true,
-        "summary": "定向复验通过，等待源码/契约审查"
+        "summary": "定向复验通过，等待源码/契约审查",
+        "finished_at": "2026-10-20T06:11:19+00:00",
+        "job": "0919979e89d041859d477e9a36491e01"
       },
       "write_paths": [
         "cursor-works/src/bootstrap/nasm_pair_cleanup_function.dg",
         "cursor-works/src/bootstrap/nasm_pair_cleanup_function.md",
         "cursor-works/tests/test_nasm_pair_cleanup_function.py",
         "cursor-works/deliveries/CR40.md"
-      ]
+      ],
+      "claim_from_status": "rework",
+      "completed_at": "2026-10-20T06:03:16+00:00",
+      "claim_token": null,
+      "pause_note": "执行器无法确认全部进程已停止；请在原机器停止并明确确认",
+      "integration_note": "已集成：主线 nasm_pair_cleanup_function.dg 与已验收交付逐字节相同，.md仅标题/说明调整；同轮主线测试11项零skip通过。未运行OS/VM，不宣称完整L3。"
     },
     {
       "auto_dispatch": false,
@@ -6061,76 +6170,145 @@
       ]
     },
     {
-      "id": "cursor:CR43",
-      "number": "CR43",
-      "owner": "cursor",
-      "title": "[L3] 源码u64函数声明→C51→C48完整SysV函数",
-      "description": "所属阶段：L3：Dong自举后端 → 通用AST→IR降级的第一段“声明级”接线。新增bootstrap.u64_source_function：把真实lexer token流中的一个完整函数声明 `fn NAME(p0:u64,...)u64 { return EXPR; }` 经真实syntax解析、C51降级、C48发射成完整NASM函数文本。首次让函数名、参数表和函数体来自源码本身，而不是由测试从token流里手工定位。只覆盖单return体，局部绑定/赋值由CR44另做，不在本项实现。\n\n```text\nmodule bootstrap.u64_source_function;\nimport bootstrap.lexer as lex; import bootstrap.expression as ast; import bootstrap.syntax as syn;\nimport bootstrap.u64_expression_ir as lower;   // C51 integrated rev6\nimport bootstrap.nasm_u64_function as f;      // C48 integrated rev13\npub const OK:u64=0; INVALID=1; CAPACITY=2; UNSUPPORTED=3; SYNTAX=4;\npub unsafe fn emit(module_name:[]const u8, source:[]const u8, tokens:[]const lex.Token,\n                   declaration_nodes:[]ast.Node, expression_nodes:[]ast.Node, ir:[]f.Instruction,\n                   out:[]u8, written:*usize)u64\n```\n\n输入与工作区：tokens是真实lexer对整个source的完整输出（末项EOF），source<=4096、tokens 1..256。声明从token 0开始。declaration_nodes（1..256项）、expression_nodes（1..24项）、ir（1..24项）是调用方工作区，本函数可在任何返回路径改写它们，但不得越界；它们与source/tokens/module_name/out/written两两互斥。module_name 1..64字节，按C48/CR3规则交给C48编码。\n\n流程（必须按此顺序真实调用组件）：\n1. 描述符/别名/数量预检（INVALID）。\n2. syn.parse(mode=4, source, tokens, 0, declaration_nodes, max_depth=32, &r)。parser返回SYNTAX→SYNTAX；CAPACITY→CAPACITY（工作区不足，仍先于out容量）；DEPTH或UNSUPPORTED→UNSUPPORTED；INVALID→INVALID。成功后r.next必须是EOF token（只允许一个声明），否则SYNTAX。\n3. 形状（不满足一律UNSUPPORTED，不尝试折叠）：根为DECLARATION且ATTRIBUTE链为空（不支持pub/export/extern等修饰）；a为FUNCTION，c为非NONE的BLOCK；参数链0..6项，无receiver位，每个参数类型是TYPE_NAME且名字拼写恰为`u64`（限定名、指针、切片、可选等均UNSUPPORTED）；返回类型同样为`u64`；BLOCK恰有一个语句，为RETURN且a非NONE。参数名两两不同的检查交给C51（重复→INVALID）。\n4. 表达式重解析：RETURN节点token是`return`关键字，表达式起点为其下一个token；ast.parse(source,tokens,起点,expression_nodes,max_depth=32,allow_struct=false,&e)。e.next必须是紧跟的`;`，且`;`之后恰是`}`，与声明树一致，否则INVALID（说明为何不可能在合法parse后出现时也要保留该检查）。expression_nodes不足→CAPACITY，SYNTAX/DEPTH按第2步映射。\n5. 参数token数组：按声明顺序收集每个FUNCTION_PARAMETER的名字token索引，放在不超过6项的局部数组。\n6. lower.lower(source,tokens,expression_nodes[0..e.count],e.root,params,ir,&lr)：C51的INVALID/UNSUPPORTED/CAPACITY原样映射。\n7. f.emit(module_name, 函数名token拼写, 参数个数, lr.slot_count, ir[0..lr.instruction_count], lr.return_slot, out, written)：C48的INVALID→INVALID（应不可达，须说明）、CAPACITY→CAPACITY。C48自身保证失败时out/written不变；本模块在调用C48前不写out/written。\n函数名拼写为1..64字节（超出→UNSUPPORTED）。不得在本模块内重新实现参数捕获、表达式降级或文本拼接；生成文本应与“同一参数token直接调用C51再C48”的结果逐字节一致。\n\n永久测试（cursor-works/tests/test_u64_source_function.py）：暂存本模块、C51/C48及前端完整只读闭包；实际lexer产生token。<=20个原生向量：0/1/6参数、单NAME、单常量、全部六种运算、优先级与括号、0/MAX/高位环绕、十六进制/二进制/下划线字面量、1字节与64字节函数名、23节点最大表达式。每个向量：独立Python oracle求值；把同一函数源码的文本与“测试中定位token直接调用C51+C48”的参考输出逐字节比较；全部生成函数放进一个汇编文件并真实call/ret核对RAX与callee-saved。拒绝类（只观察状态与原子性，不执行机器码）：语法错误→SYNTAX；两个声明/尾部多余token→SYNTAX；pub fn、extern fn、receiver、参数或返回类型为u32/*u64/[]u8/?u64、多语句体、无返回值return、if/let体→UNSUPPORTED；C51不支持的运算（/、<<、比较、调用）→UNSUPPORTED；未知名字、重复参数→INVALID；declaration_nodes、expression_nodes、ir工作区刚好/短1→CAPACITY；out exact/短1/0/富余。真实坏Dong：把参数token顺序反转（2参数SUB夹具，正常返回后按RAX拒绝）；忽略r.next检查（两声明源码，按状态拒绝）；在C48 CAPACITY前先写written（按原子性guard拒绝）；另加生成函数的RBX保持数值负控（C48坏副本ret前add rbx,8，按RBX数值拒绝）。\n\n## 共用执行与复验要求\n本项仅声明文件；生产为Dong，无隐式分配/全局可变状态/OS调用，新模块不导出C符号（测试wrapper可导出）。不得修改code/lang、编译器、已集成依赖、协调器、其它负责人或本批其它任务的文件；需要的依赖只读暂存其完整传递闭包。不依赖未集成的C49/C50/C52或本批其它任务。\n先完整检查结果指针非NULL、8对齐、端点不回绕；所有输入切片非空时非NULL、自然对齐、元素乘法与端点不回绕，空可NULL；数量先于乘法、非法数量不读正文。out/结果指针/调用方工作区彼此及与全部完整输入（含未消费尾部）互斥；输入之间可重叠且只读。INVALID/UNSUPPORTED/SYNTAX一律先于CAPACITY。任何失败都保持out与结果指针全文不变（调用方工作区按正文说明可被改写）；成功只写精确前缀和结果，out未用尾部不变。不能先写out再回滚。\n真实复用正文指定组件，不复制既有lexer/parser/C51/C48算法，不以Python/C模拟生产。每个局部数组给出栈上界并遵守dongc每函数4096字节worst-case frame限制；大缓冲一律由调用方工作区提供。\n只跑本项checks：真实Dong debug/release编译、ELF64/COFF组装、显式SysV桥链接并原生执行生成的函数。单模式不同主要原生输入向量<=24，好/坏重放复用同输入不新增向量；不做全回归/性能基准。期望值由独立Python分词/解析/求值oracle给出，不用生产输出作为唯一oracle。执行生成函数时捕获真实RAX、全部callee-saved及RSP，观察地址/宿主栈锚放在桥自己的静态内存，先独立捕获现场再恢复宿主ABI后断言。\n真实坏Dong须正常构建、执行后按指定数值/状态/原子性拒绝；缺符号、组装失败、崩溃、超时或仅文本不同不算负控。描述符/尾部别名预检各自独立可达；结果端点溢出用8对齐的UINT64_MAX-(sizeof-1)夹具。输入真实只读保护须断言保护调用成功；源码、说明、测试、全部只读依赖/输入SHA前后稳定，0skip才可验收。\n由负责人在本人客户端通过worker MCP读取最新rev/完整任务书/review_note/write_paths/依赖，claim成功后实现；交付真实命令、tests/skips、双模式/双格式、SHA、坏体实际观察和未执行限制，再原编号submit。临时产物放在本人works的build/<编号>/<唯一目录>。不启动任何AI CLI或自动化，不自行accept/integrate、提交/推送、运行OS/VM。由协调者独立复验、验收和真实集成；组件通过不等于通用AST→IR、stage1/stage2、客体自举或L3完成。",
-      "status": "paused",
-      "rev": 2,
+      "id": "cursor:CR45",
+      "number": "CR45",
+      "owner": "codex",
+      "title": "[L3] 受限文件清单批量装载为原生frontend源码目录",
+      "description": "新增bootstrap.guest_source_catalog，桥接现有guest_source_path/guest_source_reader与modules.Source。输入调用者已授权的逻辑root、相对path、文件标识清单与ReadAt；不扫描目录、不open文件、不创建权限。定义有界批次ABI及entry索引。先完整预检所有描述符、长度/乘加溢出、所有输入路径与完整输出/暂存/Source数组/结果的别名；根映射保留，路径必须合法.dg，拒绝同root同路径重复，跨root同路径保留给原模块解析器判歧义。调用现有reader逐文件读取，独立scratch复用，所有Source/path/bytes借用规则清楚；调用方提供批次暂存与最终字节区，所有文件确认EOF后一次发布最终Source表及持久path/bytes，后项失败不能留下部分可用catalog。临时区可变，最终区及结果契约原子性明确；不得返回局部栈切片。预算先用调用者给出的每文件容量和总字节界限，不硬编码49模块。路径超长、未知root、重复、空清单/越界entry、短读/精确EOF/超容量/中途IO/超长返回/后项失败与全过程轨迹、最终借用地址和canary要真实验证。批次构建后用小型真实多模块frontend运行验证catalog可直接消费；不重写frontend或模块解析器。\n共同约定：按2026-10-20用户“完成L3，顺便发布几个任务”授权。Cursor客户端手动通过worker MCP读取最新rev/完整任务后领取，优先本人已领取/返修；不得启动AI CLI。只改声明cursor-works文件（映射coordination/dongos_works/cursor-works），不改主线/内核权限/容量/其它任务。不提交推送、不运行OS/VM，不扩大64MiB内存或16KiB栈。真实Dong debug/release原生执行、ELF64/COFF组装，失败不skip冒充通过；最多24主要语义组，实际坏Dong负控须成功构建后因准确断言拒绝。保存输入SHA/实际命令/产物SHA/退出及skip数；交付等待独立审查、复验、真实集成，不等于完整L3完成。只读背景code/docs/l3-native-selfhost-progress.md及docs/l3-guest-source-integration.md。不得重复CR43/44/D28/LM9旧暂停组件，不抢GUEST4/5/CX6。",
+      "assignment_owner": "codex",
+      "status": "submitted",
+      "rev": 4,
       "write_paths": [
-        "cursor-works/src/bootstrap/u64_source_function.dg",
-        "cursor-works/src/bootstrap/u64_source_function.md",
-        "cursor-works/tests/test_u64_source_function.py",
-        "cursor-works/deliveries/CR43.md"
+        "cursor-works/lang/bootstrap/guest_source_catalog.dg",
+        "cursor-works/lang/bootstrap/guest_source_catalog.md",
+        "cursor-works/tests/test_guest_source_catalog.py",
+        "cursor-works/deliveries/CR45.md"
       ],
       "depends_on": [
-        "claude:C51",
-        "claude:C48"
+        "pool:GUEST1",
+        "pool:GUEST2"
       ],
       "checks": [
-        "discover:cursor-works/tests:test_u64_source_function.py"
+        "discover:cursor-works/tests:test_guest_source_catalog.py"
       ],
       "auto_dispatch": false,
       "auto_verify": false,
       "complexity": "standard",
-      "created_at": "2026-10-20T04:03:54+00:00",
-      "updated_at": "2026-10-20T04:20:24+00:00",
+      "created_at": "2026-10-20T07:11:53+00:00",
+      "updated_at": "2026-10-20T07:40:26+00:00",
       "historical": false,
-      "document": "cursor-works/tasks/CR43-board.md",
-      "delivery": "cursor-works/deliveries/CR43.md",
+      "document": "cursor-works/tasks/CR45-board.md",
+      "delivery": "cursor-works/deliveries/CR45.md",
+      "claimed_at": "2026-10-20T07:23:49+00:00",
+      "completed_at": "2026-10-20T07:40:26+00:00",
+      "claimed_by": "codex-mcp-d76b66689d824a70",
       "candidate": null,
       "verification": null,
       "review_note": "",
-      "legacy_hash": "d6abc45215b3c79b5ccdb558aaf28ec0ab72527a5ed820ef264658cfe71b70d1",
-      "resume_status": "todo",
-      "pause_control": "confirmed"
+      "legacy_hash": "70b0f6fc0d1de989d2c8c890cd9f09e47c6c22451d53fae5e6b567f09e8eff30",
+      "assignment_history": [
+        {
+          "at": "2026-10-20T07:23:26+00:00",
+          "from_owner": "cursor",
+          "to_owner": "codex",
+          "previous_claimed_by": null,
+          "note": "用户再次要求当前会话完成L3功能；CR45尚未领取、无活动作业，接管直接完成批量源码目录装载实现与测试，保留原编号/候选四文件/任务书。GUEST4活动文件不碰。"
+        }
+      ],
+      "claim_token": "94da995f7cab47c6b2383fb5240a7dba",
+      "claim_from_status": "todo"
     },
     {
-      "id": "cursor:CR44",
-      "number": "CR44",
-      "owner": "cursor",
-      "title": "[L3] 带let/var绑定与赋值的u64函数体块→C48 IR",
-      "description": "所属阶段：L3：Dong自举后端 → 通用AST→IR降级的“局部绑定/赋值”接线。新增bootstrap.u64_block_ir：把真实syntax解析得到的函数体BLOCK（let/var绑定、对var的赋值、最后一条return）降为C48的直线Instruction序列。每个表达式真实复用C51，通过把“当前可见名字”作为C51的参数token列表并重映射槽号实现，不得重写C51的表达式降级。与CR43互不依赖、文件不重叠；不做声明级解析，不发射文本。\n\n```text\nmodule bootstrap.u64_block_ir;\nimport bootstrap.lexer as lex; import bootstrap.expression as ast;\nimport bootstrap.u64_expression_ir as lower;   // C51 integrated rev6\nimport bootstrap.nasm_u64_function as f;      // C48 integrated rev13，仅用Instruction和操作码\npub const OK:u64=0; INVALID=1; CAPACITY=2; UNSUPPORTED=3; SYNTAX=4;\npub struct Result{pub instruction_count:usize,pub slot_count:usize,pub return_slot:usize}   // 24字节，8对齐\npub unsafe fn lower_block(source:[]const u8, tokens:[]const lex.Token, nodes:[]const ast.Node, block:usize,\n                          parameter_tokens:[]const usize, expression_nodes:[]ast.Node, scratch:[]f.Instruction,\n                          out:[]f.Instruction, result:*Result)u64\n```\n\n输入：source<=4096，tokens 1..256为真实lexer完整输出；nodes 1..256为真实syntax（mode 1或从FUNCTION取c）产生的只读树，block<nodes.len且kind=BLOCK；parameter_tokens 0..6项，指向IDENTIFIER，定义槽0..p-1。expression_nodes（1..24项）与scratch（1..24项）是调用方工作区，任何返回路径都可被改写，但不得越界，二者与全部输入/out/result互斥。\n\n支持的语句（链顺序即执行顺序，1..8条）：\n- BINDING：op为let或var（const→UNSUPPORTED），必须有类型a且为TYPE_NAME `u64`、必须有初值b；token序列严格为`let|var NAME : u64 = EXPR ;`，表达式起点为NAME之后第4个token（不符合→UNSUPPORTED）。名字不得与任何参数或已声明局部重名（禁止遮蔽，INVALID）。新局部取下一个空闲槽。\n- ASSIGN：op必须是普通`=`（复合赋值→UNSUPPORTED），目标a是NAME且解析到var局部（参数或let→INVALID，未知→INVALID），表达式起点为赋值运算符token的下一个。\n- RETURN：必须是最后一条且有值；表达式起点为`return`下一个token。缺少最终return或return后还有语句→UNSUPPORTED。\n- 其它语句（if/while/loop/for/defer/match/unsafe/asm/break/continue/调用/嵌套块）→UNSUPPORTED。\n名字解析只在本块内：参数+已出现的局部，总数任何时刻<=6（超出→UNSUPPORTED）。\n\n每个表达式：ast.parse(source,tokens,起点,expression_nodes,32,false,&e)，e.next必须是`;`（否则INVALID，因为它与已给语法树矛盾）；然后lower.lower(source,tokens,expression_nodes[0..e.count],e.root,visible,scratch,&lr)，其中visible按“参数顺序、再局部声明顺序”列出当前可见名字token。C51输出槽重映射：s<k（k=visible个数）→该名字当前槽；s>=k→base+(s-k)，base为本块已用槽数，然后base+=lr.instruction_count。所有指令的destination/left/right都按此重映射，operation/immediate原样。BINDING与ASSIGN随后追加一条COPY(destination=局部槽,left=表达式结果槽,right=0,immediate=0)，即使表达式只是NAME也追加；RETURN不追加，return_slot=结果槽。C51的INVALID/UNSUPPORTED原样映射；C51 CAPACITY（scratch不足）→CAPACITY；parse SYNTAX→SYNTAX、DEPTH/UNSUPPORTED→UNSUPPORTED、CAPACITY→CAPACITY。\n全块累计：槽数>32或指令>64（C48上限）→UNSUPPORTED；slot_count=max(1,已用槽)。全部语句完成检查和降级后再判断out容量（不足→CAPACITY），然后一次性写out前缀与*result；中间累计只能放在有界局部或scratch之外的局部计数，不能先写out。注意：后续表达式会复用expression_nodes与scratch，所以已降级的指令须在局部有界缓冲中累计（64*40=2560字节会超出带初始化数组的帧预算，需给出可编译方案，例如两遍：第一遍只计数和校验，第二遍确认容量后重放并写out；须证明第二遍失败不可达）。\n\n永久测试：暂存本模块、C51、C48与前端完整只读闭包。用真实lexer+syntax解析整个`fn ...(...)u64 {...}`源码取FUNCTION的BLOCK与参数名token（测试可以定位这些，但表达式起点由生产计算）。把输出IR交给已集成C48.emit生成完整函数，汇编后真实call/ret；独立Python解释器（自己的分词/解析/作用域）给期望RAX，并独立按上述规则构造期望IR逐项比对。<=20原生向量：只有return、let/var各1个、var多次赋值并读取旧值、`x = x + a`、6名字上限、局部遮蔽之外的同前缀名、返回参数/返回局部、表达式为单NAME或常量、MAX环绕、8条语句上限。拒绝类：const绑定、无类型或非u64类型、无初值、复合赋值`+=`、给参数/let赋值、未知名字、遮蔽参数、第7个可见名字、return在中间、无return、if/while语句、C51不支持的运算→各指定状态；scratch/expression_nodes刚好/短1、out exact/短1/0/富余、槽数33/指令65。真实坏Dong：重映射把s>=k的临时槽错用为名字槽（正常执行后按RAX拒绝）；给let赋值不报错（按状态拒绝）；容量不足先写一条IR（原子性guard拒绝）；生成函数RBX保持数值负控（C48坏副本）。\n\n## 共用执行与复验要求\n本项仅声明文件；生产为Dong，无隐式分配/全局可变状态/OS调用，新模块不导出C符号（测试wrapper可导出）。不得修改code/lang、编译器、已集成依赖、协调器、其它负责人或本批其它任务的文件；需要的依赖只读暂存其完整传递闭包。不依赖未集成的C49/C50/C52或本批其它任务。\n先完整检查结果指针非NULL、8对齐、端点不回绕；所有输入切片非空时非NULL、自然对齐、元素乘法与端点不回绕，空可NULL；数量先于乘法、非法数量不读正文。out/结果指针/调用方工作区彼此及与全部完整输入（含未消费尾部）互斥；输入之间可重叠且只读。INVALID/UNSUPPORTED/SYNTAX一律先于CAPACITY。任何失败都保持out与结果指针全文不变（调用方工作区按正文说明可被改写）；成功只写精确前缀和结果，out未用尾部不变。不能先写out再回滚。\n真实复用正文指定组件，不复制既有lexer/parser/C51/C48算法，不以Python/C模拟生产。每个局部数组给出栈上界并遵守dongc每函数4096字节worst-case frame限制；大缓冲一律由调用方工作区提供。\n只跑本项checks：真实Dong debug/release编译、ELF64/COFF组装、显式SysV桥链接并原生执行生成的函数。单模式不同主要原生输入向量<=24，好/坏重放复用同输入不新增向量；不做全回归/性能基准。期望值由独立Python分词/解析/求值oracle给出，不用生产输出作为唯一oracle。执行生成函数时捕获真实RAX、全部callee-saved及RSP，观察地址/宿主栈锚放在桥自己的静态内存，先独立捕获现场再恢复宿主ABI后断言。\n真实坏Dong须正常构建、执行后按指定数值/状态/原子性拒绝；缺符号、组装失败、崩溃、超时或仅文本不同不算负控。描述符/尾部别名预检各自独立可达；结果端点溢出用8对齐的UINT64_MAX-(sizeof-1)夹具。输入真实只读保护须断言保护调用成功；源码、说明、测试、全部只读依赖/输入SHA前后稳定，0skip才可验收。\n由负责人在本人客户端通过worker MCP读取最新rev/完整任务书/review_note/write_paths/依赖，claim成功后实现；交付真实命令、tests/skips、双模式/双格式、SHA、坏体实际观察和未执行限制，再原编号submit。临时产物放在本人works的build/<编号>/<唯一目录>。不启动任何AI CLI或自动化，不自行accept/integrate、提交/推送、运行OS/VM。由协调者独立复验、验收和真实集成；组件通过不等于通用AST→IR、stage1/stage2、客体自举或L3完成。",
-      "status": "paused",
-      "rev": 2,
+      "id": "cursor:CR46",
+      "number": "CR46",
+      "owner": "codex",
+      "title": "[L3] 将原生前端诊断按有界回调发送给既有日志接收者",
+      "description": "新增bootstrap.guest_diagnostic_sink，将现有frontend_diagnostics.render的单行诊断送到调用者已授权的Write回调，生产路径必须实际调用render而非复制诊断映射。显式sources/frontend.Result、渲染scratch、发送回调context及返回报告，所有可检查完整范围/别名/容量/溢出在第一次输出副作用前预检。render失败禁止调用sink；成功后仅发送实际written前缀，不发送尾部；处理短写、零进展有界停止、负/错误码、超过请求长度与偏移，累计已确认发送字节和错误阶段。不可回滚外部输出，不许报告完整诊断已发当只有前缀；不申请日志/文件权限、不进行syscall、不改现有format、position或frontend实现。原始sources/Result不变。测试真实正常源码/非法UTF8/绑定或语义错误产生的诊断与render基线逐字一致、Unicode位置、精确/不足容量、sink轨迹及错误后无后续输出；至少真实坏Dong跳过render失败/短写当全写负控。\n共同约定：按2026-10-20用户“完成L3，顺便发布几个任务”授权。Cursor客户端手动通过worker MCP读取最新rev/完整任务后领取，优先本人已领取/返修；不得启动AI CLI。只改声明cursor-works文件（映射coordination/dongos_works/cursor-works），不改主线/内核权限/容量/其它任务。不提交推送、不运行OS/VM，不扩大64MiB内存或16KiB栈。真实Dong debug/release原生执行、ELF64/COFF组装，失败不skip冒充通过；最多24主要语义组，实际坏Dong负控须成功构建后因准确断言拒绝。保存输入SHA/实际命令/产物SHA/退出及skip数；交付等待独立审查、复验、真实集成，不等于完整L3完成。只读背景code/docs/l3-native-selfhost-progress.md及docs/l3-guest-source-integration.md。不得重复CR43/44/D28/LM9旧暂停组件，不抢GUEST4/5/CX6。",
+      "assignment_owner": "codex",
+      "status": "submitted",
+      "rev": 4,
       "write_paths": [
-        "cursor-works/src/bootstrap/u64_block_ir.dg",
-        "cursor-works/src/bootstrap/u64_block_ir.md",
-        "cursor-works/tests/test_u64_block_ir.py",
-        "cursor-works/deliveries/CR44.md"
+        "cursor-works/lang/bootstrap/guest_diagnostic_sink.dg",
+        "cursor-works/lang/bootstrap/guest_diagnostic_sink.md",
+        "cursor-works/tests/test_guest_diagnostic_sink.py",
+        "cursor-works/deliveries/CR46.md"
       ],
-      "depends_on": [
-        "claude:C51",
-        "claude:C48"
-      ],
+      "depends_on": [],
       "checks": [
-        "discover:cursor-works/tests:test_u64_block_ir.py"
+        "discover:cursor-works/tests:test_guest_diagnostic_sink.py"
       ],
       "auto_dispatch": false,
       "auto_verify": false,
       "complexity": "standard",
-      "created_at": "2026-10-20T04:03:54+00:00",
-      "updated_at": "2026-10-20T04:20:26+00:00",
+      "created_at": "2026-10-20T07:11:54+00:00",
+      "updated_at": "2026-10-20T07:42:04+00:00",
       "historical": false,
-      "document": "cursor-works/tasks/CR44-board.md",
-      "delivery": "cursor-works/deliveries/CR44.md",
+      "document": "cursor-works/tasks/CR46-board.md",
+      "delivery": "cursor-works/deliveries/CR46.md",
+      "claimed_at": "2026-10-20T07:28:02+00:00",
+      "completed_at": "2026-10-20T07:42:04+00:00",
+      "claimed_by": "codex-mcp-d76b66689d824a70",
       "candidate": null,
       "verification": null,
       "review_note": "",
-      "legacy_hash": "e19924d74777391b5b68b8b4dcc01468dc4a1c7fb187b91e101d88cbad008a82",
-      "resume_status": "todo",
-      "pause_control": "confirmed"
+      "legacy_hash": "fbb371d2aa1453ded1a58d6b6707fc5e78c9fda3ad676e90e979c6a4a4b1d628",
+      "assignment_history": [
+        {
+          "at": "2026-10-20T07:28:00+00:00",
+          "from_owner": "cursor",
+          "to_owner": "codex",
+          "previous_claimed_by": null,
+          "note": "用户明确要求当前会话完成L3功能；CR46未领取无活动作业，接管诊断输出接线，保留原四文件及历史，不碰GUEST4。"
+        }
+      ],
+      "claim_token": "2b2846fb943540cf9f83a157d4a22db4",
+      "claim_from_status": "todo"
+    },
+    {
+      "id": "cursor:CR47",
+      "number": "CR47",
+      "owner": "codex",
+      "title": "[L3] 测量并降低semantic_types递归路径实际栈峰值",
+      "description": "本项为真正栈阻塞优化，不新写预算规划器。先将当前code/lang/bootstrap/semantic_types.dg逐字复制至cursor-works/lang/bootstrap/semantic_types.dg并记录基线SHA，在独立roots快照中测实际声明类型解析/运行时表达式及flow递归路径的seed与native生成代码栈使用，定位大帧/递归重复临时量；在该候选文件内以复用已授权工作区、减小生命周期/避免不必要值拷贝等实质改动降低峰值。不能关闭深度/容量/语义检查、用全局可变scratch破坏重入、伪称增大线程栈已解决。保留公开API与成功/失败发布契约；若改变Workspace ABI必须先报告，不能越权改frontend。独立测量至少实际编译器模块闭包及固定嵌套正反语料，debug/release、guard/canary、有效/过深/容量/确定初始化/try/match/defer代表回归，改前后语义/发射结果一致；强制旧大栈路径或破坏复用的真实坏体须被栈/语义断言拒绝。须区分最大单帧、动态调用链峰值、seed与native证据；若仍不能16KiB明确剩余峰值，不把本组件优化等同客体自举成功。只改候选semantic_types.dg、其md、定向test及交付，避免GUEST4/5与CX6。\n共同约定：按2026-10-20用户“完成L3，顺便发布几个任务”授权。Cursor客户端手动通过worker MCP读取最新rev/完整任务后领取，优先本人已领取/返修；不得启动AI CLI。只改声明cursor-works文件（映射coordination/dongos_works/cursor-works），不改主线/内核权限/容量/其它任务。不提交推送、不运行OS/VM，不扩大64MiB内存或16KiB栈。真实Dong debug/release原生执行、ELF64/COFF组装，失败不skip冒充通过；最多24主要语义组，实际坏Dong负控须成功构建后因准确断言拒绝。保存输入SHA/实际命令/产物SHA/退出及skip数；交付等待独立审查、复验、真实集成，不等于完整L3完成。只读背景code/docs/l3-native-selfhost-progress.md及docs/l3-guest-source-integration.md。不得重复CR43/44/D28/LM9旧暂停组件，不抢GUEST4/5/CX6。",
+      "assignment_owner": "codex",
+      "status": "in_progress",
+      "rev": 3,
+      "write_paths": [
+        "cursor-works/lang/bootstrap/semantic_types.dg",
+        "cursor-works/lang/bootstrap/semantic_stack.md",
+        "cursor-works/tests/test_semantic_stack.py",
+        "cursor-works/deliveries/CR47.md"
+      ],
+      "depends_on": [],
+      "checks": [
+        "discover:cursor-works/tests:test_semantic_stack.py"
+      ],
+      "auto_dispatch": false,
+      "auto_verify": false,
+      "complexity": "standard",
+      "created_at": "2026-10-20T07:11:54+00:00",
+      "updated_at": "2026-10-20T07:35:36+00:00",
+      "historical": false,
+      "document": "cursor-works/tasks/CR47-board.md",
+      "delivery": "cursor-works/deliveries/CR47.md",
+      "claimed_at": "2026-10-20T07:35:36+00:00",
+      "completed_at": null,
+      "claimed_by": "codex-mcp-d76b66689d824a70",
+      "candidate": null,
+      "verification": null,
+      "review_note": "",
+      "legacy_hash": "3d6f0c22fa1233014600493cb6cea32f621488216e9753e4632f97e578122ca9",
+      "assignment_history": [
+        {
+          "at": "2026-10-20T07:35:34+00:00",
+          "from_owner": "cursor",
+          "to_owner": "codex",
+          "previous_claimed_by": null,
+          "note": "用户再次明确要求当前会话完成L3功能；CR47未领取无活动作业，接管semantic_types栈峰值测量与优化，保持原四文件候选副本及所有边界，不改主线容量。"
+        }
+      ],
+      "claim_token": "aaef665e32f14219a430e134e375b35b",
+      "claim_from_status": "todo"
     },
     {
       "auto_dispatch": false,
@@ -7825,39 +8003,6 @@
       ]
     },
     {
-      "id": "deepseek:D28",
-      "number": "D28",
-      "owner": "deepseek",
-      "title": "[L3] 模块AST中的函数声明清单与重名检查",
-      "description": "所属阶段：L3：Dong自举后端 → 多函数模块驱动的前置分析。新增bootstrap.module_function_index：读取真实syntax mode 2产生的完整模块树，按源码次序列出全部函数声明，供后续“逐函数降级→多函数模块”驱动使用。只做分析，不降级、不发射、不做类型检查。不依赖C52或本批Cursor任务。\n\n```text\nmodule bootstrap.module_function_index;\nimport bootstrap.lexer as lex; import bootstrap.expression as ast;\npub const OK:u64=0; INVALID=1; CAPACITY=2; DUPLICATE=3;\npub const PUB:u64=1; EXTERN:u64=2; EXPORT:u64=4; RECEIVER:u64=8;\npub struct Entry{pub declaration:usize,pub function:usize,pub name_token:usize,pub parameter_count:usize,pub body:usize,pub flags:u64}  // 48字节，8对齐\npub struct Result{pub count:usize,pub first_duplicate:usize,pub second_duplicate:usize}  // 24字节\npub unsafe fn index(source:[]const u8, tokens:[]const lex.Token, nodes:[]const ast.Node, root:usize,\n                    out:[]Entry, result:*Result)u64\n```\n\n输入：source<=65536、tokens 1..16384、nodes 1..16384，root为MODULE节点；全部只读。\n校验（INVALID）：描述符/对齐/别名；token流单调且EOF仅在末尾；root及沿b链（IMPORT/DECLARATION混合链）访问到的每个节点索引在范围内、kind合法；用有界迭代遍历链（最多nodes.len步，检测环→INVALID，不递归）。DECLARATION的a为FUNCTION时，FUNCTION.token必须是IDENTIFIER，参数链（FUNCTION_PARAMETER）同样有界遍历、检测环；body为c（extern为NONE）。非函数声明（struct/enum/error/alias/global）跳过但仍需DECLARATION本身的a在范围内。\nflags：DECLARATION的ATTRIBUTE链中出现pub→PUB、extern→EXTERN、export→EXPORT（按lexer关键字kind显式映射，未知修饰保持不设位）；参数链首flags位0→RECEIVER。parameter_count包括receiver。\n重名：函数名按原始字节比较；任一对重复→DUPLICATE，result写first_duplicate/second_duplicate为两个Entry序号（最先出现的一对，按第二个出现位置最小、再第一个最小），count写0，out不变。receiver函数（方法）不参与顶层重名检查。\n容量：函数个数>out.len→CAPACITY，out不变，result.count写所需个数（这是唯一允许在失败时写result的情形，须在说明中写清）；INVALID时out与result全不变。成功写out[0..count]与result（duplicate字段为NONE）。\n\n测试：真实lexer+syntax(mode 2)解析源码，<=16个模块夹具：空模块、仅import、混合struct/const/fn、pub/export/extern组合、receiver方法、0..6参数、1字节与64字节名字、64个函数、重名（相邻/相隔/与方法同名不算）。独立Python oracle按源码文本解析函数声明并比较全部Entry字段（节点索引用独立遍历核对）。手工破坏：链成环、越界索引、错误kind、FUNCTION.token非IDENTIFIER、token流缺EOF→INVALID；out刚好/短1/0。真实坏Dong：忽略ATTRIBUTE链（flags错误，按字段拒绝）；重名检查只比较前8字节（用前缀相同的两个名字，按状态拒绝）；容量不足时先写一项（原子性guard拒绝）。本项无机器码生成，不需要SysV桥，但仍需debug/release编译与原生执行生产代码。\n\n## 共用执行与复验要求\n本项仅声明文件；生产为Dong，无隐式分配/全局可变状态/OS调用，新模块不导出C符号（测试wrapper可导出）。不得修改code/lang、编译器、已集成依赖、协调器、其它负责人或本批其它任务的文件；需要的依赖只读暂存其完整传递闭包。不依赖未集成的C49/C50/C52或本批其它任务。\n先完整检查结果指针非NULL、8对齐、端点不回绕；所有输入切片非空时非NULL、自然对齐、元素乘法与端点不回绕，空可NULL；数量先于乘法、非法数量不读正文。out/结果指针/调用方工作区彼此及与全部完整输入（含未消费尾部）互斥；输入之间可重叠且只读。INVALID/UNSUPPORTED/SYNTAX一律先于CAPACITY。任何失败都保持out与结果指针全文不变（调用方工作区按正文说明可被改写）；成功只写精确前缀和结果，out未用尾部不变。不能先写out再回滚。\n真实复用正文指定组件，不复制既有lexer/parser/C51/C48算法，不以Python/C模拟生产。每个局部数组给出栈上界并遵守dongc每函数4096字节worst-case frame限制；大缓冲一律由调用方工作区提供。\n只跑本项checks：真实Dong debug/release编译、ELF64/COFF组装、显式SysV桥链接并原生执行生成的函数。单模式不同主要原生输入向量<=24，好/坏重放复用同输入不新增向量；不做全回归/性能基准。期望值由独立Python分词/解析/求值oracle给出，不用生产输出作为唯一oracle。执行生成函数时捕获真实RAX、全部callee-saved及RSP，观察地址/宿主栈锚放在桥自己的静态内存，先独立捕获现场再恢复宿主ABI后断言。\n真实坏Dong须正常构建、执行后按指定数值/状态/原子性拒绝；缺符号、组装失败、崩溃、超时或仅文本不同不算负控。描述符/尾部别名预检各自独立可达；结果端点溢出用8对齐的UINT64_MAX-(sizeof-1)夹具。输入真实只读保护须断言保护调用成功；源码、说明、测试、全部只读依赖/输入SHA前后稳定，0skip才可验收。\n由负责人在本人客户端通过worker MCP读取最新rev/完整任务书/review_note/write_paths/依赖，claim成功后实现；交付真实命令、tests/skips、双模式/双格式、SHA、坏体实际观察和未执行限制，再原编号submit。临时产物放在本人works的build/<编号>/<唯一目录>。不启动任何AI CLI或自动化，不自行accept/integrate、提交/推送、运行OS/VM。由协调者独立复验、验收和真实集成；组件通过不等于通用AST→IR、stage1/stage2、客体自举或L3完成。",
-      "status": "paused",
-      "rev": 2,
-      "write_paths": [
-        "deepseek-works/src/bootstrap/module_function_index.dg",
-        "deepseek-works/src/bootstrap/module_function_index.md",
-        "deepseek-works/tests/test_module_function_index.py",
-        "deepseek-works/deliveries/D28.md"
-      ],
-      "depends_on": [],
-      "checks": [
-        "discover:deepseek-works/tests:test_module_function_index.py"
-      ],
-      "auto_dispatch": false,
-      "auto_verify": false,
-      "complexity": "standard",
-      "created_at": "2026-10-20T04:03:55+00:00",
-      "updated_at": "2026-10-20T04:20:27+00:00",
-      "historical": false,
-      "document": "deepseek-works/tasks/D28-board.md",
-      "delivery": "deepseek-works/deliveries/D28.md",
-      "candidate": null,
-      "verification": null,
-      "review_note": "",
-      "legacy_hash": "aee4063e22a79e41b287a8ef7749f215bc95bb34c710305c04dc4edecf1621da",
-      "resume_status": "todo",
-      "pause_control": "confirmed"
-    },
-    {
       "auto_dispatch": false,
       "auto_verify": false,
       "candidate": null,
@@ -8820,35 +8965,463 @@
       ]
     },
     {
-      "id": "lmstudio:LM9",
-      "number": "LM9",
-      "owner": "lmstudio",
-      "title": "最简单固定数据：C48 u64 IR的8个操作码",
-      "description": "只做最简单固定数据录入，写一个JSON及交付两个文件，不写实现或测试。文件lmstudio-works/fixtures/u64-ir-operation-codes.json。\n顶层恰好version/operations两个字段且按此顺序，version为整数1；operations恰好如下顺序8项，每项恰好name/code两个字段且按此顺序，name为字符串，code为JSON整数：\nCONST 0\nCOPY 1\nADD 2\nSUB 3\nAND 4\nOR 5\nXOR 6\nIMUL 7\nUTF-8 JSON，不增删字段/项目，不改顺序，不把code写成字符串。独立检查已由协调者维护（lmstudio-works/tests/test_u64_ir_operation_codes.py），不修改检查文件；数据仅供后续可选补充。另写lmstudio-works/deliveries/LM9.md，说明固定数据录入，未运行测试明确写未运行，禁止编造通过或自举完成。\n通过自己的worker MCP查看最新rev、领取、实际落盘后提交；没有文件工具则说明并释放，不能以聊天正文冒充文件。LM Studio同时仅一项最简单任务。不改主线/他人/索引，不运行OS/VM、AI CLI、全回归、提交推送或自行验收。",
-      "status": "paused",
-      "rev": 2,
+      "id": "pool:GUEST1",
+      "number": "GUEST1",
+      "owner": "deepseek",
+      "title": "[L3] 客体编译输入的相对路径与根目录边界校验",
+      "description": "实现无分配路径门禁，为后续受限源码读取提供词法边界。显式输入允许根标识、相对UTF-8路径和调用者输出缓冲区；拒绝绝对路径、盘符、反斜杠、NUL、空路径段、.、..、越界长度及非法UTF-8；允许中文文件名，明确最大字节数。合法输出保持字节原样，不用大小写折叠或截断，禁止把字符串前缀当目录边界。预检失败所有输出/结果保持不变，容量不足不发布半路径。接口说明区分词法校验与实际文件系统权限/符号链接安全，不能宣称单靠路径可授予权限。复用现有严格UTF-8组件的主线实现，先核实路径及可用性。测试同名前缀兄弟目录、父目录穿越、精确容量、空与多字节字符、尾部canary和实际错误放行负控。\n共同约定：2026-10-20用户要求增加公共任务，不指定负责人，由DeepSeek/Claude/Cursor自主领取。先get_task/read_document读最新rev、完整范围与依赖，claim成功才执行，不抢占在途。只修改本项声明的pool-works文件，映射coordination/dongos_works/pool-works；源码路径相对code/，只读复用当前主线。每项交付Dong生产实现、接口说明、永久Python定向测试和交付报告，不以设计文档或Python替代生产实现。新模块独立，不直接修改内核、服务权限、现有编译器/配置或其它任务文件；需要额外文件先报告协调者。禁止自行提交推送、运行OS/VM、扩大64MiB内存/16KiB栈或授予写盘/进程权限。真实Dong编译执行测试须含debug/release、边界、失败原子性、canary及至少一个实际坏Dong实现负控；工具缺失须如实报告，不能skip冒充通过。最多24组主要语义向量，结构性非法参数可另列；保存来源SHA、命令、结果、失败与skip数量。独立复验及真实集成由Codex完成；本项成功不代表完整客体自举或L3完成。\n只读背景：code/docs/l3-native-selfhost-progress.md；当前已具frontend→lower_program→program_ir→nasm_program→compiler_driver与native_assembler，禁止重复已暂停CR43/CR44/D28/LM9的旧组件。",
+      "assignment_owner": null,
+      "status": "integrated",
+      "rev": 9,
       "write_paths": [
-        "lmstudio-works/fixtures/u64-ir-operation-codes.json",
-        "lmstudio-works/deliveries/LM9.md"
+        "pool-works/lang/bootstrap/guest_source_path.dg",
+        "pool-works/lang/bootstrap/guest_source_path.md",
+        "pool-works/tests/test_guest_source_path.py",
+        "pool-works/deliveries/GUEST1.md"
       ],
       "depends_on": [],
       "checks": [
-        "discover:lmstudio-works/tests:test_u64_ir_operation_codes.py"
+        "discover:pool-works/tests:test_guest_source_path.py"
       ],
       "auto_dispatch": false,
       "auto_verify": false,
-      "complexity": "simple",
-      "created_at": "2026-10-20T04:03:55+00:00",
-      "updated_at": "2026-10-20T04:20:28+00:00",
+      "complexity": "standard",
+      "created_at": "2026-10-20T04:44:46+00:00",
+      "updated_at": "2026-10-20T07:06:20+00:00",
       "historical": false,
-      "document": "lmstudio-works/tasks/LM9-board.md",
-      "delivery": "lmstudio-works/deliveries/LM9.md",
+      "document": "pool-works/tasks/GUEST1-board.md",
+      "delivery": "pool-works/deliveries/GUEST1.md",
+      "claimed_at": "2026-10-20T05:50:53+00:00",
+      "completed_at": "2026-10-20T06:02:46+00:00",
+      "claimed_by": "deepseek-mcp-199bcd394d05436c",
+      "candidate": null,
+      "verification": {
+        "passed": true,
+        "checks": [
+          {
+            "spec": "discover:pool-works/tests:test_guest_source_path.py",
+            "passed": true,
+            "tests": 19,
+            "skips": 0,
+            "returncode": 0,
+            "cancelled": false,
+            "timed_out": false,
+            "process_stopped": true,
+            "execution_exited": true,
+            "elapsed_seconds": 50.028
+          }
+        ],
+        "process_stopped": true,
+        "execution_exited": true,
+        "source_stable": true,
+        "fingerprint": {
+          "pool-works/lang/bootstrap/guest_source_path.dg": "80e046debce67153b7a655f7b7161985c99b9ce6e2cf318f7e3edfc5115044ee",
+          "pool-works/lang/bootstrap/guest_source_path.md": "319d28540ecf15a436110ae3860dfdc7cacd67450d8a3180c1e431dff99d171e",
+          "pool-works/tests/test_guest_source_path.py": "9cdeec44b23c8e5aee199374ca89fbfca770da11a6f50fd3d7e4d72f9403b466",
+          "pool-works/deliveries/GUEST1.md": "67c97ad430457270750bfc6f81fc481d2b3d772193a3fc36af2ff0246450ca4c"
+        },
+        "summary": "定向复验通过，等待源码/契约审查",
+        "finished_at": "2026-10-20T06:12:29+00:00",
+        "job": "60cfd4a66b364bd3885d847d2667e522"
+      },
+      "review_note": "实际审查R1完整out描述符修复、任务契约及永久测试：先验证整个out.len端点及与path/written完整区间别名，再判断容量；非法路径优先级和失败零写入保留。正式作业60cfd4a66b364bd3885d847d2667e522通过19tests/0skip/returncode0，process_stopped=true/source_stable=true，当前四交付指纹一致。debug/release安全永久探针验证written位于out尾部、path位于out尾部、out端点回绕均INVALID且全文不变，合法正控可成功；真实退化为prefix-only的坏Dong被指定状态/原子性拒绝，原5类坏体保留。本轮summary产物SHA已独立核对，原P2关闭。登记组件验收，未集成主线，路径门禁不授予文件权限。",
+      "legacy_hash": "f7a357f2bbf93bd7ca33811e269e9454fc3eac4aaaa65411812aa79ebb4ef78d",
+      "claim_from_status": "rework",
+      "claim_token": "98bb5f4f65bc42b3840fa55ac6b09304",
+      "integration_note": "已实际复制Dong生产/说明到code/lang/bootstrap及路径适配永久测试到code/lang/tests，生产与验收源逐字SHA相同；主线联合53 tests/0skip/97.642秒通过（GUEST1=19/GUEST2=21/GUEST3=13），包括debug/release真实编译执行、双格式及坏Dong负控，测试源码稳定。build/test/guest-integration/integration-files.json记录来源与目标指纹。此为组件真实集成，不代表客体I/O/内存已接线或完整L3完成。"
+    },
+    {
+      "id": "pool:GUEST2",
+      "number": "GUEST2",
+      "owner": "deepseek",
+      "title": "[L3] 通过调用者读回调装载有界源码字节",
+      "description": "实现无分配、有界、回调式源码装载适配器。仅处理调用者已授权且验证过的单个文件标识，不自行解析根目录或打开宿主文件。调用者提供scratch、最终out、结果和read_at回调；写明回调ABI及EOF/错误/短读/无进展定义，用现有Dong可编译的函数指针/extern方式验证，不臆造语言语法。分块读取到独立scratch，确认EOF和大小后一次发布out；输入恰好容量时需额外探测区分EOF与超长，不能截断当成功。检查offset加法、容量、全部可检查别名和失效描述符；失败out及尾部不变，scratch可变。拒绝回调返回超过请求长度，零进展有界退出，保持原错误阶段/码；空文件可成功。测试可控短读轨迹、逐字节、精确容量、超长、途中I/O失败、错误回调返回及坏实现负控。只实现读取器，不重复GUEST1路径逻辑，不授予实际I/O权限。\n共同约定：2026-10-20用户要求增加公共任务，不指定负责人，由DeepSeek/Claude/Cursor自主领取。先get_task/read_document读最新rev、完整范围与依赖，claim成功才执行，不抢占在途。只修改本项声明的pool-works文件，映射coordination/dongos_works/pool-works；源码路径相对code/，只读复用当前主线。每项交付Dong生产实现、接口说明、永久Python定向测试和交付报告，不以设计文档或Python替代生产实现。新模块独立，不直接修改内核、服务权限、现有编译器/配置或其它任务文件；需要额外文件先报告协调者。禁止自行提交推送、运行OS/VM、扩大64MiB内存/16KiB栈或授予写盘/进程权限。真实Dong编译执行测试须含debug/release、边界、失败原子性、canary及至少一个实际坏Dong实现负控；工具缺失须如实报告，不能skip冒充通过。最多24组主要语义向量，结构性非法参数可另列；保存来源SHA、命令、结果、失败与skip数量。独立复验及真实集成由Codex完成；本项成功不代表完整客体自举或L3完成。\n只读背景：code/docs/l3-native-selfhost-progress.md；当前已具frontend→lower_program→program_ir→nasm_program→compiler_driver与native_assembler，禁止重复已暂停CR43/CR44/D28/LM9的旧组件。",
+      "assignment_owner": null,
+      "status": "integrated",
+      "rev": 6,
+      "write_paths": [
+        "pool-works/lang/bootstrap/guest_source_reader.dg",
+        "pool-works/lang/bootstrap/guest_source_reader.md",
+        "pool-works/tests/test_guest_source_reader.py",
+        "pool-works/deliveries/GUEST2.md"
+      ],
+      "depends_on": [],
+      "checks": [
+        "discover:pool-works/tests:test_guest_source_reader.py"
+      ],
+      "auto_dispatch": false,
+      "auto_verify": false,
+      "complexity": "standard",
+      "created_at": "2026-10-20T04:44:47+00:00",
+      "updated_at": "2026-10-20T07:06:21+00:00",
+      "historical": false,
+      "document": "pool-works/tasks/GUEST2-board.md",
+      "delivery": "pool-works/deliveries/GUEST2.md",
+      "claimed_at": "2026-10-20T05:31:37+00:00",
+      "completed_at": "2026-10-20T05:36:54+00:00",
+      "claimed_by": "deepseek-mcp-199bcd394d05436c",
+      "candidate": null,
+      "verification": {
+        "passed": true,
+        "checks": [
+          {
+            "spec": "discover:pool-works/tests:test_guest_source_reader.py",
+            "passed": true,
+            "tests": 21,
+            "skips": 0,
+            "returncode": 0,
+            "cancelled": false,
+            "timed_out": false,
+            "process_stopped": true,
+            "execution_exited": true,
+            "elapsed_seconds": 92.433
+          }
+        ],
+        "process_stopped": true,
+        "execution_exited": true,
+        "source_stable": true,
+        "fingerprint": {
+          "pool-works/lang/bootstrap/guest_source_reader.dg": "131afe98052cd8c28ffbbb53b3c1ddadccb8f87196b4a4f9f2084240f7c93db4",
+          "pool-works/lang/bootstrap/guest_source_reader.md": "55a46f3b39f11ee5467a30ae10be3dfa0843bd4fafec544104997f4adb491cc5",
+          "pool-works/tests/test_guest_source_reader.py": "3b286a2c8823f1212357e50254a81e8a5d3d811c510c152bfb3487b5366bbb6c",
+          "pool-works/deliveries/GUEST2.md": "7f170a1915970ccae2b6d94db9d1c10a2dde7da1ec526b7b7df3d31aaa498ca8"
+        },
+        "summary": "定向复验通过，等待源码/契约审查",
+        "finished_at": "2026-10-20T05:59:56+00:00",
+        "job": "55ecdf4cea7f401c9627ac360d391648"
+      },
+      "review_note": "实际审查Dong生产load及回调ABI、描述符/完整scratch-out-result别名、短读推进、精确容量额外EOF探测、错误阶段/原码保持和单点发布；永久测试含真实debug/release与坏Dong负控。正式隔离作业55ecdf4cea7f401c9627ac360d391648通过21 tests/0skip/returncode0，92.433秒，process_stopped=true、source_stable=true，当前授权文件指纹一致。此前独立产物审查核对245个产物SHA，无阻塞发现。验收组件，未集成主线，不代表真实客体I/O或L3完成。",
+      "legacy_hash": "e32697db180562a516febb34901ca9617647f2faffba2c225e6911197dfd04de",
+      "claim_from_status": "todo",
+      "claim_token": "b52e3bb4e8b84f33aa4f6de31ce3925f",
+      "integration_note": "已实际复制Dong生产/说明到code/lang/bootstrap及路径适配永久测试到code/lang/tests，生产与验收源逐字SHA相同；主线联合53 tests/0skip/97.642秒通过（GUEST1=19/GUEST2=21/GUEST3=13），包括debug/release真实编译执行、双格式及坏Dong负控，测试源码稳定。build/test/guest-integration/integration-files.json记录来源与目标指纹。此为组件真实集成，不代表客体I/O/内存已接线或完整L3完成。"
+    },
+    {
+      "id": "pool:GUEST3",
+      "number": "GUEST3",
+      "owner": "claude",
+      "title": "[L3] 客体编译阶段内存预算与独占复用规划",
+      "description": "实现纯规划器，输入调用者的各阶段区域大小、对齐、外部常驻字节、栈预留和总预算，输出阶段内存布局与峰值。基于明确的活跃区间支持frontend→保留graph→backend→assembly的独占复用；graph/source等仍存活区域不得被覆盖。仅消费调用者提供的实测尺寸，不硬编码文档53MiB等结果当普遍保证。对齐必须2幂，所有加乘/align-up/区间结束检查usize溢出；精确预算成功、超一字节拒绝，输出记录及缓冲在失败不变。说明独占复用需要先释放所有旧别名，不实际移动graph，不重复现有compact实现。栈单独预算并报告16KiB不足的输入，不自动调大栈或承诺当前编译器可在客体运行。测试阶段峰值与总和区别、并存区域禁止重叠、零长度、极大数溢出、对齐、稳定确定性及故意复用活graph的坏实现负控。\n共同约定：2026-10-20用户要求增加公共任务，不指定负责人，由DeepSeek/Claude/Cursor自主领取。先get_task/read_document读最新rev、完整范围与依赖，claim成功才执行，不抢占在途。只修改本项声明的pool-works文件，映射coordination/dongos_works/pool-works；源码路径相对code/，只读复用当前主线。每项交付Dong生产实现、接口说明、永久Python定向测试和交付报告，不以设计文档或Python替代生产实现。新模块独立，不直接修改内核、服务权限、现有编译器/配置或其它任务文件；需要额外文件先报告协调者。禁止自行提交推送、运行OS/VM、扩大64MiB内存/16KiB栈或授予写盘/进程权限。真实Dong编译执行测试须含debug/release、边界、失败原子性、canary及至少一个实际坏Dong实现负控；工具缺失须如实报告，不能skip冒充通过。最多24组主要语义向量，结构性非法参数可另列；保存来源SHA、命令、结果、失败与skip数量。独立复验及真实集成由Codex完成；本项成功不代表完整客体自举或L3完成。\n只读背景：code/docs/l3-native-selfhost-progress.md；当前已具frontend→lower_program→program_ir→nasm_program→compiler_driver与native_assembler，禁止重复已暂停CR43/CR44/D28/LM9的旧组件。",
+      "assignment_owner": null,
+      "status": "integrated",
+      "rev": 9,
+      "write_paths": [
+        "pool-works/lang/bootstrap/guest_compile_memory.dg",
+        "pool-works/lang/bootstrap/guest_compile_memory.md",
+        "pool-works/tests/test_guest_compile_memory.py",
+        "pool-works/deliveries/GUEST3.md"
+      ],
+      "depends_on": [],
+      "checks": [
+        "discover:pool-works/tests:test_guest_compile_memory.py"
+      ],
+      "auto_dispatch": false,
+      "auto_verify": false,
+      "complexity": "standard",
+      "created_at": "2026-10-20T04:44:48+00:00",
+      "updated_at": "2026-10-20T07:06:23+00:00",
+      "historical": false,
+      "document": "pool-works/tasks/GUEST3-board.md",
+      "delivery": "pool-works/deliveries/GUEST3.md",
+      "claimed_at": "2026-10-20T05:53:11+00:00",
+      "completed_at": "2026-10-20T05:53:12+00:00",
+      "claimed_by": "claude-worker-guest3",
+      "candidate": null,
+      "verification": {
+        "passed": true,
+        "checks": [
+          {
+            "spec": "discover:pool-works/tests:test_guest_compile_memory.py",
+            "passed": true,
+            "tests": 13,
+            "skips": 0,
+            "returncode": 0,
+            "cancelled": false,
+            "timed_out": false,
+            "process_stopped": true,
+            "execution_exited": true,
+            "elapsed_seconds": 94.772
+          }
+        ],
+        "process_stopped": true,
+        "execution_exited": true,
+        "source_stable": true,
+        "fingerprint": {
+          "pool-works/lang/bootstrap/guest_compile_memory.dg": "0fea3cbb9e30ebbc9a51a0901d7517f47b713bd68380b9124066aaa25036831d",
+          "pool-works/lang/bootstrap/guest_compile_memory.md": "19d24177b05831071f37726cdec9e152c87cb096341b15c052b0b8d373974bda",
+          "pool-works/tests/test_guest_compile_memory.py": "61a024f9b031004b2b859eb6ca461dac918116fc17c52bd05d4ba020c6939475",
+          "pool-works/deliveries/GUEST3.md": "468cdab0e986d97587d0cdf73fea797133a90ab7448c64eb35dac05901e63029"
+        },
+        "summary": "定向复验通过，等待源码/契约审查",
+        "finished_at": "2026-10-20T06:01:50+00:00",
+        "job": "e8069a1bf067437b898b92c5c8e56514"
+      },
+      "review_note": "已实际审查R1源码：所有非OK路径先返回，Result/out全文保持，成功后一次发布；规划/对齐/阶段并存复用/溢出/栈门禁正确。独立13测试与debug/release额外安全探针均确认BUDGET时Result改变0字节，251产物SHA已审查。正式隔离作业e8069a1bf067437b898b92c5c8e56514通过13 tests/0skip/returncode0、source_stable=true、process_stopped=true，当前交付指纹一致。修复原P2，登记组件验收，未集成主线。",
+      "legacy_hash": "bc90307b5a861bff21c084f83f6e330d15dea0dc127885f270349b0b0016ca37",
+      "claim_from_status": "rework",
+      "claim_token": "a508b7fba1b2496db4798949e1e3e39f",
+      "integration_note": "已实际复制Dong生产/说明到code/lang/bootstrap及路径适配永久测试到code/lang/tests，生产与验收源逐字SHA相同；主线联合53 tests/0skip/97.642秒通过（GUEST1=19/GUEST2=21/GUEST3=13），包括debug/release真实编译执行、双格式及坏Dong负控，测试源码稳定。build/test/guest-integration/integration-files.json记录来源与目标指纹。此为组件真实集成，不代表客体I/O/内存已接线或完整L3完成。"
+    },
+    {
+      "id": "pool:GUEST4",
+      "number": "GUEST4",
+      "owner": "cursor",
+      "title": "[L3] 将现有编译器文本输出接入原生汇编器",
+      "description": "新增独立适配模块，接收真实frontend.Graph及现有compiler_driver.EmitLimits/工作区和native_assembler.Workspace，调用compiler_driver现有Dong发射函数后调用native_assembler.assemble，输出静态ELF和统一阶段结果。先查两模块导出签名，严格复用，不在Python/C重做IR或汇编，不修改既有模块。调用者明确传入口符号；说明函数入口并非OS启动入口，不生成假DongOS startup。最终ELF仅成功时发布；前阶段失败不调用后阶段；保留原status/stage/code，written=0，不把unsupported当成功；所有可检查描述符、容量、可写/只读和完整尾部别名在写前预检。参数复杂时先设计窄ABI，不申请隐藏内存。测试小型真实源码至少含局部变量、分支或循环、跨函数调用，用真实frontend构图，编译为ELF并由现有内核ELF验证器验证；宿主探针按已支持平台执行验证返回值，不能把可调用函数当OS进程启动；覆盖发射失败、汇编失败、容量失败和输出不变，加入损坏ELF/绕过汇编阶段的坏实现负控。该项不依赖任何新公共任务。\n共同约定：2026-10-20用户要求增加公共任务，不指定负责人，由DeepSeek/Claude/Cursor自主领取。先get_task/read_document读最新rev、完整范围与依赖，claim成功才执行，不抢占在途。只修改本项声明的pool-works文件，映射coordination/dongos_works/pool-works；源码路径相对code/，只读复用当前主线。每项交付Dong生产实现、接口说明、永久Python定向测试和交付报告，不以设计文档或Python替代生产实现。新模块独立，不直接修改内核、服务权限、现有编译器/配置或其它任务文件；需要额外文件先报告协调者。禁止自行提交推送、运行OS/VM、扩大64MiB内存/16KiB栈或授予写盘/进程权限。真实Dong编译执行测试须含debug/release、边界、失败原子性、canary及至少一个实际坏Dong实现负控；工具缺失须如实报告，不能skip冒充通过。最多24组主要语义向量，结构性非法参数可另列；保存来源SHA、命令、结果、失败与skip数量。独立复验及真实集成由Codex完成；本项成功不代表完整客体自举或L3完成。\n只读背景：code/docs/l3-native-selfhost-progress.md；当前已具frontend→lower_program→program_ir→nasm_program→compiler_driver与native_assembler，禁止重复已暂停CR43/CR44/D28/LM9的旧组件。",
+      "assignment_owner": null,
+      "status": "submitted",
+      "rev": 3,
+      "write_paths": [
+        "pool-works/lang/bootstrap/guest_compile_image.dg",
+        "pool-works/lang/bootstrap/guest_compile_image.md",
+        "pool-works/tests/test_guest_compile_image.py",
+        "pool-works/deliveries/GUEST4.md"
+      ],
+      "depends_on": [],
+      "checks": [
+        "discover:pool-works/tests:test_guest_compile_image.py"
+      ],
+      "auto_dispatch": false,
+      "auto_verify": false,
+      "complexity": "standard",
+      "created_at": "2026-10-20T04:44:48+00:00",
+      "updated_at": "2026-10-20T07:42:09+00:00",
+      "historical": false,
+      "document": "pool-works/tasks/GUEST4-board.md",
+      "delivery": "pool-works/deliveries/GUEST4.md",
+      "claimed_at": "2026-10-20T05:40:39+00:00",
+      "completed_at": "2026-10-20T07:42:09+00:00",
+      "claimed_by": "cursor-mcp-415ed5783a554f4e",
       "candidate": null,
       "verification": null,
       "review_note": "",
-      "legacy_hash": "368c5173126996884c34d9d21acc62b15d6427cce07ce217c0f549d649978739",
-      "resume_status": "todo",
-      "pause_control": "confirmed"
+      "legacy_hash": "cdb89275000cf91010e36a39f0375ee341fbdb55b1714b4486ff27064b4055af",
+      "claim_from_status": "todo",
+      "claim_token": "3504c8c3c21f426c901e5d6acd20cf82"
+    },
+    {
+      "id": "pool:GUEST5",
+      "number": "GUEST5",
+      "owner": "codex",
+      "title": "[L3] 编译产物写入与FLUSH确认的有界状态机",
+      "description": "实现独立无分配产物提交协议状态机。仅消费已有授权句柄和调用者提供的write_at/flush回调，不解析路径、不创建权限、不启动进程或关机。先定义窄ABI和结果：未开始/写入中/待flush/已持久化/失败，记录累计确认字节、失败阶段、错误码。正确处理短写、零进展、部分写后错误、超过请求长度的非法返回、offset溢出；完整写完才调用FLUSH且只有FLUSH成功才报告durable。失败禁止报告成功或自动启动下一stage，重试策略明确且有界，不隐式重试导致重复偏移。承认外部写盘副作用不能回滚，报告已写字节，不能宣称整个磁盘事务原子。空产物是否允许明确并测试，原始产物输入必须保持不变。测试回调事件序列、精确偏移和长度、多次短写、失败后无后续调用、flush失败/成功及虚假durable坏实现负控；不以host fsync假装真实DongOS FLUSH/重启验收。本项提供协议组件，真实系统接入另行任务。\n共同约定：2026-10-20用户要求增加公共任务，不指定负责人，由DeepSeek/Claude/Cursor自主领取。先get_task/read_document读最新rev、完整范围与依赖，claim成功才执行，不抢占在途。只修改本项声明的pool-works文件，映射coordination/dongos_works/pool-works；源码路径相对code/，只读复用当前主线。每项交付Dong生产实现、接口说明、永久Python定向测试和交付报告，不以设计文档或Python替代生产实现。新模块独立，不直接修改内核、服务权限、现有编译器/配置或其它任务文件；需要额外文件先报告协调者。禁止自行提交推送、运行OS/VM、扩大64MiB内存/16KiB栈或授予写盘/进程权限。真实Dong编译执行测试须含debug/release、边界、失败原子性、canary及至少一个实际坏Dong实现负控；工具缺失须如实报告，不能skip冒充通过。最多24组主要语义向量，结构性非法参数可另列；保存来源SHA、命令、结果、失败与skip数量。独立复验及真实集成由Codex完成；本项成功不代表完整客体自举或L3完成。\n只读背景：code/docs/l3-native-selfhost-progress.md；当前已具frontend→lower_program→program_ir→nasm_program→compiler_driver与native_assembler，禁止重复已暂停CR43/CR44/D28/LM9的旧组件。",
+      "assignment_owner": "codex",
+      "status": "submitted",
+      "rev": 14,
+      "write_paths": [
+        "pool-works/lang/bootstrap/guest_artifact_commit.dg",
+        "pool-works/lang/bootstrap/guest_artifact_commit.md",
+        "pool-works/tests/test_guest_artifact_commit.py",
+        "pool-works/deliveries/GUEST5.md"
+      ],
+      "depends_on": [],
+      "checks": [
+        "discover:pool-works/tests:test_guest_artifact_commit.py"
+      ],
+      "auto_dispatch": false,
+      "auto_verify": false,
+      "complexity": "standard",
+      "created_at": "2026-10-20T04:44:49+00:00",
+      "updated_at": "2026-10-20T07:29:58+00:00",
+      "historical": false,
+      "document": "pool-works/tasks/GUEST5-board.md",
+      "delivery": "pool-works/deliveries/GUEST5.md",
+      "claimed_at": "2026-10-20T07:21:45+00:00",
+      "completed_at": "2026-10-20T07:27:07+00:00",
+      "claimed_by": "codex-mcp-d76b66689d824a70",
+      "candidate": null,
+      "verification": {
+        "passed": true,
+        "checks": [
+          {
+            "spec": "discover:pool-works/tests:test_guest_artifact_commit.py",
+            "passed": true,
+            "tests": 16,
+            "skips": 0,
+            "returncode": 0,
+            "cancelled": false,
+            "timed_out": false,
+            "process_stopped": true,
+            "execution_exited": true,
+            "elapsed_seconds": 148.3
+          }
+        ],
+        "process_stopped": true,
+        "execution_exited": true,
+        "source_stable": true,
+        "fingerprint": {
+          "pool-works/lang/bootstrap/guest_artifact_commit.dg": "0264475d79e0b38cbef38bfe195c1e1f175ec1d3f95c9840b6181ac1c891dcf8",
+          "pool-works/lang/bootstrap/guest_artifact_commit.md": "cf430a4e5e1273d8e383ece9648d10584897fe9fd370724cd22d5080e2cfb342",
+          "pool-works/tests/test_guest_artifact_commit.py": "370022da1981e09ef5bdf77ad05a27edd6959e0ec34b35a8e57c4b6c1bff72a6",
+          "pool-works/deliveries/GUEST5.md": "962c7bf86ed3e4cf6155b435ecbace8c1351525f8d0be6319321aa0e0ee84fb4"
+        },
+        "summary": "定向复验通过，等待源码/契约审查",
+        "finished_at": "2026-10-20T07:29:58+00:00",
+        "job": "10c71d602ff848a996219f1232bc87cc"
+      },
+      "review_note": "R1旧PENDING_FLUSH未写满缺陷已修；正式隔离38dffc1e368b43f288d8eec1ba86a60a已16 tests/0skip/source_stable。但独立release安全原生探针发现计数器不变量仍漏：init(total=4)，status=WRITING、written=0、stalls=0、attempts=UINT64_MAX，step接受并先attempts+=1回绕到0，正常执行write_at确认4字节，发布PENDING_FLUSH(written=4,total=4,attempts=0)；下一次step立刻INVALID且0flush，自己的输出不能继续。没有崩溃或构建失败，探针只链接未改生产的release Dong对象。违反文档每次非INVALID发布一致State/计数有界。请在回调/State写入前拒绝不可能或会溢出的attempts组合（按已写字节/零进展次数约束，注意边界算术自身不溢出）；其余status的计数关系同审，保证step成功后产出的状态可被下一step接受。新增安全永久边界与正控/坏体灵敏度，不能只改文本或放宽后继检查。证据reviews/2026-10-20-GUEST5-R1-counter.c与-counter-evidence.json，source SHA c9e839cf203cb2cda9c6bca75d67fdacce87d3bf40ebfacf2c0d814bb57ddba0。仅改原四文件，重新原编号提交，不验收集成。",
+      "legacy_hash": "6c1d72827a8c2092920475a8b96249b4ae6b53e7602cd4bd9ba0f08f12a9ccca",
+      "claim_token": "d8404bb1aa1c42c1844104ea3e8c3806",
+      "assignment_history": [
+        {
+          "at": "2026-10-20T07:21:36+00:00",
+          "from_owner": "deepseek",
+          "to_owner": "codex",
+          "previous_claimed_by": "deepseek-mcp-199bcd394d05436c",
+          "note": "用户再次明确要求由当前会话完成L3功能；接管已提交后审查退回、当前非in_progress的GUEST5 R2，直接完成已实证的计数器不变量修复。保留原任务编号、四文件范围、全部交付/审查历史；不接管仍在编辑的GUEST4。"
+        }
+      ],
+      "claim_from_status": "rework"
+    },
+    {
+      "id": "pool:MCPPOOL1",
+      "number": "MCPPOOL1",
+      "owner": "cursor",
+      "title": "MCP公共任务池适配：DeepSeek、Claude、Cursor自主领取",
+      "description": "2026-10-20用户新规则：发布新任务不指定负责人，由DeepSeek、Claude、Cursor自主领取执行。覆盖ALLOCATION旧的定向派单与Claude不新增等历史偏好。本项不指定owner，任一上述客户端领取后完成共用MCP适配，不重复开发三个服务。\n\n只读基线：工作区D:/projects/projects3/2026/dongos；coordination/dongos_coordination/mcp_server.py、mcp_config.py、client.py、store.py；coordination/tests/test_mcp.py、test_mcp_config.py；coordination/dongos_coordination/docs/MCP.md及coordination/README.md。store已支持公共pool编号、assignment_owner、领取和claim_token，MCP已有本人+unassigned初步查询；先识别缺口再改，禁止重复建设。\n\n授权与交付：项目source_root为code/，协调源码在coordination/，不能混淆。所有改动只写声明的pool-works候选文件及自动交付报告；pool-works映射coordination/dongos_works/pool-works。mcp-pool内候选文件按相对路径一一对应coordination/正式文件。记录原文件SHA256、精确映射和差异；从最新正式源码只读创建临时完整测试副本并覆盖候选代码，测试临时HTTP/数据库，不能操作生产任务。两项pool-works/tests测试应自带临时夹具和导入路径，可被声明discover直接执行，不依赖未交付的手工副本。禁止修改正式协调源码、真实客户端配置、SQLite/index.json及其它任务文件，不用../绕过范围。基线变化须重新合并报告。候选提交后由Codex独立复验并真实集成。\n\n功能：\n1. initialize instructions、get_workflow、tools/list及文档统一说明默认公共池发布，三个客户端自主领取；启动owner继续绑定真实领取身份。worker不可覆盖owner/agent_id，不增加发布/验收/集成管理权限。\n2. worker默认可查公共待领取与本人任务；owner=unassigned只查公共池。状态/关键词/分页/总数正确、无重复漏项；列出不等于领取。说明依赖、文件冲突处理。\n3. coordinator create_task省略owner创建owner为空的pool任务；完整pool编号有效。保留旧显式负责人任务兼容，但新任务默认不指定。领取后任务ID和pool授权路径不变。\n4. DeepSeek/Claude/Cursor均先读完整任务书、最新rev、依赖、review_note、write_paths，领取成功才编辑。相同rev并发领取仅一胜者；释放回公共池可供另一成员领取；旧rev、旧agent、旧claim_token及迟到提交不能覆盖新轮次；暂停停止确认与依赖/文件冲突保护保留。409重新查询，不抢占。\n5. 核对mcp_config为三客户端输出正确worker身份及共用服务，仅必要时改候选配置生成代码；保留其它服务和配置备份语义。不安装真实配置、不输出凭据、不自动启动模型或轮询派单；文档给统一客户端提示及服务重载说明。\n6. 若发现必须修改store/client才能完成，提交具体阻塞证据，由协调者另扩授权；不得越范围修改。\n\n验收必须真实stdio MCP子进程+临时HTTP服务，不仅mock：三客户端分别发现公共任务并claim→submit；协调者省略owner发布；两个worker竞争；释放后换成员领取及旧令牌/版本拒绝；依赖与文件冲突；筛选分页；角色隔离/身份不可覆盖；旧定向任务兼容；配置生成与其它配置保留。声明定向测试真实通过且零skip，报告实际命令、数量、失败/skip、SHA和候选映射，未运行如实说明。不启动AI CLI、不提交推送、不运行OS/VM；submitted不是accepted/integrated，执行者不能自行验收。",
+      "assignment_owner": null,
+      "status": "integrated",
+      "rev": 8,
+      "write_paths": [
+        "pool-works/mcp-pool/dongos_coordination/mcp_server.py",
+        "pool-works/mcp-pool/dongos_coordination/mcp_config.py",
+        "pool-works/tests/test_mcp_pool.py",
+        "pool-works/tests/test_mcp_pool_config.py",
+        "pool-works/mcp-pool/dongos_coordination/docs/MCP.md",
+        "pool-works/mcp-pool/README.md",
+        "pool-works/deliveries/MCPPOOL1.md"
+      ],
+      "depends_on": [],
+      "checks": [
+        "discover:pool-works/tests:test_mcp_pool.py",
+        "discover:pool-works/tests:test_mcp_pool_config.py"
+      ],
+      "auto_dispatch": false,
+      "auto_verify": false,
+      "complexity": "standard",
+      "created_at": "2026-10-20T04:37:26+00:00",
+      "updated_at": "2026-10-20T07:34:44+00:00",
+      "historical": false,
+      "document": "pool-works/tasks/MCPPOOL1-board.md",
+      "delivery": "pool-works/deliveries/MCPPOOL1.md",
+      "claimed_at": "2026-10-20T04:43:36+00:00",
+      "completed_at": "2026-10-20T06:03:14+00:00",
+      "claimed_by": "cursor-mcp-415ed5783a554f4e",
+      "candidate": null,
+      "verification": {
+        "passed": true,
+        "checks": [
+          {
+            "spec": "discover:pool-works/tests:test_mcp_pool.py",
+            "passed": true,
+            "tests": 6,
+            "skips": 0,
+            "returncode": 0,
+            "cancelled": false,
+            "timed_out": false,
+            "process_stopped": true,
+            "execution_exited": true,
+            "elapsed_seconds": 34.954
+          },
+          {
+            "spec": "discover:pool-works/tests:test_mcp_pool_config.py",
+            "passed": true,
+            "tests": 6,
+            "skips": 0,
+            "returncode": 0,
+            "cancelled": false,
+            "timed_out": false,
+            "process_stopped": true,
+            "execution_exited": true,
+            "elapsed_seconds": 3.116
+          }
+        ],
+        "process_stopped": true,
+        "execution_exited": true,
+        "source_stable": true,
+        "fingerprint": {
+          "pool-works/mcp-pool/dongos_coordination/mcp_server.py": "5417cb1321b84043a81b93589e1243b591044b93d21ca4169c01c6a5b4ca6a51",
+          "pool-works/mcp-pool/dongos_coordination/mcp_config.py": "a91518fed911f286db1b92e5087772513a18b0a411fa1f01bae51c5b176b3c8f",
+          "pool-works/tests/test_mcp_pool.py": "e488f4aff9a7fb071e1537d22504213f424688b77dfc73efc26589d865e7189d",
+          "pool-works/tests/test_mcp_pool_config.py": "017a28861507cb5cd594dff0c086405113b27da730da203251ddc77fdea3d021",
+          "pool-works/mcp-pool/dongos_coordination/docs/MCP.md": "32030a82a27295b282bbf6e02156f4cef881ec3d10e98592b90f171b71763c4d",
+          "pool-works/mcp-pool/README.md": "f58c9232ede99ff4065229288f4988fd628a927b20c9483c2b1ec9fbbcbbee42",
+          "pool-works/deliveries/MCPPOOL1.md": "6440bd6cde535a8d9c0f5c8f83496fdc21a047176325c32b3e5e6ed3e480e807"
+        },
+        "summary": "定向复验通过，等待源码/契约审查",
+        "finished_at": "2026-10-20T06:07:18+00:00",
+        "job": "46bf8df03c054df1a168546082a90e48"
+      },
+      "review_note": "已实际审查共用MCP源码、配置生成及新规则文档：省略owner发布公共池、worker身份不可覆盖/不可升权、默认本人+公共池查询去重排序分页、稳定pool任务编号、领取释放与旧令牌保护。两份永久测试已适配正式隔离目录，只读服务依赖复制到临时包且前后指纹守卫，不碰生产状态。正式作业46bf8df03c054df1a168546082a90e48两项checks合计12tests/0skip/returncode0，process_stopped=true、source_stable=true，实际stdio/临时HTTP竞争与配置保留回归均通过。当前授权文件与正式指纹一致，登记验收，尚未将候选MCP代码集成正式服务。",
+      "legacy_hash": "1a71793671d0252b94ef3a21d5dee113a69cd87f4e36ee6ae8d2d5fdb8156910",
+      "claim_from_status": "todo",
+      "claim_token": "b34339cecacf4d9a9a05158851af29f7",
+      "integration_note": "已集成：候选 mcp_server.py/mcp_config.py/docs/MCP.md 按行尾约定回写 coordination/dongos_coordination；两项永久回归复制为 coordination/tests/test_mcp_pool.py、test_mcp_pool_config.py（改为针对正式包）；与 test_mcp 合计29项通过、0skip（98.2秒）。需重载客户端MCP连接或新建会话后新规则才生效；本次未改真实客户端配置。"
+    },
+    {
+      "id": "pool:WINVERIFY1",
+      "number": "WINVERIFY1",
+      "owner": "claude",
+      "title": "修复Windows定向复验正常退出后无法登记完成",
+      "description": "C52独立复验发现真实阻塞：作业ec1d698d5863424b8f0726a07d659303，6tests/0skip/returncode0/source_stable=true，但runner.run_process在Windows正常退出返回process_stopped=None、execution_exited=True，store.finish因process_stopped不是True将其挂为停止未确认，未保存task.verification。详见reviews/2026-10-20-C52-R1-review.md和-evidence.json。只修复正常完成与进程停止证明之间的契约，不能简单将None改True或弱化暂停/取消保护；Windows领导进程退出不等于所有子进程退出。采用可验证的进程树/Job Object生命周期或同等方案，明确正常完成、残留子进程、暂停、超时、取消、服务重启的边界。测试覆盖Windows真实正常父子进程退出可登记复验、残留子进程不误报停止、取消/暂停等待停止、迟到旧令牌结果不能覆写、非Windows兼容。保存独立测试和证据。正式代码只读，声明的pool-works/win-verify候选按相对路径对应coordination/，pool-works/tests新永久测试自建临时完整测试副本，不能依赖未交付临时文件。禁止改正式服务/生产状态库/index或手填verification，不自动重启服务。不得覆盖Cursor在途MCPPOOL1文件，不修改其候选。由DeepSeek/Claude/Cursor任一自主领取，未指定负责人；提交后由Codex独立复验及实际集成，修复集成后才恢复C52正式验证。",
+      "assignment_owner": null,
+      "status": "integrated",
+      "rev": 9,
+      "write_paths": [
+        "pool-works/win-verify/dongos_coordination/runner.py",
+        "pool-works/win-verify/dongos_coordination/store.py",
+        "pool-works/tests/test_windows_verification_finish.py",
+        "pool-works/deliveries/WINVERIFY1.md"
+      ],
+      "depends_on": [],
+      "checks": [
+        "discover:pool-works/tests:test_windows_verification_finish.py"
+      ],
+      "auto_dispatch": false,
+      "auto_verify": false,
+      "complexity": "standard",
+      "created_at": "2026-10-20T05:01:44+00:00",
+      "updated_at": "2026-10-20T06:15:44+00:00",
+      "historical": false,
+      "document": "pool-works/tasks/WINVERIFY1-board.md",
+      "delivery": "pool-works/deliveries/WINVERIFY1.md",
+      "claimed_at": "2026-10-20T05:58:39+00:00",
+      "completed_at": "2026-10-20T06:14:02+00:00",
+      "claimed_by": "manual:claude",
+      "candidate": null,
+      "verification": {
+        "passed": true,
+        "checks": [
+          {
+            "spec": "discover:pool-works/tests:test_windows_verification_finish.py",
+            "passed": true,
+            "tests": 11,
+            "skips": 0,
+            "returncode": 0,
+            "cancelled": false,
+            "timed_out": false,
+            "process_stopped": true,
+            "execution_exited": true,
+            "elapsed_seconds": 48.706
+          }
+        ],
+        "process_stopped": true,
+        "execution_exited": true,
+        "source_stable": true,
+        "fingerprint": {
+          "pool-works/win-verify/dongos_coordination/runner.py": "40504e6f0ca2beca2d6e1a08b9c91735d978529854c575f3a4590cc325b08abe",
+          "pool-works/tests/test_windows_verification_finish.py": "6d756663e59ea4cb0a1cfd21b55372cebefc2bb61d7b3da422fc3a37a310fca1",
+          "pool-works/deliveries/WINVERIFY1.md": "32fec1d934155889d1f6013b12b8fe4304410f0f49f991856376191a951c0314"
+        },
+        "summary": "定向复验通过，等待源码/契约审查",
+        "finished_at": "2026-10-20T06:15:12+00:00",
+        "job": "c0f8c5285d28423e80eafea8e049c648"
+      },
+      "review_note": "按用户明确授权Codex接续集成适配。已实际审查WindowsJob的挂起创建→先归入Job→恢复、无breakaway、活动计数为0才确认停止、残留后代终止、无Job保守回退及服务重启停止确认，未把None伪造为True。修复测试正式隔离目录的只读依赖定位、依赖前后SHA守卫和集成后候选相同的误断言。正式隔离作业c0f8c5285d28423e80eafea8e049c648通过11tests/0skip，48.706秒，process_stopped=true/source_stable=true，当前任务文件指纹一致；主线coordination/tests/test_windows_verification_finish.py另11tests/0skip通过44.470秒。确认正常父子退出保存verification，残留/暂停/取消/旧令牌/重启/失效Job保护均真实子进程通过。源码runner已复制到正式包，等待下一步登记实际集成。",
+      "legacy_hash": "e044fe62ff9efb3ef09962149809e9866c5bd4db51fcc27b59462f49c585e877",
+      "claim_from_status": "rework",
+      "claim_token": "97d006dcdc2e4e77849459ac2cd3624a",
+      "integration_note": "已完成真实文件集成：候选runner.py复制至coordination/dongos_coordination/runner.py，两者SHA256同为40504e6f0ca2beca2d6e1a08b9c91735d978529854c575f3a4590cc325b08abe；新增coordination/tests/test_windows_verification_finish.py对正式包运行11项零skip回归。原runner备份coordination/.local/WINVERIFY1-integration/runner-before.py。通过正式shutdown接口停止旧服务13684，无活动/排队作业，隐藏启动新服务1388，HTTP/MCP恢复且多项正式复验process_stopped=true正常登记。任务正式11项零skip与文件稳定已验收，不改库/索引、不伪造复验。"
     }
   ],
   "issues": [],
@@ -9580,6 +10153,84 @@
       ]
     },
     {
+      "id": "cursor:CR43",
+      "number": "CR43",
+      "owner": "cursor",
+      "title": "[L3] 源码u64函数声明→C51→C48完整SysV函数",
+      "description": "所属阶段：L3：Dong自举后端 → 通用AST→IR降级的第一段“声明级”接线。新增bootstrap.u64_source_function：把真实lexer token流中的一个完整函数声明 `fn NAME(p0:u64,...)u64 { return EXPR; }` 经真实syntax解析、C51降级、C48发射成完整NASM函数文本。首次让函数名、参数表和函数体来自源码本身，而不是由测试从token流里手工定位。只覆盖单return体，局部绑定/赋值由CR44另做，不在本项实现。\n\n```text\nmodule bootstrap.u64_source_function;\nimport bootstrap.lexer as lex; import bootstrap.expression as ast; import bootstrap.syntax as syn;\nimport bootstrap.u64_expression_ir as lower;   // C51 integrated rev6\nimport bootstrap.nasm_u64_function as f;      // C48 integrated rev13\npub const OK:u64=0; INVALID=1; CAPACITY=2; UNSUPPORTED=3; SYNTAX=4;\npub unsafe fn emit(module_name:[]const u8, source:[]const u8, tokens:[]const lex.Token,\n                   declaration_nodes:[]ast.Node, expression_nodes:[]ast.Node, ir:[]f.Instruction,\n                   out:[]u8, written:*usize)u64\n```\n\n输入与工作区：tokens是真实lexer对整个source的完整输出（末项EOF），source<=4096、tokens 1..256。声明从token 0开始。declaration_nodes（1..256项）、expression_nodes（1..24项）、ir（1..24项）是调用方工作区，本函数可在任何返回路径改写它们，但不得越界；它们与source/tokens/module_name/out/written两两互斥。module_name 1..64字节，按C48/CR3规则交给C48编码。\n\n流程（必须按此顺序真实调用组件）：\n1. 描述符/别名/数量预检（INVALID）。\n2. syn.parse(mode=4, source, tokens, 0, declaration_nodes, max_depth=32, &r)。parser返回SYNTAX→SYNTAX；CAPACITY→CAPACITY（工作区不足，仍先于out容量）；DEPTH或UNSUPPORTED→UNSUPPORTED；INVALID→INVALID。成功后r.next必须是EOF token（只允许一个声明），否则SYNTAX。\n3. 形状（不满足一律UNSUPPORTED，不尝试折叠）：根为DECLARATION且ATTRIBUTE链为空（不支持pub/export/extern等修饰）；a为FUNCTION，c为非NONE的BLOCK；参数链0..6项，无receiver位，每个参数类型是TYPE_NAME且名字拼写恰为`u64`（限定名、指针、切片、可选等均UNSUPPORTED）；返回类型同样为`u64`；BLOCK恰有一个语句，为RETURN且a非NONE。参数名两两不同的检查交给C51（重复→INVALID）。\n4. 表达式重解析：RETURN节点token是`return`关键字，表达式起点为其下一个token；ast.parse(source,tokens,起点,expression_nodes,max_depth=32,allow_struct=false,&e)。e.next必须是紧跟的`;`，且`;`之后恰是`}`，与声明树一致，否则INVALID（说明为何不可能在合法parse后出现时也要保留该检查）。expression_nodes不足→CAPACITY，SYNTAX/DEPTH按第2步映射。\n5. 参数token数组：按声明顺序收集每个FUNCTION_PARAMETER的名字token索引，放在不超过6项的局部数组。\n6. lower.lower(source,tokens,expression_nodes[0..e.count],e.root,params,ir,&lr)：C51的INVALID/UNSUPPORTED/CAPACITY原样映射。\n7. f.emit(module_name, 函数名token拼写, 参数个数, lr.slot_count, ir[0..lr.instruction_count], lr.return_slot, out, written)：C48的INVALID→INVALID（应不可达，须说明）、CAPACITY→CAPACITY。C48自身保证失败时out/written不变；本模块在调用C48前不写out/written。\n函数名拼写为1..64字节（超出→UNSUPPORTED）。不得在本模块内重新实现参数捕获、表达式降级或文本拼接；生成文本应与“同一参数token直接调用C51再C48”的结果逐字节一致。\n\n永久测试（cursor-works/tests/test_u64_source_function.py）：暂存本模块、C51/C48及前端完整只读闭包；实际lexer产生token。<=20个原生向量：0/1/6参数、单NAME、单常量、全部六种运算、优先级与括号、0/MAX/高位环绕、十六进制/二进制/下划线字面量、1字节与64字节函数名、23节点最大表达式。每个向量：独立Python oracle求值；把同一函数源码的文本与“测试中定位token直接调用C51+C48”的参考输出逐字节比较；全部生成函数放进一个汇编文件并真实call/ret核对RAX与callee-saved。拒绝类（只观察状态与原子性，不执行机器码）：语法错误→SYNTAX；两个声明/尾部多余token→SYNTAX；pub fn、extern fn、receiver、参数或返回类型为u32/*u64/[]u8/?u64、多语句体、无返回值return、if/let体→UNSUPPORTED；C51不支持的运算（/、<<、比较、调用）→UNSUPPORTED；未知名字、重复参数→INVALID；declaration_nodes、expression_nodes、ir工作区刚好/短1→CAPACITY；out exact/短1/0/富余。真实坏Dong：把参数token顺序反转（2参数SUB夹具，正常返回后按RAX拒绝）；忽略r.next检查（两声明源码，按状态拒绝）；在C48 CAPACITY前先写written（按原子性guard拒绝）；另加生成函数的RBX保持数值负控（C48坏副本ret前add rbx,8，按RBX数值拒绝）。\n\n## 共用执行与复验要求\n本项仅声明文件；生产为Dong，无隐式分配/全局可变状态/OS调用，新模块不导出C符号（测试wrapper可导出）。不得修改code/lang、编译器、已集成依赖、协调器、其它负责人或本批其它任务的文件；需要的依赖只读暂存其完整传递闭包。不依赖未集成的C49/C50/C52或本批其它任务。\n先完整检查结果指针非NULL、8对齐、端点不回绕；所有输入切片非空时非NULL、自然对齐、元素乘法与端点不回绕，空可NULL；数量先于乘法、非法数量不读正文。out/结果指针/调用方工作区彼此及与全部完整输入（含未消费尾部）互斥；输入之间可重叠且只读。INVALID/UNSUPPORTED/SYNTAX一律先于CAPACITY。任何失败都保持out与结果指针全文不变（调用方工作区按正文说明可被改写）；成功只写精确前缀和结果，out未用尾部不变。不能先写out再回滚。\n真实复用正文指定组件，不复制既有lexer/parser/C51/C48算法，不以Python/C模拟生产。每个局部数组给出栈上界并遵守dongc每函数4096字节worst-case frame限制；大缓冲一律由调用方工作区提供。\n只跑本项checks：真实Dong debug/release编译、ELF64/COFF组装、显式SysV桥链接并原生执行生成的函数。单模式不同主要原生输入向量<=24，好/坏重放复用同输入不新增向量；不做全回归/性能基准。期望值由独立Python分词/解析/求值oracle给出，不用生产输出作为唯一oracle。执行生成函数时捕获真实RAX、全部callee-saved及RSP，观察地址/宿主栈锚放在桥自己的静态内存，先独立捕获现场再恢复宿主ABI后断言。\n真实坏Dong须正常构建、执行后按指定数值/状态/原子性拒绝；缺符号、组装失败、崩溃、超时或仅文本不同不算负控。描述符/尾部别名预检各自独立可达；结果端点溢出用8对齐的UINT64_MAX-(sizeof-1)夹具。输入真实只读保护须断言保护调用成功；源码、说明、测试、全部只读依赖/输入SHA前后稳定，0skip才可验收。\n由负责人在本人客户端通过worker MCP读取最新rev/完整任务书/review_note/write_paths/依赖，claim成功后实现；交付真实命令、tests/skips、双模式/双格式、SHA、坏体实际观察和未执行限制，再原编号submit。临时产物放在本人works的build/<编号>/<唯一目录>。不启动任何AI CLI或自动化，不自行accept/integrate、提交/推送、运行OS/VM。由协调者独立复验、验收和真实集成；组件通过不等于通用AST→IR、stage1/stage2、客体自举或L3完成。",
+      "status": "paused",
+      "rev": 3,
+      "write_paths": [
+        "cursor-works/src/bootstrap/u64_source_function.dg",
+        "cursor-works/src/bootstrap/u64_source_function.md",
+        "cursor-works/tests/test_u64_source_function.py",
+        "cursor-works/deliveries/CR43.md"
+      ],
+      "depends_on": [
+        "claude:C51",
+        "claude:C48"
+      ],
+      "checks": [
+        "discover:cursor-works/tests:test_u64_source_function.py"
+      ],
+      "auto_dispatch": false,
+      "auto_verify": false,
+      "complexity": "standard",
+      "created_at": "2026-10-20T04:03:54+00:00",
+      "updated_at": "2026-10-20T06:50:45+00:00",
+      "historical": false,
+      "document": "cursor-works/tasks/CR43-board.md",
+      "delivery": "cursor-works/deliveries/CR43.md",
+      "candidate": null,
+      "verification": null,
+      "review_note": "",
+      "legacy_hash": "d6abc45215b3c79b5ccdb558aaf28ec0ab72527a5ed820ef264658cfe71b70d1",
+      "resume_status": "todo",
+      "pause_control": "confirmed",
+      "archived": true,
+      "archived_at": "2026-10-20T06:50:45+00:00",
+      "archive_note": "用户要求处理剩余暂停任务。已核对本项paused rev2、停止已确认、无领取者及活动/排队作业，声明生产文件未落盘；依据ALLOCATION.md的2026-10-20暂停结论及当前主线lower_program/program_ir/names.collect，原窄u64接线/函数清单/操作码任务已被通用原生编译链取代，继续执行会重复建设。归档退出默认清单，保留任务书、原状态及事件历史；不恢复、不转派，不标记验收或集成，不删除文件或修改数据库/index。"
+    },
+    {
+      "id": "cursor:CR44",
+      "number": "CR44",
+      "owner": "cursor",
+      "title": "[L3] 带let/var绑定与赋值的u64函数体块→C48 IR",
+      "description": "所属阶段：L3：Dong自举后端 → 通用AST→IR降级的“局部绑定/赋值”接线。新增bootstrap.u64_block_ir：把真实syntax解析得到的函数体BLOCK（let/var绑定、对var的赋值、最后一条return）降为C48的直线Instruction序列。每个表达式真实复用C51，通过把“当前可见名字”作为C51的参数token列表并重映射槽号实现，不得重写C51的表达式降级。与CR43互不依赖、文件不重叠；不做声明级解析，不发射文本。\n\n```text\nmodule bootstrap.u64_block_ir;\nimport bootstrap.lexer as lex; import bootstrap.expression as ast;\nimport bootstrap.u64_expression_ir as lower;   // C51 integrated rev6\nimport bootstrap.nasm_u64_function as f;      // C48 integrated rev13，仅用Instruction和操作码\npub const OK:u64=0; INVALID=1; CAPACITY=2; UNSUPPORTED=3; SYNTAX=4;\npub struct Result{pub instruction_count:usize,pub slot_count:usize,pub return_slot:usize}   // 24字节，8对齐\npub unsafe fn lower_block(source:[]const u8, tokens:[]const lex.Token, nodes:[]const ast.Node, block:usize,\n                          parameter_tokens:[]const usize, expression_nodes:[]ast.Node, scratch:[]f.Instruction,\n                          out:[]f.Instruction, result:*Result)u64\n```\n\n输入：source<=4096，tokens 1..256为真实lexer完整输出；nodes 1..256为真实syntax（mode 1或从FUNCTION取c）产生的只读树，block<nodes.len且kind=BLOCK；parameter_tokens 0..6项，指向IDENTIFIER，定义槽0..p-1。expression_nodes（1..24项）与scratch（1..24项）是调用方工作区，任何返回路径都可被改写，但不得越界，二者与全部输入/out/result互斥。\n\n支持的语句（链顺序即执行顺序，1..8条）：\n- BINDING：op为let或var（const→UNSUPPORTED），必须有类型a且为TYPE_NAME `u64`、必须有初值b；token序列严格为`let|var NAME : u64 = EXPR ;`，表达式起点为NAME之后第4个token（不符合→UNSUPPORTED）。名字不得与任何参数或已声明局部重名（禁止遮蔽，INVALID）。新局部取下一个空闲槽。\n- ASSIGN：op必须是普通`=`（复合赋值→UNSUPPORTED），目标a是NAME且解析到var局部（参数或let→INVALID，未知→INVALID），表达式起点为赋值运算符token的下一个。\n- RETURN：必须是最后一条且有值；表达式起点为`return`下一个token。缺少最终return或return后还有语句→UNSUPPORTED。\n- 其它语句（if/while/loop/for/defer/match/unsafe/asm/break/continue/调用/嵌套块）→UNSUPPORTED。\n名字解析只在本块内：参数+已出现的局部，总数任何时刻<=6（超出→UNSUPPORTED）。\n\n每个表达式：ast.parse(source,tokens,起点,expression_nodes,32,false,&e)，e.next必须是`;`（否则INVALID，因为它与已给语法树矛盾）；然后lower.lower(source,tokens,expression_nodes[0..e.count],e.root,visible,scratch,&lr)，其中visible按“参数顺序、再局部声明顺序”列出当前可见名字token。C51输出槽重映射：s<k（k=visible个数）→该名字当前槽；s>=k→base+(s-k)，base为本块已用槽数，然后base+=lr.instruction_count。所有指令的destination/left/right都按此重映射，operation/immediate原样。BINDING与ASSIGN随后追加一条COPY(destination=局部槽,left=表达式结果槽,right=0,immediate=0)，即使表达式只是NAME也追加；RETURN不追加，return_slot=结果槽。C51的INVALID/UNSUPPORTED原样映射；C51 CAPACITY（scratch不足）→CAPACITY；parse SYNTAX→SYNTAX、DEPTH/UNSUPPORTED→UNSUPPORTED、CAPACITY→CAPACITY。\n全块累计：槽数>32或指令>64（C48上限）→UNSUPPORTED；slot_count=max(1,已用槽)。全部语句完成检查和降级后再判断out容量（不足→CAPACITY），然后一次性写out前缀与*result；中间累计只能放在有界局部或scratch之外的局部计数，不能先写out。注意：后续表达式会复用expression_nodes与scratch，所以已降级的指令须在局部有界缓冲中累计（64*40=2560字节会超出带初始化数组的帧预算，需给出可编译方案，例如两遍：第一遍只计数和校验，第二遍确认容量后重放并写out；须证明第二遍失败不可达）。\n\n永久测试：暂存本模块、C51、C48与前端完整只读闭包。用真实lexer+syntax解析整个`fn ...(...)u64 {...}`源码取FUNCTION的BLOCK与参数名token（测试可以定位这些，但表达式起点由生产计算）。把输出IR交给已集成C48.emit生成完整函数，汇编后真实call/ret；独立Python解释器（自己的分词/解析/作用域）给期望RAX，并独立按上述规则构造期望IR逐项比对。<=20原生向量：只有return、let/var各1个、var多次赋值并读取旧值、`x = x + a`、6名字上限、局部遮蔽之外的同前缀名、返回参数/返回局部、表达式为单NAME或常量、MAX环绕、8条语句上限。拒绝类：const绑定、无类型或非u64类型、无初值、复合赋值`+=`、给参数/let赋值、未知名字、遮蔽参数、第7个可见名字、return在中间、无return、if/while语句、C51不支持的运算→各指定状态；scratch/expression_nodes刚好/短1、out exact/短1/0/富余、槽数33/指令65。真实坏Dong：重映射把s>=k的临时槽错用为名字槽（正常执行后按RAX拒绝）；给let赋值不报错（按状态拒绝）；容量不足先写一条IR（原子性guard拒绝）；生成函数RBX保持数值负控（C48坏副本）。\n\n## 共用执行与复验要求\n本项仅声明文件；生产为Dong，无隐式分配/全局可变状态/OS调用，新模块不导出C符号（测试wrapper可导出）。不得修改code/lang、编译器、已集成依赖、协调器、其它负责人或本批其它任务的文件；需要的依赖只读暂存其完整传递闭包。不依赖未集成的C49/C50/C52或本批其它任务。\n先完整检查结果指针非NULL、8对齐、端点不回绕；所有输入切片非空时非NULL、自然对齐、元素乘法与端点不回绕，空可NULL；数量先于乘法、非法数量不读正文。out/结果指针/调用方工作区彼此及与全部完整输入（含未消费尾部）互斥；输入之间可重叠且只读。INVALID/UNSUPPORTED/SYNTAX一律先于CAPACITY。任何失败都保持out与结果指针全文不变（调用方工作区按正文说明可被改写）；成功只写精确前缀和结果，out未用尾部不变。不能先写out再回滚。\n真实复用正文指定组件，不复制既有lexer/parser/C51/C48算法，不以Python/C模拟生产。每个局部数组给出栈上界并遵守dongc每函数4096字节worst-case frame限制；大缓冲一律由调用方工作区提供。\n只跑本项checks：真实Dong debug/release编译、ELF64/COFF组装、显式SysV桥链接并原生执行生成的函数。单模式不同主要原生输入向量<=24，好/坏重放复用同输入不新增向量；不做全回归/性能基准。期望值由独立Python分词/解析/求值oracle给出，不用生产输出作为唯一oracle。执行生成函数时捕获真实RAX、全部callee-saved及RSP，观察地址/宿主栈锚放在桥自己的静态内存，先独立捕获现场再恢复宿主ABI后断言。\n真实坏Dong须正常构建、执行后按指定数值/状态/原子性拒绝；缺符号、组装失败、崩溃、超时或仅文本不同不算负控。描述符/尾部别名预检各自独立可达；结果端点溢出用8对齐的UINT64_MAX-(sizeof-1)夹具。输入真实只读保护须断言保护调用成功；源码、说明、测试、全部只读依赖/输入SHA前后稳定，0skip才可验收。\n由负责人在本人客户端通过worker MCP读取最新rev/完整任务书/review_note/write_paths/依赖，claim成功后实现；交付真实命令、tests/skips、双模式/双格式、SHA、坏体实际观察和未执行限制，再原编号submit。临时产物放在本人works的build/<编号>/<唯一目录>。不启动任何AI CLI或自动化，不自行accept/integrate、提交/推送、运行OS/VM。由协调者独立复验、验收和真实集成；组件通过不等于通用AST→IR、stage1/stage2、客体自举或L3完成。",
+      "status": "paused",
+      "rev": 3,
+      "write_paths": [
+        "cursor-works/src/bootstrap/u64_block_ir.dg",
+        "cursor-works/src/bootstrap/u64_block_ir.md",
+        "cursor-works/tests/test_u64_block_ir.py",
+        "cursor-works/deliveries/CR44.md"
+      ],
+      "depends_on": [
+        "claude:C51",
+        "claude:C48"
+      ],
+      "checks": [
+        "discover:cursor-works/tests:test_u64_block_ir.py"
+      ],
+      "auto_dispatch": false,
+      "auto_verify": false,
+      "complexity": "standard",
+      "created_at": "2026-10-20T04:03:54+00:00",
+      "updated_at": "2026-10-20T06:50:46+00:00",
+      "historical": false,
+      "document": "cursor-works/tasks/CR44-board.md",
+      "delivery": "cursor-works/deliveries/CR44.md",
+      "candidate": null,
+      "verification": null,
+      "review_note": "",
+      "legacy_hash": "e19924d74777391b5b68b8b4dcc01468dc4a1c7fb187b91e101d88cbad008a82",
+      "resume_status": "todo",
+      "pause_control": "confirmed",
+      "archived": true,
+      "archived_at": "2026-10-20T06:50:46+00:00",
+      "archive_note": "用户要求处理剩余暂停任务。已核对本项paused rev2、停止已确认、无领取者及活动/排队作业，声明生产文件未落盘；依据ALLOCATION.md的2026-10-20暂停结论及当前主线lower_program/program_ir/names.collect，原窄u64接线/函数清单/操作码任务已被通用原生编译链取代，继续执行会重复建设。归档退出默认清单，保留任务书、原状态及事件历史；不恢复、不转派，不标记验收或集成，不删除文件或修改数据库/index。"
+    },
+    {
       "archive_note": "用户指定将D26转派Cursor，后继cursor:CR38。D26暂停归档并停止写入/提交；保留原任务书、发布时间和事件，原源码/说明/测试/交付均未落盘，不继承验收。历史cursor:CR36继续归档，不恢复。",
       "archived": true,
       "archived_at": "2026-10-19T15:00:26+00:00",
@@ -9624,6 +10275,76 @@
         "deepseek-works/tests/test_nasm_checked_u64_function.py",
         "deepseek-works/deliveries/D26.md"
       ]
+    },
+    {
+      "id": "deepseek:D28",
+      "number": "D28",
+      "owner": "deepseek",
+      "title": "[L3] 模块AST中的函数声明清单与重名检查",
+      "description": "所属阶段：L3：Dong自举后端 → 多函数模块驱动的前置分析。新增bootstrap.module_function_index：读取真实syntax mode 2产生的完整模块树，按源码次序列出全部函数声明，供后续“逐函数降级→多函数模块”驱动使用。只做分析，不降级、不发射、不做类型检查。不依赖C52或本批Cursor任务。\n\n```text\nmodule bootstrap.module_function_index;\nimport bootstrap.lexer as lex; import bootstrap.expression as ast;\npub const OK:u64=0; INVALID=1; CAPACITY=2; DUPLICATE=3;\npub const PUB:u64=1; EXTERN:u64=2; EXPORT:u64=4; RECEIVER:u64=8;\npub struct Entry{pub declaration:usize,pub function:usize,pub name_token:usize,pub parameter_count:usize,pub body:usize,pub flags:u64}  // 48字节，8对齐\npub struct Result{pub count:usize,pub first_duplicate:usize,pub second_duplicate:usize}  // 24字节\npub unsafe fn index(source:[]const u8, tokens:[]const lex.Token, nodes:[]const ast.Node, root:usize,\n                    out:[]Entry, result:*Result)u64\n```\n\n输入：source<=65536、tokens 1..16384、nodes 1..16384，root为MODULE节点；全部只读。\n校验（INVALID）：描述符/对齐/别名；token流单调且EOF仅在末尾；root及沿b链（IMPORT/DECLARATION混合链）访问到的每个节点索引在范围内、kind合法；用有界迭代遍历链（最多nodes.len步，检测环→INVALID，不递归）。DECLARATION的a为FUNCTION时，FUNCTION.token必须是IDENTIFIER，参数链（FUNCTION_PARAMETER）同样有界遍历、检测环；body为c（extern为NONE）。非函数声明（struct/enum/error/alias/global）跳过但仍需DECLARATION本身的a在范围内。\nflags：DECLARATION的ATTRIBUTE链中出现pub→PUB、extern→EXTERN、export→EXPORT（按lexer关键字kind显式映射，未知修饰保持不设位）；参数链首flags位0→RECEIVER。parameter_count包括receiver。\n重名：函数名按原始字节比较；任一对重复→DUPLICATE，result写first_duplicate/second_duplicate为两个Entry序号（最先出现的一对，按第二个出现位置最小、再第一个最小），count写0，out不变。receiver函数（方法）不参与顶层重名检查。\n容量：函数个数>out.len→CAPACITY，out不变，result.count写所需个数（这是唯一允许在失败时写result的情形，须在说明中写清）；INVALID时out与result全不变。成功写out[0..count]与result（duplicate字段为NONE）。\n\n测试：真实lexer+syntax(mode 2)解析源码，<=16个模块夹具：空模块、仅import、混合struct/const/fn、pub/export/extern组合、receiver方法、0..6参数、1字节与64字节名字、64个函数、重名（相邻/相隔/与方法同名不算）。独立Python oracle按源码文本解析函数声明并比较全部Entry字段（节点索引用独立遍历核对）。手工破坏：链成环、越界索引、错误kind、FUNCTION.token非IDENTIFIER、token流缺EOF→INVALID；out刚好/短1/0。真实坏Dong：忽略ATTRIBUTE链（flags错误，按字段拒绝）；重名检查只比较前8字节（用前缀相同的两个名字，按状态拒绝）；容量不足时先写一项（原子性guard拒绝）。本项无机器码生成，不需要SysV桥，但仍需debug/release编译与原生执行生产代码。\n\n## 共用执行与复验要求\n本项仅声明文件；生产为Dong，无隐式分配/全局可变状态/OS调用，新模块不导出C符号（测试wrapper可导出）。不得修改code/lang、编译器、已集成依赖、协调器、其它负责人或本批其它任务的文件；需要的依赖只读暂存其完整传递闭包。不依赖未集成的C49/C50/C52或本批其它任务。\n先完整检查结果指针非NULL、8对齐、端点不回绕；所有输入切片非空时非NULL、自然对齐、元素乘法与端点不回绕，空可NULL；数量先于乘法、非法数量不读正文。out/结果指针/调用方工作区彼此及与全部完整输入（含未消费尾部）互斥；输入之间可重叠且只读。INVALID/UNSUPPORTED/SYNTAX一律先于CAPACITY。任何失败都保持out与结果指针全文不变（调用方工作区按正文说明可被改写）；成功只写精确前缀和结果，out未用尾部不变。不能先写out再回滚。\n真实复用正文指定组件，不复制既有lexer/parser/C51/C48算法，不以Python/C模拟生产。每个局部数组给出栈上界并遵守dongc每函数4096字节worst-case frame限制；大缓冲一律由调用方工作区提供。\n只跑本项checks：真实Dong debug/release编译、ELF64/COFF组装、显式SysV桥链接并原生执行生成的函数。单模式不同主要原生输入向量<=24，好/坏重放复用同输入不新增向量；不做全回归/性能基准。期望值由独立Python分词/解析/求值oracle给出，不用生产输出作为唯一oracle。执行生成函数时捕获真实RAX、全部callee-saved及RSP，观察地址/宿主栈锚放在桥自己的静态内存，先独立捕获现场再恢复宿主ABI后断言。\n真实坏Dong须正常构建、执行后按指定数值/状态/原子性拒绝；缺符号、组装失败、崩溃、超时或仅文本不同不算负控。描述符/尾部别名预检各自独立可达；结果端点溢出用8对齐的UINT64_MAX-(sizeof-1)夹具。输入真实只读保护须断言保护调用成功；源码、说明、测试、全部只读依赖/输入SHA前后稳定，0skip才可验收。\n由负责人在本人客户端通过worker MCP读取最新rev/完整任务书/review_note/write_paths/依赖，claim成功后实现；交付真实命令、tests/skips、双模式/双格式、SHA、坏体实际观察和未执行限制，再原编号submit。临时产物放在本人works的build/<编号>/<唯一目录>。不启动任何AI CLI或自动化，不自行accept/integrate、提交/推送、运行OS/VM。由协调者独立复验、验收和真实集成；组件通过不等于通用AST→IR、stage1/stage2、客体自举或L3完成。",
+      "status": "paused",
+      "rev": 3,
+      "write_paths": [
+        "deepseek-works/src/bootstrap/module_function_index.dg",
+        "deepseek-works/src/bootstrap/module_function_index.md",
+        "deepseek-works/tests/test_module_function_index.py",
+        "deepseek-works/deliveries/D28.md"
+      ],
+      "depends_on": [],
+      "checks": [
+        "discover:deepseek-works/tests:test_module_function_index.py"
+      ],
+      "auto_dispatch": false,
+      "auto_verify": false,
+      "complexity": "standard",
+      "created_at": "2026-10-20T04:03:55+00:00",
+      "updated_at": "2026-10-20T06:50:46+00:00",
+      "historical": false,
+      "document": "deepseek-works/tasks/D28-board.md",
+      "delivery": "deepseek-works/deliveries/D28.md",
+      "candidate": null,
+      "verification": null,
+      "review_note": "",
+      "legacy_hash": "aee4063e22a79e41b287a8ef7749f215bc95bb34c710305c04dc4edecf1621da",
+      "resume_status": "todo",
+      "pause_control": "confirmed",
+      "archived": true,
+      "archived_at": "2026-10-20T06:50:46+00:00",
+      "archive_note": "用户要求处理剩余暂停任务。已核对本项paused rev2、停止已确认、无领取者及活动/排队作业，声明生产文件未落盘；依据ALLOCATION.md的2026-10-20暂停结论及当前主线lower_program/program_ir/names.collect，原窄u64接线/函数清单/操作码任务已被通用原生编译链取代，继续执行会重复建设。归档退出默认清单，保留任务书、原状态及事件历史；不恢复、不转派，不标记验收或集成，不删除文件或修改数据库/index。"
+    },
+    {
+      "id": "lmstudio:LM9",
+      "number": "LM9",
+      "owner": "lmstudio",
+      "title": "最简单固定数据：C48 u64 IR的8个操作码",
+      "description": "只做最简单固定数据录入，写一个JSON及交付两个文件，不写实现或测试。文件lmstudio-works/fixtures/u64-ir-operation-codes.json。\n顶层恰好version/operations两个字段且按此顺序，version为整数1；operations恰好如下顺序8项，每项恰好name/code两个字段且按此顺序，name为字符串，code为JSON整数：\nCONST 0\nCOPY 1\nADD 2\nSUB 3\nAND 4\nOR 5\nXOR 6\nIMUL 7\nUTF-8 JSON，不增删字段/项目，不改顺序，不把code写成字符串。独立检查已由协调者维护（lmstudio-works/tests/test_u64_ir_operation_codes.py），不修改检查文件；数据仅供后续可选补充。另写lmstudio-works/deliveries/LM9.md，说明固定数据录入，未运行测试明确写未运行，禁止编造通过或自举完成。\n通过自己的worker MCP查看最新rev、领取、实际落盘后提交；没有文件工具则说明并释放，不能以聊天正文冒充文件。LM Studio同时仅一项最简单任务。不改主线/他人/索引，不运行OS/VM、AI CLI、全回归、提交推送或自行验收。",
+      "status": "paused",
+      "rev": 3,
+      "write_paths": [
+        "lmstudio-works/fixtures/u64-ir-operation-codes.json",
+        "lmstudio-works/deliveries/LM9.md"
+      ],
+      "depends_on": [],
+      "checks": [
+        "discover:lmstudio-works/tests:test_u64_ir_operation_codes.py"
+      ],
+      "auto_dispatch": false,
+      "auto_verify": false,
+      "complexity": "simple",
+      "created_at": "2026-10-20T04:03:55+00:00",
+      "updated_at": "2026-10-20T06:50:47+00:00",
+      "historical": false,
+      "document": "lmstudio-works/tasks/LM9-board.md",
+      "delivery": "lmstudio-works/deliveries/LM9.md",
+      "candidate": null,
+      "verification": null,
+      "review_note": "",
+      "legacy_hash": "368c5173126996884c34d9d21acc62b15d6427cce07ce217c0f549d649978739",
+      "resume_status": "todo",
+      "pause_control": "confirmed",
+      "archived": true,
+      "archived_at": "2026-10-20T06:50:47+00:00",
+      "archive_note": "用户要求处理剩余暂停任务。已核对本项paused rev2、停止已确认、无领取者及活动/排队作业，声明生产文件未落盘；依据ALLOCATION.md的2026-10-20暂停结论及当前主线lower_program/program_ir/names.collect，原窄u64接线/函数清单/操作码任务已被通用原生编译链取代，继续执行会重复建设。归档退出默认清单，保留任务书、原状态及事件历史；不恢复、不转派，不标记验收或集成，不删除文件或修改数据库/index。"
     }
   ]
 }

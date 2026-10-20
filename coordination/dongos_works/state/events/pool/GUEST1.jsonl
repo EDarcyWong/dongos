@@ -1,0 +1,12 @@
+{"at":"2026-10-20T04:44:46+00:00","data":{"rev":1,"status":"todo"},"kind":"created","task_id":"pool:GUEST1"}
+{"at":"2026-10-20T04:49:13+00:00","data":{"claimed_at":"2026-10-20T04:49:13+00:00","claimed_by":"deepseek-mcp-199bcd394d05436c","completed_at":null,"owner":"deepseek","resume_status":null,"rev":2,"status":"in_progress"},"kind":"claim","task_id":"pool:GUEST1"}
+{"at":"2026-10-20T05:02:32+00:00","data":{"claimed_at":"2026-10-20T04:49:13+00:00","claimed_by":"deepseek-mcp-199bcd394d05436c","completed_at":"2026-10-20T05:02:32+00:00","owner":"deepseek","resume_status":null,"rev":3,"status":"submitted"},"kind":"submit","task_id":"pool:GUEST1"}
+{"at":"2026-10-20T05:47:22+00:00","data":{"rev":4,"status":"rework"},"kind":"rework","task_id":"pool:GUEST1"}
+{"at":"2026-10-20T05:50:53+00:00","data":{"claimed_at":"2026-10-20T05:50:53+00:00","claimed_by":"deepseek-mcp-199bcd394d05436c","completed_at":null,"owner":"deepseek","resume_status":null,"rev":5,"status":"in_progress"},"kind":"claim","task_id":"pool:GUEST1"}
+{"at":"2026-10-20T06:02:46+00:00","data":{"claimed_at":"2026-10-20T05:50:53+00:00","claimed_by":"deepseek-mcp-199bcd394d05436c","completed_at":"2026-10-20T06:02:46+00:00","owner":"deepseek","resume_status":null,"rev":6,"status":"submitted"},"kind":"submit","task_id":"pool:GUEST1"}
+{"at":"2026-10-20T06:05:16+00:00","data":{"job":"60cfd4a66b364bd3885d847d2667e522","kind":"verify","provider":"python"},"kind":"queued","task_id":"pool:GUEST1"}
+{"at":"2026-10-20T06:11:19+00:00","data":{"job":"60cfd4a66b364bd3885d847d2667e522"},"kind":"verification_started","task_id":"pool:GUEST1"}
+{"at":"2026-10-20T06:12:29+00:00","data":{"rev":7,"status":"submitted"},"kind":"verified","task_id":"pool:GUEST1"}
+{"at":"2026-10-20T06:12:29+00:00","data":{"job":"60cfd4a66b364bd3885d847d2667e522","status":"completed"},"kind":"job_finished","task_id":"pool:GUEST1"}
+{"at":"2026-10-20T06:13:31+00:00","data":{"rev":8,"status":"accepted"},"kind":"accept","task_id":"pool:GUEST1"}
+{"at":"2026-10-20T07:06:20+00:00","data":{"rev":9,"status":"integrated"},"kind":"integrate","task_id":"pool:GUEST1"}

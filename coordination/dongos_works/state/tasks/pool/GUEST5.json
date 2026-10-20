@@ -1,0 +1,74 @@
+{
+  "assignment_history": [
+    {
+      "at": "2026-10-20T07:21:36+00:00",
+      "from_owner": "deepseek",
+      "note": "用户再次明确要求由当前会话完成L3功能；接管已提交后审查退回、当前非in_progress的GUEST5 R2，直接完成已实证的计数器不变量修复。保留原任务编号、四文件范围、全部交付/审查历史；不接管仍在编辑的GUEST4。",
+      "previous_claimed_by": "deepseek-mcp-199bcd394d05436c",
+      "to_owner": "codex"
+    }
+  ],
+  "assignment_owner": "codex",
+  "auto_dispatch": false,
+  "auto_verify": false,
+  "candidate": null,
+  "checks": [
+    "discover:pool-works/tests:test_guest_artifact_commit.py"
+  ],
+  "claim_from_status": "rework",
+  "claim_token": "d8404bb1aa1c42c1844104ea3e8c3806",
+  "claimed_at": "2026-10-20T07:21:45+00:00",
+  "claimed_by": "codex-mcp-d76b66689d824a70",
+  "completed_at": "2026-10-20T07:27:07+00:00",
+  "complexity": "standard",
+  "created_at": "2026-10-20T04:44:49+00:00",
+  "delivery": "pool-works/deliveries/GUEST5.md",
+  "depends_on": [],
+  "description": "实现独立无分配产物提交协议状态机。仅消费已有授权句柄和调用者提供的write_at/flush回调，不解析路径、不创建权限、不启动进程或关机。先定义窄ABI和结果：未开始/写入中/待flush/已持久化/失败，记录累计确认字节、失败阶段、错误码。正确处理短写、零进展、部分写后错误、超过请求长度的非法返回、offset溢出；完整写完才调用FLUSH且只有FLUSH成功才报告durable。失败禁止报告成功或自动启动下一stage，重试策略明确且有界，不隐式重试导致重复偏移。承认外部写盘副作用不能回滚，报告已写字节，不能宣称整个磁盘事务原子。空产物是否允许明确并测试，原始产物输入必须保持不变。测试回调事件序列、精确偏移和长度、多次短写、失败后无后续调用、flush失败/成功及虚假durable坏实现负控；不以host fsync假装真实DongOS FLUSH/重启验收。本项提供协议组件，真实系统接入另行任务。\n共同约定：2026-10-20用户要求增加公共任务，不指定负责人，由DeepSeek/Claude/Cursor自主领取。先get_task/read_document读最新rev、完整范围与依赖，claim成功才执行，不抢占在途。只修改本项声明的pool-works文件，映射coordination/dongos_works/pool-works；源码路径相对code/，只读复用当前主线。每项交付Dong生产实现、接口说明、永久Python定向测试和交付报告，不以设计文档或Python替代生产实现。新模块独立，不直接修改内核、服务权限、现有编译器/配置或其它任务文件；需要额外文件先报告协调者。禁止自行提交推送、运行OS/VM、扩大64MiB内存/16KiB栈或授予写盘/进程权限。真实Dong编译执行测试须含debug/release、边界、失败原子性、canary及至少一个实际坏Dong实现负控；工具缺失须如实报告，不能skip冒充通过。最多24组主要语义向量，结构性非法参数可另列；保存来源SHA、命令、结果、失败与skip数量。独立复验及真实集成由Codex完成；本项成功不代表完整客体自举或L3完成。\n只读背景：code/docs/l3-native-selfhost-progress.md；当前已具frontend→lower_program→program_ir→nasm_program→compiler_driver与native_assembler，禁止重复已暂停CR43/CR44/D28/LM9的旧组件。",
+  "document": "pool-works/tasks/GUEST5-board.md",
+  "historical": false,
+  "id": "pool:GUEST5",
+  "legacy_hash": "6c1d72827a8c2092920475a8b96249b4ae6b53e7602cd4bd9ba0f08f12a9ccca",
+  "number": "GUEST5",
+  "owner": "codex",
+  "rev": 14,
+  "review_note": "R1旧PENDING_FLUSH未写满缺陷已修；正式隔离38dffc1e368b43f288d8eec1ba86a60a已16 tests/0skip/source_stable。但独立release安全原生探针发现计数器不变量仍漏：init(total=4)，status=WRITING、written=0、stalls=0、attempts=UINT64_MAX，step接受并先attempts+=1回绕到0，正常执行write_at确认4字节，发布PENDING_FLUSH(written=4,total=4,attempts=0)；下一次step立刻INVALID且0flush，自己的输出不能继续。没有崩溃或构建失败，探针只链接未改生产的release Dong对象。违反文档每次非INVALID发布一致State/计数有界。请在回调/State写入前拒绝不可能或会溢出的attempts组合（按已写字节/零进展次数约束，注意边界算术自身不溢出）；其余status的计数关系同审，保证step成功后产出的状态可被下一step接受。新增安全永久边界与正控/坏体灵敏度，不能只改文本或放宽后继检查。证据reviews/2026-10-20-GUEST5-R1-counter.c与-counter-evidence.json，source SHA c9e839cf203cb2cda9c6bca75d67fdacce87d3bf40ebfacf2c0d814bb57ddba0。仅改原四文件，重新原编号提交，不验收集成。",
+  "status": "submitted",
+  "title": "[L3] 编译产物写入与FLUSH确认的有界状态机",
+  "updated_at": "2026-10-20T07:29:58+00:00",
+  "verification": {
+    "checks": [
+      {
+        "cancelled": false,
+        "elapsed_seconds": 148.3,
+        "execution_exited": true,
+        "passed": true,
+        "process_stopped": true,
+        "returncode": 0,
+        "skips": 0,
+        "spec": "discover:pool-works/tests:test_guest_artifact_commit.py",
+        "tests": 16,
+        "timed_out": false
+      }
+    ],
+    "execution_exited": true,
+    "fingerprint": {
+      "pool-works/deliveries/GUEST5.md": "962c7bf86ed3e4cf6155b435ecbace8c1351525f8d0be6319321aa0e0ee84fb4",
+      "pool-works/lang/bootstrap/guest_artifact_commit.dg": "0264475d79e0b38cbef38bfe195c1e1f175ec1d3f95c9840b6181ac1c891dcf8",
+      "pool-works/lang/bootstrap/guest_artifact_commit.md": "cf430a4e5e1273d8e383ece9648d10584897fe9fd370724cd22d5080e2cfb342",
+      "pool-works/tests/test_guest_artifact_commit.py": "370022da1981e09ef5bdf77ad05a27edd6959e0ec34b35a8e57c4b6c1bff72a6"
+    },
+    "finished_at": "2026-10-20T07:29:58+00:00",
+    "job": "10c71d602ff848a996219f1232bc87cc",
+    "passed": true,
+    "process_stopped": true,
+    "source_stable": true,
+    "summary": "定向复验通过，等待源码/契约审查"
+  },
+  "write_paths": [
+    "pool-works/lang/bootstrap/guest_artifact_commit.dg",
+    "pool-works/lang/bootstrap/guest_artifact_commit.md",
+    "pool-works/tests/test_guest_artifact_commit.py",
+    "pool-works/deliveries/GUEST5.md"
+  ]
+}

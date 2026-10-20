@@ -110,6 +110,14 @@ class Handler(BaseHTTPRequestHandler):
     def authorized_host(self):
         return 'http://' + self.headers.get('Host', '') in self.server.origins
 
+    # Some browsers omit the port from Origin for loopback pages. Host is still
+    # required to be this service and the CSRF token remains the real gate.
+    PORTLESS_LOOPBACK_ORIGINS = frozenset({'http://127.0.0.1', 'http://localhost'})
+
+    def authorized_origin(self):
+        origin = self.headers.get('Origin')
+        return origin in self.server.origins or origin in self.PORTLESS_LOOPBACK_ORIGINS
+
     def context(self):
         ident = self.headers.get('X-Coordination-Project', '')
         if self.server.registry and not ident:
@@ -190,8 +198,12 @@ class Handler(BaseHTTPRequestHandler):
             return self.reply({'error': str(error)}, 400)
 
     def do_POST(self):
-        if not self.authorized_host() or self.headers.get('Origin') not in self.server.origins or not secrets.compare_digest(self.headers.get('X-Coordinator-CSRF', ''), self.server.csrf):
-            return self.reply({'error': '需要本机页面的同源操作令牌'}, 403)
+        if not self.authorized_host():
+            return self.reply({'error': '需要本机页面的同源操作令牌（Host 不是 ' + ' 或 '.join(sorted(self.server.origins)) + '）'}, 403)
+        if not self.authorized_origin():
+            return self.reply({'error': '需要本机页面的同源操作令牌（页面来源 ' + str(self.headers.get('Origin') or '缺失') + ' 不是本服务地址）'}, 403)
+        if not secrets.compare_digest(self.headers.get('X-Coordinator-CSRF', ''), self.server.csrf):
+            return self.reply({'error': '需要本机页面的同源操作令牌（令牌已失效，请刷新页面）'}, 403)
         if self.headers.get('Content-Type', '').split(';')[0] != 'application/json':
             return self.reply({'error': '需要application/json'}, 415)
         try:

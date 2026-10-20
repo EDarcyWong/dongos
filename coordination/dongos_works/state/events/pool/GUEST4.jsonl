@@ -1,0 +1,4 @@
+{"at":"2026-10-20T04:44:48+00:00","data":{"rev":1,"status":"todo"},"kind":"created","task_id":"pool:GUEST4"}
+{"at":"2026-10-20T05:40:39+00:00","data":{"claimed_at":"2026-10-20T05:40:39+00:00","claimed_by":"cursor-mcp-415ed5783a554f4e","completed_at":null,"owner":"cursor","resume_status":null,"rev":2,"status":"in_progress"},"kind":"claim","task_id":"pool:GUEST4"}
+{"at":"2026-10-20T07:42:09+00:00","data":{"claimed_at":"2026-10-20T05:40:39+00:00","claimed_by":"cursor-mcp-415ed5783a554f4e","completed_at":"2026-10-20T07:42:09+00:00","owner":"cursor","resume_status":null,"rev":3,"status":"submitted"},"kind":"submit","task_id":"pool:GUEST4"}
+{"at":"2026-10-20T07:42:32+00:00","data":{"job":"6928324646a341d988938d21b1c6092f","kind":"verify","provider":"python"},"kind":"queued","task_id":"pool:GUEST4"}

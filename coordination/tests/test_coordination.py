@@ -308,6 +308,17 @@ class HTTPTests(Fixture):
         with self.assertRaises(HTTPError) as error:self.request('/api/snapshot',headers={'Host':'evil.example'})
         self.assertEqual(error.exception.code,403)
 
+    def test_portless_loopback_origin_still_requires_host_and_token(self):
+        for origin in ['http://127.0.0.1','http://localhost']:
+            with self.subTest(origin=origin):
+                self.request('/api/sync',{},{'Origin':origin})
+                for headers in [{'X-Coordinator-CSRF':'bad'},{'Host':'evil.example'}]:
+                    with self.assertRaises(HTTPError) as error:self.request('/api/sync',{},{'Origin':origin,**headers})
+                    self.assertEqual(error.exception.code,403)
+        for origin in ['http://127.0.0.1:1','https://127.0.0.1','http://127.0.0.1.evil.example','http://[::1]','null']:
+            with self.subTest(origin=origin),self.assertRaises(HTTPError) as error:self.request('/api/sync',{},{'Origin':origin})
+            self.assertEqual(error.exception.code,403)
+
     def test_arbitrary_file_and_command_routes_absent(self):
         for path in ['/../coordination/.local/tasks.sqlite3','/api/document?task=../x','/api/log/../../x']:
             with self.subTest(path=path),self.assertRaises(HTTPError):self.request(path)

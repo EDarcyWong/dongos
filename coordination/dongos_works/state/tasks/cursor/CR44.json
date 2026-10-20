@@ -1,4 +1,7 @@
 {
+  "archive_note": "用户要求处理剩余暂停任务。已核对本项paused rev2、停止已确认、无领取者及活动/排队作业，声明生产文件未落盘；依据ALLOCATION.md的2026-10-20暂停结论及当前主线lower_program/program_ir/names.collect，原窄u64接线/函数清单/操作码任务已被通用原生编译链取代，继续执行会重复建设。归档退出默认清单，保留任务书、原状态及事件历史；不恢复、不转派，不标记验收或集成，不删除文件或修改数据库/index。",
+  "archived": true,
+  "archived_at": "2026-10-20T06:50:46+00:00",
   "auto_dispatch": false,
   "auto_verify": false,
   "candidate": null,
@@ -21,11 +24,11 @@
   "owner": "cursor",
   "pause_control": "confirmed",
   "resume_status": "todo",
-  "rev": 2,
+  "rev": 3,
   "review_note": "",
   "status": "paused",
   "title": "[L3] 带let/var绑定与赋值的u64函数体块→C48 IR",
-  "updated_at": "2026-10-20T04:20:26+00:00",
+  "updated_at": "2026-10-20T06:50:46+00:00",
   "verification": null,
   "write_paths": [
     "cursor-works/src/bootstrap/u64_block_ir.dg",

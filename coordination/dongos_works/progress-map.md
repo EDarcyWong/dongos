@@ -1,24 +1,36 @@
 # DongOS 整体任务图
 
-证据快照：系统主线 2026-10-18 23:36，语言主线 L3 于 2026-10-19 23:32 重算（Asia/Shanghai）。范围为 P0–P9，P10 另定。当前重点是 **L3：Dong 编译器自举**。
+核对时间：2026-10-20T14:55:24+08:00（Asia/Shanghai）。范围：P0–P9、L0–L3与协作流程；P10另定范围。
 
-已形成从 UEFI 启动到用户态图形桌面、文件持久化与四核用户调度的受控闭环。✅ 表示所列范围通过既定验收，🟡 表示阶段仍有未关闭环节，⬜ 表示原阶段门槛尚未完成。
+系统既有受控启动、用户态桌面与持久化验收范围保留；语言已具通用原生编译链、宿主固定点与原生汇编器。真正DongOS内自编译、持久化重启及产物一致性尚未验收。
 
-本文件与 [roadmap.json](roadmap.json) 是按计划、验收记录和代码实际状态核对的人工证据快照（2026-10-19 起语言主线按 `code/lang/bootstrap` 与协调器实时状态重算；系统主线自上次快照后 `code/` 下除 `lang/` 外没有源码或 PLAN.md 变化，状态与证据沿用）；控制台从 JSON 显示任务图，任务领取与验收统计仍读取协调器实时 snapshot。协作任务数量不代表整个操作系统的完成百分比。
+**当前重点：L3客体接线与16KiB栈/64MiB内存约束；GUEST1～3已验收待集成，GUEST4实现中、GUEST5返修中。WINVERIFY1已集成并重启服务，正式复验可正常登记。**
+
+本文件与 [roadmap.json](roadmap.json) 同步维护；阶段结论来自证据核对，任务统计以工作台实时快照为准。
 
 ## 系统主线
 
 ```mermaid
 flowchart TD
-    P0["✅ P0 工具链与构建环境"] --> P1["✅ P1 UEFI 引导器"]
-    P1 --> P2["🟡 P2 CPU／内存<br/>核心验收通过；动态执行、大页、PAT待补"]
-    P2 --> P3["✅ P3 中断与抢占线程"]
-    P3 --> P4["✅ P4 用户态与IPC<br/>独立地址空间、ELF、权限、百万次通信"]
-    P4 --> P5["🟡 P5 基础服务<br/>存储、FAT32、shell通过；故障DMA回收待补"]
-    P5 --> P6["🟡 P6 多核与快速启动<br/>四核调度／迁移／TLB通过；init并行启动、KVM待验"]
-    P6 --> P7["🟡 P7 图形桌面<br/>既有独立应用、DPI、主题、动画通过；当前输入回归待闭"]
-    P7 --> P8["🟡 P8 USB与真机<br/>受控USB、启动镜像、电源通过；两台真机待验"]
-    P8 --> P9["⬜ P9 安全加固<br/>安全启动、IOMMU、CET／随机化、模糊测试"]
+    P0["✅ P0 工具链与构建环境"]
+    P1["✅ P1 UEFI 引导器"]
+    P0 --> P1
+    P2["🟡 P2 CPU 与内存"]
+    P1 --> P2
+    P3["✅ P3 中断与抢占线程"]
+    P2 --> P3
+    P4["✅ P4 用户态与 IPC"]
+    P3 --> P4
+    P5["🟡 P5 基础服务"]
+    P4 --> P5
+    P6["🟡 P6 多核与快速启动"]
+    P5 --> P6
+    P7["🟡 P7 图形桌面"]
+    P6 --> P7
+    P8["🟡 P8 USB 与真机"]
+    P7 --> P8
+    P9["⬜ P9 安全加固"]
+    P8 --> P9
     classDef complete fill:#e7f7ed,stroke:#2f8a53,color:#183d26;
     classDef partial fill:#fff4d9,stroke:#b58516,color:#594108;
     classDef pending fill:#edf0f5,stroke:#8b96a8,color:#3d4654;
@@ -27,82 +39,415 @@ flowchart TD
     class P9 pending;
 ```
 
-| 阶段 | 已通过的环节 | 尚未关闭的环节 |
-| --- | --- | --- |
-| P0 工具链 | 本地构建、调试、测试入口及自动启动验收 | 远程 CI 尚未执行；不计入本地通过结论 |
-| P1 引导器 | 载荷校验、BootInfo、页表/栈交接、异常镜像拒绝、退出固件重试 | 所列 P1 本地门槛已关闭 |
-| P2 CPU 与内存 | 异常、分配器、活动页表、保护位、四核 TLB shootdown | 动态执行物理别名策略、大页转换、PAT 写合并 |
-| P3 中断与线程 | ACPI、APIC、受控定时回退、真实抢占、扩展寄存器保存 | 真实 TSC-deadline 硬件路径另补；现有验收不覆盖该硬件路径 |
-| P4 用户态与 IPC | 独立根/ELF/句柄、百万 IPC、BSP PCID、正常内核能力通知与共享对象 | 所列受控 P4 门槛已关闭；新版首次启动归 P6/P7 |
-| P5 基础服务 | 受控设备授权、键盘、三类存储、FAT32、shell、FLUSH/重启 | 同次启动的通用设备恢复、故障 DMA 安全回收/重分配/重授权 |
-| P6 多核与快启 | 四核唤醒、用户抢占/迁移、跨代退休、IPI、计时时间线 | init 首次跨 AP 并行启动；Linux/KVM 引导器至 shell ≤0.5 秒 |
-| P7 图形桌面 | 合成/字体/DPI/主题/动画、四独立应用、窗口生命周期、持久化 | 当前 R6 完整 GUI/输入回归及候选修复推广后的实际复验 |
-| P8 USB 与真机 | 受控 xHCI/HID/BOT、USB 存储持久化、启动镜像、受控电源 | 一台台式机与一台笔记本；物理设备/Hub/热插拔另验；新版 USB 回归 |
-| P9 安全加固 | NX、SMEP/SMAP、句柄隔离等基础保护已在前序阶段形成 | 安全启动、IOMMU、CET、内核基址随机化、模糊测试及原 24 小时门槛 |
+### ✅ P0 工具链与构建环境
 
-P7 的既有功能验收仍保留；当前新镜像的完整输入/GUI 回归未关闭，因此图中采用部分完成。R6 GUI 全量复验和首次启动观察均有失败记录，不能用冒烟通过替代全量通过。
+已完成或已有证据：
 
-P2 旧清单仍含 PCID 未勾选及 PCIDE 关闭的历史描述。较新的 P4 记录已经证明 BSP PCID 生命周期与 VMware 标签保留；跨核 PCID 保留仍不能由 R6 UART 回归推断。图中不把旧勾选作为“PCID 整体未实现”的依据。
+- 既定本地工具链、构建/调试/测试入口已有历史验收记录
+- 本轮未重新探测QEMU/固件或启动OS/VM；工具当前可用性不能由历史回执推定
+
+尚待完成：
+
+- 所列受控范围已关闭，范围外与后续版本回归另验。
+
+核对依据：
+
+- `code/PLAN.md:365`
+- `code/PLAN.md:373`
+
+### ✅ P1 UEFI 引导器
+
+已完成或已有证据：
+
+- 载荷读取、解压、SHA-256校验与BootInfo交接通过
+- 正常启动、篡改/截短/缺失拒绝及退出固件重试通过
+
+尚待完成：
+
+- 所列受控范围已关闭，范围外与后续版本回归另验。
+
+核对依据：
+
+- `code/PLAN.md:375`
+- `code/PLAN.md:383`
+
+### 🟡 P2 CPU 与内存
+
+已完成或已有证据：
+
+- 异常、分配器、活动页表及NX/WP/W^X等核心保护验收通过
+- 四核共享内核根TLB shootdown通过
+
+尚待完成：
+
+- 动态执行物理别名W^X与撤权同步
+- 2MiB/4KiB大页转换、失效与回收
+- PAT写合并及缓存类型冲突验证
+
+核对依据：
+
+- `code/PLAN.md:387`
+- `code/PLAN.md:402`
+- `code/PLAN.md:404`
+- `code/PLAN.md:432`
+
+### ✅ P3 中断与抢占线程
+
+已完成或已有证据：
+
+- ACPI发现、LAPIC/IOAPIC与旧PIC屏蔽通过
+- 受控定时回退与线程抢占、XSAVE/FXSAVE状态保存通过
+
+尚待完成：
+
+- 所列受控范围已关闭，范围外与后续版本回归另验。
+
+核对依据：
+
+- `code/PLAN.md:422`
+
+### ✅ P4 用户态与 IPC
+
+已完成或已有证据：
+
+- 独立地址空间、ELF加载、句柄权限与百万次真实IPC通过
+- BSP PCID生命周期及VMware标签保留通过
+- 正常内核的通用能力通知、共享对象API通过
+
+尚待完成：
+
+- 所列受控范围已关闭，范围外与后续版本回归另验。
+
+核对依据：
+
+- `code/PLAN.md:429`
+- `code/PLAN.md:437`
+- `code/docs/process-integration.md:127`
+
+### 🟡 P5 基础服务
+
+已完成或已有证据：
+
+- 受控设备授权、键盘、virtio-blk/AHCI/NVMe存储通过
+- FAT32、shell、读写/FLUSH及同盘重启持久化通过
+- 驱动故障后的MSI/BME撤权与旧owner退休通过
+
+尚待完成：
+
+- 同次启动内通用设备恢复
+- 故障DMA安全回收、重分配与设备重授权
+
+核对依据：
+
+- `code/PLAN.md:439`
+- `code/docs/process-integration.md:127`
+
+### 🟡 P6 多核与快速启动
+
+已完成或已有证据：
+
+- 四核唤醒、用户任务抢占/迁移、跨代退休与IPI唤醒通过
+- 启动计时日志和封存时间线独立复算通过
+
+尚待完成：
+
+- init首次发起的跨AP依赖图与并行启动实际验收
+- Linux/KVM引导器至shell不超过0.5秒的原阶段性能验收
+
+核对依据：
+
+- `code/PLAN.md:447`
+- `code/docs/process-integration.md:121`
+- `code/docs/process-integration.md:131`
+- `code/docs/language-l2-l3.md:148`
+
+### 🟡 P7 图形桌面
+
+已完成或已有证据：
+
+- 合成器、字体、DPI、主题、动画与真实输入功能已有验收
+- 四个独立CPL3应用、窗口生命周期及文件/设置持久化已有验收
+
+尚待完成：
+
+- 当前R6完整GUI及输入回归
+- 输入候选修复推广后与新镜像来源一致的实际复验
+
+核对依据：
+
+- `code/PLAN.md:455`
+- `code/docs/process-integration.md:75`
+- `code/docs/process-integration.md:133`
+- `code/docs/language-l2-l3.md:148`
+
+### 🟡 P8 USB 与真机
+
+已完成或已有证据：
+
+- 受控xHCI/HID/BOT、USB键鼠和USB主盘持久化通过
+- GPT/ESP启动镜像、QEMU实际USB引导及受控ACPI电源通过
+
+尚待完成：
+
+- 至少一台台式机和一台笔记本实际启动验收
+- 物理设备、Hub与热插拔等范围另验
+- 当前新镜像USB集成回归待关闭
+
+核对依据：
+
+- `code/PLAN.md:467`
+- `code/docs/process-integration.md:95`
+- `code/docs/process-integration.md:139`
+
+### ⬜ P9 安全加固
+
+已完成或已有证据：
+
+- 本阶段验收门槛尚未通过。
+
+尚待完成：
+
+- 自有密钥签名、OVMF与真机安全启动
+- IOMMU限制驱动DMA
+- CET影子栈/间接跳转检查与内核基址随机化
+- 系统调用/IPC模糊测试及原阶段24小时门槛
+
+核对依据：
+
+- `code/PLAN.md:333`
+- `code/PLAN.md:474`
 
 ## 语言主线
 
 ```mermaid
 flowchart TD
-    L0["✅ L0 语言规格"] --> L1["✅ L1 编译器与基础库"]
-    L1 --> L2["✅ L2 优化与源码调试<br/>既定性能集合、真实GDB验证通过"]
-    L2 --> L3["🟡 L3 当前重点：Dong编译器自举<br/>前端／语义子集、55个后端发射组件、受限整函数接线已集成<br/>C51：u64表达式 源码→AST→IR→完整函数 已通"]
-    L3 --> L3A["⬜ 完整后端与命令行<br/>通用降级、目标I/O、诊断CLI、工具链接线"]
-    L3A --> L3B["⬜ 宿主stage1／stage2一致性"]
-    L3B --> L3C["⬜ DongOS内编译自身<br/>FLUSH、同盘重启、产物一致性"]
+    L0["✅ L0 语言规格"]
+    L1["✅ L1 编译器与基础库"]
+    L0 --> L1
+    L2["✅ L2 优化与源码调试"]
+    L1 --> L2
+    L3["🟡 L3 Dong 编译器自举"]
+    L2 --> L3
+    L3A["🟡 L3A 通用后端、原生汇编与目标入口"]
+    L3 --> L3A
+    L3B["🟡 L3B 宿主stage1/stage2固定点与独立审查"]
+    L3A --> L3B
+    L3C["⬜ L3C DongOS内自编译与持久化验收"]
+    L3B --> L3C
     classDef complete fill:#e7f7ed,stroke:#2f8a53,color:#183d26;
     classDef partial fill:#fff4d9,stroke:#b58516,color:#594108;
     classDef pending fill:#edf0f5,stroke:#8b96a8,color:#3d4654;
     class L0,L1,L2 complete;
-    class L3 partial;
-    class L3A,L3B,L3C pending;
+    class L3,L3A,L3B partial;
+    class L3C pending;
 ```
 
-L0 规格和 L1 编译器/六个标准库已完成本地验收。L2 的受控 SSA 优化、固定五项性能集合及真实 GDB 源码断点/单步/变量/展开已通过；结论限于既定集合，不表示所有函数均优化或客体内核调试已复验。
+### ✅ L0 语言规格
 
-L3 已有 Dong 原生词法（UTF-8/Unicode）、解析、模块/名称/绑定、运行时语义子集，以及主线 `code/lang/bootstrap` 里 93 个 Dong 模块（其中 55 个 `nasm_` 发射/门禁组件：比较、分支、移位、调用/参数/返回、原子、内存内建、checked 算术与窄化、切片/越界/除法门禁、switch 分发、作用域清理、静态指针重定位等）。C45 能生成内核可验证的静态 ELF64 代码/数据镜像，D23 能逐字节比较产物。
+已完成或已有证据：
 
-**受限整函数接线（2026-10-19 新增）**：C48（直线 u64 IR → 完整 SysV 函数）与 D24（固定次数 u64 循环函数）已集成；C51 把真实 lexer + parser 产生的 `INTEGER / NAME / + - * & | ^` 表达式树降为 C48 的 IR，已集成。这是第一次打通"源码文本 → token → AST → IR → 完整函数 → 汇编 → 真实调用"，但只限 u64 单表达式，不是通用编译器后端。
+- 首版语法、类型、ABI与标准库范围规格交付
+
+尚待完成：
+
+- 所列受控范围已关闭，范围外与后续版本回归另验。
+
+核对依据：
+
+- `code/PLAN.md:338`
+- `code/PLAN.md:347`
+
+### ✅ L1 编译器与基础库
+
+已完成或已有证据：
+
+- Python编译器前端、语义、NASM后端及语言测试集通过
+- 六个标准库交付并通过本地总验收
+
+尚待完成：
+
+- 所列受控范围已关闭，范围外与后续版本回归另验。
+
+核对依据：
+
+- `code/PLAN.md:347`
+- `code/PLAN.md:358`
+
+### ✅ L2 优化与源码调试
+
+已完成或已有证据：
+
+- 受控SSA优化/寄存器分配及原固定五项性能集合通过
+- DWARF4源码断点、单步、变量与展开经真实GDB验证
+
+尚待完成：
+
+- 所列受控范围已关闭，范围外与后续版本回归另验。
+
+核对依据：
+
+- `code/PLAN.md:360`
+- `code/PLAN.md:361`
+- `code/docs/language-l2-l3.md:98`
+- `code/docs/language-l2-l3.md:118`
+
+### 🟡 L3 Dong 编译器自举
+
+已完成或已有证据：
+
+- Dong原生前端、名称/模块绑定及语义子集已进入主线；frontend→lower_program→program_ir→nasm_program→compiler_driver通用编译链已存在，覆盖局部绑定、if/while、调用、复合赋值及多函数模块的已支持子集
+- native_assembler/x86_encode可将受限NASM方言直接生成静态ELF64，并已有内核ELF验证器及宿主受限加载器的组件证据
+- 冻结的49模块编译器闭包已在宿主完成stage1/stage2字节一致性；单一有界arena、图压缩及栈测量已有局部回执，不能替代客体运行验收
+- C52 rev18、CR40 rev23及GUEST1 rev8/GUEST2 rev5/GUEST3 rev8已正式独立复验并accepted，均尚未实际集成；相关回执与当前主线能力分别记录
+
+尚待完成：
+
+- 完成原生编译器/加载器累计独立审查；支持范围之外的语言lowering与错误/诊断接线继续按真实缺口推进
+- 解决实测60/64KiB栈可运行而16KiB栈失败的客体阻塞；不擅自提高栈或64MiB共享用户arena预算
+- GUEST1/2/3组件实际集成后验证受限源码读取与阶段内存布局；GUEST4原生汇编接线仍在实现，GUEST5持久化协议仍在返修
+- 真实DongOS内编译自身、受授权FLUSH/同盘重启与产物一致性门槛尚未完成
+
+核对依据：
+
+- `code/docs/l3-native-selfhost-progress.md`
+- `code/lang/bootstrap/frontend.dg`
+- `code/lang/bootstrap/lower_program.dg`
+- `code/lang/bootstrap/program_ir.dg`
+- `code/lang/bootstrap/nasm_program.md`
+- `code/lang/bootstrap/compiler_driver.md`
+- `code/lang/bootstrap/native_assembler.md`
+- `coordination/dongos_works/reviews/2026-10-20-WINVERIFY1-integrated-and-accepted.md`
+
+### 🟡 L3A 通用后端、原生汇编与目标入口
+
+已完成或已有证据：
+
+- 已支持源码子集经真实Graph降级为统一程序IR并生成NASM；通用降级不再停留于C51单个u64表达式
+- Dong原生汇编器可生成内核可验证的静态ELF；宿主受限加载器已执行该编译核心，冻结核心可复现相同汇编
+- GUEST1路径门禁、GUEST2有界读回调及GUEST3内存规划已accepted，尚未实际接入主线运行链
+
+尚待完成：
+
+- GUEST4（in_progress rev2）：在独立适配层接通compiler_driver与native_assembler，交付后独立复验及真实集成
+- 目标源码读取、诊断CLI、编译器启动适配及授权I/O尚需接线；现有ELF入口是可调用编译API，不是DongOS进程入口
+- 保持尚不支持的语义明确失败，不能将宿主C文件系统/CLI适配器当作客体版本
+
+核对依据：
+
+- `code/lang/bootstrap/compiler_driver.md`
+- `code/lang/bootstrap/native_assembler.md`
+- `code/docs/l3-native-selfhost-progress.md`
+- `coordination/dongos_works/pool-works/tasks/GUEST4-board.md`
+
+### 🟡 L3B 宿主stage1/stage2固定点与独立审查
+
+已完成或已有证据：
+
+- 冻结49模块闭包以空PATH生成stage1/stage2；汇编、对象与宿主可执行文件字节一致，具有精确来源/命令/语义正负控回执
+- packed-flow版本另有宿主固定点回执；原生汇编生成的ELF编译核心在受限宿主加载器中可复现冻结汇编
+- 宿主加载器截短表范围缺陷已修复，112个截短长度经独立ASan复核，较宽畸形输入集另有组件回执
+
+尚待完成：
+
+- 累计独立审查尚未关闭；具体组件通过不等于整个当前源码闭包已独立验收
+- 后续源码变化需重新冻结并验证相应产物；宿主C适配器/可调用编译API不等于客体可执行编译器
+
+核对依据：
+
+- `code/docs/l3-native-selfhost-progress.md`
+
+### ⬜ L3C DongOS内自编译与持久化验收
+
+已完成或已有证据：
+
+- 前置准备：GUEST1/2/3已正式验收待集成；GUEST5已有协议实现但尚未通过验收，当前在返修
+- 现有宿主证据明确区分ELF输入上限、单一arena测量、总进程内存及栈需求，不据文件大小宣称可在客体运行
+
+尚待完成：
+
+- 客体16KiB用户栈、64MiB共享arena内的完整编译过程与其他进程并存尚未证明
+- GUEST5（in_progress rev7，返修中）：拒绝written<total的异常待FLUSH状态，修复后重新独立复验；实际系统写入/FLUSH权限接入另验
+- 受授权的产物持久化、下一阶段启动、真实DongOS内自编译及同盘FLUSH/重启后对比宿主产物
+- 所需宿主VM工具当前未满足；本轮未运行OS/VM，不自动扩大内存或授予写盘、进程管理、电源权限
+
+核对依据：
+
+- `code/docs/l3-native-selfhost-progress.md`
+- `coordination/dongos_works/pool-works/tasks/GUEST5-board.md`
+- `coordination/dongos_works/reviews/2026-10-20-guest5-inconsistent.json`
+
+## 协作与验收流程
 
 ```mermaid
-flowchart LR
-    SRC["源码文本"] --> LEX["✅ lexer"] --> PARSE["✅ expression／syntax"]
-    PARSE --> LOWER["✅ C51 u64表达式→IR<br/>仅 INTEGER／NAME／+-*&|^"]
-    LOWER --> FUNC["✅ C48 直线IR→完整函数<br/>✅ D24 固定次数循环函数"]
-    FUNC --> MOD["🔄 C52 多函数NASM模块<br/>待独立复验"]
-    MOD -. 未接线 .-> TOOL["⬜ 汇编／链接／ELF产物与CLI"]
-    PARSE -. 未接线 .-> GEN["⬜ 通用AST→IR降级<br/>局部绑定、调用、条件、循环、switch、受检算术、聚合"]
-    BR["🔄 C49 条件双分支 已验收未集成<br/>🔄 C50 实参重排跨函数调用 已验收未集成<br/>🔄 D25 switch、D27 索引装入存储 待复验<br/>⏸ Cursor CR38～CR42 暂停"] -.-> GEN
+flowchart TD
+    C0["✅ C0 公共任务池与客户端MCP"]
+    C1["✅ C1 Windows复验停止证明与登记"]
+    C0 --> C1
+    C2["🟡 C2 独立验收、主线集成与旧任务归档"]
+    C1 --> C2
     classDef complete fill:#e7f7ed,stroke:#2f8a53,color:#183d26;
     classDef partial fill:#fff4d9,stroke:#b58516,color:#594108;
     classDef pending fill:#edf0f5,stroke:#8b96a8,color:#3d4654;
-    class SRC,LEX,PARSE,LOWER,FUNC complete;
-    class MOD,BR partial;
-    class TOOL,GEN pending;
+    class C0,C1 complete;
+    class C2 partial;
 ```
 
-| L3 环节 | 当前状态（协调器 2026-10-19 23:30） |
-| --- | --- |
-| 已集成 | 前端与语义子集、55 个 `nasm_` 组件、C48、D24、C51、C45（ELF64 镜像）、D23（产物比较） |
-| 已验收、尚未集成 | C49（条件比较与双分支返回）、C50（实参重排与真实跨函数调用） |
-| 已提交、待独立复验 | C52（多函数 NASM 模块与可链接导出）、D25（有界 i64 switch 函数）、D27（有界索引装入/存储函数） |
-| 暂停 | Cursor CR38～CR42（受检 64 位算术与错误返回、AND/OR 短路、双字返回清理、窄算术、切片视图） |
-| 尚未开始 | 通用 AST→IR 降级与统一后端、目标 I/O/诊断 CLI/工具链接线、宿主 stage1/stage2、DongOS 内自编译 |
+### ✅ C0 公共任务池与客户端MCP
 
-协调器全表此刻共 120 项：已集成 91、已验收未集成 21、待复验 3、暂停 5；它们是协作任务数，不代表系统或 L3 的完成百分比。
+已完成或已有证据：
 
-下一步仍须补完整语义（方法、标签、错误与 defer 清理）、把各受限组件统一进完整后端、目标 I/O/诊断 CLI/工具链，再完成宿主 stage1/stage2 和真正 DongOS 自编译、落盘与重启一致性。组件验收不能替代完整自举验收。
+- 工作台支持发布时省略负责人，由DeepSeek/Claude/Cursor自行领取；本机三执行客户端worker、Codex coordinator已核对连接
+- MCPPOOL1已真实集成：mcp_server.py/mcp_config.py/MCP.md回写正式路径，两项永久回归在coordination/tests，与test_mcp合计29项零skip（2026-10-20）
 
-## 依据
+尚待完成：
 
-- [总计划](../../code/PLAN.md)：语言线 338–363 行；系统阶段 365–479 行。
-- [系统集成记录](../../code/docs/process-integration.md)：127 行为正常内核能力通知/共享对象/MSI 通过；131–139 行保留 R6 首次启动与 GUI 回归的未关闭结论。
-- [语言线记录](../../code/docs/language-l2-l3.md)：30–46 行为当前 L3 进展与剩余顺序；98–104 行为 L2 固定性能集合通过；144–148 行为自举原门槛与后续系统回归现状。该文档的 L3 新增条目停在 CR28/CR29，尚未写入 C48/D24/C51 的集成；这里以代码和协调器状态为准。
-- 受限整函数接线的源码：`code/lang/bootstrap/nasm_u64_function.dg`、`nasm_u64_loop_function.dg`、`u64_expression_ir.dg`（各带同名 `.md`），永久测试在 `code/lang/tests/test_bootstrap_nasm_u64_function.py`、`test_bootstrap_nasm_u64_loop_function.py`、`test_bootstrap_u64_expression_ir.py`。
-- 集成与验收记录：[C48 集成与 C49/C50 复审](reviews/2026-10-19-C48-integrated-C49-C50-R1.md)、[C51/D24 集成](reviews/2026-10-19-C51-D24-integrated.md)。
+- 各客户端需重载MCP连接或新建会话，新规则才在该客户端生效；未改动真实客户端配置
 
-本次只更新任务图文档（`roadmap.json`、本文件），没有执行 OS/VM，没有修改源码、任务数据库、派生索引或验收/集成状态。
+核对依据：
+
+- `coordination/dongos_works/pool-works/tasks/MCPPOOL1-board.md`
+- `coordination/dongos_works/reviews/2026-10-20-formal-acceptance-evidence.json`
+
+### ✅ C1 Windows复验停止证明与登记
+
+已完成或已有证据：
+
+- WINVERIFY1已真实集成正式runner与永久回归，服务已重启；Windows Job Object证明整个进程树停止后才登记结果
+- WINVERIFY1 integrated rev9；11项正式测试与11项主线回归零skip，后续正式作业均能正常保存结果，无遗留停止确认
+
+尚待完成：
+
+- 所列受控范围已关闭，范围外与后续版本回归另验。
+
+核对依据：
+
+- `coordination/dongos_coordination/runner.py`
+- `coordination/tests/test_windows_verification_finish.py`
+- `coordination/dongos_works/reviews/2026-10-20-WINVERIFY1-integrated-and-accepted.md`
+
+### 🟡 C2 独立验收、主线集成与旧任务归档
+
+已完成或已有证据：
+
+- C52、CR40、MCPPOOL1已真实集成并登记integrated；GUEST1/2/3与WINVERIFY1此前已集成；C52/CR40主线测试11项零skip（2026-10-20）
+- CR43、CR44、D28、LM9已被通用编译链取代，全部归档rev3；保留原任务/事件，不再在默认清单等待执行
+
+尚待完成：
+
+- GUEST4实现中、GUEST5返修中，提交后按最新rev审查源码/契约并独立复验，再逐项真实集成；不能批量改成integrated
+
+核对依据：
+
+- `coordination/dongos_works/reviews/2026-10-20-WINVERIFY1-integrated-and-accepted.md`
+- `coordination/dongos_works/ALLOCATION.md`
+
+## 范围与证据说明
+
+- 本次于2026-10-20核对语言/协作主线与协调器最新状态。系统P0–P9保留原受控验收证据范围，本轮未重跑系统/GUI/真机/性能验收，也不据语言进展改变系统阶段结论。
+- 核对时默认清单127项：integrated 92、accepted 33、in_progress 2；GUEST4与GUEST5在途。归档任务不计入默认清单。数量仅为带时间的快照，页面统计仍从协调器实时读取，不代表整个操作系统完成百分比。
+- L3仍未完成。通用后端、宿主固定点及原生汇编器已有具体证据，累计独立审查和真正DongOS内自编译/持久化重启仍未关闭。旧“通用后端/宿主stage1-stage2尚未开始”表述已撤除。
+- accepted表示组件通过独立验收；integrated表示已真实集成。GUEST1/2/3、C52、CR40及MCPPOOL1目前均只是accepted，不自动升级为主线能力或客体验收。
+- CR43/CR44/D28/LM9因重复建设已归档；旧清单中的CR38～CR42暂停、C52待复验等描述是历史状态，不能据此恢复任务。
+- 系统完成表示所列受控范围通过既定门槛，历史镜像功能验收不替代当前镜像回归；P7当前输入/GUI、P8新版USB回归和真机、P6 Linux/KVM外部验收继续保留。
+- P2旧PCID勾选与较新P4 BSP PCID证据分开看待，跨核PCID保留未由R6 UART回归证明；P0本地通过不等于远程CI，P3受控定时回退不等于真实TSC-deadline路径。
+- P10网络、声音、中文输入及更多应用另定范围；本轮不扩大客体权限、栈/内存配置或启动OS/VM。

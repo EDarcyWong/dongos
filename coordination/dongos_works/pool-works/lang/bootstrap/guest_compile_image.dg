@@ -1,0 +1,82 @@
+// Guest adapter: live frontend.Graph → compiler_driver.compile → native_assembler.assemble.
+// Caller supplies every buffer. The entry symbol is a callable text label, not an OS _start.
+// Final ELF bytes are published only after both stages succeed. Unsupported emit is never OK.
+// No allocation, no global mutable cache, no OS calls, no C export on the production module.
+module bootstrap.guest_compile_image;
+import bootstrap.frontend as front;
+import bootstrap.compiler_driver as driver;
+import bootstrap.native_assembler as nasm;
+pub const OK:u64=0;pub const INVALID:u64=1;pub const CAPACITY:u64=2;
+pub const UNSUPPORTED:u64=3;pub const FRAME:u64=4;pub const INTERNAL:u64=5;
+pub const SYNTAX:u64=3;pub const SYMBOL:u64=4;pub const RANGE:u64=5;
+pub const WORKSPACE:u64=0;pub const LOWER:u64=1;pub const EMIT:u64=2;pub const ASSEMBLE:u64=3;
+const MAX:u64=0xffff_ffff_ffff_ffff;
+const RESULT_BYTES:u64=72;const LIMITS_BYTES:u64=56;const WORKSPACE_BYTES:u64=64;const LABEL_BYTES:u64=32;
+pub struct Result{pub status:u64,pub stage:u64,pub code:u64,pub unit:usize,pub node:usize,
+ pub detail:u64,pub used:usize,pub text:usize,pub written:usize}
+struct Region{p:u64,n:u64}
+fn span(p:u64,n:u64)bool{return n==0||(p!=0&&n<=MAX-p);}
+fn overlap(a:u64,n:u64,b:u64,m:u64)bool{return n!=0&&m!=0&&a<b+m&&b<a+n;}
+unsafe fn publish(r:*Result,status:u64,stage:u64,code:u64,unit:usize,node:usize,detail:u64,
+ used:usize,text:usize,written:usize)u64{unsafe{
+ *r=Result{status:status,stage:stage,code:code,unit:unit,node:node,detail:detail,used:used,text:text,written:written};
+ return status;
+}}
+// Descriptor, capacity-arithmetic and full-tail alias checks before any callee write.
+unsafe fn preflight(g:*const front.Graph,limits:*const driver.Limits,storage:[]u8,text:[]u8,
+ entry:[]const u8,w:*const nasm.Workspace,out:[]u8,r:*Result)bool{unsafe{
+ if g==null||limits==null||w==null||r==null{return false;}
+ let gp=g as u64;let lp=limits as u64;let wp=w as u64;let rp=r as u64;
+ if (gp&7)!=0||(lp&7)!=0||(wp&7)!=0||(rp&7)!=0{return false;}
+ if !span(gp,sizeof(front.Graph))||!span(lp,LIMITS_BYTES)||!span(wp,WORKSPACE_BYTES)||!span(rp,RESULT_BYTES){return false;}
+ if (*w).labels.len>MAX/LABEL_BYTES||(*w).table.len>MAX/8{return false;}
+ let sp=storage.ptr as u64;let sn=storage.len as u64;
+ let tp=text.ptr as u64;let tn=text.len as u64;
+ let ep=entry.ptr as u64;let en=entry.len as u64;
+ let op=out.ptr as u64;let on=out.len as u64;
+ let lab=(*w).labels.ptr as u64;let labn=(*w).labels.len*LABEL_BYTES;
+ let tab=(*w).table.ptr as u64;let tabn=(*w).table.len*8;
+ let wt=(*w).text.ptr as u64;let wtn=(*w).text.len as u64;
+ let wd=(*w).data.ptr as u64;let wdn=(*w).data.len as u64;
+ if !span(sp,sn)||!span(tp,tn)||!span(ep,en)||!span(op,on){return false;}
+ if !span(lab,labn)||!span(tab,tabn)||!span(wt,wtn)||!span(wd,wdn){return false;}
+ if (labn!=0&&(lab&7)!=0)||(tabn!=0&&(tab&7)!=0){return false;}
+ // Mutable regions (full capacities) must be pairwise disjoint and free of input aliases.
+ let muts=[Region{p:sp,n:sn},Region{p:tp,n:tn},Region{p:op,n:on},Region{p:rp,n:RESULT_BYTES},
+  Region{p:lab,n:labn},Region{p:tab,n:tabn},Region{p:wt,n:wtn},Region{p:wd,n:wdn}];
+ var i:usize=0;while i<muts.len{
+  var j:usize=0;while j<i{if overlap(muts[i].p,muts[i].n,muts[j].p,muts[j].n){return false;}j+=1;}
+  i+=1;
+ }
+ let inputs=[Region{p:gp,n:sizeof(front.Graph)},Region{p:lp,n:LIMITS_BYTES},Region{p:wp,n:WORKSPACE_BYTES},
+  Region{p:ep,n:en}];
+ i=0;while i<inputs.len{
+  if !span(inputs[i].p,inputs[i].n){return false;}
+  var k:usize=0;while k<muts.len{if overlap(muts[k].p,muts[k].n,inputs[i].p,inputs[i].n){return false;}k+=1;}
+  i+=1;
+ }
+ return true;
+}}
+pub unsafe fn compile_image(g:*const front.Graph,limits:*const driver.Limits,mode:u64,
+ storage:[]u8,text:[]u8,entry:[]const u8,w:*const nasm.Workspace,out:[]u8,r:*Result)u64{unsafe{
+ if mode>1||!preflight(g,limits,storage,text,entry,w,out,r){return INVALID;}
+ var er=driver.Result{status:0,stage:0,code:0,unit:0,node:0,detail:0,used:0,written:0};
+ let emit=driver.compile(g,limits,mode,storage,text,&er);
+ if emit==INVALID{return INVALID;}
+ if emit!=OK{
+  // Emit failed: never call the assembler; keep ELF capacity untouched.
+  return publish(r,er.status,er.stage,er.code,er.unit,er.node,er.detail,er.used,0,0);
+ }
+ // Emit succeeded: text[0..er.written] is the only assembly source for the next stage.
+ let source=slice_from_raw_parts(text.ptr,er.written);
+ var ar=nasm.Result{status:0,line:0,detail:0,text_bytes:0,data_bytes:0,labels:0,written:0};
+ let assembled=nasm.assemble(source,entry,w,out,&ar);
+ if assembled==INVALID{
+  // Should be unreachable after our preflight; keep caller Result/out untouched.
+  return INVALID;
+ }
+ if assembled!=OK{
+  return publish(r,ar.status,ASSEMBLE,ar.status,MAX as usize,MAX as usize,ar.detail,er.used,er.written,0);
+ }
+ return publish(r,OK,ASSEMBLE,0,MAX as usize,MAX as usize,0,er.used,er.written,ar.written);
+}}

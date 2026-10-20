@@ -42,7 +42,7 @@ Codex 默认安装 `coordinator` 角色：下方8个执行工具加5个管理工
 
 | 协调工具 | 参数 | 行为 |
 | --- | --- | --- |
-| `create_task` | `project,id,title,write_paths`；可选 `owner,description,checks,depends_on` | 创建todo任务，保留路径、依赖及LM Studio简单任务约束，不调用执行器 |
+| `create_task` | `project,id,title,write_paths`；可选 `owner,description,checks,depends_on` | 创建todo任务；**省略owner默认进入公共池**（`pool:`编号与`pool-works/`）；显式owner保留旧定向派单；保留路径、依赖及LM Studio简单任务约束，不调用执行器 |
 | `change_task` | `project,task_id,rev,action,note` | action为rework/pause/resume/accept/integrate/archive/unarchive/reassign；转派须额外指定new_owner（unassigned表示公共领取）；登记明确返修、归档或真实审查/集成依据 |
 | `queue_verification` | `project,task_id,rev` | 只排队已声明的定向测试，返回作业，不把排队成功当测试通过 |
 | `list_jobs` | `project`；可选 `task_id` | 最近最多120个作业摘要；完整复验结论在get_task.verification |
@@ -70,21 +70,21 @@ Codex 默认安装 `coordinator` 角色：下方8个执行工具加5个管理工
 | --- | --- | --- |
 | `get_workflow` | 无 | 当前绑定 owner、role、会话 agent_id、地址及执行约定 |
 | `list_projects` | 无 | 项目编号及源码/任务目录 |
-| `list_tasks` | `project`；可选 `owner,status,q,offset,limit` | worker默认当前负责人及公共待领取任务，Codex协调角色默认全部负责人；limit默认25，最大100 |
+| `list_tasks` | `project`；可选 `owner,status,q,offset,limit` | worker默认当前负责人及公共待领取；`owner=unassigned`仅公共池；Codex协调角色默认全部负责人；列出不等于领取；结果按id去重排序后分页；limit默认25，最大100 |
 | `get_task` | `project,task_id` | 完整任务、最新 rev、依赖、write_paths、review_note、candidate |
 | `read_document` | `project,task_id`；可选 `kind=task/delivery` | 任务书或交付、SHA256、truncated 标识 |
-| `claim_task` | `project,task_id,rev` | 领取当前负责人或公共任务，受依赖、活动作业、路径冲突和版本检查约束 |
-| `release_task` | `project,task_id,rev` | 释放本会话领取的任务，保留文件 |
+| `claim_task` | `project,task_id,rev` | 领取当前负责人或公共任务；相同rev并发仅一胜者；受依赖、活动作业、路径冲突和版本检查约束 |
+| `release_task` | `project,task_id,rev` | 释放本会话领取的任务；公共任务回到公共池可供其它成员领取，保留文件 |
 | `acknowledge_pause` | `project,task_id,rev`；重连可传 `claim_token` | 原领取者已确实停止外部工作后确认；不能用于假装进程已停止 |
-| `submit_task` | `project,task_id,rev`；可选 `report` | 追加真实交付报告，只进入 submitted，不验收、不集成 |
+| `submit_task` | `project,task_id,rev`；可选 `report` | 追加真实交付报告，只进入 submitted，不验收、不集成；旧轮次令牌/版本拒绝 |
 
-`task_id` 必须为完整编号，例如 `claude:C19`、`cursor:CR2` 或 `lmstudio:LM6`。owner 由服务启动参数绑定，工具参数不能覆盖 owner/agent_id。worker可只读查询其它负责人，领取可选择公共任务，交付只能是当前领取轮次的任务；worker没有发布、验收、集成等管理工具。Codex协调角色的额外能力见上表；所有角色均无shell或任意文件读写工具。
+`task_id` 必须为完整编号，例如 `claude:C19`、`cursor:CR2`、`lmstudio:LM6` 或公共池 `pool:MCPPOOL1`。owner 由服务启动参数绑定，工具参数不能覆盖 owner/agent_id。worker可只读查询其它负责人，领取可选择公共任务，交付只能是当前领取轮次的任务；worker没有发布、验收、集成等管理工具。Codex协调角色的额外能力见上表；所有角色均无shell或任意文件读写工具。
 
 ## 客户端执行提示
 
-在各客户端对话中发送（Cursor 必须由用户手动发起）：
+新任务默认不指定负责人，由 DeepSeek、Claude、Cursor 自主领取。安装/重载 MCP 后，在各客户端对话中发送（Cursor 必须由用户手动发起；不自动启动模型或轮询派单）：
 
-> 使用 coordination-tasks：先查看项目列表，选择 dongos；查询分配给你及公共池的 todo/rework 任务。读取完整任务、任务书和返修要求，确认依赖和文件范围。选择一项，用最新 rev 领取，收到成功响应后才开始。只修改授权文件；测试结果如实记录。完成后重新查询 rev，提交交付并等待独立复验。遇到409重新查询原因，不抢占、不无限重试；没有可执行任务就停止。
+> 使用 coordination-tasks：先查看项目列表，选择 dongos；查询分配给你及公共池的 todo/rework（列出不等于领取）。读取完整任务、任务书、依赖、review_note 和 write_paths，确认文件范围。选择一项，用最新 rev 领取，收到成功响应后才开始。只修改授权文件；测试结果如实记录。完成后重新查询 rev，提交交付并等待独立复验。遇到409（依赖未验收、路径冲突、版本或令牌冲突）重新查询原因，不抢占、不无限重试；没有可执行任务就停止。
 
 示例工具参数：
 
@@ -116,9 +116,9 @@ LM Studio 继续只接少量简单任务，最多3个明确文本文件（含交
 
 ## 公共领取与安全转派
 
-发布时省略owner即可进入公共池，路径使用pool-works/。MCP默认列表包含公共任务；LM Studio仍受最多3个明确文本文件等限制。任务ID表示稳定身份，转派后不会随负责人改名，实际owner以当前任务字段为准。
+**默认公共池发布（2026-10-20）**：协调者 `create_task` 省略 owner 即进入公共池，稳定编号为 `pool:…`，路径使用 `pool-works/`。DeepSeek、Claude、Cursor 三个 worker 客户端共用同一 `coordination-tasks` 服务，启动参数分别绑定 `--owner deepseek|claude|cursor`，由各客户端自主领取；显式指定 owner 的旧定向任务仍兼容。MCP worker 默认列表包含本人任务与公共待领取；`owner=unassigned` 仅查公共池。列出不等于领取。LM Studio仍受最多3个明确文本文件等限制。任务ID表示稳定身份，领取/转派后不会改名，实际owner以当前任务字段为准；授权路径仍为 `pool-works/`。
 
-领取返回claim_token，本进程自动保存。release_task、submit_task、acknowledge_pause可显式传claim_token以恢复同一领取实例；服务会同时检查owner、agent_id、最新rev与本轮令牌。不要从新轮次获取令牌后提交旧结果。
+领取返回claim_token，本进程自动保存。release_task、submit_task、acknowledge_pause可显式传claim_token以恢复同一领取实例；服务会同时检查owner、agent_id、最新rev与本轮令牌。释放后公共任务重新开放给其它成员。不要用旧轮次令牌提交新结果。
 
 协调者pause会请求停止：本服务管理的CLI必须等实际进程退出；外部客户端必须先自行停止，再acknowledge_pause。停止等待期间不可转派或继续提交。暂停确认后，协调者使用change_task/action=reassign并明确new_owner和交接note；旧领取立即失效，新成员须重新领取。CLI恢复需要重新执行，没有操作系统级挂起/恢复功能。服务重启后无法确认的旧进程必须人工核对停止，不能自动接续。
 
