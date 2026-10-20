@@ -42,5 +42,7 @@ python3 -m tests.run_p6_kvm_qemu --reuse-esp build/test/p6-kvm/build/esp --outpu
 ```
 
 保存整个 `build/test/p6-kvm/`；实际结果是 `actual/result.json`，不是主机
-单元测试中的合成 KVM 标志。`.github/workflows/p6.yml` 自动尝试相同门禁，
-保留没有 KVM 的失败原因，不用跳过或允许失败来伪造通过。
+单元测试中的合成 KVM 标志。`.github/workflows/p6.yml` 在本次 PR #3 中尝试相同门禁，
+保留没有 KVM 的失败原因，不用允许失败来伪造通过。用户仅授权本次验收
+进程临时使用设备所属的既有 kvm 组；不改设备权限或永久组成员，其他 PR
+与 main push 不继承这一权限。后续 KVM 验收须使用已有访问权限或另行授权。

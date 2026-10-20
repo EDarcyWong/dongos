@@ -34,6 +34,9 @@ jobs:
             code/build/test/usb-input-usbonly/
           if-no-files-found: error
   kvm-timing:
+    # One-task authorization: this PR's validation process may use the existing
+    # device group. Do not grant persistent membership or authorize future PRs.
+    if: github.event_name == 'pull_request' && github.event.pull_request.number == 3 && github.event.pull_request.head.repo.full_name == 'EDarcyWong/dongos' && github.event.pull_request.head.ref == 'codex/p6-input-irq-kvm-validation'
     runs-on: ubuntu-24.04
     timeout-minutes: 45
     defaults:
@@ -45,7 +48,14 @@ jobs:
           persist-credentials: false
       - name: Probe KVM access without changing host permissions
         run: |
-          python3 - <<'PYCODE'
+          python3 - <<'VERIFY'
+          import grp, os, pwd, stat
+          device = os.stat('/dev/kvm')
+          assert stat.S_ISCHR(device.st_mode), 'KVM must be a character device'
+          assert device.st_gid == grp.getgrnam('kvm').gr_gid, 'existing kvm group must own device'
+          assert os.getuid() == pwd.getpwnam('runner').pw_uid, 'expected unprivileged runner user'
+          VERIFY
+          sudo -n -u runner -g kvm -- python3 - <<'PYCODE'
           import json
           from pathlib import Path
           from tests.run_p6_kvm_qemu import preflight
@@ -65,7 +75,7 @@ jobs:
       - name: Build current normal runtime7 image
         run: python3 -c "from pathlib import Path; from tools.build import build; build(runtime_level=7, output=Path('build/test/p6-kvm/build'))"
       - name: Run uninterrupted four-core KVM timing gate
-        run: python3 -m tests.run_p6_kvm_qemu --reuse-esp build/test/p6-kvm/build/esp --output build/test/p6-kvm/actual --timeout 120
+        run: sudo -n -u runner -g kvm -- python3 -m tests.run_p6_kvm_qemu --reuse-esp build/test/p6-kvm/build/esp --output build/test/p6-kvm/actual --timeout 120
       - name: Preserve successful or failed real-guest evidence
         if: always()
         uses: actions/upload-artifact@v7
