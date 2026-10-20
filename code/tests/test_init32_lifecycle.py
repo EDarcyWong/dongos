@@ -1,11 +1,13 @@
 """Real init launcher and bounded recovery policy, executed in both modes."""
+# Tests the tracked current implementation, not a replay of unavailable candidate sources.
 from __future__ import annotations
 import hashlib,json,os,subprocess,unittest,uuid
 from pathlib import Path
 from lang.dongc import compile_file
 from lang.tests.test_dongc import nasm_flags,tool
 ROOT=Path(__file__).resolve().parents[1]
-BASE=ROOT/'build/test/p7-catalog-candidate'
+BASE_REVISION=subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip()
+BASE=ROOT
 INPUTS=[(BASE/p if p.startswith("services/") else ROOT/p) for p in ('services/lib/process_abi.dg','services/lib/process.dg','services/lib/sys.dg',
  'services/lib/abi.dg','services/init/policy.dg','services/init/main.dg',
  'tests/init_lifecycle_probe.dg','tests/init32_lifecycle_probe.c','tests/test_init32_lifecycle.py')]
@@ -23,7 +25,7 @@ class Init32LifecycleTests(unittest.TestCase):
         for file in cls.out.glob('*/native.json'):
             data=json.loads(file.read_text());results[file.parent.name]={key:data[key] for key in ('returncode','stdout','stderr')}
         passed=len(results)==10 and all(item['returncode']==(0 if name in ('debug','release') else 1) for name,item in results.items())
-        (cls.out/'validation-summary.json').write_text(json.dumps(dict(passed=passed,sources_unchanged=after==cls.before,source_sha256=after,evidence=results),indent=2)+'\n')
+        (cls.out/'validation-summary.json').write_text(json.dumps(dict(passed=passed,source_binding='tracked-current-source',historical_candidate_replay=False,base_revision=BASE_REVISION,sources_unchanged=after==cls.before,source_sha256=after,evidence=results),indent=2)+'\n')
         print('INIT32_EVIDENCE',cls.out)
         if after!=cls.before:raise AssertionError('init inputs changed during verification')
     def command(self,args,d,name):

@@ -156,7 +156,7 @@ static ABI uint64_t model_write(uint64_t context,uint64_t handle,uint64_t offset
     case 0x14:C(value==0);v->ie=0;break;case 0x10:C(!(value&~UINT64_C(0xfdc000ff)));v->is&=~(uint32_t)value;break;
     case 0x30:C(!(value&~UINT64_C(0x07ff0f03)));v->serr&=~(uint32_t)value;break;
     case 0x18:C(!(value&~UINT64_C(0x17)));if((value&0x10)&&!(v->cmd&0x10))C(hba.bme&&p==2);
-        if((value&1)&&!(v->cmd&1))C(hba.bme&&p==2&&(v->cmd&0x10));v->cmd=(uint32_t)value;break;
+        if((value&1)&&!(v->cmd&1)){C(hba.bme&&p==2&&(v->cmd&0x10));}v->cmd=(uint32_t)value;break;
     case 0x38:C(p==2);issue(value);break;default:C(0);}
     return 0;
 }

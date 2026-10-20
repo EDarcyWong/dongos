@@ -3,9 +3,9 @@ import copy,hashlib,importlib.util,json,struct,sys,tempfile,unittest
 from pathlib import Path
 from unittest import mock
 from tests import user_smp_oracle as o
-ROOT=Path(__file__).resolve().parents[1];BASE=ROOT/'build/test/p6-cpl3-integration-candidate'
+ROOT=Path(__file__).resolve().parents[1];BASE=ROOT/'tests'
 def runner():
- s=importlib.util.spec_from_file_location('user_smp_actual_runner',BASE/'tests/run_user_smp_qemu.py');m=importlib.util.module_from_spec(s);s.loader.exec_module(m);return m
+ s=importlib.util.spec_from_file_location('user_smp_actual_runner',BASE/'run_current_user_smp_qemu.py');m=importlib.util.module_from_spec(s);s.loader.exec_module(m);return m
 def fixture():
  a=0xffff800011000000;domain=0xffff800010000000;r=[1,0,1,4,15,domain,a-4096,a+65536,0x900000,1000000000]
  h=[0]*32;h[0]=a+32768;h[2]=a;h[4]=r[8];h[7]=o.MAGIC;h[8]=r[7]+256;h[9]=r[5];h[10]=1;h[11]=r[7];h[12]=4;h[13]=1
@@ -82,14 +82,14 @@ class Tests(unittest.TestCase):
    (out/'kernel.elf').write_bytes(b'completed-artifact');elfs={}
    for name in module.NAMES[7:12]:
     path=out/'services'/name/'program.elf';path.parent.mkdir(parents=True);path.write_bytes(b'completed '+name.encode());elfs[name]=module.sha(path)
-   m=dict(built=True,source_unchanged=True,test=True,runtime_level=7,user_smp=True,user_workload=True,user_case=None,esp=str(esp.resolve()),
-          actual_kernel_sha256={'kernel/entry.dg':module.sha(kernel)},candidate_sha256={'services/worker.asm':module.sha(worker)},workload_elf_sha256=elfs,production_base_sha256={})
-   (base/'base-sha256.json').write_text('{}')
-   (out/'p6-cpl3-source.json').write_text(json.dumps(m));(out/'build-inputs.json').write_text(json.dumps(dict(runtime_level=7,test=True,graphics_case=None,source_unchanged=True,source_sha256={},artifacts={'kernel.elf':module.sha(out/'kernel.elf')})))
+   m=dict(schema=1,contract='current-user-smp-v1',source_root=str(base.resolve()),kernel_elf_sha256=module.sha(out/'kernel.elf'),built=True,source_unchanged=True,test=True,runtime_level=7,user_smp=True,user_workload=True,user_case=None,esp=str(esp.resolve()),
+          staged_kernel_sha256={'kernel/entry.dg':module.sha(kernel)},source_sha256={'services/worker.asm':module.sha(worker)},workload_elf_sha256=elfs)
+   # Newly generated host fixture, not historical evidence.
+   (out/'current-user-smp-source.json').write_text(json.dumps(m));(out/'build-inputs.json').write_text(json.dumps(dict(runtime_level=7,test=True,graphics_case=None,source_unchanged=True,source_sha256=m['source_sha256'],artifacts={'kernel.elf':module.sha(out/'kernel.elf'),**{'services/'+n+'/program.elf':h for n,h in elfs.items()}})))
    with mock.patch.object(module,'BASE',base):
     self.assertEqual(m,module.identity(esp,False))
     worker.write_text('tampered after completed build')
-    with self.assertRaisesRegex(ValueError,'candidate builder/workload/include'):module.identity(esp,False)
+    with self.assertRaisesRegex(ValueError,'current builder/workload/include'):module.identity(esp,False)
     worker.write_text('actual original source');(out/'kernel.elf').write_bytes(b'tampered artifact')
     with self.assertRaisesRegex(ValueError,'artifact changed'):module.identity(esp,False)
     with self.assertRaisesRegex(ValueError,'explicitly selected'):module.identity(esp,True)

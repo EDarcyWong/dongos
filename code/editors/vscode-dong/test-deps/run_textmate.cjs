@@ -17,12 +17,12 @@ async function main() {
     if (bytes.length !== pinned.bytes || digest !== pinned.sha256) throw new Error('dependency hash mismatch: ' + relative);
   }
   for (const [name, version] of Object.entries(lock.packages)) {
-    const installed = JSON.parse(fs.readFileSync(path.join(base, 'node_modules', name, 'package.json'), 'utf8'));
+    const installed = JSON.parse(fs.readFileSync(path.join(base, 'vendor', name, 'package.json'), 'utf8'));
     if (installed.version !== version) throw new Error('dependency version mismatch: ' + name);
   }
-  const tm = require(path.join(base, 'node_modules/vscode-textmate'));
-  const onig = require(path.join(base, 'node_modules/vscode-oniguruma'));
-  const wasm = fs.readFileSync(path.join(base, 'node_modules/vscode-oniguruma/release/onig.wasm'));
+  const tm = require(path.join(base, 'vendor/vscode-textmate'));
+  const onig = require(path.join(base, 'vendor/vscode-oniguruma'));
+  const wasm = fs.readFileSync(path.join(base, 'vendor/vscode-oniguruma/release/onig.wasm'));
   await onig.loadWASM(wasm.buffer.slice(wasm.byteOffset, wasm.byteOffset + wasm.byteLength));
   const request = JSON.parse(fs.readFileSync(0, 'utf8'));
   const groups = {};

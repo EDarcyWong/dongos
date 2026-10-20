@@ -94,7 +94,7 @@ static void check_select(const Reference *r,const Sample *s,size_t n){
  struct{uint64_t pre;Result value;uint64_t post;} out;out.pre=UINT64_C(0x8877665544332211);out.post=UINT64_C(0x1122334455667788);memset(&out.value,0xa5,sizeof out.value);Result saved=out.value,expected=out.value;Sample original[7];if(s&&n<=7)memcpy(original,s,n*sizeof *s);
  uint64_t want=model_select(r,s,n,&expected),actual=clock_select(r,s,n,&out.value);CHECK(actual==want);
  if(!actual){CHECK(memcmp(&out.value,&expected,sizeof expected)==0);CHECK(out.value.consistent>=3);selections++;}else{CHECK(memcmp(&out.value,&saved,sizeof saved)==0);rejections++;}
- if(s&&n<=7)CHECK(memcmp(original,s,n*sizeof *s)==0);CHECK(out.pre==UINT64_C(0x8877665544332211)&&out.post==UINT64_C(0x1122334455667788));
+ if(s&&n<=7){CHECK(memcmp(original,s,n*sizeof *s)==0);}CHECK(out.pre==UINT64_C(0x8877665544332211)&&out.post==UINT64_C(0x1122334455667788));
 }
 static void old_bias(void){
  Reference r={UINT64_MAX,10000000,0};Sample s[7];s[0]=synthetic(&r,100000,1350000,10000,10000000,UINT64_C(3410000000),62500000);s[1]=synthetic(&r,100000,1200000,10000,10000000,UINT64_C(3410000000),62500000);

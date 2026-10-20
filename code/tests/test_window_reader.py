@@ -1,16 +1,18 @@
-"""Deferred compositor-reader lifetime using real USER PTEs and RAM owner."""
+"""Current-source compositor-reader lifetime using real USER PTEs and RAM owner."""
+# No historical candidate replay: negative variants are explicit synthetic mutations.
 import hashlib,json,os,re,subprocess,unittest,uuid
 from pathlib import Path
 from lang.dongc import compile_file
 from lang.tests.test_dongc import nasm_flags,tool
 ROOT=Path(__file__).resolve().parents[1]
-CANDIDATE=ROOT/'build/test/p7-reader-candidate/kernel/user/window_broker.dg'
+BASE_REVISION=subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip()
+CURRENT=ROOT/'kernel/user/window_broker.dg'
 class Tests(unittest.TestCase):
     def test_real_alias_retention_reused_source_and_final_reclaim(self):
         names=('kernel/user/memory.dg','kernel/mm/paging.dg','kernel/boot/memory_startup.dg','kernel/user/window_broker.dg',
           'tests/window_reader_memory.dg','tests/window_reader_startup.dg','tests/window_reader_broker.dg',
           'tests/user_unshare_resources.dg','tests/window_reader_probe.c','tests/test_window_reader.py')
-        inputs=[ROOT/p for p in names]+[CANDIDATE];before={str(p):hashlib.sha256(p.read_bytes()).hexdigest() for p in inputs}
+        inputs=[ROOT/p for p in names]+[CURRENT];before={str(p):hashlib.sha256(p.read_bytes()).hexdigest() for p in inputs}
         mutations={
           'early-budget-refund':('ENTRIES[i].live=2;','USED-=item.pages*4096;ENTRIES[i].live=2;'),
           'retouch-reused-client':('if item.live==1{','if true{'),
@@ -26,8 +28,13 @@ class Tests(unittest.TestCase):
                 d=out/(mode+'-'+variant);(d/'kernel').mkdir(parents=True)
                 for original in (ROOT/'kernel').rglob('*.dg'):
                     target=d/'kernel'/original.relative_to(ROOT/'kernel');target.parent.mkdir(parents=True,exist_ok=True);target.write_bytes(original.read_bytes())
-                source=CANDIDATE.read_text(encoding='utf-8')
-                if variant=='old-immediate-double-withdrawal':source=(ROOT/names[3]).read_text(encoding='utf-8')
+                source=CURRENT.read_text(encoding='utf-8')
+                if variant=='old-immediate-double-withdrawal':
+                    # Reproduce the historical bug class, not unavailable historical bytes.
+                    start=source.index('        let item=ENTRIES[i];let source=try owner_slot(owner);')
+                    end=source.index('        ENTRIES[i].live=2;',start)+len('        ENTRIES[i].live=2;')
+                    old=source[start:end];self.assertEqual(1,source.count(old))
+                    source=source.replace(old,'        try revoke_index(i);')
                 elif variant!='normal':
                     old,new=mutations[variant];self.assertEqual(1,source.count(old));source=source.replace(old,new)
                 path=d/'kernel/user/window_broker.dg';path.write_text(source+'\n'+(ROOT/names[6]).read_text(encoding='utf-8'),encoding='utf-8')
@@ -50,6 +57,6 @@ class Tests(unittest.TestCase):
                 evidence[mode+'-'+variant]=dict(returncode=r.returncode,stdout=r.stdout,stderr=r.stderr)
         after={str(p):hashlib.sha256(p.read_bytes()).hexdigest() for p in inputs};self.assertEqual(before,after)
         (out/'validation-summary.json').write_text(json.dumps(dict(passed=True,source_sha256=after,sources_unchanged=True,
-          candidate_only=True,real_memory_and_paging=True,hardware_and_arena_boundaries_mocked=True,evidence=evidence),indent=2)+'\n')
+          source_binding='tracked-current-source',historical_candidate_replay=False,base_revision=BASE_REVISION,static_table_slots=3,compositor_pool_pages=128,client_pool_pages=32,synthetic_immediate_withdrawal_control=True,real_memory_and_paging=True,hardware_and_arena_boundaries_mocked=True,evidence=evidence),indent=2)+'\n')
         print('WINDOW_READER_EVIDENCE',out)
 if __name__=='__main__':unittest.main(verbosity=2)

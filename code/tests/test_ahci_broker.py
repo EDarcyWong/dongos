@@ -60,7 +60,14 @@ class AhciBrokerTests(unittest.TestCase):
             needle = b'if ((try read32(ecam+4))&65535)!=((old_command&~7) as u32) {return error.Invalid;}'
             self.assertEqual(1, body.count(needle))
             body = body.replace(needle, b'negative_hit(1); // deliberately omitted initial readback')
-        harness = (FIXTURES / 'harness-prefix.dg.in').read_bytes() + body + (FIXTURES / 'harness-suffix.dg.in').read_bytes()
+        prefix = (FIXTURES / 'harness-prefix.dg.in').read_bytes()
+        capwalk = self.raw[self.raw.index(b'unsafe fn interrupt_caps('):self.raw.index(b'pub unsafe fn grant(')]
+        stub = b'unsafe fn interrupt_caps(ecam:u64,disable:bool)!u64 {return error.Invalid;}'
+        self.assertEqual(1, prefix.count(stub))
+        # Execute the real capability walk. This independent AHCI model has no
+        # MSI capability; any attempted capability write must fail closed.
+        prefix = prefix.replace(stub, b'unsafe fn configuration_write16(address:u64,value:u16)!void {return error.Invalid;}\n' + capwalk)
+        harness = prefix + body + (FIXTURES / 'harness-suffix.dg.in').read_bytes()
         path = where / 'broker_probe.dg'
         path.write_bytes(harness)
         if not bad:

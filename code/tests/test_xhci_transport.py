@@ -1,11 +1,14 @@
-"""Actual transport adapter, actual controller+enumerator, independent DMA hardware."""
+"""Current-source transport regression, not a replay of an unavailable snapshot.
+
+Actual controller+enumerator against independent DMA hardware.
+"""
 from __future__ import annotations
-import hashlib,json,os,subprocess,unittest,uuid
+import hashlib,json,os,shutil,subprocess,unittest,uuid
 from pathlib import Path
 from lang.dongc import compile_file
 from lang.tests.test_dongc import nasm_flags,tool
 ROOT=Path(__file__).resolve().parents[1]
-SOURCE=ROOT/'build/test/p8-transport-candidate/services/usb/xhci_transport.dg'
+SOURCE=ROOT/'services/usb/xhci_transport.dg'
 class XhciTransportTests(unittest.TestCase):
  @classmethod
  def setUpClass(cls):
@@ -22,14 +25,14 @@ class XhciTransportTests(unittest.TestCase):
   for mode in ('debug','release'):
    d=self.out/((mutation+'-' if mutation else '')+mode);d.mkdir();source=SOURCE.parents[1]
    if mutation:
-    source=d/'services';(source/'usb').mkdir(parents=True);s=SOURCE.read_text()
+    source=d/'services';shutil.copytree(ROOT/'services',source);s=SOURCE.read_text()
     old,new={
-     'command-pointer':('match ring.complete(&(*c).command,','e.parameter=(*c).command.physical+(*c).command.slots[0]*16;match ring.complete(&(*c).command,'),
-     'transfer-pointer':('match ring.complete(r,','e.parameter=(*r).physical+(*r).slots[(*r).count-1]*16;match ring.complete(r,'),
+     'command-pointer':('match ring.complete(&(*c).command,(*s).epoch,(*s).command_generation,e,','var sanitized=*e;sanitized.parameter=(*c).command.physical+(*c).command.slots[0]*16;match ring.complete(&(*c).command,(*s).epoch,(*s).command_generation,&sanitized,'),
+     'transfer-pointer':('match ring.complete(r,(*s).epoch,(*p).generation,e,','var sanitized=*e;sanitized.parameter=(*r).physical+(*r).slots[(*r).count-1]*16;match ring.complete(r,(*s).epoch,(*p).generation,&sanitized,'),
      'skip-erdp':('try write64(s,(*c).caps.runtime+0x38,pointer);','let omitted:u64=pointer;'),
-     'short-before-status':('actual=bytes-completion.residual;shortened=true;','actual=bytes-completion.residual;shortened=true;*out=actual;return;'),
+     'short-before-status':('(*p).actual=(*p).bytes-completion.residual;(*p).shortened=1;return;','(*p).actual=(*p).bytes-completion.residual;(*p).shortened=1;try completed(s,p,0);return;'),
     }[mutation];self.assertEqual(1,s.count(old));(source/'usb/xhci_transport.dg').write_text(s.replace(old,new))
-   c=compile_file(ROOT/'tests/xhci_transport_probe.dg',roots=[ROOT/'tests',source,ROOT/'services'],mode=mode);layouts={i['full_name']:i for i in c.layout_manifest['types']};self.assertEqual(720,layouts['usb.xhci_transport.State']['size']);self.assertEqual(1784,layouts['usb.enumerate.State']['size']);self.assertNotRegex(c.assembly.lower(),r'\b(?:invlpg|invpcid|rdmsr|wrmsr|hlt|cli|sti)\b');asm=d/'probe.asm';asm.write_text(c.assembly);obj=d/'probe.o';nasm,cc=tool('nasm','NASM'),tool('gcc','CC');self.assertTrue(nasm and cc)
+   c=compile_file(ROOT/'tests/xhci_transport_probe.dg',roots=[ROOT/'tests',source],mode=mode);layouts={i['full_name']:i for i in c.layout_manifest['types']};self.assertEqual(112,layouts['usb.xhci_transport.Pending']['size']);self.assertEqual(720+12*112+7*8,layouts['usb.xhci_transport.State']['size']);self.assertEqual(1784,layouts['usb.enumerate.State']['size']);self.assertNotRegex(c.assembly.lower(),r'\b(?:invlpg|invpcid|rdmsr|wrmsr|hlt|cli|sti)\b');asm=d/'probe.asm';asm.write_text(c.assembly);obj=d/'probe.o';nasm,cc=tool('nasm','NASM'),tool('gcc','CC');self.assertTrue(nasm and cc)
    r=self.command([nasm,'-f','win64' if os.name=='nt' else 'elf64',*nasm_flags(nasm),asm,'-o',obj],d,'assemble');self.assertEqual(0,r.returncode,r.stderr)
    model=(ROOT/'tests/xhci_controller_probe.c').read_text();self.assertEqual(1,model.count('int main(int argc,char**argv)'));(d/'xhci_transport_controller_model.h').write_text(model.replace('int main(int argc,char**argv)','int xhci_controller_unused_main(int argc,char**argv)'))
    exe=d/('probe.exe' if os.name=='nt' else 'probe');r=self.command([cc,'-std=c11','-O2','-Wall','-Wextra','-Werror','-fno-strict-aliasing','-I',ROOT/'tests','-I',d,*(['-mno-sse'] if os.name=='nt' else ['-no-pie']),ROOT/'tests/xhci_transport_probe.c',obj,'-o',exe],d,'link');self.assertEqual(0,r.returncode,r.stderr)

@@ -1,9 +1,11 @@
-"""Execute the candidate arena builder with real paging; arena/CPU mocks only."""
+"""Execute the current arena builder with real paging; arena/CPU mocks only."""
+# Tests the tracked current implementation, not a replay of unavailable candidate sources.
 import hashlib,json,os,subprocess,unittest,uuid
 from pathlib import Path
 from lang.dongc import compile_file
 from lang.tests.test_dongc import nasm_flags,tool
-ROOT=Path(__file__).resolve().parents[1];BASE=ROOT/'build/test/p6-runtime-candidate/kernel'
+ROOT=Path(__file__).resolve().parents[1];BASE=ROOT/'kernel'
+BASE_REVISION=subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip()
 class Tests(unittest.TestCase):
  def test_real_guard_withdrawal_and_held_failure(self):
   files=[BASE/'sched/parallel.dg',BASE/'sched/multicore.dg',BASE/'sched/parallel_boot.dg',ROOT/'kernel/mm/paging.dg',ROOT/'tests/parallel_builder_probe.dg',ROOT/'tests/parallel_builder_startup.dg',ROOT/'tests/parallel_builder_resources.dg',ROOT/'tests/parallel_builder_probe.c',Path(__file__)]
@@ -23,5 +25,5 @@ class Tests(unittest.TestCase):
     exe=d/('probe.exe'if os.name=='nt'else'probe');r=run([cc,'-std=c11','-O2','-Wall','-Wextra','-Werror',*([]if os.name=='nt'else['-no-pie']),files[7],obj,'-o',exe],d,'link');self.assertEqual(0,r.returncode,r.stderr)
     for scenario in (('normal','early','late')if variant=='normal'else('normal',)):
      r=run([exe,scenario],d,scenario);self.assertEqual(0 if variant=='normal' else 1,r.returncode,r.stdout+r.stderr);evidence[mode+'-'+variant+'-'+scenario]=dict(returncode=r.returncode,stdout=r.stdout,stderr=r.stderr)
-  after={str(p):hashlib.sha256(p.read_bytes()).hexdigest()for p in files};self.assertEqual(before,after);(out/'validation-summary.json').write_text(json.dumps(dict(passed=True,candidate_only=True,real_paging=True,arena_and_cpu_operations_mocked=True,actual_ap_executed=False,source_sha256=after,sources_unchanged=True,evidence=evidence),indent=2)+'\n');print('PARALLEL_BUILDER_EVIDENCE',out)
+  after={str(p):hashlib.sha256(p.read_bytes()).hexdigest()for p in files};self.assertEqual(before,after);(out/'validation-summary.json').write_text(json.dumps(dict(passed=True,source_binding='tracked-current-source',historical_candidate_replay=False,base_revision=BASE_REVISION,real_paging=True,arena_and_cpu_operations_mocked=True,actual_ap_executed=False,source_sha256=after,sources_unchanged=True,evidence=evidence),indent=2)+'\n');print('PARALLEL_BUILDER_EVIDENCE',out)
 if __name__=='__main__':unittest.main(verbosity=2)

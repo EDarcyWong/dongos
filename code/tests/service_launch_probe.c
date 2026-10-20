@@ -48,7 +48,7 @@ uint64_t ABI launch_adapter_event(uint64_t op,uint64_t target,uint64_t id,uint64
 static void checkpoint(void){memcpy(&before,launch_fixture_catalog(),sizeof(before));internal_before=*launch_fixture_internal();memset(&output,0xa5,sizeof(output));count=0;tracing=1;}
 static void setup(unsigned selected,unsigned prepare){
  tracing=0;mode=selected;slot=prepare==4?8:7;cfg=prepare==6?3:7;preloaded=prepare==6;
- if(preloaded)slot=3;CHECK(!launch_fixture_init());CHECK(!launch_fixture_prepare(prepare));checkpoint();
+ if(preloaded){slot=3;}CHECK(!launch_fixture_init());CHECK(!launch_fixture_prepare(prepare));checkpoint();
 }
 static void trace_is(const unsigned* expected,unsigned n){CHECK(count==n);CHECK(!memcmp(trace,expected,n*sizeof(*expected)));}
 static void unchanged_failed_output(void){catalog_unchanged();CHECK(untouched());CHECK(!memcmp(&internal_before,launch_fixture_internal(),sizeof(internal_before)));}

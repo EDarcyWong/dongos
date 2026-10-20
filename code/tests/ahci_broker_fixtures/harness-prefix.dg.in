@@ -7,6 +7,11 @@ pub error Invalid=0x050a_0001;
 pub error Denied=0x050a_0002;
 pub error Busy=0x050a_0003;
 const BAR_BASE:u64=0x6000_0000;
+var BLOCK_QUARANTINED:bool=false;
+var INPUT_QUARANTINED:bool=false;
+var MANAGED:bool=false;
+var ADMITTED_BLOCK:u64=0;
+var ADMITTED_INPUT:u64=0;
 var SELECTED:u64=0;
 var SELECTED_KIND:u64=0;
 var INPUT_SELECTED:u64=0;
@@ -14,6 +19,7 @@ var BLOCK_GRANT_ATTEMPTED:bool=false;
 var INPUT_GRANT_ATTEMPTED:bool=false;
 const EMPTY_BAR:vp.Bar=vp.Bar {physical:0,length:0,handle:0};
 var BARS:[6]vp.Bar=[EMPTY_BAR;6];
+var XHCI_BARS:[6]vp.Bar=[EMPTY_BAR;6];
 var VIRTUAL:[6]u64=[0;6];
 var INPUT_BARS:[6]vp.Bar=[EMPTY_BAR;6];
 var INPUT_VIRTUAL:[6]u64=[0;6];
@@ -31,3 +37,6 @@ unsafe fn mmio_range(physical:u64,bytes:u64,ecam:bool)!void {unsafe {var kind:u6
 // fail closed. The dedicated NVMe broker test executes its complete real body.
 unsafe fn interrupt_caps(ecam:u64,disable:bool)!u64 {return error.Invalid;}
 
+// This storage-only model must reject the unrelated xHCI grant path.
+const ADMITTED_XHCI:usize=13;
+unsafe fn xhci_grant(table:*handles.Table,ecam:u64)!void {return error.Denied;}

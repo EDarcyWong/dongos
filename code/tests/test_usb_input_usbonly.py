@@ -1,4 +1,6 @@
-"""Actual service main: authenticated USB-only fallback plus original PS2 cases."""
+"""Current-source regression, not a replay of unavailable candidate snapshots.
+
+Actual service main: authenticated USB-only fallback plus original PS2 cases."""
 import hashlib,json,os,shutil,unittest,uuid
 from pathlib import Path
 from lang.dongc import compile_file
@@ -7,10 +9,10 @@ from tests.test_input import command
 from tests.test_fat32 import stack_bound
 from tests.test_usb_input_entry import SUFFIX
 ROOT=Path(__file__).resolve().parents[1]
-CANDIDATE=ROOT/'build/test/p8-input-usbonly-candidate/services'
+SOURCE_ROOT=ROOT/'services'
 class UsbOnlyInputTests(unittest.TestCase):
  def test_actual_main_retains_ps2_and_requires_trusted_ready(self):
-  paths=list(CANDIDATE.rglob('*.dg'))+[ROOT/'tests/input_service_probe.c',ROOT/'tests/usb_input_usbonly_probe.c',Path(__file__)]
+  paths=list(SOURCE_ROOT.rglob('*.dg'))+[ROOT/'tests/input_service_probe.c',ROOT/'tests/usb_input_usbonly_probe.c',Path(__file__)]
   before={str(p.relative_to(ROOT)):hashlib.sha256(p.read_bytes()).hexdigest() for p in paths};out=ROOT/'build/test/usb-input-usbonly'/('run-'+uuid.uuid4().hex[:12]);out.mkdir(parents=True);evidence=[]
   variants={
    'zero-readiness-accepted':('if value!=0{','if value==0{return true;}if value!=0{'),
@@ -29,8 +31,6 @@ class UsbOnlyInputTests(unittest.TestCase):
   for variant in ('normal',*variants):
    for mode in ('debug','release'):
     d=out/(variant+'-'+mode);stage=d/'source';shutil.copytree(ROOT/'services',stage,ignore=shutil.ignore_patterns('*.asm','*.ld'))
-    for p in CANDIDATE.rglob('*.dg'):
-     q=stage/p.relative_to(CANDIDATE);q.parent.mkdir(parents=True,exist_ok=True);q.write_bytes(p.read_bytes())
     p=stage/'drivers/input_service.dg';s=p.read_text()
     if variant!='normal':
      old,new=variants[variant];self.assertGreaterEqual(s.count(old),1);s=s.replace(old,new,1)

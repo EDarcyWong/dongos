@@ -249,10 +249,10 @@ service_key_%1: db "services_",%str(%1),"=",0
 %endmacro
 SERVICE_FIELDS SERVICE_KEY
 section .bss
-alignb 16
+align 16, resb 1
 user_active_frame: resb UserFrame_size
 user_runtime_report: resq 1
-alignb 4096
+align 4096, resb 1
 user_kernel_guard_low: resb 4096
 user_kernel_stack: resb 32768
 user_kernel_stack_top:

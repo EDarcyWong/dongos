@@ -24,6 +24,11 @@ static unsigned scenario,configured,started,delivered_key,delivered_mouse;
 static void append(U value){CK(rxtail<256);rx[rxtail++]=value;}
 static void inject(void){U bytes[]={0x20012,0x07,0x12,0x1c,0xf0,0x1c,0xf0,0x12,0x12,0x16,0xf0,0x16,0xf0,0x12,0x5a,0x07,0x108,0x101,0x102};for(unsigned i=0;i<sizeof bytes/sizeof bytes[0];i++)append(bytes[i]);}
 ABI U svc_call(U number,U a,U b,U c,U d,U e,U f){
+ /* This PS/2-only model has no admitted USB session or pending HID RPC. */
+ if(number==0x2e){CK(a==0x101&&!b&&!c&&!d&&!e&&!f);return 0;}
+ if(number==0x2f){CK(a==0x101&&!b&&!c&&!d&&!e&&!f);return 0x050b0002;}
+ if(number==0x25){CK(a==0x101&&b&&c&&!d&&!e&&!f);return 0x05110005;}
+ if(number==0x97){CK(a==0x444&&b==0&&c&&!d&&!e&&!f);U *entry=(U*)(uintptr_t)c;memset(entry,0,16*sizeof(U));entry[0]=1;return 0;}
  if(number==2){CK(!a&&!b&&!c&&!d&&!e&&!f);return (U)(uintptr_t)boot;}
  if(number==0x60){CK(a==0x444&&b>=0xe0000000&&b<0xe0100000&&c&&!d&&!e&&!f);*(uint32_t*)(uintptr_t)c=0xffff;return 0;}
  if(number==0x76){CK(a==0x333&&(b==0x60||b==0x64)&&c<=255&&!d&&!e&&!f);if(b==0x64){if(c==0x20)append(0x43);else if(c==0x60)config_pending=1;else if(c==0xd4)mouse_prefix=1;else CK(c==0xad||c==0xa7||c==0xae||c==0xa8);}else if(config_pending){config_pending=0;CK(c==0||c==3);configured++;if(c==3){CK(binds==2);irq_on=1;}}else{if(mouse_prefix){mouse_prefix=0;if(c==0xf6&&!mouse_resends){mouse_resends++;append(0x1fe);}else append(0x1fa);}else if(c==0xf5&&(scenario==5||!key_resends)){key_resends++;append(0xfe);}else append(0xfa);}return 0;}
@@ -35,7 +40,7 @@ ABI U svc_call(U number,U a,U b,U c,U d,U e,U f){
  if(number==0x84){CK(a==0x101&&b==1&&!c&&!d&&!e&&!f);ready++;CK(key_resends==1&&mouse_resends==1);return 0;}
  if(number==0x70){CK(a&&b&&b<=4096&&!c&&!d&&!e&&!f);logs++;return 0;}
  if(number==3){CK(!a&&!b&&!c&&!d&&!e&&!f);yields++;if(!started){started=1;inject();return 0;}return 0x073100ff;}
- CK(0);return 1;
+ fprintf(stderr,"unexpected syscall: %#lx\n",(unsigned long)number);CK(0);return 1;
 }
 ABI void svc_fence(void){}
 ABI void svc_vector_clobber(void){}

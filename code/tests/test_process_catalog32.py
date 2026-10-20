@@ -1,12 +1,14 @@
 """Independent native model of the kernel-admitted process catalog."""
+# Tests the tracked current implementation, not a replay of unavailable candidate sources.
 import hashlib,json,os,subprocess,unittest,uuid
 from pathlib import Path
 from lang.dongc import compile_file
 from lang.tests.test_dongc import nasm_flags,tool
 ROOT=Path(__file__).resolve().parents[1]
+BASE_REVISION=subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip()
 class ProcessCatalog32Tests(unittest.TestCase):
     def test_exact_catalog_dependencies_scope_generation_and_events(self):
-        names=('build/test/p7-catalog-candidate/kernel/user/processes.dg','build/test/p7-catalog-candidate/services/lib/process_abi.dg','tests/process_catalog_probe.dg','tests/process_catalog32_probe.c','tests/test_process_catalog32.py')
+        names=('kernel/user/processes.dg','services/lib/process_abi.dg','tests/process_catalog_probe.dg','tests/process_catalog32_probe.c','tests/test_process_catalog32.py')
         before={p:hashlib.sha256((ROOT/p).read_bytes()).hexdigest() for p in names}
         out=ROOT/'build/test/process-catalog32'/('run-'+uuid.uuid4().hex[:12]);out.mkdir(parents=True)
         nasm,cc=tool('nasm','NASM'),tool('gcc','CC');self.assertTrue(nasm and cc);evidence={}
@@ -26,11 +28,11 @@ class ProcessCatalog32Tests(unittest.TestCase):
                 'failure-clobbers-output':('    try dependencies(c,id);\n    if (*c).sequence', '    if out!=null{(*out).argument=0;}\n    try dependencies(c,id);\n    if (*c).sequence'),
             }
             for mode,variant in ((mode,variant) for mode in ('debug','release') for variant in ('normal',*controls)):
-                d=out/(mode+'-'+variant);d.mkdir();roots=[ROOT/'tests',ROOT/'build/test/p7-catalog-candidate/kernel',ROOT/'build/test/p7-catalog-candidate/services']
+                d=out/(mode+'-'+variant);d.mkdir();roots=[ROOT/'tests',ROOT/'kernel',ROOT/'services']
                 if variant!='normal':
                     (d/'kernel/user').mkdir(parents=True);source=(ROOT/names[0]).read_text();old,new=controls[variant]
                     self.assertEqual(1,source.count(old));(d/'kernel/user/processes.dg').write_text(source.replace(old,new))
-                    roots=[ROOT/'tests',d/'kernel',ROOT/'build/test/p7-catalog-candidate/services']
+                    roots=[ROOT/'tests',d/'kernel',ROOT/'services']
                 c=compile_file(ROOT/names[2],roots=roots,mode=mode)
                 layouts={v['full_name']:v for v in c.layout_manifest['types']}
                 for name,size in (('lib.process_abi.Config',128),('lib.process_abi.Snapshot',64),('lib.process_abi.Event',64),('user.processes.Catalog',10776)):
@@ -47,5 +49,5 @@ class ProcessCatalog32Tests(unittest.TestCase):
         finally:
             after={p:hashlib.sha256((ROOT/p).read_bytes()).hexdigest() for p in names}
             passed=len(evidence)==2*(1+len(controls)) and all(v['returncode']==(0 if name.endswith('-normal') else 1) for name,v in evidence.items())
-            (out/'validation-summary.json').write_text(json.dumps(dict(passed=passed,source_sha256=after,sources_unchanged=before==after,evidence=evidence),indent=2)+'\n')
+            (out/'validation-summary.json').write_text(json.dumps(dict(passed=passed,source_binding='tracked-current-source',historical_candidate_replay=False,base_revision=BASE_REVISION,configuration_capacity=32,physical_slots=16,desktop_application_flags=9,source_sha256=after,sources_unchanged=before==after,evidence=evidence),indent=2)+'\n')
         self.assertEqual(before,after);print('PROCESS_CATALOG32_EVIDENCE',out)

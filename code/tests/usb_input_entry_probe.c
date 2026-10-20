@@ -13,7 +13,7 @@ ABI U svc_call(U number,U a,U b,U c,U d,U e,U f){
  if(number==0x25){CK(a==0x101&&b&&c&&!d&&!e&&!f);if(!pending)return 0x05110005;*(Message*)(uintptr_t)b=request;*(U*)(uintptr_t)c=0x1234;pending=0;received++;return 0;}
  if(number==0x29){CK(a==0x101&&b==0x1234&&!c&&!d&&!e&&!f);return peer;}
  if(number==0x2a){CK(a==0x101&&b==0x1234&&!c&&!d&&!e&&!f);return identity;}
- if(number==0x2e){CK(a==0x101&&!b&&!c&&!d&&!e&&!f);U value=departed;departed=0;departure_queries++;return value;}
+ if(number==0x2e){CK(a==0x101&&!b&&!c&&!d&&!e&&!f);U value=departed;departed=0;departure_queries++;return value?((U)0x55484450<<32)|value:0;}
  if(number==0x24){CK(a==0x101&&b==0x1234&&c&&!d&&!e&&!f);response=*(Message*)(uintptr_t)c;replied++;return 0;}
  return legacy_svc_call(number,a,b,c,d,e,f);
 }

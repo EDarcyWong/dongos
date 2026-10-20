@@ -18,6 +18,8 @@ static U address(U selected,U offset){return 0x4000000+selected*8192+(offset?409
 static U owner(U id){return ((id+1)<<32)|7;} // Catalog incarnation7 != root generation101.
 ABI void __dong_panic(void){die("Dong panic");}
 ABI U user_current_root(void){return current_root;}
+/* Object-sharing paths are outside this font-portal probe and must not run. */
+ABI U user_shared_barrier(void){die("unexpected object-sharing barrier");return 0;}
 ABI U user_pcid_bind(U id,U root,U generation){(void)id;(void)root;(void)generation;die("unexpected bind");return 0;}
 ABI U user_pcid_unbind(U id,U root){CK(id==watch_id&&root==0x100000+id*0x20000&&phase==3&&flushes);CK(!font_memory_get(1,id)&&!font_memory_get(2,id));unbinds++;return 1;}
 ABI U user_entropy64(void*a,void*b){(void)a;(void)b;die("unexpected entropy");return 0;}

@@ -967,7 +967,7 @@ smp_trampoline_end:
 bits 64
 
 section .bss
-alignb 8
+align 8, resb 1
 smp_mtrr_snapshot: resq 48
-alignb 64
+align 64, resb 1
 smp_tlb_mailboxes: resb 16*SmpMailbox_size

@@ -1,10 +1,12 @@
-"""Staged P6 per-CPU queues; executes policy, never an AP or user context."""
+"""Current per-CPU queues; executes policy, never an AP or user context."""
+# Tests the tracked current implementation, not a replay of unavailable candidate sources.
 import hashlib,json,os,re,subprocess,unittest,uuid
 from pathlib import Path
 from lang.dongc import compile_file
 from lang.tests.test_dongc import nasm_flags,tool
 ROOT=Path(__file__).resolve().parents[1]
-CANDIDATE=ROOT/'build/test/p6-candidate/kernel'
+BASE_REVISION=subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip()
+CURRENT=ROOT/'kernel'
 
 def direct_stack(assembly):
     functions={};current=None;in_text=False
@@ -37,8 +39,8 @@ def direct_stack(assembly):
 
 class MulticoreSchedulingTests(unittest.TestCase):
     def test_independent_priority_affinity_steal_and_failure_model(self):
-        source=CANDIDATE/'sched/multicore.dg'
-        self.assertTrue(source.is_file(),'P6 staging source must exist until root admits the candidate')
+        source=CURRENT/'sched/multicore.dg'
+        self.assertTrue(source.is_file(),'tracked current-source scheduler must exist')
         files=[source,ROOT/'tests/multicore_sched_probe.dg',ROOT/'tests/multicore_sched_probe.c',Path(__file__)]
         before={str(p.relative_to(ROOT)):hashlib.sha256(p.read_bytes()).hexdigest() for p in files}
         out=ROOT/'build/test/p6-runqueue'/('run-'+uuid.uuid4().hex[:12]);out.mkdir(parents=True)
@@ -54,7 +56,7 @@ class MulticoreSchedulingTests(unittest.TestCase):
         for mode in ('debug','release'):
             evidence[mode]={}
             for variant in ('normal',*controls):
-                d=out/(mode+'-'+variant);d.mkdir();modules=CANDIDATE
+                d=out/(mode+'-'+variant);d.mkdir();modules=CURRENT
                 if variant!='normal':
                     modules=d/'kernel';(modules/'sched').mkdir(parents=True)
                     body=source.read_text();old,new=controls[variant];self.assertEqual(1,body.count(old));(modules/'sched/multicore.dg').write_text(body.replace(old,new))
@@ -76,5 +78,5 @@ class MulticoreSchedulingTests(unittest.TestCase):
                 else:self.assertEqual(1,r.returncode,r.stdout+r.stderr);self.assertIn('multicore oracle failed line',r.stderr)
                 evidence[mode][variant]=dict(stdout=r.stdout,stderr=r.stderr,returncode=r.returncode,maximum_single_frame=maximum,direct_stack=stack)
         after={str(p.relative_to(ROOT)):hashlib.sha256(p.read_bytes()).hexdigest() for p in files};self.assertEqual(before,after)
-        (out/'validation-summary.json').write_text(json.dumps(dict(passed=True,staged_production_candidate=str(source.relative_to(ROOT)),source_sha256=after,sources_unchanged=True,evidence=evidence,hardware_ap_scheduling_executed=False,kernel_tree_unchanged_by_candidate=True),indent=2)+'\n')
+        (out/'validation-summary.json').write_text(json.dumps(dict(passed=True,current_source=str(source.relative_to(ROOT)),source_binding='tracked-current-source',historical_candidate_replay=False,base_revision=BASE_REVISION,source_sha256=after,sources_unchanged=True,evidence=evidence,hardware_ap_scheduling_executed=False,kernel_tree_unchanged_by_test=True),indent=2)+'\n')
         print('MULTICORE_SCHED_EVIDENCE',out)

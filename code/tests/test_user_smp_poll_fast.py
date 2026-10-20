@@ -6,7 +6,7 @@ from lang.tests.test_dongc import tool,nasm_flags
 from tests.test_service_ipc_cancellation import block
 from tests.test_service_gui_wiring import copy_graph
 from tests import test_user_smp_services as old
-ROOT=Path(__file__).resolve().parents[1];BASE=ROOT/'build/test/p6-poll-fast-candidate';R2=ROOT/'build/test/p6-combined-r2-candidate';ARCH=ROOT/'build/test/p6-cpl3-integration-candidate'
+ROOT=Path(__file__).resolve().parents[1];BASE=ROOT;ARCH=ROOT
 HOST='''module user.device_host;import user.device_manager as ledger;import drivers.pci_msi as msi;import lib.device_abi as abi;
 pub var PCI_FAILED:bool=false;var T:ledger.Table=ledger.EMPTY;pub var TABLE:*ledger.Table=null;pub var IRQ:abi.Irq=abi.EMPTY_IRQ;pub var MSI:msi.State=msi.EMPTY;
 pub unsafe fn interrupt(vector:u64)!u64{return 0;}
@@ -59,7 +59,7 @@ int main(int argc,char**argv){C(argc==2);U slot=!strcmp(argv[1],"msi")?2:4;setup
  C(pf_policy(3,0)==1&&pf_policy(3,9)==0);C(pf_policy(0x93,0)==1&&digest()==old);C(pf_policy(0x93,8)==1&&digest()==old);
  for(U i=1;i<=7;i++){if(i==4)valid_output=0;C(pf_policy(0x93,i)==0);valid_output=1;C(digest()==old);}
  C(pf_policy(0x93,10)==0);C(pf_policy(0x94,0)==0);C(pf_policy(0x92,0)==0);C(pf_policy(0xb6,0)==0);C(pf_policy(0xb0,0)==0);C(pf_policy(0x97,0)==0);
- for(U i=0;i<1000;i++)C(pf_policy(i&1?3:0x93,0)==1);C(digest()==old);C(!ue_audit());
+ for(U i=0;i<1000;i++){C(pf_policy(i&1?3:0x93,0)==1);}C(digest()==old);C(!ue_audit());
  printf("poll fast actual policy checks=%u scenario=%s real-ledger/MSI owner/caps/range/const-output,1000classifiedsafe\n",(unsigned)checks,argv[1]);return 0;}
 '''
 class Tests(unittest.TestCase):
@@ -67,12 +67,12 @@ class Tests(unittest.TestCase):
   source=(BASE/'kernel/user/services.dg').read_text();actual='\n'.join(block(source,n)for n in ('unsafe fn process(', 'unsafe fn managed(', 'pub unsafe fn enable_smp(', 'export("dong_user_smp_project")','export("dong_user_smp_service_policy")'))
   prefix=old.PREFIX.replace('import user.device_host as device_host;','import user.device_host as device_host;import user.devices as devices;import ipc.handles as handles;import lib.device_abi as dev;')
   prefix=prefix.replace('struct State{waiting:u64,started:u64}','struct State{table:handles.Table,waiting:u64,started:u64}').replace('State{waiting:0,started:0}','State{table:handles.EMPTY_TABLE,waiting:0,started:0}').replace('var LAUNCH_FAILED:bool=false;','var LAUNCH_FAILED:bool=false;var GRAPHICS:bool=true;').replace('try retire_one(id,state,status);','').replace('try retire_one(CURRENT,proc.EXITED,73);','')
-  entry=(ROOT/'tests/user_entry_probe.dg').read_text().replace('bridge.initialize(storage,704,','bridge.initialize(storage,1536,')+prefix+actual+TAIL
-  memory=old.MEMORY+'''pub var OBJECT_FAILED:bool=false;unsafe extern "sysv64" fn pf_output(slot:u64,va:u64,size:u64,write:u64)u64;
+  entry=(ROOT/'tests/user_current_entry_probe.dg').read_text()+prefix+actual+TAIL
+  memory=old.MEMORY+'''unsafe extern "sysv64" fn pf_output(slot:u64,va:u64,size:u64,write:u64)u64;
 pub unsafe fn check_range(slot:usize,va:u64,size:usize,write:bool)!void{unsafe{if pf_output(slot as u64,va,size as u64,write as u64)!=1{return error.Invalid;}}return;}pub error Invalid=0x1111;'''
   devices='''module user.devices;pub const CONFIGURATION_OBJECT:u64=0x1234;pub unsafe fn configuration_read_stable(physical:u64)bool{return true;}'''
   host=HOST+block((BASE/'kernel/user/device_host.dg').read_text(),'pub unsafe fn irq_poll_readonly(')
-  c=(ROOT/'tests/user_entry_probe.c').read_text();c=c.replace(block(c,'U ABI dong_user_smp_project('),'');c=c[:c.index('int main(void)')]+CMAIN
+  c=(ROOT/'tests/user_current_entry_probe.c').read_text();c=c.replace(block(c,'U ABI dong_user_smp_project('),'');c=c[:c.index('int main(void)')]+CMAIN
   controls={
    'yield-args-ignored':('policy','(*frame).rdi!=0||','', 'if (*frame).rax==3{'),
    'yield-not-fast':('policy','return 1;','return 0;','if (*frame).rax==3{'),
@@ -88,9 +88,7 @@ pub unsafe fn check_range(slot:usize,va:u64,size:usize,write:bool)!void{unsafe{i
   }
   out=ROOT/'build/test/p6-poll-fast-native'/('run-'+uuid.uuid4().hex[:12]);out.mkdir(parents=True);evidence={};nasm,cc=tool('nasm','NASM'),tool('gcc','CC')
   candidate={}
-  for p in list((R2/'kernel/sched').glob('*.dg'))+list((R2/'services').rglob('*.dg')):
-   text=p.read_text();m=re.search(r'module\s+([\w.]+);',text);candidate[m[1]]=text
-  files=[BASE/'kernel/user/services.dg',BASE/'kernel/user/device_host.dg',Path(__file__),ROOT/'tests/user_entry_probe.c',ROOT/'tests/user_entry_probe.dg'];before={str(p.relative_to(ROOT)):hashlib.sha256(p.read_bytes()).hexdigest()for p in files}
+  files=[BASE/'kernel/user/services.dg',BASE/'kernel/user/device_host.dg',Path(__file__),ROOT/'tests/user_current_entry_probe.c',ROOT/'tests/user_current_entry_probe.dg'];before={str(p.relative_to(ROOT)):hashlib.sha256(p.read_bytes()).hexdigest()for p in files}
   for mode in ('debug','release'):
    for variant in ('normal',*controls):
     d=out/(mode+'-'+variant);stage=d/'kernel';s=entry;h=host
@@ -98,8 +96,8 @@ pub unsafe fn check_range(slot:usize,va:u64,size:usize,write:bool)!void{unsafe{i
      kind,a,b,scope=controls[variant]
      if kind=='policy':sub=block(s,scope);self.assertEqual(1,sub.count(a));s=s.replace(sub,sub.replace(a,b))
      else:self.assertGreaterEqual(h.count(a),1);h=h.replace(a,b)
-    copy_graph(stage,['user_entry_probe'],{**candidate,'user_entry_probe':s,'user.memory':memory,'user.devices':devices,'user.window_broker':old.WINDOWS,'user.device_host':h})
-    compiled=compile_file(stage/'user_entry_probe.dg',roots=[stage],mode=mode);(d/'probe.asm').write_text(compiled.assembly);(d/'probe.c').write_text(c)
+    copy_graph(stage,['user_current_entry_probe'],{**candidate,'user_current_entry_probe':s,'user.memory':memory,'user.devices':devices,'boot.trace_runtime':'module boot.trace_runtime;pub unsafe fn event(a:u64,b:u64,c:u64,d:u64)void{return;}','user.window_broker':old.WINDOWS,'user.device_host':h})
+    compiled=compile_file(stage/'user_current_entry_probe.dg',roots=[stage],mode=mode);(d/'probe.asm').write_text(compiled.assembly);(d/'probe.c').write_text(c)
     def run(args,label):
      r=subprocess.run(list(map(str,args)),cwd=ROOT,capture_output=True,text=True,timeout=60);(d/(label+'.json')).write_text(json.dumps(dict(command=list(map(str,args)),returncode=r.returncode,stdout=r.stdout,stderr=r.stderr),indent=2)+'\n');return r
     objects=[]
@@ -108,10 +106,10 @@ pub unsafe fn check_range(slot:usize,va:u64,size:usize,write:bool)!void{unsafe{i
     exe=d/('probe.exe'if os.name=='nt'else'probe');r=run([cc,'-std=c11','-O2','-Wall','-Wextra','-Werror','-Wno-unused-function',*([]if os.name=='nt'else['-no-pie']),d/'probe.c',*objects,'-o',exe],'link');self.assertEqual(0,r.returncode,r.stderr)
     for scenario in(('legacy','msi')if variant=='normal'else(('msi',)if variant=='MSI-preview-ACKs'else('legacy',))):
      r=run([exe,scenario],scenario);self.assertEqual(0 if variant=='normal'else 1,r.returncode,r.stdout+r.stderr)
-     if variant!='normal':self.assertIn('user CPL3 candidate oracle line',r.stderr)
+     if variant!='normal':self.assertIn('user CPL3 current-source oracle line',r.stderr)
      evidence[mode+'-'+variant+'-'+scenario]=dict(returncode=r.returncode,stdout=r.stdout,stderr=r.stderr)
   after={str(p.relative_to(ROOT)):hashlib.sha256(p.read_bytes()).hexdigest()for p in files};self.assertEqual(before,after)
-  (out/'validation-summary.json').write_text(json.dumps(dict(passed=True,actual_policy_and_preview=True,real_catalog_domain_queue_handles_legacy_irq_and_msi=True,hardware_and_owned_ram_boundary_mocked=True,no_os_build_or_vm=True,source_sha256=after,sources_unchanged=True,evidence=evidence),indent=2)+'\n');print('POLL_FAST_EVIDENCE',out)
+  (out/'validation-summary.json').write_text(json.dumps(dict(passed=True,source_commit=subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip(),contract="tracked-current-cpl3-v1",actual_policy_and_preview=True,real_catalog_domain_queue_handles_legacy_irq_and_msi=True,hardware_and_owned_ram_boundary_mocked=True,no_os_build_or_vm=True,source_sha256=after,sources_unchanged=True,evidence=evidence),indent=2)+'\n');print('POLL_FAST_EVIDENCE',out)
 if __name__=='__main__':unittest.main(verbosity=2)
 
 

@@ -1,26 +1,33 @@
 """Coherent retained128-page BSP pool, actual raw PTE audit and independent oracles."""
+# Tests the tracked current implementation, not a replay of unavailable candidate sources.
 from pathlib import Path
 import hashlib,json,os,re,shutil,subprocess,unittest,uuid
 from lang.dongc import compile_file
 from lang.tests.test_dongc import tool,nasm_flags
 from tests.test_activation import AUDIT_PREFIX,AUDIT_SUFFIX
 ROOT=Path(__file__).resolve().parents[1]
-CANDIDATE=ROOT/'build/test/kernel-pool128-candidate/kernel'
+BASE_REVISION=subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip()
+CURRENT=ROOT/'kernel'
 class KernelPool128Tests(unittest.TestCase):
  @classmethod
  def setUpClass(cls):
   cls.out=ROOT/'build/test/kernel-pool128-native'/('run-'+uuid.uuid4().hex[:12]);cls.out.mkdir(parents=True)
-  cls.inputs=[*CANDIDATE.rglob('*.dg'),*[ROOT/('tests/'+n) for n in ('kernel_pool128_probe.dg','arena_fit_probe.c','runtime_view_probe.c','activation_probe.c','test_activation.py')],Path(__file__)]
+  cls.inputs=[*CURRENT.rglob('*.dg'),*[ROOT/('tests/'+n) for n in ('kernel_pool128_probe.dg','arena_fit_probe.c','runtime_view_probe.c','activation_probe.c','test_activation.py')],Path(__file__)]
   cls.before={str(p.relative_to(ROOT)):hashlib.sha256(p.read_bytes()).hexdigest() for p in cls.inputs};(cls.out/'source-before.json').write_text(json.dumps(cls.before,indent=2)+'\n')
  @classmethod
  def tearDownClass(cls):
   after={str(p.relative_to(ROOT)):hashlib.sha256(p.read_bytes()).hexdigest() for p in cls.inputs};(cls.out/'source-after.json').write_text(json.dumps(after,indent=2)+'\n');assert after==cls.before
+  results={}
+  for file in cls.out.glob('*/native.json'):
+   data=json.loads(file.read_text());results[file.parent.name]={key:data[key] for key in ('returncode','stdout','stderr')}
+  normal={kind+'-'+mode for kind in ('arena','runtime','audit') for mode in ('debug','release')}
+  passed=len(results)==16 and all((v['returncode']==0 if name in normal else v['returncode']!=0) for name,v in results.items())
+  (cls.out/'validation-summary.json').write_text(json.dumps(dict(passed=passed,source_binding='tracked-current-source',historical_candidate_replay=False,base_revision=BASE_REVISION,source_sha256=after,sources_unchanged=after==cls.before,actual_ap_or_vm_executed=False,evidence=results),indent=2)+'\n')
+  print('KERNEL_POOL128_EVIDENCE',cls.out)
  def command(self,args,d,name):
   r=subprocess.run(list(map(str,args)),cwd=ROOT,capture_output=True,text=True,timeout=90);(d/(name+'.json')).write_text(json.dumps({'command':list(map(str,args)),'returncode':r.returncode,'stdout':r.stdout,'stderr':r.stderr},indent=2)+'\n');return r
  def stage(self,d,mutation=None):
   kernel=d/'kernel';shutil.copytree(ROOT/'kernel',kernel)
-  for f in CANDIDATE.rglob('*.dg'):
-   target=kernel/f.relative_to(CANDIDATE);target.parent.mkdir(parents=True,exist_ok=True);shutil.copyfile(f,target)
   if mutation:
    file,old,new={
     'arena-eight':('arena_fit','stack_blocks >= policy.POOL_PAGES / 16 + 1','stack_blocks >= policy.POOL_PAGES / 16'),

@@ -60,5 +60,5 @@ int main(void){
  // destroy() may retain dirty reusable RAM; every later fresh() must zero it.
  for(unsigned i=0;i<12;i++){CHECK(reader_fresh()==i);CHECK(!zero(ram,i));}
  CHECK(unshare_resources_calls()==1&&flushes>10&&invalidations>4);for(unsigned i=0;i<4096;i++)CHECK(scratch[11*4096+i]==0xcd);
- printf("window reader real memory/paging checks passed %u; STATIC4 dynamic slot7, last-reader retention, same-slot reuse, zeroed reuse\n",checks);return 0;
+ printf("window reader real memory/paging checks passed %u; STATIC3 dynamic compositor128 and slot7, last-reader retention, same-slot reuse, zeroed reuse\n",checks);return 0;
 }

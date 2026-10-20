@@ -389,25 +389,25 @@ cpu_gdt:
 cpu_gdt_end:
 
 section .bss
-alignb 16
+align 16, resb 1
 cpu_tss: resb CPU_TSS_SIZE
 cpu_tss_end:
-alignb 16
+align 16, resb 1
 cpu_idt: resb CPU_IDT_SIZE
 cpu_idt_end:
-alignb 4096
+align 4096, resb 1
 ; Each guard owns a distinct reserved page. The inactive memory tree skips
 ; these six pages; P1's current bootstrap mapping still includes them.
 cpu_df_guard_low: resb 4096
 cpu_df_stack_bottom: resb CPU_IST_STACK_SIZE
 cpu_df_stack_top:
 cpu_df_guard_high: resb 4096
-alignb 4096
+align 4096, resb 1
 cpu_nmi_guard_low: resb 4096
 cpu_nmi_stack_bottom: resb CPU_IST_STACK_SIZE
 cpu_nmi_stack_top:
 cpu_nmi_guard_high: resb 4096
-alignb 4096
+align 4096, resb 1
 cpu_exception_guard_low: resb 4096
 cpu_exception_stack_bottom: resb CPU_IST_STACK_SIZE
 cpu_exception_stack_top:

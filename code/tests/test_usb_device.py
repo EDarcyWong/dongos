@@ -1,4 +1,6 @@
-"""Candidate direct-root USB enumeration, boot HID and serial BOT wire execution."""
+"""Current-source regression, not a replay of unavailable candidate snapshots.
+
+Tracked direct-root USB enumeration, boot HID and serial BOT wire execution."""
 from __future__ import annotations
 import hashlib,json,os,subprocess,unittest,uuid
 from pathlib import Path
@@ -9,7 +11,7 @@ NAMES=('xhci_trb.dg','xhci_ring.dg','xhci_context.dg','descriptor.dg','transport
 class UsbDeviceTests(unittest.TestCase):
  @classmethod
  def setUpClass(cls):
-  cls.services=ROOT/'services' if (ROOT/'services/usb/enumerate.dg').exists() else ROOT/'build/test/p8-xhci-candidate/services';cls.inputs=[*(cls.services/'usb'/p for p in NAMES),ROOT/'services/input/events.dg',ROOT/'tests/usb_descriptor_probe.dg',ROOT/'tests/usb_descriptor_probe.c',ROOT/'tests/usb_device_probe.dg',ROOT/'tests/usb_device_probe.c',Path(__file__)]
+  cls.services=ROOT/'services';cls.inputs=[*(cls.services/'usb'/p for p in NAMES),ROOT/'services/input/events.dg',ROOT/'tests/usb_descriptor_probe.dg',ROOT/'tests/usb_descriptor_probe.c',ROOT/'tests/usb_device_probe.dg',ROOT/'tests/usb_device_probe.c',Path(__file__)]
   cls.out=ROOT/'build/test/p8-usb-device/host'/('run-'+uuid.uuid4().hex[:12]);cls.out.mkdir(parents=True);cls.before={str(p.relative_to(ROOT)):hashlib.sha256(p.read_bytes()).hexdigest() for p in cls.inputs};(cls.out/'source-before.json').write_text(json.dumps(cls.before,indent=2)+'\n')
  @classmethod
  def tearDownClass(cls):

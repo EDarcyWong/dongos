@@ -3,10 +3,12 @@ var READER_FRAMES:[16]Frame=[EMPTY_RAM;16];
 var READER_STATES:[16]u8=[0;16];
 var READER_JOURNAL:[16]u16=[0;16];
 var READER_DYNAMIC:[POOL_PAGES]paging.Table=[EMPTY_TABLE;POOL_PAGES];
+var READER_COMPOSITOR:[COMPOSITOR_POOL_PAGES]paging.Table=[EMPTY_TABLE;COMPOSITOR_POOL_PAGES];
 unsafe fn reader_open(id:usize)!void{unsafe{
     let physical=0x10_0000+id as u64*0x20_000;
+    if id==3{DYNAMIC_TABLES[id]=&READER_COMPOSITOR[0];DYNAMIC_PHYSICAL[id]=physical;POOL_LIMITS[id]=COMPOSITOR_POOL_PAGES;}
     if id==7{DYNAMIC_TABLES[id]=&READER_DYNAMIC[0];DYNAMIC_PHYSICAL[id]=physical;}
-    try paging.init(&SPACES[id],slice_from_raw_parts(table_at(id,0),POOL_PAGES),physical,META[id][..],48,true);
+    try paging.init(&SPACES[id],slice_from_raw_parts(table_at(id,0),pool_pages(id)),physical,META[id][..],48,true);
     PROCESSES[id]=EMPTY_PROCESS;PROCESSES[id].ready=1;PROCESSES[id].root=physical;GENERATIONS[id]+=1;
 }return;}
 export("reader_setup") fn reader_setup(alias:u64)u64{unsafe{

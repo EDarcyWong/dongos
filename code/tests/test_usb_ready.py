@@ -1,15 +1,18 @@
-"""Exact new kernel readiness branch, actual Catalog/capabilities; no guest."""
+"""Current-source regression, not a replay of unavailable candidate snapshots.
+
+Exact current kernel readiness branch, actual Catalog/capabilities; no guest."""
 import hashlib,json,os,subprocess,unittest,uuid
 from pathlib import Path
 from lang.dongc import compile_file
 from lang.tests.test_dongc import nasm_flags,tool
 from tests.test_service_ipc_cancellation import block
 from tests.test_service_gui_wiring import copy_graph
+from tests.test_usb_departed import retirement_boundaries
 ROOT=Path(__file__).resolve().parents[1]
-SOURCE=ROOT/'build/test/p8-usb-root-candidate/kernel/user/services.dg'
+SOURCE=ROOT/'kernel/user/services.dg'
 class UsbReadyTests(unittest.TestCase):
  def test_actual_query_checks_real_identity_ready_and_incarnation(self):
-  paths=[SOURCE,ROOT/'kernel/user/processes.dg',ROOT/'kernel/ipc/handles.dg',ROOT/'tests/usb_departed_probe.dg.in',ROOT/'tests/usb_ready_probe.c',Path(__file__)]
+  paths=[SOURCE,ROOT/'kernel/boot/trace.dg',ROOT/'tests/test_usb_departed.py',ROOT/'kernel/user/processes.dg',ROOT/'kernel/ipc/handles.dg',ROOT/'tests/usb_departed_probe.dg.in',ROOT/'tests/usb_ready_probe.c',Path(__file__)]
   before={str(p.relative_to(ROOT)):hashlib.sha256(p.read_bytes()).hexdigest() for p in paths};source=SOURCE.read_text()
   fragments='\n'.join(block(source,'unsafe fn '+name+'(') for name in ('managed','authority','endpoint','retire_one'))
   fragments+='\nunsafe fn perform(frame:*abi.Frame)!usize{unsafe{let code=(*frame).rax;'+block(source,'if code==0x2f{')+'}return error.InvalidCall;}\n'
@@ -38,7 +41,7 @@ class UsbReadyTests(unittest.TestCase):
     d=out/(mode+'-'+variant);d.mkdir();text=fixture
     if variant!='normal':
      old,new=variants[variant];self.assertGreaterEqual(text.count(old),1);text=text.replace(old,new)
-    copy_graph(d/'source',('usb_departed_fixture',),{'usb_departed_fixture':text,'usb_departed_windows':windows})
+    copy_graph(d/'source',('usb_departed_fixture',),{**retirement_boundaries(),'usb_departed_fixture':text,'usb_departed_windows':windows})
     c=compile_file(d/'source/usb_departed_fixture.dg',roots=[d/'source'],mode=mode);asm=d/'probe.asm';asm.write_text(c.assembly);obj=d/'probe.o'
     r=command([nasm,'-f','win64' if os.name=='nt' else 'elf64',*nasm_flags(nasm),asm,'-o',obj],d,'assemble');self.assertEqual(0,r.returncode,r.stderr)
     exe=d/('probe.exe' if os.name=='nt' else 'probe');r=command([cc,'-std=c11','-O2','-Wall','-Wextra','-Werror','-fno-strict-aliasing',*(['-mno-sse'] if os.name=='nt' else ['-no-pie']),ROOT/'tests/usb_ready_probe.c',obj,'-o',exe],d,'link');self.assertEqual(0,r.returncode,r.stderr)

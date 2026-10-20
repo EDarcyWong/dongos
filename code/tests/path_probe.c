@@ -100,7 +100,7 @@ static void one_path(const uint8_t*c,size_t cn,const uint8_t*p,size_t n){
  if(error)CHECK(!memcmp(&out.value,&before,sizeof before));else CHECK(!memcmp(&out.value,&expected,sizeof expected));
  CHECK(!memcmp(cwd+8,c,cn)&&!memcmp(input+8,p,n));for(size_t i=0;i<8;i++)CHECK(cwd[i]==0xa3&&input[i]==0xb4);
  for(size_t i=8+cn;i<sizeof cwd;i++)CHECK(cwd[i]==0xa3);
- for(size_t i=8+n;i<sizeof input;i++)CHECK(input[i]==0xb4);paths++;
+ for(size_t i=8+n;i<sizeof input;i++){CHECK(input[i]==0xb4);}paths++;
 }
 #define PATH(c,p) one_path((const uint8_t*)(c),strlen(c),(const uint8_t*)(p),strlen(p))
 static size_t encode(uint32_t cp,uint8_t*out){

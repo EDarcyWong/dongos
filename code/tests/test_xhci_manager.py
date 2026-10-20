@@ -1,15 +1,15 @@
-"""Actual CPL3 manager candidate: dynamic xHCI spawning and absent-USB regression."""
+"""Current-source CPL3 manager regression, not a historical candidate replay."""
 from __future__ import annotations
 import hashlib,json,os,subprocess,unittest,uuid
 from pathlib import Path
 from lang.dongc import compile_file
 from lang.tests.test_dongc import nasm_flags,tool
-from tests.test_xhci_kernel import dependencies,CANDIDATE,ROOT
+from tests.test_xhci_kernel import dependencies,ROOT
 class XhciManagerTests(unittest.TestCase):
  @classmethod
  def setUpClass(cls):
   cls.out=ROOT/'build/test/p8-xhci-manager'/('run-'+uuid.uuid4().hex[:12]);cls.out.mkdir(parents=True)
-  cls.inputs=[CANDIDATE/'services/drivers/device_manager.dg',ROOT/'tests/device_manager_probe.dg',ROOT/'tests/device_manager_probe.c',ROOT/'tests/xhci_manager_probe.c',Path(__file__)]
+  cls.inputs=[ROOT/'services/drivers/device_manager.dg',ROOT/'tests/device_manager_probe.dg',ROOT/'tests/device_manager_probe.c',ROOT/'tests/xhci_manager_probe.c',Path(__file__)]
   cls.before={str(p.relative_to(ROOT)):hashlib.sha256(p.read_bytes()).hexdigest() for p in cls.inputs};(cls.out/'source-before.json').write_text(json.dumps(cls.before,indent=2)+'\n')
  @classmethod
  def tearDownClass(cls):
@@ -21,7 +21,7 @@ class XhciManagerTests(unittest.TestCase):
   for mode in ('debug','release'):
    d=self.out/((mutation+'-' if mutation else '')+mode);d.mkdir();stage=d/'source';overrides={}
    if mutation:
-    s=(CANDIDATE/'services/drivers/device_manager.dg').read_text()
+    s=(ROOT/'services/drivers/device_manager.dg').read_text()
     old,new={
      'bare-pid-contract':('(state.process&255)!=14||(state.process>>8)==0\n                    ||(state.process>>8)>0x0fff_ffff','state.process!=14'),
      'accept-zero-incarnation':('||(state.process>>8)==0',''),
