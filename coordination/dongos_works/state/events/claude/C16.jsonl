@@ -18,3 +18,5 @@
 {"at":"2026-10-18T10:50:07+00:00","data":{"rev":12,"status":"paused"},"kind":"document_changed","task_id":"claude:C16"}
 {"at":"2026-10-18T14:18:14+00:00","data":{"rev":13,"status":"paused"},"kind":"archive","task_id":"claude:C16"}
 {"at":"2026-10-19T11:42:09+00:00","data":{"rev":15,"status":"paused"},"kind":"state_reconciled","task_id":"claude:C16"}
+{"at":"2026-10-19T04:21:47+00:00","data":{"rev":1,"status":"todo"},"kind":"imported","task_id":"claude:C16"}
+{"at":"2026-10-19T04:43:01+00:00","data":{"rev":14,"status":"paused"},"kind":"state_restored","task_id":"claude:C16"}

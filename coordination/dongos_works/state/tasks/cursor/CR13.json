@@ -19,10 +19,10 @@
   "historical": false,
   "id": "cursor:CR13",
   "integration_note": "按独立验收hash真实集成到code/lang/bootstrap的.dg/.md及路径适配永久测试；主线同15项0skip通过、124.500秒、生产/测试/编译器来源稳定。新增frame_memory_integration另1项0skip通过、debug/release各8向量实际组合五模块并验证内存guard/flags/输入寄存器/栈平衡与嵌套调用对齐。首轮连接中断未计通过，已取得重跑完整回执。见reviews/2026-10-18-CR11-CR16-review-integration.md；完整L3自举未完成。",
-  "legacy_hash": "0d1b6276466f76b9f4d36703726a2ee681ee74313a1c5f06beadf300c8d89f13",
+  "legacy_hash": "30d2def1f1096b5ed7be3858a0182ae8d0b87de8990b278b9a5bbe22c67abbc1",
   "number": "CR13",
   "owner": "cursor",
-  "rev": 16,
+  "rev": 17,
   "review_note": "独立审查生产源码、契约及全定向测试通过。R1用不占scratch的存储捕获source/base完整64位前后值，普通及src==base真实地址期望有效；原生payload/完整非目标guard、坏宽度与提前written负控保留。正式3项通过0skip、debug/release原生及ELF64/COFF组装、来源稳定。先登记验收，随后真实集成与永久测试。",
   "state_reconciliation": {
     "at": "2026-10-19T11:42:09+00:00",
@@ -45,7 +45,7 @@
   },
   "status": "integrated",
   "title": "有界NASM整数内存存储",
-  "updated_at": "2026-10-19T11:42:10+00:00",
+  "updated_at": "2026-10-20T01:32:41+00:00",
   "verification": {
     "checks": [
       {

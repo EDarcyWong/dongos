@@ -1,2 +1,5 @@
 {"at":"2026-10-19T11:33:31+00:00","data":{"rev":1,"status":"todo"},"kind":"imported","task_id":"cursor:CR32"}
 {"at":"2026-10-19T11:42:09+00:00","data":{"rev":4,"status":"paused"},"kind":"state_reconciled","task_id":"cursor:CR32"}
+{"at":"2026-10-19T07:30:06+00:00","data":{"rev":1,"status":"todo"},"kind":"created","task_id":"cursor:CR32"}
+{"at":"2026-10-19T07:48:01+00:00","data":{"rev":2,"status":"paused"},"kind":"pause","task_id":"cursor:CR32"}
+{"at":"2026-10-19T07:48:21+00:00","data":{"rev":3,"status":"paused"},"kind":"archive","task_id":"cursor:CR32"}

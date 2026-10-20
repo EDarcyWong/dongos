@@ -1,0 +1,31 @@
+{
+  "auto_dispatch": false,
+  "auto_verify": false,
+  "candidate": null,
+  "checks": [
+    "discover:lmstudio-works/tests:test_u64_ir_operation_codes.py"
+  ],
+  "complexity": "simple",
+  "created_at": "2026-10-20T04:03:55+00:00",
+  "delivery": "lmstudio-works/deliveries/LM9.md",
+  "depends_on": [],
+  "description": "只做最简单固定数据录入，写一个JSON及交付两个文件，不写实现或测试。文件lmstudio-works/fixtures/u64-ir-operation-codes.json。\n顶层恰好version/operations两个字段且按此顺序，version为整数1；operations恰好如下顺序8项，每项恰好name/code两个字段且按此顺序，name为字符串，code为JSON整数：\nCONST 0\nCOPY 1\nADD 2\nSUB 3\nAND 4\nOR 5\nXOR 6\nIMUL 7\nUTF-8 JSON，不增删字段/项目，不改顺序，不把code写成字符串。独立检查已由协调者维护（lmstudio-works/tests/test_u64_ir_operation_codes.py），不修改检查文件；数据仅供后续可选补充。另写lmstudio-works/deliveries/LM9.md，说明固定数据录入，未运行测试明确写未运行，禁止编造通过或自举完成。\n通过自己的worker MCP查看最新rev、领取、实际落盘后提交；没有文件工具则说明并释放，不能以聊天正文冒充文件。LM Studio同时仅一项最简单任务。不改主线/他人/索引，不运行OS/VM、AI CLI、全回归、提交推送或自行验收。",
+  "document": "lmstudio-works/tasks/LM9-board.md",
+  "historical": false,
+  "id": "lmstudio:LM9",
+  "legacy_hash": "368c5173126996884c34d9d21acc62b15d6427cce07ce217c0f549d649978739",
+  "number": "LM9",
+  "owner": "lmstudio",
+  "pause_control": "confirmed",
+  "resume_status": "todo",
+  "rev": 2,
+  "review_note": "",
+  "status": "paused",
+  "title": "最简单固定数据：C48 u64 IR的8个操作码",
+  "updated_at": "2026-10-20T04:20:28+00:00",
+  "verification": null,
+  "write_paths": [
+    "lmstudio-works/fixtures/u64-ir-operation-codes.json",
+    "lmstudio-works/deliveries/LM9.md"
+  ]
+}

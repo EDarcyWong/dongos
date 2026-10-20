@@ -6,3 +6,12 @@
 {"at":"2026-10-18T15:53:05+00:00","data":{"job":"661921dfc8e74011b113449581fbbbac","status":"completed"},"kind":"job_finished","task_id":"cursor:CR20"}
 {"at":"2026-10-18T15:55:47+00:00","data":{"rev":5,"status":"rework"},"kind":"rework","task_id":"cursor:CR20"}
 {"at":"2026-10-19T11:42:09+00:00","data":{"rev":12,"status":"integrated"},"kind":"state_reconciled","task_id":"cursor:CR20"}
+{"at":"2026-10-19T04:21:48+00:00","data":{"rev":1,"status":"todo"},"kind":"imported","task_id":"cursor:CR20"}
+{"at":"2026-10-19T04:43:01+00:00","data":{"rev":6,"status":"rework"},"kind":"state_restored","task_id":"cursor:CR20"}
+{"at":"2026-10-19T05:44:14+00:00","data":{"rev":7,"status":"in_progress"},"kind":"claim","task_id":"cursor:CR20"}
+{"at":"2026-10-19T05:52:33+00:00","data":{"rev":8,"status":"submitted"},"kind":"submit","task_id":"cursor:CR20"}
+{"at":"2026-10-19T05:53:42+00:00","data":{"job":"b5b7ebb504c74de394a82cc5937de411","kind":"verify","provider":"python"},"kind":"queued","task_id":"cursor:CR20"}
+{"at":"2026-10-19T05:54:50+00:00","data":{"rev":9,"status":"submitted"},"kind":"verified","task_id":"cursor:CR20"}
+{"at":"2026-10-19T05:54:50+00:00","data":{"job":"b5b7ebb504c74de394a82cc5937de411","status":"completed"},"kind":"job_finished","task_id":"cursor:CR20"}
+{"at":"2026-10-19T05:56:19+00:00","data":{"rev":10,"status":"accepted"},"kind":"accept","task_id":"cursor:CR20"}
+{"at":"2026-10-19T05:58:14+00:00","data":{"rev":11,"status":"integrated"},"kind":"integrate","task_id":"cursor:CR20"}
