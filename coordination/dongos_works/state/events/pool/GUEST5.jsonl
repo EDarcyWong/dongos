@@ -22,3 +22,5 @@
 {"at":"2026-10-20T07:27:08+00:00","data":{"job":"10c71d602ff848a996219f1232bc87cc"},"kind":"verification_started","task_id":"pool:GUEST5"}
 {"at":"2026-10-20T07:29:58+00:00","data":{"rev":14,"status":"submitted"},"kind":"verified","task_id":"pool:GUEST5"}
 {"at":"2026-10-20T07:29:58+00:00","data":{"job":"10c71d602ff848a996219f1232bc87cc","status":"completed"},"kind":"job_finished","task_id":"pool:GUEST5"}
+{"at":"2026-10-20T08:00:30+00:00","data":{"rev":15,"status":"accepted"},"kind":"accept","task_id":"pool:GUEST5"}
+{"at":"2026-10-20T08:07:00+00:00","data":{"rev":16,"status":"integrated"},"kind":"integrate","task_id":"pool:GUEST5"}

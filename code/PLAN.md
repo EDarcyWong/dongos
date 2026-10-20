@@ -403,11 +403,11 @@ P1 已验证正常启动、载荷篡改、镜像截短和镜像缺失；后三�
 
 #### P2扩展（SMP已通过，其余四项保留）
 
-- [ ] 动态执行别名策略：仍属P2扩展，先建立物理别名W^X/所有权及撤权同步契约，P4代码加载前复核；活动API当前仍拒绝USER/EXEC
-- [ ] 大页/拆分：仍属P2扩展，独立实现2MiB/4KiB转换、失败不变、失效及回收；当前私有树只用4KiB页
+- [x] 动态执行别名策略（跨别名W^X与撤权顺序已实现；QEMU双CPU实测过期TLB、SHOOTDOWN后消除、两CPU执行新生成代码；活动API仍拒绝USER/EXEC，P4接入，见 `docs/p2-extensions.md`）：原属P2扩展，先建立物理别名W^X/所有权及撤权同步契约，P4代码加载前复核；活动API当前仍拒绝USER/EXEC
+- [x] 大页/拆分（`mm.paging` 原生2MiB叶子、live拆分/合并/回收，QEMU实测CPU走新页表；内核启动路径尚未使用，见 `docs/p2-extensions.md`）：原属P2扩展，独立实现2MiB/4KiB转换、失败不变、失效及回收；当前私有树只用4KiB页
 - [ ] PCID生命周期与精确失效：关联P4多地址空间，启用前验证tag复用；当前PCIDE关闭
 - [x] SMP shootdown：runtime6 四核共享内核根，BSP 单写者等待全部 AP IPI 应答后回收；真实陈旧映射反例通过，PCID/PGE 关闭
-- [ ] PAT写合并：本次明确排期为图形阶段使用WC前完成，先验证PAT/MTRR、缓存类型迁移及冲突别名；当前保留WB/UC、不改PAT
+- [x] PAT写合并（`mm.paging` WRITE_COMBINING、PAT/MTRR、按Intel SDM Table 14-7逐格的有效类型与迁移顺序，QEMU实测PAT第4项WC及映射，见 `docs/p2-extensions.md`）：本次明确排期为图形阶段使用WC前完成，先验证PAT/MTRR、缓存类型迁移及冲突别名；当前保留WB/UC、不改PAT
 
 SMP一项已按独立客体验收，其余四项继续承担交付义务；核心阶段验收不将它们视为已实现或删除范围。原单一阶段标准仍为“故意缺页显示panic屏，保护位全开”；范围及依赖见 `docs/p2-acceptance.md`。
 
@@ -438,7 +438,7 @@ P4压测里程碑：XSAVE/FXSAVE均完成1,000,000次实际CPL3往返、2,000,01
 
 ### P5 基础服务
 
-- [ ] 设备管理：受控32项PCIe ECAM目录、独立devmgr/四角色匹配、寄存器句柄、IRQ1/12及AHCI单MSI、owner退出撤权均已实测；同boot通用设备恢复与DMA安全回收/重授权仍待完成（故障时持有DMA，不冒充已恢复，见docs/process-integration.md）
+- [ ] 设备管理：受控32项PCIe ECAM目录、独立devmgr/四角色匹配、寄存器句柄、IRQ1/12及AHCI单MSI、owner退出撤权均已实测；同boot通用设备恢复与DMA安全回收/重授权仍待完成（离线恢复契约与 `memory.release_dma` 原语已实现并测试，见 docs/device-recovery.md，尚未接入调用点/QEMU验收；故障时持有DMA，不冒充已恢复，见docs/process-integration.md）
 - [x] 键盘驱动（i8042，独立CPL3、Set2/RESEND/错误字节与有界回退、IRQ1/12 owner/incarnation/sequence ACK；实际40次控制台循环及400+IRQ通过，见docs/process-integration.md）
 - [x] 存储驱动：virtio-blk → AHCI → NVMe（受控子集的实际读写/FLUSH与同盘双启动均通过；NVMe为NSID1/512B轮询，AHCI另有VMware双启动，见 docs/nvme.md、docs/ahci.md。通用设备生命周期和物理盘另验）
 - [x] FAT32 文件系统服务（根目录8.3、子目录/LFN/UTF-8、按文件能力授权/代际/退出drain与FS重启撤权，实际读写/FLUSH及同盘双启动通过；全树审计、66个写/FLUSH故障点及GUI文件持久化通过。不承诺journal、rename或任意断电恢复，见docs/fat32.md、docs/process-integration.md）

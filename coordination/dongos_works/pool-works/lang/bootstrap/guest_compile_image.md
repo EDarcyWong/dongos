@@ -58,6 +58,22 @@ and `Result` are mutually exclusive. Graph / limits / entry / workspace descript
 may share only as read-only inputs and must not overlap mutables. No hidden heap,
 global cache, or OS I/O.
 
+The borrowed Graph includes its entire declared arena (including unused tails),
+the complete Source array, and every source path/byte slice. R1 validates these
+extents and rejects overlap with any mutable before invoking the driver. The
+assembler cannot make that check on the adapter's behalf because it receives
+only assembly text. Graph Source counts are checked before multiplication and
+Source records must be aligned. Even a driver failure must leave Graph/source
+storage unchanged. The permanent native probe covers eleven backing/source
+aliases, a valid unsupported-source control, a valid ELF control, and a compiled
+regression mutant that removes only these backing/source checks.
+
+Labels/table pointer alignment is checked even when their length is zero,
+matching native_assembler.valid. A late INVALID from the assembler after the
+driver has modified storage/text would otherwise break the adapter's INVALID
+atomicity contract. Two native empty-slice alignment regressions check early
+rejection with unchanged storage/text/Result.
+
 ## Host probing
 
 Independent tests build a live Graph with production `frontend.check`, call

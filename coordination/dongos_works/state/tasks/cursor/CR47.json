@@ -15,11 +15,11 @@
   "checks": [
     "discover:cursor-works/tests:test_semantic_stack.py"
   ],
-  "claim_from_status": "todo",
-  "claim_token": "aaef665e32f14219a430e134e375b35b",
-  "claimed_at": "2026-10-20T07:35:36+00:00",
+  "claim_from_status": "rework",
+  "claim_token": "f4a4cc08957a46f78b2774b992b8668d",
+  "claimed_at": "2026-10-20T08:27:37+00:00",
   "claimed_by": "codex-mcp-d76b66689d824a70",
-  "completed_at": null,
+  "completed_at": "2026-10-20T08:28:36+00:00",
   "complexity": "standard",
   "created_at": "2026-10-20T07:11:54+00:00",
   "delivery": "cursor-works/deliveries/CR47.md",
@@ -28,15 +28,44 @@
   "document": "cursor-works/tasks/CR47-board.md",
   "historical": false,
   "id": "cursor:CR47",
+  "integration_note": "已真实复制candidate semantic_types.dg与semantic_stack.md至主线，源SHA e28128c7...与正式/独审一致。新增主线完整compiler_job run-3383cd152203通过1test0skip406.892s（两个seed模式、两个格式、真实全编译器闭包seed/native有界固定点+坏语义），独立同闭包与kernel ELF验证通过；CR47正式全语义/栈优化比较先前1642.989s零skip通过。已有semantic_types/runtime广泛回归另仍运行，不把未完成测试报作成功。组件真实集成，普通16KiB栈不改变；专用64KiB另由已集成CX7负责。",
   "legacy_hash": "3d6f0c22fa1233014600493cb6cea32f621488216e9753e4632f97e578122ca9",
   "number": "CR47",
   "owner": "codex",
-  "rev": 3,
-  "review_note": "",
-  "status": "in_progress",
+  "rev": 13,
+  "review_note": "已审查rt_expr拆分与原语义/发布契约，独立review_stack实际160语义+容量8变体、闭包seed/native栈测量通过（code/build/test/independent-stack/review.md及独立并行审查）；正式46c435复验1测试0skip1642.989秒、双模式双格式、语义/真实坏体及源码稳定通过。仅接受递归帧优化，native峰值37056字节仍超过16KiB，不能宣称guest L3完成；64KiB专用受保护栈另属用户授权CX7。",
+  "status": "integrated",
   "title": "[L3] 测量并降低semantic_types递归路径实际栈峰值",
-  "updated_at": "2026-10-20T07:35:36+00:00",
-  "verification": null,
+  "updated_at": "2026-10-20T09:45:21+00:00",
+  "verification": {
+    "checks": [
+      {
+        "cancelled": false,
+        "elapsed_seconds": 1642.989,
+        "execution_exited": true,
+        "passed": true,
+        "process_stopped": true,
+        "returncode": 0,
+        "skips": 0,
+        "spec": "discover:cursor-works/tests:test_semantic_stack.py",
+        "tests": 1,
+        "timed_out": false
+      }
+    ],
+    "execution_exited": true,
+    "fingerprint": {
+      "cursor-works/deliveries/CR47.md": "56c4ee339f3241b512c8ff91225921933fdda8e824860c8c2561940a0ac2a8a2",
+      "cursor-works/lang/bootstrap/semantic_stack.md": "eb9fb4f51e8db0891caec25ec1948a9fd9c4da446dfcf5ab79925817167fd4b6",
+      "cursor-works/lang/bootstrap/semantic_types.dg": "e28128c7a6c5c742d1a2caa9bbb4f89e5f83a8c265de151e885b5d65166f5271",
+      "cursor-works/tests/test_semantic_stack.py": "19a0513edba2fa5738245fceffb3f8aa50c22168a439c369d548c5b40d71f2c7"
+    },
+    "finished_at": "2026-10-20T09:09:06+00:00",
+    "job": "46c4352792224c5bbba86332e0b92a95",
+    "passed": true,
+    "process_stopped": true,
+    "source_stable": true,
+    "summary": "定向复验通过，等待源码/契约审查"
+  },
   "write_paths": [
     "cursor-works/lang/bootstrap/semantic_types.dg",
     "cursor-works/lang/bootstrap/semantic_stack.md",

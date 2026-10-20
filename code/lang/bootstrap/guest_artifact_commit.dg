@@ -1,0 +1,271 @@
+// Bounded, allocation-free artifact-commit protocol state machine.
+//
+// This module sequences the final "write it out, then make it durable" step of
+// a guest build product. It owns no buffer, parses no path, creates no
+// permission, opens no file, launches no process and nobody's next stage. The
+// caller passes one already-authorized opaque handle plus two callbacks:
+// write_at(handle, offset, data, len) -> confirmed byte count or negative
+// caller error, and flush(handle) -> 0 only when the already-written bytes are
+// durable, negative caller error otherwise.
+//
+// Lifecycle (State.status):
+//   IDLE (0)          init() completed; no callback has run yet.
+//   WRITING (1)       artifact bytes are being handed to write_at.
+//   PENDING_FLUSH (2) every artifact byte is confirmed written; flush required.
+//   DURABLE (3)       flush succeeded; this is the only success terminal state.
+//   FAILED (4)        terminal failure; no callback is ever issued again.
+//
+// A short write (0 < n <= remaining) advances offset by exactly n, so an offset
+// whose bytes are already confirmed is never written twice. A zero-progress
+// write (n == 0) is retried, but at most MAX_STALL times per commit; the budget
+// is global and never reset, so the whole commit terminates after at most
+// total + MAX_STALL write calls. A negative write result is terminal
+// immediately: this protocol never guesses that a partial artifact is usable.
+// flush is attempted exactly once, only after every byte is confirmed written.
+//
+// A callback result larger than the remaining length is a protocol violation
+// (E_PROTOCOL), not progress. A positive flush result is also E_PROTOCOL.
+// Caller-originated negative results are stored verbatim as the u64 bit pattern
+// of the i64 result, so code >= 0x8000_0000_0000_0000 identifies a callback
+// error and never collides with the small internal codes E_NO_PROGRESS,
+// E_PROTOCOL and E_INTERNAL.
+//
+// Honest limits: writing already happened outside this module, so a failed
+// commit cannot roll the medium back. State.written reports the confirmed
+// bytes for the caller's recovery policy. A successful flush proves only that
+// the caller's flush callback reported durable storage; it says nothing about
+// whole-disk transaction atomicity, other files, or a real DongOS reboot. This
+// component alone is not evidence of guest self-hosting.
+//
+// Descriptors: State must be non-null, 8-byte aligned and its full 64 bytes
+// must not wrap. The artifact slice must be non-null for a non-empty length,
+// must not wrap, must not overlap the State, and must keep the same length as
+// State.total for every step of the commit. An empty artifact (total == 0) is
+// allowed: it performs no write_at call but still requires a successful flush
+// before DURABLE. Callback pointers are non-null by the Dong function-pointer
+// type (a null callback is outside this ABI and cannot be represented or
+// checked here). INVALID never changes State; every other path publishes a
+// complete, self-consistent State.
+//
+// State consistency: step() re-validates the associative invariants of the
+// whole State before it writes a byte or issues a callback, because otherwise a
+// forged or corrupted State could buy a FLUSH - and a DURABLE report - for
+// bytes that were never written. Every mismatch is COMMIT_INVALID with State
+// byte-identical and zero callbacks, terminal states included:
+//   IDLE           written=attempts=stalls=flushes=0, stage=NONE, code=E_NONE
+//   WRITING        total>0, written<total, flushes=0, stalls<MAX_STALL,
+//                  attempts>=stalls, written==0 or attempts>0
+//   PENDING_FLUSH  written==total, flushes=0, stalls<MAX_STALL,
+//                  attempts>=stalls, written==0 or attempts>0
+//   DURABLE        written==total, flushes==1, stalls<MAX_STALL, attempts>=stalls
+//   FAILED         code!=E_NONE, and either STAGE_WRITE with flushes=0,
+//                  stalls<=MAX_STALL, attempts>=stalls, or STAGE_FLUSH with
+//                  written==total and flushes=1
+// Non-failed states always carry stage=STAGE_NONE and code=E_NONE, and
+// written<=total holds everywhere. In particular PENDING_FLUSH requires every
+// artifact byte to be confirmed written, so the "write everything, then FLUSH,
+// and only a successful FLUSH is durable" order cannot be bypassed by editing
+// State.
+module bootstrap.guest_artifact_commit;
+
+pub type WriteAt = fn(u64,u64,*const u8,u64)i64;
+pub type Flush = fn(u64)i64;
+
+// step/run return values.
+pub const COMMIT_STEP:u64=0;    // one action performed; State describes progress
+pub const COMMIT_INVALID:u64=1; // rejected arguments/state; nothing was changed
+pub const COMMIT_FAILED:u64=2;  // terminal failure; no callback was issued
+pub const COMMIT_DONE:u64=3;    // terminal DURABLE; no callback was issued
+
+// State.status lifecycle.
+pub const IDLE:u64=0;
+pub const WRITING:u64=1;
+pub const PENDING_FLUSH:u64=2;
+pub const DURABLE:u64=3;
+pub const FAILED:u64=4;
+
+// State.stage, the stage that failed (STAGE_NONE until then).
+pub const STAGE_NONE:u64=0;
+pub const STAGE_WRITE:u64=1;
+pub const STAGE_FLUSH:u64=2;
+
+// Internal State.code values. Callback failures use their raw i64 bit pattern.
+pub const E_NONE:u64=0;
+pub const E_NO_PROGRESS:u64=1;
+pub const E_PROTOCOL:u64=2;
+pub const E_INTERNAL:u64=3;
+
+// Maximum total zero-progress write results tolerated by one commit.
+pub const MAX_STALL:u64=8;
+
+// 64 bytes, 8-byte aligned, no padding. Offsets are fixed by declaration
+// order; the interface document and the C oracle depend on them.
+pub struct State {
+ pub status:u64,  // offset 0
+ pub stage:u64,   // offset 8
+ pub code:u64,    // offset 16
+ pub written:u64, // offset 24, confirmed artifact bytes
+ pub total:u64,   // offset 32, full artifact length
+ pub attempts:u64,// offset 40, write_at calls issued
+ pub stalls:u64,  // offset 48, zero-progress write results seen
+ pub flushes:u64, // offset 56, flush calls issued
+}
+
+const MAX:u64=0xffff_ffff_ffff_ffff;
+
+fn span(p:u64,n:u64)bool{return n==0||(p!=0&&n<=MAX-p);}
+fn overlap(a:u64,n:u64,b:u64,m:u64)bool{return n!=0&&m!=0&&a<b+m&&b<a+n;}
+
+// Non-null, 8-aligned, full 64-byte State does not wrap.
+unsafe fn state_valid(st:*State)bool{unsafe{
+ let p:u64=st as u64;
+ return st!=null&&(p&7)==0&&span(p,64);
+}}
+
+// Associative invariants of a published State: status must agree with
+// written/total and with the callback counters, and a non-failed State keeps
+// stage/code at their "nothing failed yet" values. This is what stops a forged
+// PENDING_FLUSH (written < total) from obtaining a FLUSH and a DURABLE report.
+// Pure read-only predicate; it never mutates State.
+unsafe fn state_consistent(st:*State)bool{unsafe{
+  let s:u64=(*st).status;
+  let w:u64=(*st).written;
+  let t:u64=(*st).total;
+  let a:u64=(*st).attempts;
+  let k:u64=(*st).stalls;
+  let f:u64=(*st).flushes;
+  if w>t{return false;}
+  // Subtract before comparing: w+k may itself overflow. Every successful
+  // nonzero write confirms at least one byte; stalls confirm none. A failed
+  // write may add one unconfirmed attempt, but no other state may do so.
+  if a<k{return false;}
+  let positive=a-k;
+  if s==FAILED&&(*st).stage==STAGE_WRITE{
+   if positive>w&&positive-w>1{return false;}
+  }else{
+   if positive>w||(w!=0&&positive==0){return false;}
+  }
+  if s==IDLE{
+   return w==0&&a==0&&k==0&&f==0&&(*st).stage==STAGE_NONE&&(*st).code==E_NONE;
+  }
+  if s==WRITING{
+   return t>0&&w<t&&f==0&&k<MAX_STALL&&a!=MAX&&a>=k&&(w==0||a>0)
+    &&(*st).stage==STAGE_NONE&&(*st).code==E_NONE;
+  }
+  if s==PENDING_FLUSH{
+   return w==t&&f==0&&k<MAX_STALL&&a>=k&&(w==0||a>0)
+    &&(*st).stage==STAGE_NONE&&(*st).code==E_NONE;
+  }
+  if s==DURABLE{
+   return w==t&&f==1&&k<MAX_STALL&&a>=k&&(w==0||a>0)
+    &&(*st).stage==STAGE_NONE&&(*st).code==E_NONE;
+  }
+  if s==FAILED{
+   if (*st).code==E_NONE{return false;}
+   if (*st).stage==STAGE_WRITE{return f==0&&k<=MAX_STALL&&a>=k;}
+   if (*st).stage==STAGE_FLUSH{return f==1&&w==t&&a>=k&&(w==0||a>0);}
+   return false;
+  }
+  return false;
+}}
+
+// Publish a terminal failure atomically enough for the caller: status, stage
+// and code are written in one straight-line sequence after the callback.
+unsafe fn fail(st:*State,stage:u64,code:u64)u64{unsafe{
+ (*st).status=FAILED;
+ (*st).stage=stage;
+ (*st).code=code;
+ return COMMIT_FAILED;
+}}
+
+// Initialize a complete State: IDLE, no callbacks issued, zero counters.
+// Any previous contents are overwritten; the caller must not re-initialize a
+// commit whose bytes are already on the medium. total may be 0.
+pub unsafe fn init(st:*State,total:u64)u64{unsafe{
+ if !state_valid(st){return COMMIT_INVALID;}
+ (*st).status=IDLE;
+ (*st).stage=STAGE_NONE;
+ (*st).code=E_NONE;
+ (*st).written=0;
+ (*st).total=total;
+ (*st).attempts=0;
+ (*st).stalls=0;
+ (*st).flushes=0;
+ return COMMIT_STEP;
+}}
+
+// Perform exactly one protocol action:
+//   IDLE          -> WRITING (or PENDING_FLUSH when total == 0), no callback.
+//   WRITING       -> one write_at(handle, written, src.ptr+written,
+//                                total-written) call, then transition or fail.
+//   PENDING_FLUSH -> one flush(handle) call, then DURABLE or fail.
+//   DURABLE       -> COMMIT_DONE, no callback.
+//   FAILED        -> COMMIT_FAILED, no callback.
+// Invalid descriptors, a changed artifact length or an inconsistent State are
+// rejected with COMMIT_INVALID before any callback or State write. The State
+// consistency check runs first, so a forged PENDING_FLUSH whose bytes were
+// never written cannot reach flush(), and a corrupted DURABLE/FAILED State is
+// not endorsed either.
+pub unsafe fn step(st:*State,handle:u64,src:[]const u8,write_at:WriteAt,flush:Flush)u64{unsafe{
+ if !state_valid(st){return COMMIT_INVALID;}
+ if !state_consistent(st){return COMMIT_INVALID;}
+ let s:u64=(*st).status;
+ if s==DURABLE{return COMMIT_DONE;}
+ if s==FAILED{return COMMIT_FAILED;}
+ let sp=src.ptr as u64;
+ let stp=st as u64;
+ if !span(sp,src.len){return COMMIT_INVALID;}
+ if overlap(stp,64,sp,src.len){return COMMIT_INVALID;}
+ if src.len!=(*st).total{return COMMIT_INVALID;}
+ if s==IDLE{
+  if (*st).total==0{(*st).status=PENDING_FLUSH;}else{(*st).status=WRITING;}
+  return COMMIT_STEP;
+ }
+ if s==WRITING{
+  let off:u64=(*st).written;
+  let remaining:u64=(*st).total-off;
+  (*st).attempts+=1;
+  let n:i64=write_at(handle,off,src.ptr+(off as usize),remaining);
+  if n<0{return fail(st,STAGE_WRITE,n as u64);}
+  let take:u64=n as u64;
+  if take>remaining{return fail(st,STAGE_WRITE,E_PROTOCOL);}
+  if take==0{
+   (*st).stalls+=1;
+   if (*st).stalls>=MAX_STALL{return fail(st,STAGE_WRITE,E_NO_PROGRESS);}
+   return COMMIT_STEP;
+  }
+  (*st).written=off+take;
+  if (*st).written==(*st).total{(*st).status=PENDING_FLUSH;}
+  return COMMIT_STEP;
+ }
+ if s==PENDING_FLUSH{
+  (*st).flushes+=1;
+  let r:i64=flush(handle);
+  if r<0{return fail(st,STAGE_FLUSH,r as u64);}
+  if r>0{return fail(st,STAGE_FLUSH,E_PROTOCOL);}
+  (*st).status=DURABLE;
+  return COMMIT_DONE;
+ }
+ return COMMIT_INVALID;
+}}
+
+// Drive step() to a terminal state. The loop is bounded by total + MAX_STALL
+// write actions plus the IDLE and flush transitions; a surviving COMMIT_STEP
+// after the bound is a corrupted State and is reported as E_INTERNAL. An
+// inconsistent input State is reported as COMMIT_INVALID by the first step().
+// This is a convenience wrapper; callers that need per-step observation call
+// step().
+pub unsafe fn run(st:*State,handle:u64,src:[]const u8,write_at:WriteAt,flush:Flush)u64{unsafe{
+ if !state_valid(st){return COMMIT_INVALID;}
+ let t:u64=(*st).total;
+ var cap:u64=MAX;
+ if t<=MAX-16{cap=t+16;}
+ var r:u64=step(st,handle,src,write_at,flush);
+ var i:u64=0;
+ while r==COMMIT_STEP&&i<cap{
+  r=step(st,handle,src,write_at,flush);
+  i+=1;
+ }
+ if r==COMMIT_STEP{return fail(st,STAGE_WRITE,E_INTERNAL);}
+ return r;
+}}

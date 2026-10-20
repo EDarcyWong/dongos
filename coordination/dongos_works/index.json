@@ -1,6 +1,6 @@
 {
   "schema_version": 1,
-  "generated_at": "2026-10-20T07:42:32+00:00",
+  "generated_at": "2026-10-20T10:12:52+00:00",
   "tasks": [
     {
       "auto_dispatch": false,
@@ -3540,6 +3540,341 @@
       ]
     },
     {
+      "id": "codex:CX10",
+      "number": "CX10",
+      "owner": "codex",
+      "title": "[L3] P5服务启用既有64MiB共享帧表并保留物理验收",
+      "description": "替代未实施即归档的CX9错误检查名。真实QEMU P5装载失败0x04060002；ELF实测shell需551页，三服务共712页+12栈页，超过旧512帧表。把既有memory.enable_arena(16384)在所有P5服务首次装载前启用，GRAPHICS不重复启用；64MiB物理总预算与普通16KiB栈不扩大，不增权限。更新真实P5物理校验读取动态EXTENDED帧表并验证其来源/长度在原arena内，保持所有代码/页表/W^X/guard/IPC/实际FLUSH检查，真实同盘双启动复验。主线既有memory/address和service_handoff定向回归；新增物理读取器边界/伪造帧表/读前拒绝测试。独立审查源码/验收脚本/真实物理证据后方验收。",
+      "assignment_owner": "codex",
+      "status": "integrated",
+      "rev": 6,
+      "write_paths": [
+        "kernel/user/services.dg",
+        "tests/run_services_qemu.py",
+        "tests/test_services_frame_reader.py",
+        "docs/l3-p5-memory-profile.md",
+        "codex-works/deliveries/CX10.md"
+      ],
+      "depends_on": [],
+      "checks": [
+        "module:tests.test_services_frame_reader",
+        "module:tests.test_user_address_spaces",
+        "module:tests.test_service_handoff"
+      ],
+      "auto_dispatch": false,
+      "auto_verify": false,
+      "complexity": "standard",
+      "created_at": "2026-10-20T08:42:39+00:00",
+      "updated_at": "2026-10-20T09:19:15+00:00",
+      "historical": false,
+      "document": "codex-works/tasks/CX10-board.md",
+      "delivery": "codex-works/deliveries/CX10.md",
+      "claimed_at": "2026-10-20T08:42:39+00:00",
+      "completed_at": "2026-10-20T09:13:24+00:00",
+      "claimed_by": "codex-mcp-d76b66689d824a70",
+      "candidate": null,
+      "verification": {
+        "passed": true,
+        "checks": [
+          {
+            "spec": "module:tests.test_services_frame_reader",
+            "passed": true,
+            "tests": 7,
+            "skips": 0,
+            "returncode": 0,
+            "cancelled": false,
+            "timed_out": false,
+            "process_stopped": true,
+            "execution_exited": true,
+            "elapsed_seconds": 15.088
+          },
+          {
+            "spec": "module:tests.test_user_address_spaces",
+            "passed": true,
+            "tests": 1,
+            "skips": 0,
+            "returncode": 0,
+            "cancelled": false,
+            "timed_out": false,
+            "process_stopped": true,
+            "execution_exited": true,
+            "elapsed_seconds": 18.365
+          },
+          {
+            "spec": "module:tests.test_service_handoff",
+            "passed": true,
+            "tests": 2,
+            "skips": 0,
+            "returncode": 0,
+            "cancelled": false,
+            "timed_out": false,
+            "process_stopped": true,
+            "execution_exited": true,
+            "elapsed_seconds": 33.527
+          }
+        ],
+        "process_stopped": true,
+        "execution_exited": true,
+        "source_stable": true,
+        "fingerprint": {
+          "kernel/user/services.dg": "8e5f632b847aacc13b468619111369ab3f67ce86f8893c5a68e166c63380bcf5",
+          "tests/run_services_qemu.py": "a1f24281bc9e3f0534f8f465e79aaf515120e8c7c73a31f5bf3407c7076bfca1",
+          "tests/test_services_frame_reader.py": "44a389cd8fcd0df9446e20d1e2f8c07c9b064006a57b57e85baf847f517a9a4e",
+          "docs/l3-p5-memory-profile.md": "9397c4ccc45785085d02b642cf796bc3c0ec1a5d2448899ff1cbb539074d8275",
+          "codex-works/deliveries/CX10.md": "dfcebb3ccc22b440cbbad212e8fdc3fac1cccae8d24901decf705fc93643651d"
+        },
+        "summary": "定向复验通过，等待源码/契约审查",
+        "finished_at": "2026-10-20T09:17:08+00:00",
+        "job": "7167db6da57b434b853a6e02c6c51183"
+      },
+      "review_note": "独立review_stack重放真实两启各241原始物理chunk完整verify及175编译输入/179源码SHA，实际磁盘两FAT/clean/精确payload；两个原始单字节坏体被准确拒绝。最终7tests0skip独立28.726s，正式7167三模块共10tests0skip稳定通过。已审查P5trace窄限定、64MiB原额度及动态表PTE来源，功能正确性压力范围明确。",
+      "legacy_hash": "b81825dd23ffc5f61ef5d96a5d3bb96063c06bac3d96cff6571692ed8d901b3e",
+      "claim_from_status": "todo",
+      "claim_token": "6569b20e5fac41448994e4bc4afb2727",
+      "integration_note": "声明主线文件均已真实落盘，逐项匹配正式最终指纹；主线执行与独立审查证据如验收note。组件集成完成，不将其等同完整L3客体自举。"
+    },
+    {
+      "id": "codex:CX12",
+      "number": "CX12",
+      "owner": "codex",
+      "title": "[L3] 原生汇编器使用有界短位移编码以保持2MiB执行上限",
+      "description": "替代未实施CX11的平台检查误配。当前56MiB单arena/64KiB guarded栈原生自编译闭包已双stage ELF一致，但release2142264字节超既有2MiB EXEC上限；closed-call过滤后仍2121768。保持执行文件上限和64MiB不扩大。为x86_encode新增显式encode_compact API：base非RIP内存0/有符号disp8/disp32最短有效形式，RBP/R13零位移必须disp8零，RSP/R12需SIB，RIP始终disp32；现有encode字节契约完全不变。native_assembler内部采用compact，两遍长度稳定，禁止rel32隐式缩短/地址截断。永久NASM独立字节oracle与debug/release双格式、边界/输入输出canary、原始encode兼容、实际坏RBP与截断负控；同一跨平台测试直接执行nativeassembler并装载生成ELF运行验证，不能skip。旧Linux限定测试不作为本机正式规格。独立审查+正式稳定复验；闭包大小和固定点另记真实证据，不宣称guest完成。",
+      "assignment_owner": "codex",
+      "status": "integrated",
+      "rev": 9,
+      "write_paths": [
+        "lang/bootstrap/x86_encode.dg",
+        "lang/bootstrap/native_assembler.dg",
+        "lang/tests/test_bootstrap_x86_compact.py",
+        "docs/l3-compact-x86.md",
+        "codex-works/deliveries/CX12.md"
+      ],
+      "depends_on": [],
+      "checks": [
+        "module:lang.tests.test_bootstrap_x86_compact"
+      ],
+      "auto_dispatch": false,
+      "auto_verify": false,
+      "complexity": "standard",
+      "created_at": "2026-10-20T09:01:10+00:00",
+      "updated_at": "2026-10-20T09:19:10+00:00",
+      "historical": false,
+      "document": "codex-works/tasks/CX12-board.md",
+      "delivery": "codex-works/deliveries/CX12.md",
+      "claimed_at": "2026-10-20T09:11:52+00:00",
+      "completed_at": "2026-10-20T09:13:23+00:00",
+      "claimed_by": "codex-mcp-d76b66689d824a70",
+      "candidate": null,
+      "verification": {
+        "passed": true,
+        "checks": [
+          {
+            "spec": "module:lang.tests.test_bootstrap_x86_compact",
+            "passed": true,
+            "tests": 1,
+            "skips": 0,
+            "returncode": 0,
+            "cancelled": false,
+            "timed_out": false,
+            "process_stopped": true,
+            "execution_exited": true,
+            "elapsed_seconds": 62.293
+          }
+        ],
+        "process_stopped": true,
+        "execution_exited": true,
+        "source_stable": true,
+        "fingerprint": {
+          "lang/bootstrap/x86_encode.dg": "afbabaa0d11f865be62b01d118a8cc81fc79baed42eb525e7497c15dd1fd4575",
+          "lang/bootstrap/native_assembler.dg": "27b02c24876b632d624f30633fe1b40a111da536011f01b7d18325d6d434f3f9",
+          "lang/tests/test_bootstrap_x86_compact.py": "676394808353ea89f4cdf274efdf0bf950a364b9751e1941b5979c9e98329fbf",
+          "docs/l3-compact-x86.md": "517e103568816214da72e08bb55b061c57dca6cda75c46249099c19ee2f18098",
+          "codex-works/deliveries/CX12.md": "87f4fd7b2f642bd649ad958b037cd9bc3ffdb6b56656d225263b070a16d2c3b9"
+        },
+        "summary": "定向复验通过，等待源码/契约审查",
+        "finished_at": "2026-10-20T09:15:39+00:00",
+        "job": "f4a7fcba7ea345c891aeb6c4c93e4469"
+      },
+      "review_note": "独立review_io两模式各7532独立NASM向量、576真实机器执行、6越界拒绝均通过；已核对两遍长度/RIP/SIB/低位移逻辑，生产无阻断。Windows夹具binary修正后正式f4a7复验1test0skip62.293s源码稳定，主线实际ELF执行及坏体通过。",
+      "legacy_hash": "1a5e16965b6bb105d8432b549bccdd983452ef359720d6e9372a267237b1a473",
+      "claim_from_status": "rework",
+      "claim_token": "bacb6dffed0f469baa9af19c686653b7",
+      "integration_note": "声明主线文件均已真实落盘，逐项匹配正式最终指纹；主线执行与独立审查证据如验收note。组件集成完成，不将其等同完整L3客体自举。"
+    },
+    {
+      "id": "codex:CX13",
+      "number": "CX13",
+      "owner": "codex",
+      "title": "[L3] 单56MiB纯Dong自编译作业与客体入口",
+      "description": "把已验证build-only原型实现为主线纯Dong有界编译作业，不引入closed-driver或DCE；用现有compiler_driver/native_assembler compact。入口接受连续只读源blob（count,entry及各root/pathlen/byteslen/path/bytes）、56MiBarena与Result，完整溢出/区域重叠/输入预检；无文件/系统调用权限。解析Source后check→consume compact→lower/NASM→消费重用同arena assembler输出，容量不扩大。输出ELF内固定dong_compiler_entry薄桥调用dong_compile_job并通过既有255退出ABI，供后续受限启动。双模式/双对象格式、前置失败不写、有效/坏语义/容量真实运行；全闭包主机保护arena/64KiB栈生成ELF两stage精确固定点且≤2MiB，不能冒称客体完成。独立审查及零skip复验后集成，不提交推送。",
+      "assignment_owner": "codex",
+      "status": "integrated",
+      "rev": 6,
+      "write_paths": [
+        "lang/bootstrap/compiler_job.dg",
+        "lang/tests/test_bootstrap_compiler_job.py",
+        "tools/compiler_job.py",
+        "docs/l3-compiler-job.md",
+        "codex-works/deliveries/CX13.md"
+      ],
+      "depends_on": [],
+      "checks": [
+        "module:lang.tests.test_bootstrap_compiler_job"
+      ],
+      "auto_dispatch": false,
+      "auto_verify": false,
+      "complexity": "standard",
+      "created_at": "2026-10-20T09:16:30+00:00",
+      "updated_at": "2026-10-20T09:53:12+00:00",
+      "historical": false,
+      "document": "codex-works/tasks/CX13-board.md",
+      "delivery": "codex-works/deliveries/CX13.md",
+      "claimed_at": "2026-10-20T09:16:31+00:00",
+      "completed_at": "2026-10-20T09:45:21+00:00",
+      "claimed_by": "codex-mcp-d76b66689d824a70",
+      "candidate": null,
+      "verification": {
+        "passed": true,
+        "checks": [
+          {
+            "spec": "module:lang.tests.test_bootstrap_compiler_job",
+            "passed": true,
+            "tests": 1,
+            "skips": 0,
+            "returncode": 0,
+            "cancelled": false,
+            "timed_out": false,
+            "process_stopped": true,
+            "execution_exited": true,
+            "elapsed_seconds": 387.803
+          }
+        ],
+        "process_stopped": true,
+        "execution_exited": true,
+        "source_stable": true,
+        "fingerprint": {
+          "lang/bootstrap/compiler_job.dg": "c071546dcad196024fc9cfd4ac2b9843f9540bda5540c2dc74a39ee763fe0e84",
+          "lang/tests/test_bootstrap_compiler_job.py": "b3e5874a8756cdf75a96b215b516ceab15e91e85f48a0c8e6471a61fad355925",
+          "tools/compiler_job.py": "63a2e2f3a3a3672e5b36fd26c90eaf225e304b5f7e3bdbad87f91900380712f9",
+          "docs/l3-compiler-job.md": "183f78bf8aa71e6dd082961fed3543d4369887c1452d430f31c4f930aaed806b",
+          "codex-works/deliveries/CX13.md": "049481e1e16b4be1187e523ce8b077bc131f4e0f201a3eadc64d9d48206e9f57"
+        },
+        "summary": "定向复验通过，等待源码/契约审查",
+        "finished_at": "2026-10-20T09:52:07+00:00",
+        "job": "4c4df8a5ffe64234a8c5a5146684c82a"
+      },
+      "review_note": "完整源码/四区借用与consuming布局/固定24B入口/host ELF loader和测试有效性已审查；独立review_io66额外原子拒绝、真实小ELF返回37、1101函数backend容量、debug/release全闭包guarded固定点与生产kernel ELF四产物均通过，旧P1/P2已修复并闭环，最终文档新增容量断言只读复核认可。正式4c4df8复验最终版1test0skip387.803s源稳定/进程停止，包含新增实际容量；ELF1892632B全部字节一致。组件验收，不宣称VM成功。",
+      "legacy_hash": "899e5524bee98ac0252b5358f4677042ba952fc85293950c0b27fb9d80c6bbb7",
+      "claim_from_status": "todo",
+      "claim_token": "bf495ba086c54dd99da9d441c654ea8a",
+      "integration_note": "声明主线文件已实际落盘并与正式指纹逐项一致。主线run3383先前1test0skip406.892s，最终新增容量由独立执行与正式387.803s通过；完整两模式双格式seed/native字节固定点已实测。纯编译作业真实集成，VM启动链由CX14继续，未冒充完整L3完成。"
+    },
+    {
+      "id": "codex:CX14",
+      "number": "CX14",
+      "owner": "codex",
+      "title": "[L3] 受限客体编译启动与持久化控制服务",
+      "description": "接通CX13纯编译核心真实DongOS启动。新增仅显式P5编译profile启用的job启动通道，普通/桌面默认不变：controller slot0只读blob/已验证ELF请求，独占slot3/64KiB保护栈/56MiBarena，共计既有16384 USER帧。内核快照ELF并限制映射范围，不允许请求栈大小/arena大小/权限；controller阻塞，源码借页只读，core只允许退出255，没有FS/进程/电源handle。返回时校验Result并有界拷贝产物后销毁job。控制服务通过实际H_READ读取磁盘源blob和可选stage1，通过既有H_WRITE/H_SYNC写stage产物；重启后加载同盘stage1编译并精确比较，不提交推送。增加显式build选项、永久受限请求/返回检查负控、真实QEMU两启物理/磁盘/源稳定证据和独立审查。尚未测试不得声明完成L3。",
+      "assignment_owner": "codex",
+      "status": "in_progress",
+      "rev": 2,
+      "write_paths": [
+        "kernel/user/compiler_job.dg",
+        "kernel/user/services.dg",
+        "kernel/services_run.asm",
+        "services/compiler/controller.dg",
+        "tools/build.py",
+        "tests/test_compiler_job_launch.py",
+        "tests/run_compiler_job_qemu.py",
+        "docs/l3-guest-compiler.md",
+        "codex-works/deliveries/CX14.md"
+      ],
+      "depends_on": [],
+      "checks": [
+        "module:tests.test_compiler_job_launch"
+      ],
+      "auto_dispatch": false,
+      "auto_verify": false,
+      "complexity": "standard",
+      "created_at": "2026-10-20T09:26:40+00:00",
+      "updated_at": "2026-10-20T09:26:40+00:00",
+      "historical": false,
+      "document": "codex-works/tasks/CX14-board.md",
+      "delivery": "codex-works/deliveries/CX14.md",
+      "claimed_at": "2026-10-20T09:26:40+00:00",
+      "completed_at": null,
+      "claimed_by": "codex-mcp-d76b66689d824a70",
+      "candidate": null,
+      "verification": null,
+      "review_note": "",
+      "legacy_hash": "5f9f3ae4783ac1d594440ba6e263562d075e4774bdaa159a48d693ce44f84b79",
+      "claim_from_status": "todo",
+      "claim_token": "412058971cba4ad9aab02a0c645515e8"
+    },
+    {
+      "id": "codex:CX15",
+      "number": "CX15",
+      "owner": "codex",
+      "title": "[L3] 修正编译作业宿主验证器的Linux布局与u64格式兼容",
+      "description": "复核发现tools/compiler_job.py虽然有POSIX guarded mmap路径，但Linux -no-pie宿主默认占用0x400000，与待装载静态ELF冲突，且uint64_t在LP64是unsigned long而现有printf用%llu。仅将非Windows宿主测试exe链接到0x10000000并保留-no-pie，C夹具U明确unsigned long long/64bit ABI，不改Dong核心、guest ELF地址、64MiB预算或测试oracle。复用完整双模式双格式固定点定向测试，独立审查。当前Windows能实际复验；无Linux运行环境则明确未实际Linux执行，不编造跨平台通过。",
+      "assignment_owner": "codex",
+      "status": "submitted",
+      "rev": 4,
+      "write_paths": [
+        "tools/compiler_job.py",
+        "docs/l3-compiler-job-host.md",
+        "codex-works/deliveries/CX15.md"
+      ],
+      "depends_on": [],
+      "checks": [
+        "module:lang.tests.test_bootstrap_compiler_job"
+      ],
+      "auto_dispatch": false,
+      "auto_verify": false,
+      "complexity": "standard",
+      "created_at": "2026-10-20T10:05:51+00:00",
+      "updated_at": "2026-10-20T10:12:52+00:00",
+      "historical": false,
+      "document": "codex-works/tasks/CX15-board.md",
+      "delivery": "codex-works/deliveries/CX15.md",
+      "claimed_at": "2026-10-20T10:05:52+00:00",
+      "completed_at": "2026-10-20T10:06:31+00:00",
+      "claimed_by": "codex-mcp-d76b66689d824a70",
+      "candidate": null,
+      "verification": {
+        "passed": true,
+        "checks": [
+          {
+            "spec": "module:lang.tests.test_bootstrap_compiler_job",
+            "passed": true,
+            "tests": 1,
+            "skips": 0,
+            "returncode": 0,
+            "cancelled": false,
+            "timed_out": false,
+            "process_stopped": true,
+            "execution_exited": true,
+            "elapsed_seconds": 358.667
+          }
+        ],
+        "process_stopped": true,
+        "execution_exited": true,
+        "source_stable": true,
+        "fingerprint": {
+          "tools/compiler_job.py": "4490cacbd83987f1472abe8d84069258649fec4d92644f2f56a180260d944e60",
+          "docs/l3-compiler-job-host.md": "c18891fc8adee492e7db0270048d94b88df4c88e2637df49051d3d47c04cdd6a",
+          "codex-works/deliveries/CX15.md": "3d1b7e1460f819ff44aca949a95bd74967bcb29c6b23a1bc6a6f76bfb96ce7d6"
+        },
+        "summary": "定向复验通过，等待源码/契约审查",
+        "finished_at": "2026-10-20T10:12:52+00:00",
+        "job": "ccb0e44cff144b4d9da302e0a34b3fcd"
+      },
+      "review_note": "",
+      "legacy_hash": "c1d2a8a07e991011bd56fb3a6fb64a0d3bf3af970db8201b8703f0aac8819e7e",
+      "claim_from_status": "todo",
+      "claim_token": "4d0cdee2f7274ce0a345a9ce97747f1f"
+    },
+    {
       "auto_dispatch": false,
       "auto_verify": false,
       "candidate": null,
@@ -3867,8 +4202,8 @@
       "title": "[L3] 将有界源码读取器接入已有DongOS文件句柄",
       "description": "按用户完成L3授权，新增lib.compiler_source：仅消费已初始化的lib.files.Session和调用者已授权文件token，通过现有H_READ IPC接入bootstrap.guest_source_reader，分块<=61440，检查返回字节数后拷贝，零长度EOF与错误保持；不申请权限、不打开路径、不改内核配置。校验Session/channel与scratch/out/result完整区间不别名，失败预检无IPC与无写入。真实debug/release原生C传输桩检查消息、偏移、短读、EOF、超容量、错误、坏返回及原子性。仅声明文件，不抢GUEST4/5。",
       "assignment_owner": "codex",
-      "status": "submitted",
-      "rev": 4,
+      "status": "integrated",
+      "rev": 6,
       "write_paths": [
         "services/lib/compiler_source.dg",
         "services/lib/compiler_source.md",
@@ -3886,7 +4221,7 @@
       "auto_verify": false,
       "complexity": "standard",
       "created_at": "2026-10-20T07:03:54+00:00",
-      "updated_at": "2026-10-20T07:10:26+00:00",
+      "updated_at": "2026-10-20T08:00:31+00:00",
       "historical": false,
       "document": "codex-works/tasks/CX6-board.md",
       "delivery": "codex-works/deliveries/CX6.md",
@@ -3924,10 +4259,147 @@
         "finished_at": "2026-10-20T07:10:26+00:00",
         "job": "425a27aeef594fce946c7d6944844eb8"
       },
-      "review_note": "",
+      "review_note": "独立审查子代理review_io实际完整审核源码/契约/测试，独立SHA核对原对象并追加debug/release各2200条短读/精确容量/超容边界及9预检，全部原生exit0。正式隔离425a27aeef594fce946c7d6944844eb8 1test/0skip/38.717秒/source_stable/退出并停止。当前四文件指纹一致。报告reviews/2026-10-20-independent-io-review.md，证据code/build/test/independent-io/reader/evidence.json。准予文件读取适配组件验收，非完整L3完成。",
       "legacy_hash": "d3124a96642a0379b0f498ef14f12ebf97b36e4d80b306f81b2bf5324e744504",
       "claim_from_status": "todo",
-      "claim_token": "787b20d07fc94cf3a9abcad276a0a398"
+      "claim_token": "787b20d07fc94cf3a9abcad276a0a398",
+      "integration_note": "实现已真实落于主线code/services/lib/compiler_source.dg/.md和lang/tests/test_guest_files_reader.py，文件身份与独立验收/正式隔离指纹一致。正式隔离及独立2200边界/模式通过，主线此前完整1test0skip34.794秒通过，冻结后未修改。独立审查报告reviews/2026-10-20-independent-io-review.md。登记真实集成，未扩大权限/内存/栈。"
+    },
+    {
+      "id": "codex:CX7",
+      "number": "CX7",
+      "owner": "codex",
+      "title": "[L3] 编译器专用64KiB受保护栈配置与装载入口",
+      "description": "用户已要求协调者选择栈约束，选择仅编译器专用64KiB，普通进程仍16KiB，两侧guard，全部映射来自既有64MiB共享arena。实现窄profile及内核可信专用stage入口，容量预检和ELF guard碰撞覆盖完整16页，stage失败回收保持。不得扩大arena、暴露用户自选栈大小或赋予额外权限。独立审查+真实编译debug/release测试、边界与旧4页坏实现负控；本项只是专用装载能力，真实编译器启动/自举另需集成。",
+      "assignment_owner": "codex",
+      "status": "integrated",
+      "rev": 12,
+      "write_paths": [
+        "kernel/user/compiler_stack.dg",
+        "kernel/user/memory.dg",
+        "tests/test_compiler_stack.py",
+        "docs/l3-compiler-stack.md",
+        "codex-works/deliveries/CX7.md"
+      ],
+      "depends_on": [],
+      "checks": [
+        "discover:tests:test_compiler_stack.py"
+      ],
+      "auto_dispatch": false,
+      "auto_verify": false,
+      "complexity": "standard",
+      "created_at": "2026-10-20T08:07:19+00:00",
+      "updated_at": "2026-10-20T09:16:29+00:00",
+      "historical": false,
+      "document": "codex-works/tasks/CX7-board.md",
+      "delivery": "codex-works/deliveries/CX7.md",
+      "claimed_at": "2026-10-20T08:30:02+00:00",
+      "completed_at": "2026-10-20T08:30:03+00:00",
+      "claimed_by": "codex-mcp-d76b66689d824a70",
+      "candidate": null,
+      "verification": {
+        "passed": true,
+        "checks": [
+          {
+            "spec": "discover:tests:test_compiler_stack.py",
+            "passed": true,
+            "tests": 1,
+            "skips": 0,
+            "returncode": 0,
+            "cancelled": false,
+            "timed_out": false,
+            "process_stopped": true,
+            "execution_exited": true,
+            "elapsed_seconds": 288.257
+          }
+        ],
+        "process_stopped": true,
+        "execution_exited": true,
+        "source_stable": true,
+        "fingerprint": {
+          "kernel/user/compiler_stack.dg": "ca725ad53b4bf6f1b291c1c777f451abe171834614bebe6489ebab48f90d8a26",
+          "kernel/user/memory.dg": "6fae95b3919a399d5e4af0f57cb45b0478c15bb6c3dbc03618273b530fc4375c",
+          "tests/test_compiler_stack.py": "ec8448901c5d9193646c68624e76f5688e97d62dfbaa46bae7a413ab78773d2d",
+          "docs/l3-compiler-stack.md": "93d0205ccb269b66bc16b5a6eba5cfba86e118601f1415d42f9a5461ae622d56",
+          "codex-works/deliveries/CX7.md": "d3b0b932b9f1ef18cb0548d008632099b9945c7337d8f9d2a024e9a069694a5b"
+        },
+        "summary": "定向复验通过，等待源码/契约审查",
+        "finished_at": "2026-10-20T09:14:15+00:00",
+        "job": "00301938c43645479a2a6233b804fd2d"
+      },
+      "review_note": "用户明确委托选择栈约束，采用专用64KiB上下guard且计入既有64MiB，普通仍16KiB。独立review_stack每模式2729145实测检查全17失败位置/回滚/复用清零/边界/ET_DYN通过，报告2026-10-20-independent-compiler-stack-review.md；正式003019复验1test0skip288.257s源码稳定/停止确认。已审查profile封闭入口与容量/保护保留，无用户选择大小或权限扩张。",
+      "legacy_hash": "b93d4c3c54572a48692d8b64fad66f10e9b04291aa9a2d190bd156b5f3017a2e",
+      "claim_from_status": "rework",
+      "claim_token": "1166544bcb184666bbde5cc21aeed9ed",
+      "integration_note": "此任务声明路径即主线真实文件，已落盘并逐项与正式指纹一致；主线先前1test0skip267.672s及独立全面执行、正式最终288.257s均通过。完成组件真实集成；尚未宣称客体编译链完成。"
+    },
+    {
+      "id": "codex:CX8",
+      "number": "CX8",
+      "owner": "codex",
+      "title": "[L3] 产物提交状态机接入既有H_WRITE/H_SYNC文件授权",
+      "description": "完成GUEST5真实文件客户端适配：一次性提交既有可写token，不open/create/root/close、不请求权限、不启动下一stage或关机；限制产物2MiB，分块<=61440，真实files.write和files.sync，短写精确offset、zero有界、所有错误保留原u64、超长回报拒绝、完整后且仅一次FLUSH成功才durable。全Session/channel/产物/State/error输出别名预检失败无写。测试debug/release双格式真实Dong组件+files客户端、观察syscall、失败/负控；仅host协议执行不冒充真实客体磁盘/重启。",
+      "assignment_owner": "codex",
+      "status": "integrated",
+      "rev": 6,
+      "write_paths": [
+        "services/lib/compiler_artifact.dg",
+        "lang/tests/test_guest_files_commit.py",
+        "docs/l3-guest-artifact-integration.md",
+        "codex-works/deliveries/CX8.md"
+      ],
+      "depends_on": [
+        "pool:GUEST5"
+      ],
+      "checks": [
+        "module:lang.tests.test_guest_files_commit"
+      ],
+      "auto_dispatch": false,
+      "auto_verify": false,
+      "complexity": "standard",
+      "created_at": "2026-10-20T08:15:48+00:00",
+      "updated_at": "2026-10-20T08:30:00+00:00",
+      "historical": false,
+      "document": "codex-works/tasks/CX8-board.md",
+      "delivery": "codex-works/deliveries/CX8.md",
+      "claimed_at": "2026-10-20T08:15:48+00:00",
+      "completed_at": "2026-10-20T08:19:33+00:00",
+      "claimed_by": "codex-mcp-d76b66689d824a70",
+      "candidate": null,
+      "verification": {
+        "passed": true,
+        "checks": [
+          {
+            "spec": "module:lang.tests.test_guest_files_commit",
+            "passed": true,
+            "tests": 1,
+            "skips": 0,
+            "returncode": 0,
+            "cancelled": false,
+            "timed_out": false,
+            "process_stopped": true,
+            "execution_exited": true,
+            "elapsed_seconds": 49.85
+          }
+        ],
+        "process_stopped": true,
+        "execution_exited": true,
+        "source_stable": true,
+        "fingerprint": {
+          "services/lib/compiler_artifact.dg": "3caa1ed8099e09c710de734cc483a7737f32c393d16bf40b0be7cb7b18ce39ab",
+          "lang/tests/test_guest_files_commit.py": "418b3356083c803a138f3d312afb26d28aee4207ad340e7028263434f8609a90",
+          "docs/l3-guest-artifact-integration.md": "dc6706224d6dab61795334e51ecd474c995fd45668f450d3ed7a94565bb92abd",
+          "codex-works/deliveries/CX8.md": "047888bdfe6dd698526ff5db4b3d242c6628463030858c79da35fbd320c4d878"
+        },
+        "summary": "定向复验通过，等待源码/契约审查",
+        "finished_at": "2026-10-20T08:27:57+00:00",
+        "job": "a7c05835ce2b49c4a49f9e4a12aa94ca"
+      },
+      "review_note": "独立review_io完成源码/契约/永久测试读审并追加两模式各16边界序列+10结构预检，原生全exit0，含全局stall7/8、transport高位u64、H_SYNC版本错、2MiB/61440边界与wrap/align/尾部别名。独立报告reviews/2026-10-20-independent-io-review.md，独立code/build/test/independent-io/files-commit/evidence.json。正式a7c058... 1test/0skip/49.85s/source_stable/已停止退出，当前四文件指纹一致，准予适配组件验收，非真实客体FLUSH或完整L3。",
+      "legacy_hash": "8afd66d75a129936c91cf92a050686ff8de3ac7db84f45afda6ff8caf4b087fc",
+      "claim_from_status": "todo",
+      "claim_token": "216f06b195824b139048849dd8a09640",
+      "integration_note": "任务直接在授权code/services/lib/compiler_artifact.dg、lang/tests/test_guest_files_commit.py、docs/l3-guest-artifact-integration.md真实实施，非只存在works候选。主线实测1test/0skip/38.282s与正式隔离49.85s全部通过，生产SHA3caa1ed8099e09c710de734cc483a7737f32c393d16bf40b0be7cb7b18ce39ab与验收指纹一致。登记真实主线集成；无额外句柄/路径/权限/进程/关机能力。"
     },
     {
       "auto_dispatch": false,
@@ -6176,8 +6648,8 @@
       "title": "[L3] 受限文件清单批量装载为原生frontend源码目录",
       "description": "新增bootstrap.guest_source_catalog，桥接现有guest_source_path/guest_source_reader与modules.Source。输入调用者已授权的逻辑root、相对path、文件标识清单与ReadAt；不扫描目录、不open文件、不创建权限。定义有界批次ABI及entry索引。先完整预检所有描述符、长度/乘加溢出、所有输入路径与完整输出/暂存/Source数组/结果的别名；根映射保留，路径必须合法.dg，拒绝同root同路径重复，跨root同路径保留给原模块解析器判歧义。调用现有reader逐文件读取，独立scratch复用，所有Source/path/bytes借用规则清楚；调用方提供批次暂存与最终字节区，所有文件确认EOF后一次发布最终Source表及持久path/bytes，后项失败不能留下部分可用catalog。临时区可变，最终区及结果契约原子性明确；不得返回局部栈切片。预算先用调用者给出的每文件容量和总字节界限，不硬编码49模块。路径超长、未知root、重复、空清单/越界entry、短读/精确EOF/超容量/中途IO/超长返回/后项失败与全过程轨迹、最终借用地址和canary要真实验证。批次构建后用小型真实多模块frontend运行验证catalog可直接消费；不重写frontend或模块解析器。\n共同约定：按2026-10-20用户“完成L3，顺便发布几个任务”授权。Cursor客户端手动通过worker MCP读取最新rev/完整任务后领取，优先本人已领取/返修；不得启动AI CLI。只改声明cursor-works文件（映射coordination/dongos_works/cursor-works），不改主线/内核权限/容量/其它任务。不提交推送、不运行OS/VM，不扩大64MiB内存或16KiB栈。真实Dong debug/release原生执行、ELF64/COFF组装，失败不skip冒充通过；最多24主要语义组，实际坏Dong负控须成功构建后因准确断言拒绝。保存输入SHA/实际命令/产物SHA/退出及skip数；交付等待独立审查、复验、真实集成，不等于完整L3完成。只读背景code/docs/l3-native-selfhost-progress.md及docs/l3-guest-source-integration.md。不得重复CR43/44/D28/LM9旧暂停组件，不抢GUEST4/5/CX6。",
       "assignment_owner": "codex",
-      "status": "submitted",
-      "rev": 4,
+      "status": "integrated",
+      "rev": 7,
       "write_paths": [
         "cursor-works/lang/bootstrap/guest_source_catalog.dg",
         "cursor-works/lang/bootstrap/guest_source_catalog.md",
@@ -6195,7 +6667,7 @@
       "auto_verify": false,
       "complexity": "standard",
       "created_at": "2026-10-20T07:11:53+00:00",
-      "updated_at": "2026-10-20T07:40:26+00:00",
+      "updated_at": "2026-10-20T08:13:37+00:00",
       "historical": false,
       "document": "cursor-works/tasks/CR45-board.md",
       "delivery": "cursor-works/deliveries/CR45.md",
@@ -6203,8 +6675,36 @@
       "completed_at": "2026-10-20T07:40:26+00:00",
       "claimed_by": "codex-mcp-d76b66689d824a70",
       "candidate": null,
-      "verification": null,
-      "review_note": "",
+      "verification": {
+        "passed": true,
+        "checks": [
+          {
+            "spec": "discover:cursor-works/tests:test_guest_source_catalog.py",
+            "passed": true,
+            "tests": 2,
+            "skips": 0,
+            "returncode": 0,
+            "cancelled": false,
+            "timed_out": false,
+            "process_stopped": true,
+            "execution_exited": true,
+            "elapsed_seconds": 233.343
+          }
+        ],
+        "process_stopped": true,
+        "execution_exited": true,
+        "source_stable": true,
+        "fingerprint": {
+          "cursor-works/lang/bootstrap/guest_source_catalog.dg": "d4e6abffdfbfec8b7af7cf669836f160045a6bb11b27a834ef8eb54703377408",
+          "cursor-works/lang/bootstrap/guest_source_catalog.md": "9d72013ee78345003fb7a2f450daf60cabe3376c67fb82b2d06ad5a27b2e838f",
+          "cursor-works/tests/test_guest_source_catalog.py": "baacca610346159402964ba1870d8559ae33174ad0e08cbbab4213c3b5c150af",
+          "cursor-works/deliveries/CR45.md": "0ce863226c45e2585b238508dca1affc810513c505362163fbb5c76016c5f60e"
+        },
+        "summary": "定向复验通过，等待源码/契约审查",
+        "finished_at": "2026-10-20T07:44:39+00:00",
+        "job": "39189f12ef984f2a979371fb76ecfe3e"
+      },
+      "review_note": "实现者之外的独立子代理review_catalog_sink已实际审查完整源码/契约/永久测试及实际负控产物，未发现阻塞；独立安全C探针复用已核对SHA对象重新链接debug/release，catalog18场景+sink12场景/模式全通过。报告reviews/2026-10-20-independent-catalog-sink-review.md及code/build/test/independent-catalog-sink/summary.json。正式隔离CR45 2tests0skip233.343秒、CR46 1test0skip638.269秒，均returncode0/source_stable/process_stopped/execution_exited=true，当前四文件指纹一致。准予组件验收；尚未集成，非L3整体验收。",
       "legacy_hash": "70b0f6fc0d1de989d2c8c890cd9f09e47c6c22451d53fae5e6b567f09e8eff30",
       "assignment_history": [
         {
@@ -6216,7 +6716,8 @@
         }
       ],
       "claim_token": "94da995f7cab47c6b2383fb5240a7dba",
-      "claim_from_status": "todo"
+      "claim_from_status": "todo",
+      "integration_note": "已真实复制生产源码/契约至code/lang/bootstrap并将永久测试仅路径适配到code/lang/tests；清单code/build/test/guest-integration/CR45-CR46-files.json。主线联合3 tests/0skip/877.096秒，源码稳定通过；CR45生产SHAd4e6abff...、CR46生产SHA46c59707...与验收候选一致。沿用独立review_catalog_sink及各正式复验。仅组件主线集成，非客体L3/FLUSH/重启验收。"
     },
     {
       "id": "cursor:CR46",
@@ -6225,8 +6726,8 @@
       "title": "[L3] 将原生前端诊断按有界回调发送给既有日志接收者",
       "description": "新增bootstrap.guest_diagnostic_sink，将现有frontend_diagnostics.render的单行诊断送到调用者已授权的Write回调，生产路径必须实际调用render而非复制诊断映射。显式sources/frontend.Result、渲染scratch、发送回调context及返回报告，所有可检查完整范围/别名/容量/溢出在第一次输出副作用前预检。render失败禁止调用sink；成功后仅发送实际written前缀，不发送尾部；处理短写、零进展有界停止、负/错误码、超过请求长度与偏移，累计已确认发送字节和错误阶段。不可回滚外部输出，不许报告完整诊断已发当只有前缀；不申请日志/文件权限、不进行syscall、不改现有format、position或frontend实现。原始sources/Result不变。测试真实正常源码/非法UTF8/绑定或语义错误产生的诊断与render基线逐字一致、Unicode位置、精确/不足容量、sink轨迹及错误后无后续输出；至少真实坏Dong跳过render失败/短写当全写负控。\n共同约定：按2026-10-20用户“完成L3，顺便发布几个任务”授权。Cursor客户端手动通过worker MCP读取最新rev/完整任务后领取，优先本人已领取/返修；不得启动AI CLI。只改声明cursor-works文件（映射coordination/dongos_works/cursor-works），不改主线/内核权限/容量/其它任务。不提交推送、不运行OS/VM，不扩大64MiB内存或16KiB栈。真实Dong debug/release原生执行、ELF64/COFF组装，失败不skip冒充通过；最多24主要语义组，实际坏Dong负控须成功构建后因准确断言拒绝。保存输入SHA/实际命令/产物SHA/退出及skip数；交付等待独立审查、复验、真实集成，不等于完整L3完成。只读背景code/docs/l3-native-selfhost-progress.md及docs/l3-guest-source-integration.md。不得重复CR43/44/D28/LM9旧暂停组件，不抢GUEST4/5/CX6。",
       "assignment_owner": "codex",
-      "status": "submitted",
-      "rev": 4,
+      "status": "integrated",
+      "rev": 7,
       "write_paths": [
         "cursor-works/lang/bootstrap/guest_diagnostic_sink.dg",
         "cursor-works/lang/bootstrap/guest_diagnostic_sink.md",
@@ -6241,7 +6742,7 @@
       "auto_verify": false,
       "complexity": "standard",
       "created_at": "2026-10-20T07:11:54+00:00",
-      "updated_at": "2026-10-20T07:42:04+00:00",
+      "updated_at": "2026-10-20T08:13:39+00:00",
       "historical": false,
       "document": "cursor-works/tasks/CR46-board.md",
       "delivery": "cursor-works/deliveries/CR46.md",
@@ -6249,8 +6750,36 @@
       "completed_at": "2026-10-20T07:42:04+00:00",
       "claimed_by": "codex-mcp-d76b66689d824a70",
       "candidate": null,
-      "verification": null,
-      "review_note": "",
+      "verification": {
+        "passed": true,
+        "checks": [
+          {
+            "spec": "discover:cursor-works/tests:test_guest_diagnostic_sink.py",
+            "passed": true,
+            "tests": 1,
+            "skips": 0,
+            "returncode": 0,
+            "cancelled": false,
+            "timed_out": false,
+            "process_stopped": true,
+            "execution_exited": true,
+            "elapsed_seconds": 638.269
+          }
+        ],
+        "process_stopped": true,
+        "execution_exited": true,
+        "source_stable": true,
+        "fingerprint": {
+          "cursor-works/lang/bootstrap/guest_diagnostic_sink.dg": "46c59707abc44dd34cba0885d8f0a438d5c0108c99dc2db104a7ca1d2d864a20",
+          "cursor-works/lang/bootstrap/guest_diagnostic_sink.md": "a5ab8761df2da5dc4c474c580c3cf1d751459c5ca01f3b32a3432a28e49b82e7",
+          "cursor-works/tests/test_guest_diagnostic_sink.py": "7b7504ee82c5b61c9b83be4186dc39ef5699b3aabc6222482fac5cf32ddb06ba",
+          "cursor-works/deliveries/CR46.md": "7957aa6cad367d2e3d3ba9ec4a002c791ee12ec5432c5e0c9869452975747644"
+        },
+        "summary": "定向复验通过，等待源码/契约审查",
+        "finished_at": "2026-10-20T07:55:37+00:00",
+        "job": "de63bae909114898a73d1e35b6e8fed5"
+      },
+      "review_note": "实现者之外的独立子代理review_catalog_sink已实际审查完整源码/契约/永久测试及实际负控产物，未发现阻塞；独立安全C探针复用已核对SHA对象重新链接debug/release，catalog18场景+sink12场景/模式全通过。报告reviews/2026-10-20-independent-catalog-sink-review.md及code/build/test/independent-catalog-sink/summary.json。正式隔离CR45 2tests0skip233.343秒、CR46 1test0skip638.269秒，均returncode0/source_stable/process_stopped/execution_exited=true，当前四文件指纹一致。准予组件验收；尚未集成，非L3整体验收。",
       "legacy_hash": "fbb371d2aa1453ded1a58d6b6707fc5e78c9fda3ad676e90e979c6a4a4b1d628",
       "assignment_history": [
         {
@@ -6262,7 +6791,8 @@
         }
       ],
       "claim_token": "2b2846fb943540cf9f83a157d4a22db4",
-      "claim_from_status": "todo"
+      "claim_from_status": "todo",
+      "integration_note": "已真实复制生产源码/契约至code/lang/bootstrap并将永久测试仅路径适配到code/lang/tests；清单code/build/test/guest-integration/CR45-CR46-files.json。主线联合3 tests/0skip/877.096秒，源码稳定通过；CR45生产SHAd4e6abff...、CR46生产SHA46c59707...与验收候选一致。沿用独立review_catalog_sink及各正式复验。仅组件主线集成，非客体L3/FLUSH/重启验收。"
     },
     {
       "id": "cursor:CR47",
@@ -6271,8 +6801,8 @@
       "title": "[L3] 测量并降低semantic_types递归路径实际栈峰值",
       "description": "本项为真正栈阻塞优化，不新写预算规划器。先将当前code/lang/bootstrap/semantic_types.dg逐字复制至cursor-works/lang/bootstrap/semantic_types.dg并记录基线SHA，在独立roots快照中测实际声明类型解析/运行时表达式及flow递归路径的seed与native生成代码栈使用，定位大帧/递归重复临时量；在该候选文件内以复用已授权工作区、减小生命周期/避免不必要值拷贝等实质改动降低峰值。不能关闭深度/容量/语义检查、用全局可变scratch破坏重入、伪称增大线程栈已解决。保留公开API与成功/失败发布契约；若改变Workspace ABI必须先报告，不能越权改frontend。独立测量至少实际编译器模块闭包及固定嵌套正反语料，debug/release、guard/canary、有效/过深/容量/确定初始化/try/match/defer代表回归，改前后语义/发射结果一致；强制旧大栈路径或破坏复用的真实坏体须被栈/语义断言拒绝。须区分最大单帧、动态调用链峰值、seed与native证据；若仍不能16KiB明确剩余峰值，不把本组件优化等同客体自举成功。只改候选semantic_types.dg、其md、定向test及交付，避免GUEST4/5与CX6。\n共同约定：按2026-10-20用户“完成L3，顺便发布几个任务”授权。Cursor客户端手动通过worker MCP读取最新rev/完整任务后领取，优先本人已领取/返修；不得启动AI CLI。只改声明cursor-works文件（映射coordination/dongos_works/cursor-works），不改主线/内核权限/容量/其它任务。不提交推送、不运行OS/VM，不扩大64MiB内存或16KiB栈。真实Dong debug/release原生执行、ELF64/COFF组装，失败不skip冒充通过；最多24主要语义组，实际坏Dong负控须成功构建后因准确断言拒绝。保存输入SHA/实际命令/产物SHA/退出及skip数；交付等待独立审查、复验、真实集成，不等于完整L3完成。只读背景code/docs/l3-native-selfhost-progress.md及docs/l3-guest-source-integration.md。不得重复CR43/44/D28/LM9旧暂停组件，不抢GUEST4/5/CX6。",
       "assignment_owner": "codex",
-      "status": "in_progress",
-      "rev": 3,
+      "status": "integrated",
+      "rev": 13,
       "write_paths": [
         "cursor-works/lang/bootstrap/semantic_types.dg",
         "cursor-works/lang/bootstrap/semantic_stack.md",
@@ -6287,16 +6817,44 @@
       "auto_verify": false,
       "complexity": "standard",
       "created_at": "2026-10-20T07:11:54+00:00",
-      "updated_at": "2026-10-20T07:35:36+00:00",
+      "updated_at": "2026-10-20T09:45:21+00:00",
       "historical": false,
       "document": "cursor-works/tasks/CR47-board.md",
       "delivery": "cursor-works/deliveries/CR47.md",
-      "claimed_at": "2026-10-20T07:35:36+00:00",
-      "completed_at": null,
+      "claimed_at": "2026-10-20T08:27:37+00:00",
+      "completed_at": "2026-10-20T08:28:36+00:00",
       "claimed_by": "codex-mcp-d76b66689d824a70",
       "candidate": null,
-      "verification": null,
-      "review_note": "",
+      "verification": {
+        "passed": true,
+        "checks": [
+          {
+            "spec": "discover:cursor-works/tests:test_semantic_stack.py",
+            "passed": true,
+            "tests": 1,
+            "skips": 0,
+            "returncode": 0,
+            "cancelled": false,
+            "timed_out": false,
+            "process_stopped": true,
+            "execution_exited": true,
+            "elapsed_seconds": 1642.989
+          }
+        ],
+        "process_stopped": true,
+        "execution_exited": true,
+        "source_stable": true,
+        "fingerprint": {
+          "cursor-works/lang/bootstrap/semantic_types.dg": "e28128c7a6c5c742d1a2caa9bbb4f89e5f83a8c265de151e885b5d65166f5271",
+          "cursor-works/lang/bootstrap/semantic_stack.md": "eb9fb4f51e8db0891caec25ec1948a9fd9c4da446dfcf5ab79925817167fd4b6",
+          "cursor-works/tests/test_semantic_stack.py": "19a0513edba2fa5738245fceffb3f8aa50c22168a439c369d548c5b40d71f2c7",
+          "cursor-works/deliveries/CR47.md": "56c4ee339f3241b512c8ff91225921933fdda8e824860c8c2561940a0ac2a8a2"
+        },
+        "summary": "定向复验通过，等待源码/契约审查",
+        "finished_at": "2026-10-20T09:09:06+00:00",
+        "job": "46c4352792224c5bbba86332e0b92a95"
+      },
+      "review_note": "已审查rt_expr拆分与原语义/发布契约，独立review_stack实际160语义+容量8变体、闭包seed/native栈测量通过（code/build/test/independent-stack/review.md及独立并行审查）；正式46c435复验1测试0skip1642.989秒、双模式双格式、语义/真实坏体及源码稳定通过。仅接受递归帧优化，native峰值37056字节仍超过16KiB，不能宣称guest L3完成；64KiB专用受保护栈另属用户授权CX7。",
       "legacy_hash": "3d6f0c22fa1233014600493cb6cea32f621488216e9753e4632f97e578122ca9",
       "assignment_history": [
         {
@@ -6307,8 +6865,9 @@
           "note": "用户再次明确要求当前会话完成L3功能；CR47未领取无活动作业，接管semantic_types栈峰值测量与优化，保持原四文件候选副本及所有边界，不改主线容量。"
         }
       ],
-      "claim_token": "aaef665e32f14219a430e134e375b35b",
-      "claim_from_status": "todo"
+      "claim_token": "f4a4cc08957a46f78b2774b992b8668d",
+      "claim_from_status": "rework",
+      "integration_note": "已真实复制candidate semantic_types.dg与semantic_stack.md至主线，源SHA e28128c7...与正式/独审一致。新增主线完整compiler_job run-3383cd152203通过1test0skip406.892s（两个seed模式、两个格式、真实全编译器闭包seed/native有界固定点+坏语义），独立同闭包与kernel ELF验证通过；CR47正式全语义/栈优化比较先前1642.989s零skip通过。已有semantic_types/runtime广泛回归另仍运行，不把未完成测试报作成功。组件真实集成，普通16KiB栈不改变；专用64KiB另由已集成CX7负责。"
     },
     {
       "auto_dispatch": false,
@@ -9165,12 +9724,12 @@
     {
       "id": "pool:GUEST4",
       "number": "GUEST4",
-      "owner": "cursor",
+      "owner": "codex",
       "title": "[L3] 将现有编译器文本输出接入原生汇编器",
       "description": "新增独立适配模块，接收真实frontend.Graph及现有compiler_driver.EmitLimits/工作区和native_assembler.Workspace，调用compiler_driver现有Dong发射函数后调用native_assembler.assemble，输出静态ELF和统一阶段结果。先查两模块导出签名，严格复用，不在Python/C重做IR或汇编，不修改既有模块。调用者明确传入口符号；说明函数入口并非OS启动入口，不生成假DongOS startup。最终ELF仅成功时发布；前阶段失败不调用后阶段；保留原status/stage/code，written=0，不把unsupported当成功；所有可检查描述符、容量、可写/只读和完整尾部别名在写前预检。参数复杂时先设计窄ABI，不申请隐藏内存。测试小型真实源码至少含局部变量、分支或循环、跨函数调用，用真实frontend构图，编译为ELF并由现有内核ELF验证器验证；宿主探针按已支持平台执行验证返回值，不能把可调用函数当OS进程启动；覆盖发射失败、汇编失败、容量失败和输出不变，加入损坏ELF/绕过汇编阶段的坏实现负控。该项不依赖任何新公共任务。\n共同约定：2026-10-20用户要求增加公共任务，不指定负责人，由DeepSeek/Claude/Cursor自主领取。先get_task/read_document读最新rev、完整范围与依赖，claim成功才执行，不抢占在途。只修改本项声明的pool-works文件，映射coordination/dongos_works/pool-works；源码路径相对code/，只读复用当前主线。每项交付Dong生产实现、接口说明、永久Python定向测试和交付报告，不以设计文档或Python替代生产实现。新模块独立，不直接修改内核、服务权限、现有编译器/配置或其它任务文件；需要额外文件先报告协调者。禁止自行提交推送、运行OS/VM、扩大64MiB内存/16KiB栈或授予写盘/进程权限。真实Dong编译执行测试须含debug/release、边界、失败原子性、canary及至少一个实际坏Dong实现负控；工具缺失须如实报告，不能skip冒充通过。最多24组主要语义向量，结构性非法参数可另列；保存来源SHA、命令、结果、失败与skip数量。独立复验及真实集成由Codex完成；本项成功不代表完整客体自举或L3完成。\n只读背景：code/docs/l3-native-selfhost-progress.md；当前已具frontend→lower_program→program_ir→nasm_program→compiler_driver与native_assembler，禁止重复已暂停CR43/CR44/D28/LM9的旧组件。",
-      "assignment_owner": null,
-      "status": "submitted",
-      "rev": 3,
+      "assignment_owner": "codex",
+      "status": "integrated",
+      "rev": 13,
       "write_paths": [
         "pool-works/lang/bootstrap/guest_compile_image.dg",
         "pool-works/lang/bootstrap/guest_compile_image.md",
@@ -9185,19 +9744,57 @@
       "auto_verify": false,
       "complexity": "standard",
       "created_at": "2026-10-20T04:44:48+00:00",
-      "updated_at": "2026-10-20T07:42:09+00:00",
+      "updated_at": "2026-10-20T08:58:19+00:00",
       "historical": false,
       "document": "pool-works/tasks/GUEST4-board.md",
       "delivery": "pool-works/deliveries/GUEST4.md",
-      "claimed_at": "2026-10-20T05:40:39+00:00",
-      "completed_at": "2026-10-20T07:42:09+00:00",
-      "claimed_by": "cursor-mcp-415ed5783a554f4e",
+      "claimed_at": "2026-10-20T08:27:36+00:00",
+      "completed_at": "2026-10-20T08:28:35+00:00",
+      "claimed_by": "codex-mcp-d76b66689d824a70",
       "candidate": null,
-      "verification": null,
-      "review_note": "",
+      "verification": {
+        "passed": true,
+        "checks": [
+          {
+            "spec": "discover:pool-works/tests:test_guest_compile_image.py",
+            "passed": true,
+            "tests": 6,
+            "skips": 0,
+            "returncode": 0,
+            "cancelled": false,
+            "timed_out": false,
+            "process_stopped": true,
+            "execution_exited": true,
+            "elapsed_seconds": 749.438
+          }
+        ],
+        "process_stopped": true,
+        "execution_exited": true,
+        "source_stable": true,
+        "fingerprint": {
+          "pool-works/lang/bootstrap/guest_compile_image.dg": "5d69356d09ba92336377888fcdc38becf5eeb83d4940546b76fc37c5796030e7",
+          "pool-works/lang/bootstrap/guest_compile_image.md": "ad336fc5a8472fe8eff94793d8e1c98d020348fda3df7f517f72468db798f67d",
+          "pool-works/tests/test_guest_compile_image.py": "841f4200272041fd1e5916fa2f1263266ba9adead61a65152c458008ffb6a3d8",
+          "pool-works/deliveries/GUEST4.md": "f694616c558c2041d687609f09ed2b744fbb21464b7f8de2b6740220f5509f36"
+        },
+        "summary": "定向复验通过，等待源码/契约审查",
+        "finished_at": "2026-10-20T08:41:25+00:00",
+        "job": "7c3f234b1ad04dd98c8782b22f9057b3"
+      },
+      "review_note": "R1由独立review_io源码/契约/永久测试复审，并用冻结debug/release对象自身alignment witness确认两空slice缺陷关闭；四正常方法独立复放含20预检、真实ELF验证及入口36全部通过。完整正式7c3f234b... 6tests/0skip/749.438秒/source_stable/已停止退出，指纹一致；实际Graph prefix/skip assembler/UNSUPPORTED-as-OK三坏体各双模式精确拒绝。并行编排独立读审确认无竞态/无弱化。报告reviews/2026-10-20-independent-io-review.md。准予组件验收，不等同客体L3或FLUSH重启验收。",
       "legacy_hash": "cdb89275000cf91010e36a39f0375ee341fbdb55b1714b4486ff27064b4055af",
-      "claim_from_status": "todo",
-      "claim_token": "3504c8c3c21f426c901e5d6acd20cf82"
+      "claim_token": "ade500d740fe4664a349dc0f650d4ac8",
+      "assignment_history": [
+        {
+          "at": "2026-10-20T07:50:00+00:00",
+          "from_owner": "cursor",
+          "to_owner": "codex",
+          "previous_claimed_by": "cursor-mcp-415ed5783a554f4e",
+          "note": "用户要求当前会话完成L3功能；原执行已提交、CLI测试进程已退出，R1目前rework无活动作业，接管独立探针证明的Graph完整只读范围预检缺陷，保留原四文件/编号/交付审查历史，直接修复并复验。"
+        }
+      ],
+      "claim_from_status": "rework",
+      "integration_note": "已逐字真实复制guest_compile_image.dg/.md至code/lang/bootstrap，永久测试仅SOURCE/build输出路径适配至code/lang/tests/test_bootstrap_guest_compile_image.py。主线完整6tests/0skip/673.778秒全部通过；正式749.438秒通过；生产SHA5d69356d09ba92336377888fcdc38becf5eeb83d4940546b76fc37c5796030e7保持，三文件清单code/build/test/guest-integration/GUEST4-files.json。沿用独立源码/契约/Graph/空alignment/真实ELF复审，登记组件真实主线集成，非完整L3。"
     },
     {
       "id": "pool:GUEST5",
@@ -9206,8 +9803,8 @@
       "title": "[L3] 编译产物写入与FLUSH确认的有界状态机",
       "description": "实现独立无分配产物提交协议状态机。仅消费已有授权句柄和调用者提供的write_at/flush回调，不解析路径、不创建权限、不启动进程或关机。先定义窄ABI和结果：未开始/写入中/待flush/已持久化/失败，记录累计确认字节、失败阶段、错误码。正确处理短写、零进展、部分写后错误、超过请求长度的非法返回、offset溢出；完整写完才调用FLUSH且只有FLUSH成功才报告durable。失败禁止报告成功或自动启动下一stage，重试策略明确且有界，不隐式重试导致重复偏移。承认外部写盘副作用不能回滚，报告已写字节，不能宣称整个磁盘事务原子。空产物是否允许明确并测试，原始产物输入必须保持不变。测试回调事件序列、精确偏移和长度、多次短写、失败后无后续调用、flush失败/成功及虚假durable坏实现负控；不以host fsync假装真实DongOS FLUSH/重启验收。本项提供协议组件，真实系统接入另行任务。\n共同约定：2026-10-20用户要求增加公共任务，不指定负责人，由DeepSeek/Claude/Cursor自主领取。先get_task/read_document读最新rev、完整范围与依赖，claim成功才执行，不抢占在途。只修改本项声明的pool-works文件，映射coordination/dongos_works/pool-works；源码路径相对code/，只读复用当前主线。每项交付Dong生产实现、接口说明、永久Python定向测试和交付报告，不以设计文档或Python替代生产实现。新模块独立，不直接修改内核、服务权限、现有编译器/配置或其它任务文件；需要额外文件先报告协调者。禁止自行提交推送、运行OS/VM、扩大64MiB内存/16KiB栈或授予写盘/进程权限。真实Dong编译执行测试须含debug/release、边界、失败原子性、canary及至少一个实际坏Dong实现负控；工具缺失须如实报告，不能skip冒充通过。最多24组主要语义向量，结构性非法参数可另列；保存来源SHA、命令、结果、失败与skip数量。独立复验及真实集成由Codex完成；本项成功不代表完整客体自举或L3完成。\n只读背景：code/docs/l3-native-selfhost-progress.md；当前已具frontend→lower_program→program_ir→nasm_program→compiler_driver与native_assembler，禁止重复已暂停CR43/CR44/D28/LM9的旧组件。",
       "assignment_owner": "codex",
-      "status": "submitted",
-      "rev": 14,
+      "status": "integrated",
+      "rev": 16,
       "write_paths": [
         "pool-works/lang/bootstrap/guest_artifact_commit.dg",
         "pool-works/lang/bootstrap/guest_artifact_commit.md",
@@ -9222,7 +9819,7 @@
       "auto_verify": false,
       "complexity": "standard",
       "created_at": "2026-10-20T04:44:49+00:00",
-      "updated_at": "2026-10-20T07:29:58+00:00",
+      "updated_at": "2026-10-20T08:07:00+00:00",
       "historical": false,
       "document": "pool-works/tasks/GUEST5-board.md",
       "delivery": "pool-works/deliveries/GUEST5.md",
@@ -9259,7 +9856,7 @@
         "finished_at": "2026-10-20T07:29:58+00:00",
         "job": "10c71d602ff848a996219f1232bc87cc"
       },
-      "review_note": "R1旧PENDING_FLUSH未写满缺陷已修；正式隔离38dffc1e368b43f288d8eec1ba86a60a已16 tests/0skip/source_stable。但独立release安全原生探针发现计数器不变量仍漏：init(total=4)，status=WRITING、written=0、stalls=0、attempts=UINT64_MAX，step接受并先attempts+=1回绕到0，正常执行write_at确认4字节，发布PENDING_FLUSH(written=4,total=4,attempts=0)；下一次step立刻INVALID且0flush，自己的输出不能继续。没有崩溃或构建失败，探针只链接未改生产的release Dong对象。违反文档每次非INVALID发布一致State/计数有界。请在回调/State写入前拒绝不可能或会溢出的attempts组合（按已写字节/零进展次数约束，注意边界算术自身不溢出）；其余status的计数关系同审，保证step成功后产出的状态可被下一step接受。新增安全永久边界与正控/坏体灵敏度，不能只改文本或放宽后继检查。证据reviews/2026-10-20-GUEST5-R1-counter.c与-counter-evidence.json，source SHA c9e839cf203cb2cda9c6bca75d67fdacce87d3bf40ebfacf2c0d814bb57ddba0。仅改原四文件，重新原编号提交，不验收集成。",
+      "review_note": "R2由独立子代理review_io重新读审全部源码/契约/永久测试，并从当前SHA0264475d79e0b38cbef38bfe195c1e1f175ec1d3f95c9840b6181ac1c891dcf8重新独立编译debug/release，各10000条随机短写/零进展/负错/超长/FLUSH/终态无后续调用计划，通过逐step偏移/指针/计数核对，全部exit0。正式隔离10c71d602ff848a996219f1232bc87cc 16 tests/0skip/148.3秒/source_stable/退出并停止，当前交付指纹一致。报告reviews/2026-10-20-independent-io-review.md及code/build/test/independent-io/commit/evidence.json，旧回绕缺陷关闭。准予组件验收，尚未主线集成，非真实FLUSH/重启或完整L3验收。",
       "legacy_hash": "6c1d72827a8c2092920475a8b96249b4ae6b53e7602cd4bd9ba0f08f12a9ccca",
       "claim_token": "d8404bb1aa1c42c1844104ea3e8c3806",
       "assignment_history": [
@@ -9271,7 +9868,8 @@
           "note": "用户再次明确要求由当前会话完成L3功能；接管已提交后审查退回、当前非in_progress的GUEST5 R2，直接完成已实证的计数器不变量修复。保留原任务编号、四文件范围、全部交付/审查历史；不接管仍在编辑的GUEST4。"
         }
       ],
-      "claim_from_status": "rework"
+      "claim_from_status": "rework",
+      "integration_note": "已真实复制生产源码/接口说明至code/lang/bootstrap，永久测试适配至code/lang/tests/test_bootstrap_guest_artifact_commit.py。主线16 tests/0skip/108.351s全部通过；源码SHA0264475d...与已验收候选一致，清单code/build/test/guest-integration/GUEST5-files.json。沿用独立review_io及正式148.3秒稳定复验；仅组件集成，不声称真实DongOS FLUSH/重启或L3完成。"
     },
     {
       "id": "pool:MCPPOOL1",
@@ -9764,6 +10362,91 @@
         "claude-works/tests/data_pool_layout_probe*",
         "claude-works/deliveries/C21.md"
       ]
+    },
+    {
+      "id": "codex:CX11",
+      "number": "CX11",
+      "owner": "codex",
+      "title": "[L3] 原生汇编器使用有界短位移编码以保持2MiB执行上限",
+      "description": "当前56MiB单arena/64KiB guarded栈原生自编译闭包已双stage ELF一致，但release ELF2142264字节略超既有2MiB EXEC上限；closed-call过滤后仍2121768。保持执行文件上限和64MiB不扩大。为x86_encode新增显式encode_compact API：base非RIP内存0/有符号disp8/disp32最短有效形式，RBP/R13零位移必须disp8零，RSP/R12需SIB，RIP始终disp32；现有encode字节契约完全不变。native_assembler内部采用compact，两遍长度稳定，禁止rel32隐式缩短/地址截断。永久NASM独立字节oracle与debug/release双格式，边界、输入/输出canary、原始encode兼容、实际坏RBP/位移截断负控和真实nativeassembler执行。独立审查+正式稳定复验；闭包大小与固定点另记真实证据，不宣称guest完成。",
+      "assignment_owner": "codex",
+      "status": "paused",
+      "rev": 5,
+      "write_paths": [
+        "lang/bootstrap/x86_encode.dg",
+        "lang/bootstrap/native_assembler.dg",
+        "lang/tests/test_bootstrap_x86_compact.py",
+        "docs/l3-compact-x86.md",
+        "codex-works/deliveries/CX11.md"
+      ],
+      "depends_on": [],
+      "checks": [
+        "module:lang.tests.test_bootstrap_x86_compact",
+        "module:lang.tests.test_bootstrap_native_assembler"
+      ],
+      "auto_dispatch": false,
+      "auto_verify": false,
+      "complexity": "standard",
+      "created_at": "2026-10-20T09:00:32+00:00",
+      "updated_at": "2026-10-20T09:01:09+00:00",
+      "historical": false,
+      "document": "codex-works/tasks/CX11-board.md",
+      "delivery": "codex-works/deliveries/CX11.md",
+      "claimed_at": null,
+      "completed_at": null,
+      "claimed_by": null,
+      "candidate": null,
+      "verification": null,
+      "review_note": "",
+      "legacy_hash": "3938b2c7dc31161c2382573ceba744c3b1a92f9f72682910c6d00b4207de907c",
+      "claim_token": null,
+      "resume_status": "todo",
+      "pause_control": "confirmed",
+      "archived": true,
+      "archived_at": "2026-10-20T09:01:09+00:00",
+      "archive_note": "未实施即归档不适用本机的旧测试规格；CX12使用新增跨平台永久测试，直接执行真实nativeassembler和compact编码，禁止以skip通过。"
+    },
+    {
+      "id": "codex:CX9",
+      "number": "CX9",
+      "owner": "codex",
+      "title": "[L3] P5服务启用既有64MiB共享帧表并保留物理验收",
+      "description": "真实QEMU P5装载失败0x04060002；ELF实测shell需551页，三服务共712页+12栈页，超过旧512帧表。把既有memory.enable_arena(16384)在所有P5服务首次装载前启用，GRAPHICS不重复启用；64MiB物理总预算与普通16KiB栈不扩大，不增权限。更新真实P5物理校验读取动态EXTENDED帧表并验证其来源/长度在原arena内，保持所有代码/页表/W^X/guard/IPC/实际FLUSH检查，真实同盘双启动复验。主线既有memory/address和service_resources定向回归。独立审查源码/验收脚本/真实物理证据后方验收。",
+      "assignment_owner": "codex",
+      "status": "paused",
+      "rev": 5,
+      "write_paths": [
+        "kernel/user/services.dg",
+        "tests/run_services_qemu.py",
+        "docs/l3-p5-memory-profile.md",
+        "codex-works/deliveries/CX9.md"
+      ],
+      "depends_on": [],
+      "checks": [
+        "module:tests.test_user_address_spaces",
+        "module:tests.test_service_resources"
+      ],
+      "auto_dispatch": false,
+      "auto_verify": false,
+      "complexity": "standard",
+      "created_at": "2026-10-20T08:41:24+00:00",
+      "updated_at": "2026-10-20T08:42:38+00:00",
+      "historical": false,
+      "document": "codex-works/tasks/CX9-board.md",
+      "delivery": "codex-works/deliveries/CX9.md",
+      "claimed_at": null,
+      "completed_at": null,
+      "claimed_by": null,
+      "candidate": null,
+      "verification": null,
+      "review_note": "",
+      "legacy_hash": "ad7662abaa7d4f6550b4d7dcb896d374db639688c84e2bb84edfde370bb38ffd",
+      "claim_token": null,
+      "resume_status": "todo",
+      "pause_control": "confirmed",
+      "archived": true,
+      "archived_at": "2026-10-20T08:42:38+00:00",
+      "archive_note": "误写不存在的tests.test_service_resources检查名，尚未改文件；保留历史，CX10采用真实存在的service_handoff及新增动态帧读取验证。"
     },
     {
       "archive_note": "用户明确要求将Cursor进行中/返修任务转派Claude；本项由claude:C46接续。原状态rework rev4，保留原任务书、现有交付/审查与时间线；Cursor停止本项写入/提交，原文件保留为交接历史。证据reviews/2026-10-19-Cursor-Claude-transfer-20261019T081242Z。",
@@ -10345,6 +11028,126 @@
       "archived": true,
       "archived_at": "2026-10-20T06:50:47+00:00",
       "archive_note": "用户要求处理剩余暂停任务。已核对本项paused rev2、停止已确认、无领取者及活动/排队作业，声明生产文件未落盘；依据ALLOCATION.md的2026-10-20暂停结论及当前主线lower_program/program_ir/names.collect，原窄u64接线/函数清单/操作码任务已被通用原生编译链取代，继续执行会重复建设。归档退出默认清单，保留任务书、原状态及事件历史；不恢复、不转派，不标记验收或集成，不删除文件或修改数据库/index。"
+    },
+    {
+      "id": "pool:P2ALIAS1",
+      "number": "P2ALIAS1",
+      "owner": null,
+      "title": "[P2] 物理页别名W^X所有权与撤权顺序规划器",
+      "description": "新增模块mm.alias_policy：维护调用者提供的有界“物理页→映射别名列表”表（每个别名含地址空间标识、虚拟页、读/写/执行/用户标志、缓存类型），实现动态执行（JIT/加载器）所需的跨别名W^X契约。接口：check(table, frame)=同一物理页不得同时存在可写别名与可执行别名（包括不同地址空间、不同虚拟地址）；plan_grant(table, frame, 新别名)=给出允许/拒绝及原因；plan_transition(table, frame, 目标：可写→可执行或相反)=输出严格顺序的步骤序列：先撤销旧别名的权限（unmap/protect）→需要的TLB失效范围（本核/所有核shootdown标志）→等待确认→再授予新权限，任何步骤不得跳过；所有权状态机明确：未分配/独占可写/独占可执行/只读共享，转换只能经上述步骤。拒绝USER与EXEC内核别名的非法组合、超出容量、重复别名。纯规划，不执行任何页表修改。测试：同帧多别名各组合、跨地址空间别名、转换顺序断言（撤权先于授予，shootdown标志在多核时必置位）、容量与重复、失败原子性，真实坏Dong：转换时先授权后撤权、漏检跨地址空间别名、多核不置shootdown。\n共同约定：公共任务，不指定负责人，由DeepSeek/Claude/Cursor自主领取；先get_task/read_document读最新rev，claim成功才执行，不抢占在途。只修改本项声明的pool-works文件，映射coordination/dongos_works/pool-works；源码路径相对code/，只读复用当前主线。交付Dong生产实现、接口说明、永久Python定向测试和交付报告，不以设计文档或Python替代生产实现。纯离线组件：不读写CR3/MSR、不加载页表、不修改内核、mm.paging/active_paging、服务权限或其它任务文件；与现有离线4KiB页表核心保持同类约定（调用者提供对齐页与元数据，失败时输出全文不变，描述符/别名/端点溢出先检查）。真实Dong debug/release编译执行，含边界、失败原子性、canary及至少一个实际坏Dong实现负控；独立Python/C模型作oracle，不以生产输出作唯一oracle；工具缺失如实报告，不能skip冒充通过。最多24组主要语义向量，保存来源SHA、命令、结果。禁止自行提交推送、运行OS/VM。本项通过只证明离线契约，不代表P2扩展或内核已启用该能力；没有QEMU/真机启动验收不得宣称P2完成。独立复验与真实集成由协调者完成。",
+      "assignment_owner": null,
+      "status": "paused",
+      "rev": 3,
+      "write_paths": [
+        "pool-works/lang/bootstrap/alias_policy.dg",
+        "pool-works/lang/bootstrap/alias_policy.md",
+        "pool-works/tests/test_alias_policy.py",
+        "pool-works/deliveries/P2ALIAS1.md"
+      ],
+      "depends_on": [],
+      "checks": [
+        "discover:pool-works/tests:test_alias_policy.py"
+      ],
+      "auto_dispatch": false,
+      "auto_verify": false,
+      "complexity": "standard",
+      "created_at": "2026-10-20T08:01:44+00:00",
+      "updated_at": "2026-10-20T08:02:37+00:00",
+      "historical": false,
+      "document": "pool-works/tasks/P2ALIAS1-board.md",
+      "delivery": "pool-works/deliveries/P2ALIAS1.md",
+      "claimed_at": null,
+      "completed_at": null,
+      "claimed_by": null,
+      "candidate": null,
+      "verification": null,
+      "review_note": "",
+      "legacy_hash": "46b5ced8b7550ced57e4d5c01de5a7de3f83308ca3942b62e36a072bdf932c0b",
+      "resume_status": "todo",
+      "pause_control": "confirmed",
+      "archived": true,
+      "archived_at": "2026-10-20T08:02:37+00:00",
+      "archive_note": "用户要求移除：P2剩余任务已取消，未领取、无实现。"
+    },
+    {
+      "id": "pool:P2HUGE1",
+      "number": "P2HUGE1",
+      "owner": null,
+      "title": "[P2] 2MiB/4KiB页项拆分与合并的离线规划",
+      "description": "新增模块mm.huge_page_plan：对调用者提供的页目录项(PDE)和页表(512个PTE)做纯数据转换。split：把一个存在的2MiB PDE(PS=1)展开为512个4KiB PTE，物理地址=PDE基址+i*4KiB，保持P/RW/US/PWT/PCD/NX/G语义；特别注意PAT位在2MiB PDE是bit12、在4KiB PTE是bit7，必须重映射而非复制；A/D位按保守规则（目标PTE继承A/D，调用者可选择清零并说明），拒绝未对齐的PDE物理地址、保留位非零、非PS项、以及与目标页表重叠。merge：仅当512个PTE全部存在、物理连续且2MiB对齐、权限/缓存位全部一致、PAT位可无损折回bit12时才生成PDE，A/D按OR/AND规则明确文档化，否则返回不可合并原因枚举且不写任何输出。返回待失效范围（需要的INVLPG地址或完整刷新标记）与待回收页表的“退休”描述，不自行刷新或回收。失败时PDE/PTE缓冲全文不变。测试：全权限/缓存位组合的split→merge往返逐位相等、PAT位重映射、不连续/未对齐/混合权限/混合缓存类型拒绝、NX与GLOBAL保持、保留位、别名与端点溢出，真实坏Dong：复制PAT位而不重映射、merge不检查连续性、split先写再校验。\n共同约定：公共任务，不指定负责人，由DeepSeek/Claude/Cursor自主领取；先get_task/read_document读最新rev，claim成功才执行，不抢占在途。只修改本项声明的pool-works文件，映射coordination/dongos_works/pool-works；源码路径相对code/，只读复用当前主线。交付Dong生产实现、接口说明、永久Python定向测试和交付报告，不以设计文档或Python替代生产实现。纯离线组件：不读写CR3/MSR、不加载页表、不修改内核、mm.paging/active_paging、服务权限或其它任务文件；与现有离线4KiB页表核心保持同类约定（调用者提供对齐页与元数据，失败时输出全文不变，描述符/别名/端点溢出先检查）。真实Dong debug/release编译执行，含边界、失败原子性、canary及至少一个实际坏Dong实现负控；独立Python/C模型作oracle，不以生产输出作唯一oracle；工具缺失如实报告，不能skip冒充通过。最多24组主要语义向量，保存来源SHA、命令、结果。禁止自行提交推送、运行OS/VM。本项通过只证明离线契约，不代表P2扩展或内核已启用该能力；没有QEMU/真机启动验收不得宣称P2完成。独立复验与真实集成由协调者完成。",
+      "assignment_owner": null,
+      "status": "paused",
+      "rev": 3,
+      "write_paths": [
+        "pool-works/lang/bootstrap/huge_page_plan.dg",
+        "pool-works/lang/bootstrap/huge_page_plan.md",
+        "pool-works/tests/test_huge_page_plan.py",
+        "pool-works/deliveries/P2HUGE1.md"
+      ],
+      "depends_on": [],
+      "checks": [
+        "discover:pool-works/tests:test_huge_page_plan.py"
+      ],
+      "auto_dispatch": false,
+      "auto_verify": false,
+      "complexity": "standard",
+      "created_at": "2026-10-20T08:01:44+00:00",
+      "updated_at": "2026-10-20T08:02:35+00:00",
+      "historical": false,
+      "document": "pool-works/tasks/P2HUGE1-board.md",
+      "delivery": "pool-works/deliveries/P2HUGE1.md",
+      "claimed_at": null,
+      "completed_at": null,
+      "claimed_by": null,
+      "candidate": null,
+      "verification": null,
+      "review_note": "",
+      "legacy_hash": "70b1bd39ef587a50256fe8262a3fd4c902f16463547297f05caf2ffd1bea4e15",
+      "resume_status": "todo",
+      "pause_control": "confirmed",
+      "archived": true,
+      "archived_at": "2026-10-20T08:02:35+00:00",
+      "archive_note": "用户要求移除：P2剩余任务已取消，未领取、无实现。"
+    },
+    {
+      "id": "pool:P2PAT1",
+      "number": "P2PAT1",
+      "owner": null,
+      "title": "[P2] PAT/缓存类型有效类型计算与别名冲突检查",
+      "description": "新增模块mm.cache_type_plan：纯计算IA32_PAT与MTRR对页的有效内存类型，并检查别名冲突与迁移计划，为后续图形阶段使用WC做准备。输入：调用者提供的8项PAT值（0=UC,1=WC,4=WT,5=WP,6=WB,7=UC-，其余非法）、一组有界MTRR区间（基址/大小/类型，含固定区可省略）和页项上的PAT/PCD/PWT三位。输出：该页的PAT索引(PAT<<2|PCD<<1|PWT)、PAT选出的类型、与MTRR合并后的有效类型（按Intel SDM的合并表：UC优先，WC与WB等组合规则须在文档中逐条引用并实现），以及“同一物理页的多个别名有效类型必须一致”的冲突检查。迁移计划：把一帧从WB迁到WC（或相反）时输出严格步骤：撤销所有别名映射→写回并无效缓存（WBINVD/CLFLUSH范围标志）→TLB失效→以新类型重建映射；不执行任何指令。非法PAT值、重叠冲突MTRR、保留位拒绝，失败不变。测试：PAT默认与自定义布局的8个索引全覆盖、MTRR与PAT组合表逐项核对（独立Python表）、跨别名冲突、迁移步骤顺序，真实坏Dong：UC与WC合并取错、忽略MTRR、迁移不要求刷缓存。\n共同约定：公共任务，不指定负责人，由DeepSeek/Claude/Cursor自主领取；先get_task/read_document读最新rev，claim成功才执行，不抢占在途。只修改本项声明的pool-works文件，映射coordination/dongos_works/pool-works；源码路径相对code/，只读复用当前主线。交付Dong生产实现、接口说明、永久Python定向测试和交付报告，不以设计文档或Python替代生产实现。纯离线组件：不读写CR3/MSR、不加载页表、不修改内核、mm.paging/active_paging、服务权限或其它任务文件；与现有离线4KiB页表核心保持同类约定（调用者提供对齐页与元数据，失败时输出全文不变，描述符/别名/端点溢出先检查）。真实Dong debug/release编译执行，含边界、失败原子性、canary及至少一个实际坏Dong实现负控；独立Python/C模型作oracle，不以生产输出作唯一oracle；工具缺失如实报告，不能skip冒充通过。最多24组主要语义向量，保存来源SHA、命令、结果。禁止自行提交推送、运行OS/VM。本项通过只证明离线契约，不代表P2扩展或内核已启用该能力；没有QEMU/真机启动验收不得宣称P2完成。独立复验与真实集成由协调者完成。",
+      "assignment_owner": null,
+      "status": "paused",
+      "rev": 3,
+      "write_paths": [
+        "pool-works/lang/bootstrap/cache_type_plan.dg",
+        "pool-works/lang/bootstrap/cache_type_plan.md",
+        "pool-works/tests/test_cache_type_plan.py",
+        "pool-works/deliveries/P2PAT1.md"
+      ],
+      "depends_on": [],
+      "checks": [
+        "discover:pool-works/tests:test_cache_type_plan.py"
+      ],
+      "auto_dispatch": false,
+      "auto_verify": false,
+      "complexity": "standard",
+      "created_at": "2026-10-20T08:01:45+00:00",
+      "updated_at": "2026-10-20T08:02:39+00:00",
+      "historical": false,
+      "document": "pool-works/tasks/P2PAT1-board.md",
+      "delivery": "pool-works/deliveries/P2PAT1.md",
+      "claimed_at": null,
+      "completed_at": null,
+      "claimed_by": null,
+      "candidate": null,
+      "verification": null,
+      "review_note": "",
+      "legacy_hash": "69a65e72aa22e279da93a177a96469fb3e5237e964b722c6b01de23643366742",
+      "resume_status": "todo",
+      "pause_control": "confirmed",
+      "archived": true,
+      "archived_at": "2026-10-20T08:02:39+00:00",
+      "archive_note": "用户要求移除：P2剩余任务已取消，未领取、无实现。"
     }
   ]
 }

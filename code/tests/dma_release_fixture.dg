@@ -1,0 +1,49 @@
+// Appended verbatim to a private copy of user.memory for native release_dma
+// setup only. Production release_dma/destroy code above is unchanged.
+var TEST_RECEIPTS:[UNSHARE_LIMIT]paging.Retired=[paging.EMPTY_RETIRED;UNSHARE_LIMIT];
+var TEST_FRAMES:[UNSHARE_LIMIT]u16=[0;UNSHARE_LIMIT];
+export("dma_setup") fn test_setup(alias:u64,base:u64,pages:usize)u64 {
+    unsafe {
+        FRAME_COUNT=pages;REUSE_FROM=0;EXTENDED=null;EXTENDED_LIMIT=0;EXTENDED_RECYCLED=null;
+        STAGE_ID=LIMIT;STAGE_COUNT=0;STAGE_ROOT=0;STAGE_BOUND=false;STAGE_TABLES=false;
+        STAGE_FAILED=false;UNSHARE_FAILED=false;UNSHARE_ACTIVE=false;UNSHARE_ALLOCATING=false;
+        UNSHARE_COUNT=0;UNSHARE_RECEIPTS=&TEST_RECEIPTS[0];UNSHARE_FRAMES=&TEST_FRAMES[0];FRAME_INDEX_READY=false;
+        var id:usize=0;
+        while id<LIMIT {
+            PROCESSES[id]=EMPTY_PROCESS;PINNED[id]=false;PINNED_BASE[id]=0;PINNED_PAGES[id]=0;
+            var m:usize=0;while m<COMPOSITOR_POOL_PAGES {META[id][m]=0;m+=1;}
+            id+=1;
+        }
+        PROCESSES[2].ready=1;PROCESSES[2].root=0x30_0000;
+        var i:usize=0;
+        while i<pages {
+            FRAMES[i]=Frame {physical:0x20_0000+i as u64*4096,virtual:alias+i as u64*4096,writable:1};
+            RECYCLED[i]=0;i+=1;
+        }
+        PINNED[2]=true;PINNED_BASE[2]=base;PINNED_PAGES[2]=pages;
+        SPACES[2]=paging.EMPTY_SPACE;
+        match paging.init(&SPACES[2],TABLES[2][..],0x30_0000,META[2][..],48,true) {
+            ok=>{},err(code)=>{return code;},
+        }
+        i=0;
+        while i<pages {
+            match paging.map_live(&SPACES[2],base+i as u64*4096,FRAMES[i].physical,paging.USER|paging.WRITE) {
+                ok=>{},err(code)=>{return code;},
+            }
+            i+=1;
+        }
+    }return 0;
+}
+export("dma_release") fn test_release(id:usize)u64 {
+    unsafe { match release_dma(id) {ok=>{return 0;},err(code)=>{return code;},} }
+}
+export("dma_destroy") fn test_destroy(id:usize)u64 {
+    unsafe { match destroy(id) {ok=>{return 0;},err(code)=>{return code;},} }
+}
+export("dma_pinned") fn test_pinned(id:usize)u64 {unsafe{if dma_pinned(id){return 1;}return 0;}}
+export("dma_base") fn test_base(id:usize)u64 {unsafe{if id>=LIMIT{return 0;}return PINNED_BASE[id];}}
+export("dma_pages") fn test_pages(id:usize)u64 {unsafe{if id>=LIMIT{return 0;}return PINNED_PAGES[id] as u64;}}
+export("dma_state") fn test_state(index:usize)u64 {unsafe{return *recycled(index) as u64;}}
+export("dma_ready") fn test_ready(id:usize)u64 {unsafe{if id>=LIMIT{return 0;}return PROCESSES[id].ready;}}
+export("dma_writable") fn test_writable(index:usize)u64 {unsafe{return (*record(index)).writable;}}
+export("dma_set_ready") fn test_set_ready(id:usize,value:u64)void {unsafe{if id<LIMIT{PROCESSES[id].ready=value;}return;}}

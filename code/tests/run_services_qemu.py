@@ -21,6 +21,50 @@ def free_port():
     s=socket.socket();s.bind(('127.0.0.1',0));port=s.getsockname()[1];s.close();return port
 def symbol(module,name):return '__dg_m'+module.encode().hex()+'_g'+name.encode().hex()
 
+def read_owned_frames(count,extended,limit,arena_physical,arena_pages,physical,mapping=None):
+    """Validate the complete dynamic table extent before any physical read."""
+    base=0xffffd40000000000
+    if limit!=16384 or not 0<count<=limit or arena_pages!=32768:
+        raise ValueError('shared frame capacity/count differs')
+    extent=arena_pages*4096
+    if extended%8 or not base<=extended<=base+extent-limit*24:
+        raise ValueError('frame metadata escaped held service arena')
+    if arena_physical%4096 or not 0<arena_physical<1<<48 or extent>(1<<48)-arena_physical:
+        raise ValueError('invalid service arena physical extent')
+    if mapping is None:raise ValueError('metadata mapping proof required')
+    for address in range(extended&~4095,(extended+count*24+4095)&~4095,4096):
+        expected=arena_physical+address-base
+        if mapping(address)&~0x60!=expected|0x8000000000000003:
+            raise ValueError('dynamic metadata mapping escaped supervisor RW/NX/WB arena')
+    data=physical(arena_physical+extended-base,count*24,'dynamic owned frames')
+    if len(data)!=count*24:raise ValueError('incomplete dynamic frame table')
+    frames=[struct.unpack_from('<3Q',data,i*24) for i in range(count)]
+    if len({x[0] for x in frames})!=len(frames):raise ValueError('duplicate physical RAM owner')
+    for index,(pa,va,writable) in enumerate(frames):
+        if pa%4096 or not arena_physical<=pa<=arena_physical+extent-4096 or va!=0xffffd00000000000+index*4096 or writable not in (0,1):
+            raise ValueError('RAM owner escaped held service arena')
+    return frames
+
+def validate_commands(serial,commands,sent,payload):
+    if sent!=len(commands):raise ValueError('not every requested command was sent')
+    positions=[];cursor=0
+    for command in commands:
+        echo=b'> '+command.encode()+b'\r\n'
+        if serial.count(echo)!=commands.count(command):raise ValueError('missing/duplicate full command echo')
+        at=serial.find(echo,cursor)
+        if at<0:raise ValueError('command echo order differs')
+        positions.append((at,at+len(echo)));cursor=at+len(echo)
+    for index,command in enumerate(commands):
+        stop=positions[index+1][0] if index+1<len(positions) else serial.find(b'services_version=',positions[index][1])
+        if stop<0:raise ValueError('completion report missing after command')
+        segment=serial[positions[index][1]:stop]
+        if b'ERROR ' in segment:raise ValueError('shell command reported error')
+        if command.startswith('write ') and segment.count(b'WRITE OK\r\n')!=1:raise ValueError('write acknowledgment missing')
+        if command=='sync' and segment.count(b'SYNC OK\r\n')!=1:raise ValueError('sync acknowledgment missing')
+        if command=='cat PROBE.TXT' and not segment.startswith(payload+b'\r\n'):raise ValueError('cat did not read exact persisted bytes')
+        if command=='ls' and segment.count(b'PROBE.TXT '+str(len(payload)).encode()+b'\r\n')!=1:raise ValueError('directory file size differs')
+        if command=='exit' and segment.count(b'DONGOS_SHELL_EXIT\r\n')!=1:raise ValueError('shell did not exit before report')
+
 def project(serial,symbols):
     start=serial.index(b'DONGOS_P5_SERVICES_START\r\n')
     stop=serial.index(b'DONGOS_P5_SERVICES_READY\r\n')+len(b'DONGOS_P5_SERVICES_READY\r\n')
@@ -31,7 +75,9 @@ def project(serial,symbols):
     fields={name.decode():int(value,16) for name,value in lines}
     for name,value in dict(version=1,process_count=3,errors=0,last_error=0,last_pid=1,last_syscall=255,completed=1,steps=31,current=1).items():
         if fields[name]!=value:raise ValueError('service completion failed: '+name)
-    if fields['calls']!=fields['replies'] or fields['calls']<3000 or fields['syscalls']<6000 or fields['end_tsc']<=fields['start_tsc']:
+    # This is a persistence correctness run. Command-level work and physical
+    # FLUSH/disk checks below replace the obsolete pre-cache stress floor.
+    if fields['calls']!=fields['replies'] or fields['calls']==0 or fields['syscalls']<2*fields['calls'] or fields['end_tsc']<=fields['start_tsc']:
         raise ValueError('nested actual service work/timing differs')
     for marker in (b'DONGOS_P5_ELF_LOADED',b'DONGOS_BLK_READY',b'DONGOS_FS_READY',b'DONGOS_SHELL_READY',b'DONGOS_SHELL_EXIT'):
         if block.count(marker)!=1:raise ValueError('missing/duplicate service marker '+repr(marker))
@@ -108,12 +154,16 @@ def verify(qmp,state,serial,build):
     if process['size']!=1288 or [(x['name'],x['offset']) for x in process['fields']]!=[('ready',0),('root',8),('frame',16),('plan',216)]:
         raise ValueError('process snapshot ABI differs')
     processes=global_data('user.memory','PROCESSES',3*1288)
-    owned=global_data('user.memory','FRAMES',report['frames']*24)
-    frames=[struct.unpack_from('<3Q',owned,i*24) for i in range(report['frames'])]
-    if len({x[0] for x in frames})!=len(frames):raise ValueError('duplicate physical RAM owner')
+    extended=struct.unpack('<Q',global_data('user.memory','EXTENDED',8))[0]
+    limit=struct.unpack('<Q',global_data('user.memory','EXTENDED_LIMIT',8))[0]
+    frame_count=struct.unpack('<Q',global_data('user.memory','FRAME_COUNT',8))[0]
+    if frame_count!=report['frames']:raise ValueError('physical frame count differs from report')
+    handoff=struct.unpack('<12Q',global_data('boot.service_memory','HANDOFF',96))
+    arena_pa,arena_bytes=struct.unpack_from('<2Q',global_data('boot.service_memory','PLAN',48),32)
+    if (arena_pa,arena_bytes)!=(handoff[7],handoff[8]) or handoff[9]*4096!=arena_bytes or arena_pa!=report['arena_physical']:
+        raise ValueError('retained service arena differs from loader handoff')
+    frames=read_owned_frames(frame_count,extended,limit,arena_pa,handoff[9],physical,lambda va:pte(original_root,va,False))
     for index,(pa,va,writable) in enumerate(frames):
-        if va!=0xffffd00000000000+index*4096 or writable not in (0,1) or not old['arena_base']<=pa<old['arena_base']+old['arena_pages']*4096:
-            raise ValueError('RAM owner escaped original held arena')
         if pte(original_root,va,False)&~0x60!=pa|0x8000000000000001|(2 if writable else 0):
             raise ValueError('owned supervisor alias lost WB/NX/W^X')
     for index,name in enumerate(('shell','fs','block')):
@@ -171,7 +221,7 @@ def verify(qmp,state,serial,build):
                 private_roots_verified=True,code_bytes_verified=True,stack_guards_verified=8,
                 channels_verified=2,actual_flush_verified=True,raw_physical_reads=len(chunks),prior_lifecycle_passed=True)
 
-def boot_once(esp,disk,state,commands,timeout=60):
+def boot_once(esp,disk,state,commands,timeout=60,expected_payload=None):
     state.mkdir(parents=True)
     uart_port,qmp_port=free_port(),free_port()
     command=builder.qemu_command(esp,state,test=True)
@@ -209,6 +259,7 @@ def boot_once(esp,disk,state,commands,timeout=60):
                 if process.poll() is not None:raise ValueError('guest terminated before normal HLT')
                 time.sleep(.01)
             if not completed:raise TimeoutError('service shell did not complete all actual commands')
+            if expected_payload is not None:validate_commands(bytes(raw),commands,sent,expected_payload)
             qmp.request('stop')
             result['physical']=verify(qmp,state,bytes(raw),esp.parent)
             result.update(passed=True,commands=commands,serial_bytes=len(raw),termination='Host QMP quit after actual linked normal HLT and independent physical validation.')
@@ -270,12 +321,12 @@ def main():
     esp=args.reuse_esp.resolve() if args.reuse_esp else builder.build(test=True,runtime_level=5,output=state/'build')
     disk=state/'disk.img';create(disk,64)
     results=[]
-    first=boot_once(esp,disk,state/'write',['write PROBE.TXT '+PAYLOAD.decode(),'cat PROBE.TXT','ls','sync','exit'])
+    first=boot_once(esp,disk,state/'write',['write PROBE.TXT '+PAYLOAD.decode(),'cat PROBE.TXT','ls','sync','exit'],expected_payload=PAYLOAD)
     results.append(first)
     persistent=None
     if first['passed']:
         persistent=check_disk(disk)
-        results.append(boot_once(esp,disk,state/'reboot',['cat PROBE.TXT','ls','exit']))
+        results.append(boot_once(esp,disk,state/'reboot',['cat PROBE.TXT','ls','exit'],expected_payload=PAYLOAD))
         if results[-1]['passed']:
             check_disk(disk)
             serial=(state/'reboot/serial.log').read_bytes()

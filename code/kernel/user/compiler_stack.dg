@@ -1,0 +1,7 @@
+// Kernel-only stack profiles. All pages consume the existing shared user pool.
+module user.compiler_stack;
+pub const ORDINARY_PAGES:u64=4;
+pub const COMPILER_PAGES:u64=16;
+pub fn pages(compiler:bool)u64{
+    if compiler{return COMPILER_PAGES;}return ORDINARY_PAGES;
+}

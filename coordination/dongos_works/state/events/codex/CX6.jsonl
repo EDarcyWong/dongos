@@ -5,3 +5,5 @@
 {"at":"2026-10-20T07:09:30+00:00","data":{"job":"425a27aeef594fce946c7d6944844eb8"},"kind":"verification_started","task_id":"codex:CX6"}
 {"at":"2026-10-20T07:10:26+00:00","data":{"rev":4,"status":"submitted"},"kind":"verified","task_id":"codex:CX6"}
 {"at":"2026-10-20T07:10:26+00:00","data":{"job":"425a27aeef594fce946c7d6944844eb8","status":"completed"},"kind":"job_finished","task_id":"codex:CX6"}
+{"at":"2026-10-20T08:00:27+00:00","data":{"rev":5,"status":"accepted"},"kind":"accept","task_id":"codex:CX6"}
+{"at":"2026-10-20T08:00:31+00:00","data":{"rev":6,"status":"integrated"},"kind":"integrate","task_id":"codex:CX6"}

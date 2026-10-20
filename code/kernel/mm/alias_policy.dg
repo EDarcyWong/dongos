@@ -1,0 +1,108 @@
+// Cross-alias W^X for dynamically executable memory. mm.paging enforces W^X per
+// leaf only, so the same physical frame mapped writable at one virtual address
+// (or in another address space) and executable at another defeats it. This
+// module is a pure planner over a caller-supplied alias table: it neither reads
+// nor writes any page table, TLB or CR register.
+//
+// check(): the table must be consistent. A frame violates the policy if any of
+//   its aliases is writable while any alias of it (including the same one) is
+//   executable. Two entries with the same (space, virtual page) are a DUPLICATE.
+//   Findings are reported as the first offending pair in (i, j>=i) scan order.
+// plan_transition(): turns "make this frame writable/executable through alias
+//   `grantee`" into the only order that keeps the invariant at every instant:
+//     REVOKE each conflicting alias -> FLUSH_LOCAL -> (SHOOTDOWN if cpus>1) -> GRANT.
+//   If nothing needs revoking, the plan is just GRANT (a permission that no
+//   alias conflicts with needs no flush). The caller executes the steps in
+//   order and must not skip the flush/shootdown: a stale translation on
+//   another CPU would still honour the revoked permission.
+// Failures write nothing (found/steps/count unchanged).
+module mm.alias_policy;
+pub const OK:u64=0;pub const INVALID:u64=1;pub const CAPACITY:u64=2;pub const VIOLATION:u64=3;
+pub const DUPLICATE:u64=4;pub const NOT_FOUND:u64=5;
+pub const READ:u64=1;pub const WRITE:u64=2;pub const EXECUTE:u64=4;pub const USER:u64=8;
+pub const TO_WRITABLE:u64=1;pub const TO_EXECUTABLE:u64=2;
+pub const REVOKE:u64=1;pub const FLUSH_LOCAL:u64=2;pub const SHOOTDOWN:u64=3;pub const GRANT:u64=4;
+pub const MAX_ALIASES:usize=256;pub const MAX_CPUS:u64=4096;
+pub struct Alias{pub frame:u64,pub space:u64,pub virt:u64,pub perms:u64,pub cache:u64}
+pub struct Step{pub kind:u64,pub index:u64}
+const MAX:u64=0xffff_ffff_ffff_ffff;
+const ALIAS_BYTES:u64=40;const STEP_BYTES:u64=16;
+fn span(p:u64,n:u64)bool{return n==0||(p!=0&&n<=MAX-p);}
+fn overlap(a:u64,n:u64,b:u64,m:u64)bool{return n!=0&&m!=0&&a<b+m&&b<a+n;}
+fn perms_ok(aliases:[]const Alias)bool{
+ var i:usize=0;
+ while i<aliases.len{let p=aliases[i].perms;if p==0||p>15{return false;}i+=1;}
+ return true;
+}
+// Returns OK, VIOLATION or DUPLICATE and the offending pair in out[0..2].
+fn scan(aliases:[]const Alias,out:*[2]u64)u64{unsafe{
+ var i:usize=0;
+ while i<aliases.len{
+  let a=aliases[i];
+  if (a.perms&WRITE)!=0&&(a.perms&EXECUTE)!=0{(*out)[0]=i as u64;(*out)[1]=i as u64;return VIOLATION;}
+  var j:usize=i+1;
+  while j<aliases.len{
+   let b=aliases[j];
+   if a.space==b.space&&a.virt==b.virt{(*out)[0]=i as u64;(*out)[1]=j as u64;return DUPLICATE;}
+   if a.frame==b.frame{
+    if ((a.perms&WRITE)!=0&&(b.perms&EXECUTE)!=0)||((a.perms&EXECUTE)!=0&&(b.perms&WRITE)!=0){
+     (*out)[0]=i as u64;(*out)[1]=j as u64;return VIOLATION;
+    }
+   }
+   j+=1;
+  }
+  i+=1;
+ }
+ return OK;
+}}
+pub unsafe fn check(aliases:[]const Alias,found:*[2]u64)u64{unsafe{
+ if found==null{return INVALID;}
+ let fp=found as u64;let ap=aliases.ptr as u64;
+ if (fp&7)!=0||!span(fp,16){return INVALID;}
+ if aliases.len>MAX_ALIASES{return INVALID;}
+ let an=(aliases.len as u64)*ALIAS_BYTES;
+ if !span(ap,an)||(an!=0&&(ap&7)!=0)||overlap(fp,16,ap,an){return INVALID;}
+ if !perms_ok(aliases){return INVALID;}
+ var pair:[2]u64=[0;2];
+ let status=scan(aliases,&pair);
+ if status!=OK{(*found)[0]=pair[0];(*found)[1]=pair[1];}
+ return status;
+}}
+pub unsafe fn plan_transition(aliases:[]const Alias,frame:u64,target:u64,grantee:usize,cpus:u64,steps:[]Step,count:*usize)u64{unsafe{
+ if count==null{return INVALID;}
+ let cp=count as u64;let ap=aliases.ptr as u64;let sp=steps.ptr as u64;
+ if (cp&7)!=0||!span(cp,8){return INVALID;}
+ if aliases.len>MAX_ALIASES||steps.len>MAX/STEP_BYTES{return INVALID;}
+ let an=(aliases.len as u64)*ALIAS_BYTES;let sn=(steps.len as u64)*STEP_BYTES;
+ if !span(ap,an)||(an!=0&&(ap&7)!=0)||!span(sp,sn)||(sn!=0&&(sp&7)!=0){return INVALID;}
+ if overlap(cp,8,ap,an)||overlap(cp,8,sp,sn)||overlap(ap,an,sp,sn){return INVALID;}
+ if !perms_ok(aliases){return INVALID;}
+ if target!=TO_WRITABLE&&target!=TO_EXECUTABLE{return INVALID;}
+ if cpus==0||cpus>MAX_CPUS{return INVALID;}
+ var pair:[2]u64=[0;2];
+ let status=scan(aliases,&pair);
+ if status!=OK{return status;}
+ if grantee>=aliases.len||aliases[grantee].frame!=frame{return NOT_FOUND;}
+ var conflict:u64=EXECUTE;
+ if target==TO_EXECUTABLE{conflict=WRITE;}
+ var revoked:usize=0;var i:usize=0;
+ while i<aliases.len{
+  if aliases[i].frame==frame&&(aliases[i].perms&conflict)!=0{revoked+=1;}
+  i+=1;
+ }
+ var total:usize=revoked+1;
+ if revoked!=0{total+=1;if cpus>1{total+=1;}}
+ if total>steps.len{return CAPACITY;}
+ var n:usize=0;i=0;
+ while i<aliases.len{
+  if aliases[i].frame==frame&&(aliases[i].perms&conflict)!=0{steps[n]=Step{kind:REVOKE,index:i as u64};n+=1;}
+  i+=1;
+ }
+ if revoked!=0{
+  steps[n]=Step{kind:FLUSH_LOCAL,index:0};n+=1;
+  if cpus>1{steps[n]=Step{kind:SHOOTDOWN,index:0};n+=1;}
+ }
+ steps[n]=Step{kind:GRANT,index:grantee as u64};n+=1;
+ *count=n;
+ return OK;
+}}

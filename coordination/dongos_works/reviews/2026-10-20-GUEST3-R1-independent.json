@@ -1,0 +1,24 @@
+{
+  "task": "pool:GUEST3",
+  "revision": 6,
+  "tests": 13,
+  "skips": 0,
+  "returncode": 0,
+  "elapsed_seconds": 58.749,
+  "run": "D:\\projects\\projects3\\2026\\dongos\\coordination\\dongos_works\\pool-works\\build\\GUEST3\\run-270ed65ab2e4",
+  "artifact_hashes_checked": 251,
+  "independent_probe": [
+    {
+      "mode": "debug",
+      "status": 3,
+      "result_changed_bytes": 0
+    },
+    {
+      "mode": "release",
+      "status": 3,
+      "result_changed_bytes": 0
+    }
+  ],
+  "accepted": false,
+  "integrated": false
+}

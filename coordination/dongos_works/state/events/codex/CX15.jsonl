@@ -1,0 +1,7 @@
+{"at":"2026-10-20T10:05:51+00:00","data":{"rev":1,"status":"todo"},"kind":"created","task_id":"codex:CX15"}
+{"at":"2026-10-20T10:05:52+00:00","data":{"claimed_at":"2026-10-20T10:05:52+00:00","claimed_by":"codex-mcp-d76b66689d824a70","completed_at":null,"owner":"codex","resume_status":null,"rev":2,"status":"in_progress"},"kind":"claim","task_id":"codex:CX15"}
+{"at":"2026-10-20T10:06:31+00:00","data":{"claimed_at":"2026-10-20T10:05:52+00:00","claimed_by":"codex-mcp-d76b66689d824a70","completed_at":"2026-10-20T10:06:31+00:00","owner":"codex","resume_status":null,"rev":3,"status":"submitted"},"kind":"submit","task_id":"codex:CX15"}
+{"at":"2026-10-20T10:06:32+00:00","data":{"job":"ccb0e44cff144b4d9da302e0a34b3fcd","kind":"verify","provider":"python"},"kind":"queued","task_id":"codex:CX15"}
+{"at":"2026-10-20T10:06:33+00:00","data":{"job":"ccb0e44cff144b4d9da302e0a34b3fcd"},"kind":"verification_started","task_id":"codex:CX15"}
+{"at":"2026-10-20T10:12:52+00:00","data":{"rev":4,"status":"submitted"},"kind":"verified","task_id":"codex:CX15"}
+{"at":"2026-10-20T10:12:52+00:00","data":{"job":"ccb0e44cff144b4d9da302e0a34b3fcd","status":"completed"},"kind":"job_finished","task_id":"codex:CX15"}

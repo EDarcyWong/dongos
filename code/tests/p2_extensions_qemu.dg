@@ -1,0 +1,332 @@
+// P2 extension acceptance under QEMU: drives the real mm.paging 2 MiB leaf,
+// split/merge, write-combining and alias-planner code against live hardware
+// translation. The probe builds a private mm.paging tree and links its PML4
+// slot 384 (VA 0xffff_c000_0000_0000) into the firmware root, so every later
+// edit made by mm.paging is walked by the CPU. Firmware identity mappings are
+// left untouched (and remain an alias of every RAM frame; see step 6).
+// Result: 0 on success, otherwise (step << 32) | detail.
+module p2_extensions_qemu;
+
+import mm.paging as pg;
+import mm.alias_policy as ap;
+import mm.cache_type_plan as ct;
+
+extern "sysv64" ("p2x_read_cr3") fn read_cr3() u64;
+extern "sysv64" ("p2x_reload_cr3") fn reload_cr3() void;
+extern "sysv64" ("p2x_invlpg") fn invlpg(address: u64) void;
+extern "sysv64" ("p2x_wbinvd") fn wbinvd() void;
+extern "sysv64" ("p2x_rdmsr") fn rdmsr(msr: u32) u64;
+extern "sysv64" ("p2x_wrmsr") fn wrmsr(msr: u32, value: u64) void;
+extern "sysv64" ("p2x_call") fn call(address: u64) u64;
+extern "sysv64" ("p2x_phys_bits") fn phys_bits() u64;
+extern "sysv64" ("p2x_area") fn area(index: u64) u64;
+extern "sysv64" ("p2x_log") fn log(value: u64) void;
+extern "sysv64" ("p2x_store_root_entry") fn store_root_entry(address: u64, value: u64) void;
+extern "sysv64" ("p2x_cpu_count") fn cpu_count() u64;
+extern "sysv64" ("p2x_ap") fn on_ap(command: u64, address: u64) u64;
+
+const SLOT: u64 = 384;
+const VA_L: u64 = 0xffff_c000_0000_0000;   // 2 MiB large window
+const VA_W: u64 = 0xffff_c000_0040_0000;   // writable alias of the exec frame
+const VA_X: u64 = 0xffff_c000_0040_1000;   // executable alias of the exec frame
+const VA_C: u64 = 0xffff_c000_0060_0000;   // write-combining mapping
+const VA_S: u64 = 0xffff_c000_0040_4000;   // translation observed by both CPUs
+const VA_W2: u64 = 0xffff_c000_0040_2000;  // writable alias, two-CPU transition
+const VA_X2: u64 = 0xffff_c000_0040_3000;  // executable alias, two-CPU transition
+const CODE_43: u64 = 0x0000_c300_0000_2bb8; // mov eax, 43 ; ret
+const AP_READ: u64 = 1;
+const AP_INVLPG: u64 = 2;
+const AP_CALL: u64 = 3;
+const TOKEN: u64 = 0x5032_4c41_5247_0000;
+const TOKEN_B: u64 = 0x5032_4652_4d42_0000;
+const WC_TOKEN: u64 = 0x5032_5743_0000_0001;
+const CODE: u64 = 0x0000_c300_0000_2ab8;   // mov eax, 42 ; ret
+const ADDRESS: u64 = 0x000f_ffff_ffff_f000;
+const E_LARGE_PAGE: u64 = 0x0203_0006;
+const E_NOT_MERGEABLE: u64 = 0x0203_0007;
+const IA32_PAT: u32 = 0x277;
+const IA32_EFER: u32 = 0xc000_0080;
+
+fn fail(step: u64, detail: u64) u64 { return (step << 32) | (detail & 0xffff_ffff); }
+
+unsafe fn read(address: u64) u64 { unsafe { return *(address as *u64); } }
+unsafe fn write(address: u64, value: u64) void { unsafe { *(address as *u64) = value; } }
+
+// Four representative 4 KiB pages of the 2 MiB window, including both ends.
+unsafe fn window_ok(chunk_tokens: bool) bool {
+    unsafe {
+        if read(VA_L) != TOKEN { return false; }
+        if read(VA_L + 4096) != TOKEN + 1 { return false; }
+        if read(VA_L + 255 * 4096) != TOKEN + 255 { return false; }
+        if read(VA_L + 511 * 4096) != TOKEN + 511 { return false; }
+        if chunk_tokens && read(VA_L + 5 * 4096) != TOKEN + 5 { return false; }
+    }
+    return true;
+}
+
+export("p2x_main") fn main() u64 {
+    unsafe {
+        // ---- step 1: private tree, NX on --------------------------------
+        let efer: u64 = rdmsr(IA32_EFER);
+        if (efer & 0x800) == 0 { wrmsr(IA32_EFER, efer | 0x800); }
+        let pool: u64 = area(0);
+        let meta: u64 = area(1);
+        var space: pg.Space = pg.EMPTY_SPACE;
+        match pg.init(&space, slice_from_raw_parts(pool as *pg.Table, 32), pool,
+                      slice_from_raw_parts(meta as *u8, 64), phys_bits() as usize, true) {
+            ok => {}, err(code) => { return fail(1, code); },
+        }
+        let chunk: u64 = (area(2) + 0x1f_ffff) & ~0x1f_ffff;
+        var page: u64 = 0;
+        while page < 512 { write(chunk + page * 4096, TOKEN + page); page += 1; }
+        let frame_b: u64 = area(3);
+        write(frame_b, TOKEN_B);
+        log(0x5032_0001);
+
+        // ---- step 2: real 2 MiB leaf, linked into the firmware root ------
+        match pg.map_large_live(&space, VA_L, chunk, pg.WRITE) { ok => {}, err(code) => { return fail(2, code); }, }
+        log(0x5032_0201);
+        let firmware: u64 = read_cr3() & ADDRESS;
+        if read(firmware + SLOT * 8) != 0 { return fail(2, 0xf1); }
+        let link: u64 = read(pool + SLOT * 8);
+        if link == 0 { return fail(2, 0xf2); }
+        log(0x5032_0202);
+        store_root_entry(firmware + SLOT * 8, link);
+        reload_cr3();
+        log(0x5032_0203);
+        if !window_ok(true) { return fail(2, 0xf3); }
+        var mapping: pg.Mapping = pg.Mapping { physical: 0, flags: 0 };
+        match pg.query(&space, VA_L + 0x5123, &mapping) { ok => {}, err(code) => { return fail(2, code); }, }
+        if mapping.physical != chunk + 0x5123 || mapping.flags != pg.WRITE { return fail(2, 0xf4); }
+        match pg.protect_live(&space, VA_L + 4096, 0) {
+            ok => { return fail(2, 0xf5); },
+            err(code) => { if code != E_LARGE_PAGE { return fail(2, code); } },
+        }
+        var tables: usize = 0;
+        match pg.used_tables(&space) { ok(value) => { tables = value; }, err(code) => { return fail(2, code); }, }
+        log(0x5032_0002);
+
+        // ---- step 3: split, then prove the CPU walks the new page table --
+        match pg.split_large_live(&space, VA_L) { ok => {}, err(code) => { return fail(3, code); }, }
+        reload_cr3();
+        if !window_ok(true) { return fail(3, 0xf1); }
+        match pg.used_tables(&space) {
+            ok(value) => { if value != tables + 1 { return fail(3, 0xf2); } },
+            err(code) => { return fail(3, code); },
+        }
+        match pg.replace_live(&space, VA_L + 5 * 4096, frame_b, pg.WRITE) { ok => {}, err(code) => { return fail(3, code); }, }
+        invlpg(VA_L + 5 * 4096);
+        if read(VA_L + 5 * 4096) != TOKEN_B { return fail(3, 0xf3); }
+        // A non-contiguous table must be refused without any change.
+        var refused: pg.Retired = pg.EMPTY_RETIRED;
+        match pg.merge_large_live(&space, VA_L, &refused) {
+            ok => { return fail(3, 0xf4); },
+            err(code) => { if code != E_NOT_MERGEABLE { return fail(3, code); } },
+        }
+        if read(VA_L + 5 * 4096) != TOKEN_B { return fail(3, 0xf5); }
+        match pg.replace_live(&space, VA_L + 5 * 4096, chunk + 5 * 4096, pg.WRITE) { ok => {}, err(code) => { return fail(3, code); }, }
+        invlpg(VA_L + 5 * 4096);
+        if !window_ok(true) { return fail(3, 0xf6); }
+        log(0x5032_0003);
+
+        // ---- step 4: merge back, invalidate, then reclaim the table -------
+        var retired: pg.Retired = pg.EMPTY_RETIRED;
+        match pg.merge_large_live(&space, VA_L, &retired) { ok => {}, err(code) => { return fail(4, code); }, }
+        reload_cr3();
+        match pg.reclaim(&space, &retired) { ok => {}, err(code) => { return fail(4, code); }, }
+        match pg.used_tables(&space) {
+            ok(value) => { if value != tables { return fail(4, 0xf1); } },
+            err(code) => { return fail(4, code); },
+        }
+        if !window_ok(true) { return fail(4, 0xf2); }
+        match pg.protect_live(&space, VA_L + 4096, 0) {
+            ok => { return fail(4, 0xf3); },
+            err(code) => { if code != E_LARGE_PAGE { return fail(4, code); } },
+        }
+        log(0x5032_0004);
+
+        // ---- step 5: cross-alias W^X, then really execute new code --------
+        let exec: u64 = area(4);
+        match pg.map_live(&space, VA_W, exec, pg.WRITE) { ok => {}, err(code) => { return fail(5, code); }, }
+        invlpg(VA_W);
+        match pg.map_live(&space, VA_X, exec, 0) { ok => {}, err(code) => { return fail(5, code); }, }
+        invlpg(VA_X);
+        var aliases: [2]ap.Alias = [ap.Alias { frame: 0, space: 0, virt: 0, perms: 0, cache: 0 }; 2];
+        aliases[0] = ap.Alias { frame: exec, space: 0, virt: VA_W, perms: ap.READ | ap.WRITE, cache: ct.WB };
+        aliases[1] = ap.Alias { frame: exec, space: 0, virt: VA_X, perms: ap.READ, cache: ct.WB };
+        var found: [2]u64 = [0; 2];
+        if ap.check(slice_from_raw_parts(&aliases[0] as *const ap.Alias, 2), &found) != ap.OK { return fail(5, 0xf1); }
+        aliases[1].perms = ap.READ | ap.EXECUTE;
+        if ap.check(slice_from_raw_parts(&aliases[0] as *const ap.Alias, 2), &found) != ap.VIOLATION { return fail(5, 0xf2); }
+        aliases[1].perms = ap.READ;
+        write(VA_W, CODE);
+        var steps: [4]ap.Step = [ap.Step { kind: 0, index: 0 }; 4];
+        var count: usize = 0;
+        let planned: u64 = ap.plan_transition(slice_from_raw_parts(&aliases[0] as *const ap.Alias, 2), exec, ap.TO_EXECUTABLE,
+                                              1, 1, slice_from_raw_parts(&steps[0] as *ap.Step, 4), &count);
+        if planned != ap.OK || count != 3 { return fail(5, 0xf3); }
+        var index: usize = 0;
+        while index < count {
+            let step = steps[index];
+            let target: usize = step.index as usize;
+            if step.kind == ap.REVOKE {
+                match pg.protect_live(&space, aliases[target].virt, 0) { ok => {}, err(code) => { return fail(5, code); }, }
+                aliases[target].perms = ap.READ;
+            } else if step.kind == ap.FLUSH_LOCAL {
+                invlpg(VA_W);
+            } else if step.kind == ap.GRANT {
+                match pg.protect_live(&space, aliases[target].virt, pg.EXECUTE) { ok => {}, err(code) => { return fail(5, code); }, }
+                invlpg(aliases[target].virt);
+                aliases[target].perms = ap.READ | ap.EXECUTE;
+            } else { return fail(5, 0xf4); }
+            // The policy holds after every single step, not only at the end.
+            if ap.check(slice_from_raw_parts(&aliases[0] as *const ap.Alias, 2), &found) != ap.OK { return fail(5, 0xf5); }
+            index += 1;
+        }
+        if steps[0].kind != ap.REVOKE || steps[2].kind != ap.GRANT { return fail(5, 0xf6); }
+        match pg.query(&space, VA_W, &mapping) { ok => {}, err(code) => { return fail(5, code); }, }
+        if mapping.flags != 0 { return fail(5, 0xf7); }
+        if call(VA_X) & 0xffff_ffff != 42 { return fail(5, 0xf8); }
+        log(0x5032_0005);
+
+        // ---- step 6: PAT entry 4 = WC, migration order, WC mapping --------
+        let old_pat: u64 = rdmsr(IA32_PAT);
+        if (old_pat & 255) != ct.WB || ((old_pat >> 24) & 255) != ct.UC { return fail(6, 0xf1); }
+        let new_pat: u64 = (old_pat & ~(0xff << 32)) | (ct.WC << 32);
+        if !ct.pat_valid(new_pat) { return fail(6, 0xf2); }
+        // MTRR type of the frame and the effective PAT x MTRR type.
+        let wc_frame: u64 = area(5);
+        let bits: u64 = phys_bits();
+        let physical_mask: u64 = (1 << bits) - 1;
+        let default_type: u64 = rdmsr(0x2ff);
+        var mtrr_default: u64 = ct.UC;
+        if (default_type & 0x800) != 0 { mtrr_default = default_type & 255; }
+        var ranges: [16]ct.Range = [ct.Range { base: 0, size: 0, kind: 0 }; 16];
+        var used: usize = 0;
+        let variable: u64 = rdmsr(0xfe) & 255;
+        var n: u64 = 0;
+        while n < variable && n < 16 {
+            let base: u64 = rdmsr((0x200 + 2 * n) as u32);
+            let mask: u64 = rdmsr((0x201 + 2 * n) as u32);
+            if (mask & 0x800) != 0 {
+                let size: u64 = ((~(mask & ~0xfff)) & physical_mask) + 1;
+                ranges[used] = ct.Range { base: base & ~0xfff & physical_mask, size: size, kind: base & 255 };
+                used += 1;
+            }
+            n += 1;
+        }
+        var frame_type: u64 = 0xff;
+        let resolved: u64 = ct.mtrr_type(slice_from_raw_parts(&ranges[0] as *const ct.Range, used), mtrr_default, wc_frame, &frame_type);
+        if resolved != ct.OK { return fail(6, 0x100 | resolved); }
+        var effective: u64 = 0xff;
+        if ct.effective_type(frame_type, ct.WC, &effective) != ct.OK || effective != ct.WC { return fail(6, 0xf3); }
+        log(0x5032_6000 | (frame_type << 4) | effective);
+        // The firmware identity map is a WB alias of every RAM frame; the
+        // planner must see that as a conflict (the kernel's own root has none).
+        var kinds: [2]u64 = [ct.WB, ct.WC];
+        var first: usize = 0;
+        if ct.check_aliases(slice_from_raw_parts(&kinds[0] as *const u64, 2), &first) != ct.CONFLICT || first != 1 { return fail(6, 0xf4); }
+        var migration: [5]ct.Step = [ct.Step { kind: 0, arg: 0 }; 5];
+        var planned_steps: usize = 0;
+        if ct.plan_migration(ct.WB, ct.WC, slice_from_raw_parts(&migration[0] as *ct.Step, 5), &planned_steps) != ct.OK || planned_steps != 5 {
+            return fail(6, 0xf5);
+        }
+        write(wc_frame, 0);
+        index = 0;
+        while index < planned_steps {
+            let kind: u64 = migration[index].kind;
+            if kind == ct.REVOKE_ALIASES {
+                // No alias of this frame exists in the private tree yet.
+                match pg.query(&space, VA_C, &mapping) { ok => { return fail(6, 0xf6); }, err(code) => {}, }
+            } else if kind == ct.FLUSH_TLB {
+                reload_cr3();
+            } else if kind == ct.FLUSH_CACHE {
+                wbinvd();
+            } else if kind == ct.REMAP {
+                wrmsr(IA32_PAT, new_pat);
+                match pg.map_live(&space, VA_C, wc_frame, pg.WRITE | pg.WRITE_COMBINING) { ok => {}, err(code) => { return fail(6, code); }, }
+            } else { return fail(6, 0xf7); }
+            index += 1;
+        }
+        if rdmsr(IA32_PAT) != new_pat { return fail(6, 0xf8); }
+        match pg.query(&space, VA_C, &mapping) { ok => {}, err(code) => { return fail(6, code); }, }
+        if mapping.physical != wc_frame || mapping.flags != (pg.WRITE | pg.WRITE_COMBINING) { return fail(6, 0xf9); }
+        var selected: u64 = 0xff;
+        if ct.page_type(new_pat, ct.PAT, &selected) != ct.OK || selected != ct.WC { return fail(6, 0xfa); }
+        write(VA_C, WC_TOKEN);
+        wbinvd();
+        if read(wc_frame) != WC_TOKEN || read(VA_C) != WC_TOKEN { return fail(6, 0xfb); }
+        // Undo: unmap the WC alias, flush, restore the original PAT.
+        var gone: pg.Retired = pg.EMPTY_RETIRED;
+        match pg.unmap_live(&space, VA_C, &gone) { ok => {}, err(code) => { return fail(6, code); }, }
+        reload_cr3();
+        wbinvd();
+        wrmsr(IA32_PAT, old_pat);
+        reload_cr3();
+        match pg.reclaim(&space, &gone) { ok => {}, err(code) => { return fail(6, code); }, }
+        if rdmsr(IA32_PAT) != old_pat { return fail(6, 0xfc); }
+        log(0x5032_0006);
+
+        // ---- step 8: second CPU: real stale TLB, then planned shootdown ----
+        if cpu_count() < 2 { return fail(8, 0xf0); }
+        let frame_a: u64 = chunk + 7 * 4096;
+        match pg.map_live(&space, VA_S, frame_a, 0) { ok => {}, err(code) => { return fail(8, code); }, }
+        invlpg(VA_S);
+        if on_ap(AP_READ, VA_S) != TOKEN + 7 { return fail(8, 0xf1); }   // AP now caches VA_S
+        match pg.replace_live(&space, VA_S, frame_b, 0) { ok => {}, err(code) => { return fail(8, code); }, }
+        invlpg(VA_S);                                                 // local invalidation only
+        if read(VA_S) != TOKEN_B { return fail(8, 0xf2); }
+        let stale: u64 = on_ap(AP_READ, VA_S);
+        var observed_stale: u64 = 0;
+        if stale == TOKEN + 7 { observed_stale = 1; }
+        log(0x5032_8000 | observed_stale);
+        // The other CPU must still see the old frame: the hazard is real here.
+        if stale != TOKEN + 7 { return fail(8, 0xf3); }
+        if on_ap(AP_INVLPG, VA_S) != 0 { return fail(8, 0xf4); }
+        if on_ap(AP_READ, VA_S) != TOKEN_B { return fail(8, 0xf5); }
+        // Two-CPU alias transition: the plan must contain SHOOTDOWN, executed
+        // on the other CPU before execute permission is granted.
+        let exec2: u64 = area(6);
+        match pg.map_live(&space, VA_W2, exec2, pg.WRITE) { ok => {}, err(code) => { return fail(8, code); }, }
+        invlpg(VA_W2);
+        match pg.map_live(&space, VA_X2, exec2, 0) { ok => {}, err(code) => { return fail(8, code); }, }
+        invlpg(VA_X2);
+        write(VA_W2, CODE_43);
+        if on_ap(AP_READ, VA_W2) != CODE_43 { return fail(8, 0xf6); }      // AP caches the writable alias
+        aliases[0] = ap.Alias { frame: exec2, space: 0, virt: VA_W2, perms: ap.READ | ap.WRITE, cache: ct.WB };
+        aliases[1] = ap.Alias { frame: exec2, space: 0, virt: VA_X2, perms: ap.READ, cache: ct.WB };
+        count = 0;
+        let planned2: u64 = ap.plan_transition(slice_from_raw_parts(&aliases[0] as *const ap.Alias, 2), exec2, ap.TO_EXECUTABLE,
+                                               1, 2, slice_from_raw_parts(&steps[0] as *ap.Step, 4), &count);
+        if planned2 != ap.OK || count != 4 || steps[2].kind != ap.SHOOTDOWN { return fail(8, 0xf7); }
+        index = 0;
+        while index < count {
+            let step = steps[index];
+            let target: usize = step.index as usize;
+            if step.kind == ap.REVOKE {
+                match pg.protect_live(&space, aliases[target].virt, 0) { ok => {}, err(code) => { return fail(8, code); }, }
+                aliases[target].perms = ap.READ;
+            } else if step.kind == ap.FLUSH_LOCAL {
+                invlpg(VA_W2);
+            } else if step.kind == ap.SHOOTDOWN {
+                if on_ap(AP_INVLPG, VA_W2) != 0 { return fail(8, 0xf8); }
+            } else if step.kind == ap.GRANT {
+                match pg.protect_live(&space, aliases[target].virt, pg.EXECUTE) { ok => {}, err(code) => { return fail(8, code); }, }
+                invlpg(aliases[target].virt);
+                aliases[target].perms = ap.READ | ap.EXECUTE;
+            } else { return fail(8, 0xf9); }
+            if ap.check(slice_from_raw_parts(&aliases[0] as *const ap.Alias, 2), &found) != ap.OK { return fail(8, 0xfa); }
+            index += 1;
+        }
+        if call(VA_X2) & 0xffff_ffff != 43 { return fail(8, 0xfb); }
+        if on_ap(AP_CALL, VA_X2) & 0xffff_ffff != 43 { return fail(8, 0xfc); }   // the other CPU executes it too
+        on_ap(4, 0);                                                  // stop the resident AP loop
+        log(0x5032_0008);
+
+        // ---- step 7: unlink the private tree from the firmware root ------
+        store_root_entry(firmware + SLOT * 8, 0);
+        reload_cr3();
+        log(0x5032_0007);
+    }
+    return 0;
+}

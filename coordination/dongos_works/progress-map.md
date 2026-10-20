@@ -1,6 +1,6 @@
 # DongOS 整体任务图
 
-核对时间：2026-10-20T14:55:24+08:00（Asia/Shanghai）。范围：P0–P9、L0–L3与协作流程；P10另定范围。
+核对时间：2026-10-20T16:45:00+08:00（Asia/Shanghai）。范围：P0–P9、L0–L3与协作流程；P10另定范围。
 
 系统既有受控启动、用户态桌面与持久化验收范围保留；语言已具通用原生编译链、宿主固定点与原生汇编器。真正DongOS内自编译、持久化重启及产物一致性尚未验收。
 
@@ -15,7 +15,7 @@ flowchart TD
     P0["✅ P0 工具链与构建环境"]
     P1["✅ P1 UEFI 引导器"]
     P0 --> P1
-    P2["🟡 P2 CPU 与内存"]
+    P2["✅ P2 CPU 与内存"]
     P1 --> P2
     P3["✅ P3 中断与抢占线程"]
     P2 --> P3
@@ -34,8 +34,8 @@ flowchart TD
     classDef complete fill:#e7f7ed,stroke:#2f8a53,color:#183d26;
     classDef partial fill:#fff4d9,stroke:#b58516,color:#594108;
     classDef pending fill:#edf0f5,stroke:#8b96a8,color:#3d4654;
-    class P0,P1,P3,P4 complete;
-    class P2,P5,P6,P7,P8 partial;
+    class P0,P1,P2,P3,P4 complete;
+    class P5,P6,P7,P8 partial;
     class P9 pending;
 ```
 
@@ -71,18 +71,18 @@ flowchart TD
 - `code/PLAN.md:375`
 - `code/PLAN.md:383`
 
-### 🟡 P2 CPU 与内存
+### ✅ P2 CPU 与内存
 
 已完成或已有证据：
 
 - 异常、分配器、活动页表及NX/WP/W^X等核心保护验收通过
 - 四核共享内核根TLB shootdown通过
+- mm.paging 原生2MiB叶子与live拆分/合并/回收、WRITE_COMBINING；QEMU UEFI探针（2 vCPU）实测：CPU走拆分后的新页表、合并回收、PAT第4项WC与按SDM Table 14-7的有效类型、跨别名W^X撤权后执行新代码、双CPU过期TLB经SHOOTDOWN消除（debug/release通过，4个坏实现退出35）
+- 改动后内存/页表QEMU矩阵15项与对象缓存3项回归全部通过（2026-10-20）
 
 尚待完成：
 
-- 动态执行物理别名W^X与撤权同步
-- 2MiB/4KiB大页转换、失效与回收
-- PAT写合并及缓存类型冲突验证
+- 所列P2范围已关闭；内核启动路径与active_paging按需在P4（动态执行）、P7（图形WC）接入，PCID属P4
 
 核对依据：
 
@@ -90,6 +90,8 @@ flowchart TD
 - `code/PLAN.md:402`
 - `code/PLAN.md:404`
 - `code/PLAN.md:432`
+- `code/docs/p2-extensions.md`
+- `code/tests/test_p2_extensions.py`
 
 ### ✅ P3 中断与抢占线程
 
@@ -131,11 +133,12 @@ flowchart TD
 - 受控设备授权、键盘、virtio-blk/AHCI/NVMe存储通过
 - FAT32、shell、读写/FLUSH及同盘重启持久化通过
 - 驱动故障后的MSI/BME撤权与旧owner退休通过
+- 故障DMA回收/重分配/重授权与同boot设备恢复的**离线状态机契约**已实现并通过真实Dong测试（`code/docs/device-recovery.md`）；`memory.release_dma` 原语已实现并测试，但尚未接入故障调用点
 
 尚待完成：
 
-- 同次启动内通用设备恢复
-- 故障DMA安全回收、重分配与设备重授权
+- 同次启动内通用设备恢复（离线契约与 `release_dma` 原语已实现，故障调用点、驱动重启与QEMU/VMware故障注入验收未完成）
+- 故障DMA安全回收、重分配与设备重授权（离线门禁与释放/清零/回收原语已实现，实际调用与重绑/重授权接线未完成）
 
 核对依据：
 
@@ -429,12 +432,12 @@ flowchart TD
 
 已完成或已有证据：
 
-- C52、CR40、MCPPOOL1已真实集成并登记integrated；GUEST1/2/3与WINVERIFY1此前已集成；C52/CR40主线测试11项零skip（2026-10-20）
+- C52、CR40、MCPPOOL1、GUEST5已真实集成并登记integrated；GUEST1/2/3与WINVERIFY1此前已集成；C52/CR40主线测试11项零skip（2026-10-20）
 - CR43、CR44、D28、LM9已被通用编译链取代，全部归档rev3；保留原任务/事件，不再在默认清单等待执行
 
 尚待完成：
 
-- GUEST4实现中、GUEST5返修中，提交后按最新rev审查源码/契约并独立复验，再逐项真实集成；不能批量改成integrated
+- GUEST4（rev7）已提交待独立复验及真实集成；CX7、CR47返修，CX8进行中，按各自最新rev推进；不能批量改成integrated
 
 核对依据：
 
@@ -451,3 +454,4 @@ flowchart TD
 - 系统完成表示所列受控范围通过既定门槛，历史镜像功能验收不替代当前镜像回归；P7当前输入/GUI、P8新版USB回归和真机、P6 Linux/KVM外部验收继续保留。
 - P2旧PCID勾选与较新P4 BSP PCID证据分开看待，跨核PCID保留未由R6 UART回归证明；P0本地通过不等于远程CI，P3受控定时回退不等于真实TSC-deadline路径。
 - P10网络、声音、中文输入及更多应用另定范围；本轮不扩大客体权限、栈/内存配置或启动OS/VM。
+- P5剩余两项（同boot设备恢复、故障DMA安全回收/重分配/重授权）的离线状态机契约已实现并通过真实Dong测试（`code/docs/device-recovery.md`），但尚未接入`user.devices`/`device_host`/`device_manager`与页回收，未做QEMU/VMware故障注入；P5仍未关闭。

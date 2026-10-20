@@ -1,0 +1,37 @@
+{
+  "task": "GUEST3",
+  "checks": [
+    {
+      "command": [
+        "C:\\Python313\\python.exe",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "pool-works/tests",
+        "-p",
+        "test_guest_compile_memory.py",
+        "-v"
+      ],
+      "returncode": 0,
+      "tests": 13,
+      "skips": 0,
+      "elapsed_seconds": 95.63
+    }
+  ],
+  "before": {
+    "pool-works\\lang\\bootstrap\\guest_compile_memory.dg": "9512c875d8d039e319124719a4b3ce4fa85f136479755fbde8983d9abcdd14e9",
+    "pool-works\\lang\\bootstrap\\guest_compile_memory.md": "b3597e98b0eefec7cb1aa47bd1d0c98f930d00de1591f84721f2ee9f44224208",
+    "pool-works\\tests\\test_guest_compile_memory.py": "703c9aa13c4ba1d1005426b617b6e9a795b9c685962f856b29ea859ee7aaa28a",
+    "pool-works\\deliveries\\GUEST3.md": "75b2eea4f8ed803e576785ea48077be3930ca8ba160a35fcf8c4dbd40492229a"
+  },
+  "after": {
+    "pool-works\\lang\\bootstrap\\guest_compile_memory.dg": "9512c875d8d039e319124719a4b3ce4fa85f136479755fbde8983d9abcdd14e9",
+    "pool-works\\lang\\bootstrap\\guest_compile_memory.md": "b3597e98b0eefec7cb1aa47bd1d0c98f930d00de1591f84721f2ee9f44224208",
+    "pool-works\\tests\\test_guest_compile_memory.py": "703c9aa13c4ba1d1005426b617b6e9a795b9c685962f856b29ea859ee7aaa28a",
+    "pool-works\\deliveries\\GUEST3.md": "75b2eea4f8ed803e576785ea48077be3930ca8ba160a35fcf8c4dbd40492229a"
+  },
+  "source_stable": true,
+  "passed": true,
+  "formal_registration": false
+}

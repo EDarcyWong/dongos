@@ -21,14 +21,15 @@
   "document": "codex-works/tasks/CX6-board.md",
   "historical": false,
   "id": "codex:CX6",
+  "integration_note": "实现已真实落于主线code/services/lib/compiler_source.dg/.md和lang/tests/test_guest_files_reader.py，文件身份与独立验收/正式隔离指纹一致。正式隔离及独立2200边界/模式通过，主线此前完整1test0skip34.794秒通过，冻结后未修改。独立审查报告reviews/2026-10-20-independent-io-review.md。登记真实集成，未扩大权限/内存/栈。",
   "legacy_hash": "d3124a96642a0379b0f498ef14f12ebf97b36e4d80b306f81b2bf5324e744504",
   "number": "CX6",
   "owner": "codex",
-  "rev": 4,
-  "review_note": "",
-  "status": "submitted",
+  "rev": 6,
+  "review_note": "独立审查子代理review_io实际完整审核源码/契约/测试，独立SHA核对原对象并追加debug/release各2200条短读/精确容量/超容边界及9预检，全部原生exit0。正式隔离425a27aeef594fce946c7d6944844eb8 1test/0skip/38.717秒/source_stable/退出并停止。当前四文件指纹一致。报告reviews/2026-10-20-independent-io-review.md，证据code/build/test/independent-io/reader/evidence.json。准予文件读取适配组件验收，非完整L3完成。",
+  "status": "integrated",
   "title": "[L3] 将有界源码读取器接入已有DongOS文件句柄",
-  "updated_at": "2026-10-20T07:10:26+00:00",
+  "updated_at": "2026-10-20T08:00:31+00:00",
   "verification": {
     "checks": [
       {

@@ -41,6 +41,9 @@ default rel
 %include "service_report.inc"
 extern runtime_view,dong_runtime_guard,user_run,user_context_last_error
 extern dong_services_prepare,dong_services_first,dong_services_report
+%ifdef L3_COMPILER
+extern dong_compiler_enable
+%endif
 extern serial_write,serial_hex_line
 global service_runtime_begin,runtime_copy_bytes,services_write_bytes,services_character
 global user_active_frame,user_runtime_report,user_kernel_guard_low,user_kernel_guard_high
@@ -108,6 +111,10 @@ service_runtime_begin:
     test rax,rax
     jnz .error
     mov rax,[rel runtime_view]
+%ifdef L3_COMPILER
+    call dong_compiler_enable
+    mov rax,[rel runtime_view]
+%endif
     mov rax,[rax+RuntimeView.boot_info]
     mov rdi,[rax+BootInfo.kernel_physical]
     call dong_services_prepare

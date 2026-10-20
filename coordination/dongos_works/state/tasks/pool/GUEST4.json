@@ -1,16 +1,25 @@
 {
-  "assignment_owner": null,
+  "assignment_history": [
+    {
+      "at": "2026-10-20T07:50:00+00:00",
+      "from_owner": "cursor",
+      "note": "用户要求当前会话完成L3功能；原执行已提交、CLI测试进程已退出，R1目前rework无活动作业，接管独立探针证明的Graph完整只读范围预检缺陷，保留原四文件/编号/交付审查历史，直接修复并复验。",
+      "previous_claimed_by": "cursor-mcp-415ed5783a554f4e",
+      "to_owner": "codex"
+    }
+  ],
+  "assignment_owner": "codex",
   "auto_dispatch": false,
   "auto_verify": false,
   "candidate": null,
   "checks": [
     "discover:pool-works/tests:test_guest_compile_image.py"
   ],
-  "claim_from_status": "todo",
-  "claim_token": "3504c8c3c21f426c901e5d6acd20cf82",
-  "claimed_at": "2026-10-20T05:40:39+00:00",
-  "claimed_by": "cursor-mcp-415ed5783a554f4e",
-  "completed_at": "2026-10-20T07:42:09+00:00",
+  "claim_from_status": "rework",
+  "claim_token": "ade500d740fe4664a349dc0f650d4ac8",
+  "claimed_at": "2026-10-20T08:27:36+00:00",
+  "claimed_by": "codex-mcp-d76b66689d824a70",
+  "completed_at": "2026-10-20T08:28:35+00:00",
   "complexity": "standard",
   "created_at": "2026-10-20T04:44:48+00:00",
   "delivery": "pool-works/deliveries/GUEST4.md",
@@ -19,15 +28,44 @@
   "document": "pool-works/tasks/GUEST4-board.md",
   "historical": false,
   "id": "pool:GUEST4",
+  "integration_note": "已逐字真实复制guest_compile_image.dg/.md至code/lang/bootstrap，永久测试仅SOURCE/build输出路径适配至code/lang/tests/test_bootstrap_guest_compile_image.py。主线完整6tests/0skip/673.778秒全部通过；正式749.438秒通过；生产SHA5d69356d09ba92336377888fcdc38becf5eeb83d4940546b76fc37c5796030e7保持，三文件清单code/build/test/guest-integration/GUEST4-files.json。沿用独立源码/契约/Graph/空alignment/真实ELF复审，登记组件真实主线集成，非完整L3。",
   "legacy_hash": "cdb89275000cf91010e36a39f0375ee341fbdb55b1714b4486ff27064b4055af",
   "number": "GUEST4",
-  "owner": "cursor",
-  "rev": 3,
-  "review_note": "",
-  "status": "submitted",
+  "owner": "codex",
+  "rev": 13,
+  "review_note": "R1由独立review_io源码/契约/永久测试复审，并用冻结debug/release对象自身alignment witness确认两空slice缺陷关闭；四正常方法独立复放含20预检、真实ELF验证及入口36全部通过。完整正式7c3f234b... 6tests/0skip/749.438秒/source_stable/已停止退出，指纹一致；实际Graph prefix/skip assembler/UNSUPPORTED-as-OK三坏体各双模式精确拒绝。并行编排独立读审确认无竞态/无弱化。报告reviews/2026-10-20-independent-io-review.md。准予组件验收，不等同客体L3或FLUSH重启验收。",
+  "status": "integrated",
   "title": "[L3] 将现有编译器文本输出接入原生汇编器",
-  "updated_at": "2026-10-20T07:42:09+00:00",
-  "verification": null,
+  "updated_at": "2026-10-20T08:58:19+00:00",
+  "verification": {
+    "checks": [
+      {
+        "cancelled": false,
+        "elapsed_seconds": 749.438,
+        "execution_exited": true,
+        "passed": true,
+        "process_stopped": true,
+        "returncode": 0,
+        "skips": 0,
+        "spec": "discover:pool-works/tests:test_guest_compile_image.py",
+        "tests": 6,
+        "timed_out": false
+      }
+    ],
+    "execution_exited": true,
+    "fingerprint": {
+      "pool-works/deliveries/GUEST4.md": "f694616c558c2041d687609f09ed2b744fbb21464b7f8de2b6740220f5509f36",
+      "pool-works/lang/bootstrap/guest_compile_image.dg": "5d69356d09ba92336377888fcdc38becf5eeb83d4940546b76fc37c5796030e7",
+      "pool-works/lang/bootstrap/guest_compile_image.md": "ad336fc5a8472fe8eff94793d8e1c98d020348fda3df7f517f72468db798f67d",
+      "pool-works/tests/test_guest_compile_image.py": "841f4200272041fd1e5916fa2f1263266ba9adead61a65152c458008ffb6a3d8"
+    },
+    "finished_at": "2026-10-20T08:41:25+00:00",
+    "job": "7c3f234b1ad04dd98c8782b22f9057b3",
+    "passed": true,
+    "process_stopped": true,
+    "source_stable": true,
+    "summary": "定向复验通过，等待源码/契约审查"
+  },
   "write_paths": [
     "pool-works/lang/bootstrap/guest_compile_image.dg",
     "pool-works/lang/bootstrap/guest_compile_image.md",

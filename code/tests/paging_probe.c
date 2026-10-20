@@ -156,7 +156,7 @@ static void basic_tests(void){
   if(badva[i]&~UINT64_C(4095))query_fail(&f,badva[i],E_INVALID);
  }
  FAIL_UNCHANGED(&f,pg_map(f.state.data,0x8000,1,1),E_INVALID);FAIL_UNCHANGED(&f,pg_map(f.state.data,0x8000,UINT64_C(1)<<52,1),E_INVALID);
- const uint64_t badflags[]={5,7,13,15,16,UINT64_MAX};for(size_t i=0;i<sizeof badflags/sizeof badflags[0];i++){
+ const uint64_t badflags[]={5,7,13,15,24,32,UINT64_MAX};for(size_t i=0;i<sizeof badflags/sizeof badflags[0];i++){
   FAIL_UNCHANGED(&f,pg_map(f.state.data,0x8000,same,badflags[i]),E_INVALID);FAIL_UNCHANGED(&f,pg_protect(f.state.data,0,badflags[i]),E_INVALID);
  }
  FAIL_UNCHANGED(&f,pg_map(f.state.data,UINT64_C(0xffff800000001000),same,2),E_INVALID);FAIL_UNCHANGED(&f,pg_protect(f.state.data,UINT64_C(0xffff800000000000),2),E_INVALID);
@@ -232,7 +232,8 @@ static void cache_tests(void){
  }
  FAIL_UNCHANGED(&f,pg_protect(f.state.data,va,13),E_INVALID);
  FAIL_UNCHANGED(&f,pg_protect(f.state.data,va,15),E_INVALID);
- FAIL_UNCHANGED(&f,pg_protect(f.state.data,va,16),E_INVALID);
+ FAIL_UNCHANGED(&f,pg_protect(f.state.data,va,24),E_INVALID); /* UC|WC */
+ FAIL_UNCHANGED(&f,pg_protect(f.state.data,va,32),E_INVALID);
  /* Both partial encodings are malformed, from either supported cache mode. */
  for(unsigned cached=0;cached<2;cached++){
   CHECK(pg_protect(f.state.data,va,cached?9:1)==0);uint64_t original=*path.entry[3];
@@ -240,7 +241,8 @@ static void cache_tests(void){
   for(size_t i=0;i<sizeof partial/sizeof partial[0];i++){
    *path.entry[3]=(original&~CACHE)|partial[i];malformed_failure(&f,va);*path.entry[3]=original;
   }
-  *path.entry[3]=original|128;malformed_failure(&f,va);*path.entry[3]=original;
+  /* PAT selector bit 7 is WC on its own; combined with UC it is malformed. */
+  if(cached){*path.entry[3]=original|128;malformed_failure(&f,va);*path.entry[3]=original;}
   mapping(&f,va,pa,cached?9:1);
  }
  CHECK(pg_unmap(f.state.data,va)==0);CHECK(used(&f)==1);
@@ -272,7 +274,7 @@ static void malformed_tests(void){
   f.meta.data[child]=0;malformed_failure(&f,0x1000);f.meta.data[child]=2;malformed_failure(&f,0x1000);f.meta.data[child]=1;
  }
  uint64_t original=*path.entry[3];
- uint64_t badleaf[]={original|128,original|512,original|PWT,original|PCD,original|(UINT64_C(1)<<52),original|(UINT64_C(1)<<62),original&~P,original&~NX,2};
+ uint64_t badleaf[]={original|128|PWT|PCD,original|512,original|PWT,original|PCD,original|(UINT64_C(1)<<52),original|(UINT64_C(1)<<62),original&~P,original&~NX,2};
  for(size_t i=0;i<sizeof badleaf/sizeof badleaf[0];i++){*path.entry[3]=badleaf[i];malformed_failure(&f,0x1000);*path.entry[3]=original;}
  f.meta.data[0]=0;malformed_failure(&f,0x1000);f.meta.data[0]=2;malformed_failure(&f,0x1000);f.meta.data[0]=1;
  mapping(&f,0x1000,0x100000000,1);destroy(&f);

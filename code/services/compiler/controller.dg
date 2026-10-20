@@ -1,0 +1,71 @@
+// Stable I/O controller. The independently loaded pure compiler gets no handles.
+module compiler.controller;
+import lib.sys as sys;
+import lib.files as files;
+import lib.compiler_artifact as artifact;
+import bootstrap.guest_artifact_commit as commit;
+const M:usize=1048576;
+const BAD:u64=0x0513_1001;
+var SESSION:files.Session=files.EMPTY;
+var SOURCE:[512*1024]u8=[0;512*1024];
+var IMAGE:[2*M]u8=[0;2*M];
+var OUTPUT:[2*M]u8=[0;2*M];
+struct Request{image:u64,image_bytes:u64,blob:u64,blob_bytes:u64,output:u64,result:u64}
+struct Result{status:u64,stage:u64,code:u64,detail:u64,written:u64,offset:u64,frontend:u64,retained:u64,backend:u64}
+var REQUEST:Request=Request{image:0,image_bytes:0,blob:0,blob_bytes:0,output:0,result:0};
+var RESULT:Result=Result{status:0,stage:0,code:0,detail:0,written:0,offset:0,frontend:0,retained:0,backend:0};
+var STATE:commit.State=commit.State{status:0,stage:0,code:0,written:0,total:0,attempts:0,stalls:0,flushes:0};
+var IO_ERROR:u64=0;
+var HEX:[18]u8=[0;18];
+fn text(s:[]const u8)void{let status=sys.log(s);return;}
+fn number(v:u64)void{unsafe{let digits="0123456789abcdef";HEX[0]=48;HEX[1]=120;var i:usize=0;while i<16{HEX[i+2]=digits[((v>>((15-i)*4))&15)as usize];i+=1;}text(HEX[..]);}return;}
+unsafe fn length(name:[]const u8,n:*usize)u64{unsafe{
+ var token:u64=0;let opened=files.open(&SESSION,SESSION.root,name,files.STAT,&token);if opened!=0{return opened;}
+ let checked=files.stat(&SESSION,token);if checked==0{*n=SESSION.response.words[2]as usize;}
+ let closed=files.close(&SESSION,token);if checked!=0{return checked;}return closed;
+}}
+unsafe fn read(name:[]const u8,out:[]u8,n:*usize)u64{unsafe{
+ var size:usize=0;let stat=length(name,&size);if stat!=0{return stat;}if size==0||size>out.len{return BAD;}
+ var token:u64=0;let opened=files.open(&SESSION,SESSION.root,name,files.READ,&token);if opened!=0{return opened;}
+ var at:usize=0;var status:u64=0;while at<size{
+  var count=size-at;if count>61440{count=61440;}
+  status=files.read(&SESSION,token,at as u64,count as u64);if status!=0{break;}
+  let moved=SESSION.response.words[1]as usize;if moved==0||moved>count{status=BAD;break;}
+  var i:usize=0;while i<moved{out[at+i]=*((SESSION.channel+4096)as *const u8+i);i+=1;}at+=moved;
+ }
+ if status==0{status=files.read(&SESSION,token,size as u64,1);if status==0&&SESSION.response.words[1]!=0{status=BAD;}}
+ let closed=files.close(&SESSION,token);if status!=0{return status;}if closed!=0{return closed;}*n=size;return 0;
+}}
+unsafe fn persist(name:[]const u8,bytes:[]const u8)u64{unsafe{
+ var token:u64=0;let opened=files.open(&SESSION,SESSION.root,name,files.WRITE|files.TRUNCATE,&token);if opened!=0{return opened;}
+ var status=files.truncate(&SESSION,token,0);
+ if status==0{status=artifact.store(&SESSION,token,bytes,&STATE,&IO_ERROR);if status==commit.COMMIT_DONE{status=0;}else if IO_ERROR!=0{status=IO_ERROR;}else{status=BAD;}}
+ let closed=files.close(&SESSION,token);if status!=0{return status;}return closed;
+}}
+unsafe fn run()u64{unsafe{
+ let boot=sys.boot();if boot==null||(*boot).filesystem==0||(*boot).reserved3!=0{return BAD;}
+ var status=files.init(&SESSION,(*boot).filesystem,(*boot).channel_address,files.ALL);if status!=0{return status;}
+ text("DONGOS_L3_READ SOURCES.BIN\r\n");
+ var bn:usize=0;status=read("SOURCES.BIN",SOURCE[..],&bn);if status!=0{return status;}
+ text("DONGOS_L3_SOURCE_READY ");number(bn as u64);text("\r\n");
+ var prior:usize=0;status=length("STAGE1.ELF",&prior);if status!=0{return status;}
+ var image_name:[]const u8="SEED.ELF";var output_name:[]const u8="STAGE1.ELF";
+ if prior!=0{image_name="STAGE1.ELF";output_name="STAGE2.ELF";}
+ text("DONGOS_L3_INPUT ");text(image_name);text("\r\n");
+ var en:usize=0;status=read(image_name,IMAGE[..],&en);if status!=0{return status;}
+ REQUEST=Request{image:&IMAGE[0]as u64,image_bytes:en as u64,blob:&SOURCE[0]as u64,blob_bytes:bn as u64,output:&OUTPUT[0]as u64,result:&RESULT as u64};
+ text("DONGOS_L3_RUN\r\n");status=sys.svc_call(0x8a,&REQUEST as u64,0,0,0,0,0);
+ if status!=0{return status;}
+ text("DONGOS_L3_RESULT ");number(RESULT.status);text(" ");number(RESULT.stage);text(" ");number(RESULT.code);text(" ");number(RESULT.detail);text("\r\n");
+ if RESULT.status!=0||RESULT.written<4096||RESULT.written>2*M{return BAD;}
+ if prior!=0{
+  if en!=RESULT.written as usize{return BAD;}var i:usize=0;while i<en{if IMAGE[i]!=OUTPUT[i]{return BAD;}i+=1;}
+  text("DONGOS_L3_EXACT_FIXEDPOINT\r\n");
+ }
+ status=persist(output_name,OUTPUT[0..RESULT.written as usize]);if status!=0{return status;}
+ text("DONGOS_L3_DURABLE ");text(output_name);text(" ");number(RESULT.written);text("\r\n");
+ text("DONGOS_L3_EXIT\r\n");return 0;
+}}
+export("service_main") fn main()u64{unsafe{
+ let status=run();if status!=0{text("DONGOS_L3_FAILED ");number(status);text("\r\n");}return status;
+}}

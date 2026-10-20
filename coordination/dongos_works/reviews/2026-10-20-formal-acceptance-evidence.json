@@ -1,0 +1,2594 @@
+{
+  "pool:GUEST2": {
+    "task": "pool:GUEST2",
+    "rev": 5,
+    "status": "accepted",
+    "verification": {
+      "passed": true,
+      "checks": [
+        {
+          "spec": "discover:pool-works/tests:test_guest_source_reader.py",
+          "passed": true,
+          "tests": 21,
+          "skips": 0,
+          "returncode": 0,
+          "cancelled": false,
+          "timed_out": false,
+          "process_stopped": true,
+          "execution_exited": true,
+          "elapsed_seconds": 92.433
+        }
+      ],
+      "process_stopped": true,
+      "execution_exited": true,
+      "source_stable": true,
+      "fingerprint": {
+        "pool-works/lang/bootstrap/guest_source_reader.dg": "131afe98052cd8c28ffbbb53b3c1ddadccb8f87196b4a4f9f2084240f7c93db4",
+        "pool-works/lang/bootstrap/guest_source_reader.md": "55a46f3b39f11ee5467a30ae10be3dfa0843bd4fafec544104997f4adb491cc5",
+        "pool-works/tests/test_guest_source_reader.py": "3b286a2c8823f1212357e50254a81e8a5d3d811c510c152bfb3487b5366bbb6c",
+        "pool-works/deliveries/GUEST2.md": "7f170a1915970ccae2b6d94db9d1c10a2dde7da1ec526b7b7df3d31aaa498ca8"
+      },
+      "summary": "定向复验通过，等待源码/契约审查",
+      "finished_at": "2026-10-20T05:59:56+00:00",
+      "job": "55ecdf4cea7f401c9627ac360d391648"
+    },
+    "summaries": [
+      {
+        "path": "D:\\projects\\projects3\\2026\\dongos\\coordination\\dongos_works\\.local\\runs\\55ecdf4cea7f401c9627ac360d391648\\workspace\\pool-works\\build\\GUEST2\\run-1f52964ff1ce\\summary.json",
+        "artifact_hashes_checked": 245,
+        "records": [
+          {
+            "test": "bad-publish-each-chunk",
+            "compiled": true,
+            "native_executed": true,
+            "modes": 2,
+            "rejected_by": "guard/atomicity"
+          },
+          {
+            "test": "bad-zero-probe",
+            "compiled": true,
+            "native_executed": true,
+            "modes": 2,
+            "rejected_by": "status"
+          },
+          {
+            "test": "bad-ignore-error",
+            "compiled": true,
+            "native_executed": true,
+            "modes": 2,
+            "rejected_by": "status"
+          },
+          {
+            "test": "bad-probe-phase",
+            "compiled": true,
+            "native_executed": true,
+            "modes": 2,
+            "rejected_by": "phase"
+          },
+          {
+            "test": "capacity-plus-one",
+            "cases": 1,
+            "modes": 2,
+            "passed": true
+          },
+          {
+            "test": "empty-file",
+            "cases": 3,
+            "modes": 2,
+            "passed": true
+          },
+          {
+            "test": "eof-at-start",
+            "cases": 1,
+            "modes": 2,
+            "passed": true
+          },
+          {
+            "test": "error-code-preserved",
+            "cases": 2,
+            "modes": 2,
+            "passed": true
+          },
+          {
+            "test": "exact-capacity",
+            "cases": 1,
+            "modes": 2,
+            "passed": true
+          },
+          {
+            "test": "far-over-capacity",
+            "cases": 1,
+            "modes": 2,
+            "passed": true
+          },
+          {
+            "test": "immediate-io",
+            "cases": 1,
+            "modes": 2,
+            "passed": true
+          },
+          {
+            "test": "max-source-exact",
+            "cases": 1,
+            "modes": 2,
+            "passed": true
+          },
+          {
+            "test": "max-source-over",
+            "cases": 1,
+            "modes": 2,
+            "passed": true
+          },
+          {
+            "test": "mid-read-io",
+            "cases": 1,
+            "modes": 2,
+            "passed": true
+          },
+          {
+            "test": "oversize-probe",
+            "cases": 1,
+            "modes": 2,
+            "passed": true
+          },
+          {
+            "test": "oversize-read",
+            "cases": 1,
+            "modes": 2,
+            "passed": true
+          },
+          {
+            "test": "probe-io",
+            "cases": 1,
+            "modes": 2,
+            "passed": true
+          },
+          {
+            "test": "repeat-deterministic",
+            "cases": 3,
+            "modes": 2,
+            "passed": true
+          },
+          {
+            "test": "byte-at-a-time",
+            "cases": 1,
+            "modes": 2,
+            "passed": true
+          },
+          {
+            "test": "byte-exact-capacity",
+            "cases": 1,
+            "modes": 2,
+            "passed": true
+          },
+          {
+            "test": "byte-over-capacity",
+            "cases": 1,
+            "modes": 2,
+            "passed": true
+          },
+          {
+            "test": "short-read-patterns",
+            "cases": 3,
+            "modes": 2,
+            "passed": true
+          },
+          {
+            "test": "small-file",
+            "cases": 4,
+            "modes": 2,
+            "passed": true
+          },
+          {
+            "test": "zero-capacity-output",
+            "cases": 2,
+            "modes": 2,
+            "passed": true
+          }
+        ],
+        "summary_sha256": "1cae87fe69bc7ec960a16f9a13bbca4ac74ecd7f3bfe17c690ae093f7fcbd570"
+      }
+    ]
+  },
+  "pool:GUEST3": {
+    "task": "pool:GUEST3",
+    "rev": 8,
+    "status": "accepted",
+    "verification": {
+      "passed": true,
+      "checks": [
+        {
+          "spec": "discover:pool-works/tests:test_guest_compile_memory.py",
+          "passed": true,
+          "tests": 13,
+          "skips": 0,
+          "returncode": 0,
+          "cancelled": false,
+          "timed_out": false,
+          "process_stopped": true,
+          "execution_exited": true,
+          "elapsed_seconds": 94.772
+        }
+      ],
+      "process_stopped": true,
+      "execution_exited": true,
+      "source_stable": true,
+      "fingerprint": {
+        "pool-works/lang/bootstrap/guest_compile_memory.dg": "0fea3cbb9e30ebbc9a51a0901d7517f47b713bd68380b9124066aaa25036831d",
+        "pool-works/lang/bootstrap/guest_compile_memory.md": "19d24177b05831071f37726cdec9e152c87cb096341b15c052b0b8d373974bda",
+        "pool-works/tests/test_guest_compile_memory.py": "61a024f9b031004b2b859eb6ca461dac918116fc17c52bd05d4ba020c6939475",
+        "pool-works/deliveries/GUEST3.md": "468cdab0e986d97587d0cdf73fea797133a90ab7448c64eb35dac05901e63029"
+      },
+      "summary": "定向复验通过，等待源码/契约审查",
+      "finished_at": "2026-10-20T06:01:50+00:00",
+      "job": "e8069a1bf067437b898b92c5c8e56514"
+    },
+    "summaries": [
+      {
+        "path": "D:\\projects\\projects3\\2026\\dongos\\coordination\\dongos_works\\.local\\runs\\e8069a1bf067437b898b92c5c8e56514\\workspace\\pool-works\\build\\GUEST3\\run-c6a431c44bb6\\summary.json",
+        "artifact_hashes_checked": 251,
+        "records": [
+          {
+            "test": "bad-reuse-live-graph",
+            "compiled": true,
+            "native_executed": true,
+            "modes": 2,
+            "rejected_by": "placement"
+          },
+          {
+            "test": "bad-exact-budget",
+            "compiled": true,
+            "native_executed": true,
+            "modes": 2,
+            "rejected_by": "status"
+          },
+          {
+            "test": "bad-ignore-alignment",
+            "compiled": true,
+            "native_executed": true,
+            "modes": 2,
+            "rejected_by": "placement"
+          },
+          {
+            "test": "bad-early-publish",
+            "compiled": true,
+            "native_executed": true,
+            "modes": 2,
+            "rejected_by": "guard/atomicity"
+          },
+          {
+            "test": "bad-result-on-failure",
+            "compiled": true,
+            "native_executed": true,
+            "modes": 2,
+            "rejected_by": "guard/atomicity"
+          },
+          {
+            "test": "bad-ignore-stack",
+            "compiled": true,
+            "native_executed": true,
+            "modes": 2,
+            "rejected_by": "status"
+          },
+          {
+            "test": "alignment-power-of-two",
+            "cases": 4,
+            "modes": 2,
+            "passed": true
+          },
+          {
+            "test": "capacity-out-tail",
+            "cases": 5,
+            "modes": 2,
+            "passed": true
+          },
+          {
+            "test": "coexisting-no-overlap",
+            "cases": 4,
+            "modes": 2,
+            "passed": true
+          },
+          {
+            "test": "exact-budget-one-byte-over",
+            "cases": 5,
+            "modes": 2,
+            "passed": true,
+            "memory_required": 54937688
+          },
+          {
+            "test": "invalid-contents-before-capacity",
+            "cases": 11,
+            "modes": 2,
+            "passed": true
+          },
+          {
+            "test": "max-64-deterministic",
+            "cases": 3,
+            "modes": 2,
+            "passed": true
+          },
+          {
+            "test": "overflow-saturation",
+            "cases": 5,
+            "modes": 2,
+            "passed": true
+          },
+          {
+            "test": "peak-vs-sum",
+            "cases": 2,
+            "modes": 2,
+            "passed": true
+          },
+          {
+            "test": "pipeline-exclusive-reuse",
+            "cases": 2,
+            "modes": 2,
+            "passed": true,
+            "arena": 54525952,
+            "peak": 54525952,
+            "sum": 73400443
+          },
+          {
+            "test": "readonly-inputs",
+            "cases": 4,
+            "modes": 2,
+            "passed": true
+          },
+          {
+            "test": "stack-separate-16k",
+            "cases": 5,
+            "modes": 2,
+            "passed": true
+          },
+          {
+            "test": "zero-length-empty",
+            "cases": 5,
+            "modes": 2,
+            "passed": true
+          }
+        ],
+        "summary_sha256": "d92572c2fbc2a93dcb4f0dbef87bdc5035ffde701bc03f432f07b1d08b5627f5"
+      }
+    ]
+  },
+  "claude:C52": {
+    "task": "claude:C52",
+    "rev": 17,
+    "status": "submitted",
+    "verification": {
+      "passed": true,
+      "checks": [
+        {
+          "spec": "discover:claude-works/tests:test_nasm_u64_module.py",
+          "passed": true,
+          "tests": 6,
+          "skips": 0,
+          "returncode": 0,
+          "cancelled": false,
+          "timed_out": false,
+          "process_stopped": true,
+          "execution_exited": true,
+          "elapsed_seconds": 207.66
+        }
+      ],
+      "process_stopped": true,
+      "execution_exited": true,
+      "source_stable": true,
+      "fingerprint": {
+        "claude-works/src/bootstrap/nasm_u64_module.dg": "3ef6b5598d30b5a82345f1cdb80b705bcf7e02c49cd8d11a7a5b9adc4e32d2f7",
+        "claude-works/src/bootstrap/nasm_u64_module.md": "fc43f2d553d3ed88ab0df65647a5405487fc9d01a57ecf0ee79a67f9da5ece0c",
+        "claude-works/tests/test_nasm_u64_module.py": "b63dba5d8c9159f4fe5a5a6ae970883ed23b62991e903c607938bc634a75e04b",
+        "claude-works/deliveries/C52.md": "d4db6be6c1b976115846f47efddcfc04213a150947e870e9ace35fc4cc2b555a"
+      },
+      "summary": "定向复验通过，等待源码/契约审查",
+      "finished_at": "2026-10-20T06:06:04+00:00",
+      "job": "72281b9c169340bd9124bf7eb7a7e7a1"
+    },
+    "summaries": [
+      {
+        "path": "D:\\projects\\projects3\\2026\\dongos\\coordination\\dongos_works\\.local\\runs\\72281b9c169340bd9124bf7eb7a7e7a1\\workspace\\claude-works\\build\\C52\\run-a233c9bb0067\\summary.json",
+        "artifact_hashes_checked": 713,
+        "records": [
+          {
+            "test": "bad-return-slot-swapped",
+            "compiled": true,
+            "linked": true,
+            "native_executed": true,
+            "modes": 2,
+            "rejected_by": "native rax"
+          },
+          {
+            "test": "bad-no-duplicate-check",
+            "compiled": true,
+            "native_executed": true,
+            "modes": 2,
+            "rejected_by": "status (not INVALID)"
+          },
+          {
+            "test": "bad-early-header-in-out",
+            "compiled": true,
+            "native_executed": true,
+            "modes": 2,
+            "rejected_by": "out/written atomicity guard"
+          },
+          {
+            "test": "bad-early-work-write",
+            "compiled": true,
+            "native_executed": true,
+            "modes": 2,
+            "rejected_by": "work dirty byte on WORKSPACE"
+          },
+          {
+            "test": "bad-rbx-clobbered",
+            "vectors": 13,
+            "compiled": true,
+            "linked": true,
+            "native_executed": true,
+            "modes": 2,
+            "rejected_by": "native rbx preserved (rax and rsp assertions passed first)"
+          },
+          {
+            "test": "bad-no-alias",
+            "compiled": true,
+            "native_executed": true,
+            "modes": 2,
+            "rejected_by": "preflights 13..18, 27..35"
+          },
+          {
+            "test": "native-module-link-and-call",
+            "modules": 4,
+            "vectors_per_mode": 13,
+            "modes": 2,
+            "formats": [
+              "elf64",
+              "win64"
+            ],
+            "nm_checked": true,
+            "exports": 16,
+            "passed": true
+          },
+          {
+            "test": "exact-text-priorities-work-out",
+            "modules": 4,
+            "cases_per_mode": 32,
+            "modes": 2,
+            "preflights_per_native": 36,
+            "passed": true
+          },
+          {
+            "test": "nested-prechecks-read-no-body-bytes",
+            "cases": 10,
+            "modes": 2,
+            "observation": "PAGE_GUARD per body page (POSIX: PROT_NONE + SIGSEGV)",
+            "passed": true
+          },
+          {
+            "test": "overlapping-duplicate-invalid",
+            "ok_cases": 5,
+            "invalid_cases": 36,
+            "modes": 2,
+            "passed": true
+          }
+        ],
+        "summary_sha256": "7644bfd6a7919de71d6cc9e9aec5b1c7c6676f82e48ea0b2cd4c550094df304a"
+      }
+    ]
+  },
+  "pool:MCPPOOL1": {
+    "task": "pool:MCPPOOL1",
+    "rev": 7,
+    "status": "accepted",
+    "verification": {
+      "passed": true,
+      "checks": [
+        {
+          "spec": "discover:pool-works/tests:test_mcp_pool.py",
+          "passed": true,
+          "tests": 6,
+          "skips": 0,
+          "returncode": 0,
+          "cancelled": false,
+          "timed_out": false,
+          "process_stopped": true,
+          "execution_exited": true,
+          "elapsed_seconds": 34.954
+        },
+        {
+          "spec": "discover:pool-works/tests:test_mcp_pool_config.py",
+          "passed": true,
+          "tests": 6,
+          "skips": 0,
+          "returncode": 0,
+          "cancelled": false,
+          "timed_out": false,
+          "process_stopped": true,
+          "execution_exited": true,
+          "elapsed_seconds": 3.116
+        }
+      ],
+      "process_stopped": true,
+      "execution_exited": true,
+      "source_stable": true,
+      "fingerprint": {
+        "pool-works/mcp-pool/dongos_coordination/mcp_server.py": "5417cb1321b84043a81b93589e1243b591044b93d21ca4169c01c6a5b4ca6a51",
+        "pool-works/mcp-pool/dongos_coordination/mcp_config.py": "a91518fed911f286db1b92e5087772513a18b0a411fa1f01bae51c5b176b3c8f",
+        "pool-works/tests/test_mcp_pool.py": "e488f4aff9a7fb071e1537d22504213f424688b77dfc73efc26589d865e7189d",
+        "pool-works/tests/test_mcp_pool_config.py": "017a28861507cb5cd594dff0c086405113b27da730da203251ddc77fdea3d021",
+        "pool-works/mcp-pool/dongos_coordination/docs/MCP.md": "32030a82a27295b282bbf6e02156f4cef881ec3d10e98592b90f171b71763c4d",
+        "pool-works/mcp-pool/README.md": "f58c9232ede99ff4065229288f4988fd628a927b20c9483c2b1ec9fbbcbbee42",
+        "pool-works/deliveries/MCPPOOL1.md": "6440bd6cde535a8d9c0f5c8f83496fdc21a047176325c32b3e5e6ed3e480e807"
+      },
+      "summary": "定向复验通过，等待源码/契约审查",
+      "finished_at": "2026-10-20T06:07:18+00:00",
+      "job": "46bf8df03c054df1a168546082a90e48"
+    },
+    "summaries": []
+  },
+  "cursor:CR40": {
+    "task": "cursor:CR40",
+    "rev": 22,
+    "status": "submitted",
+    "verification": {
+      "passed": true,
+      "checks": [
+        {
+          "spec": "discover:cursor-works/tests:test_nasm_pair_cleanup_function.py",
+          "passed": true,
+          "tests": 4,
+          "skips": 0,
+          "returncode": 0,
+          "cancelled": false,
+          "timed_out": false,
+          "process_stopped": true,
+          "execution_exited": true,
+          "elapsed_seconds": 221.623
+        }
+      ],
+      "process_stopped": true,
+      "execution_exited": true,
+      "source_stable": true,
+      "fingerprint": {
+        "cursor-works/src/bootstrap/nasm_pair_cleanup_function.dg": "22522c485b9650f59d05a6ae3a7237f706a06e3ac6199e55782e1d67b24f6e8e",
+        "cursor-works/src/bootstrap/nasm_pair_cleanup_function.md": "65d09a2ca8c5970277b1a4ae3e9d10df77d73e900d84e09d55eb606468ce56e4",
+        "cursor-works/tests/test_nasm_pair_cleanup_function.py": "2145159da40db85d4348c5b437bb8f2fbcac1a887c25e8ef7895f5a71255175e",
+        "cursor-works/deliveries/CR40.md": "bd84f24327466b7e2cd2043801b32e9e00078ea7340207c1ccac636043eaa47d"
+      },
+      "summary": "定向复验通过，等待源码/契约审查",
+      "finished_at": "2026-10-20T06:11:19+00:00",
+      "job": "0919979e89d041859d477e9a36491e01"
+    },
+    "summaries": [
+      {
+        "path": "D:\\projects\\projects3\\2026\\dongos\\coordination\\dongos_works\\.local\\runs\\0919979e89d041859d477e9a36491e01\\workspace\\cursor-works\\build\\CR40\\codex-fd3ccbc9ce034571be792df10d4b2c43\\summary.json",
+        "artifact_hashes_checked": 0,
+        "records": [
+          {
+            "native": "native-debug",
+            "normal_exit": true,
+            "observations": [
+              [
+                18446744073709551615,
+                9223372036854775808,
+                781860207328,
+                781860207328,
+                845282253045697467,
+                845282253045697467,
+                795741901218843403,
+                1302123111085380114,
+                1374463283923456787,
+                1446803456761533460,
+                1519143629599610133,
+                6674804268309651740,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
+              ],
+              [
+                18446744073709551614,
+                9223372036854775809,
+                781860207328,
+                781860207328,
+                845282253045697467,
+                845282253045697467,
+                795741901218843403,
+                1302123111085380114,
+                1374463283923456787,
+                1446803456761533460,
+                1519143629599610133,
+                6674804268309651740,
+                0,
+                1,
+                10,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                8,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
+              ],
+              [
+                18446744073709551613,
+                9223372036854775810,
+                781860207328,
+                781860207328,
+                845282253045697467,
+                845282253045697467,
+                795741901218843403,
+                1302123111085380114,
+                1374463283923456787,
+                1446803456761533460,
+                1519143629599610133,
+                6674804268309651740,
+                0,
+                2,
+                12,
+                11,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                8,
+                8,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
+              ],
+              [
+                18446744073709551612,
+                9223372036854775811,
+                781860207328,
+                781860207328,
+                845282253045697467,
+                845282253045697467,
+                795741901218843403,
+                1302123111085380114,
+                1374463283923456787,
+                1446803456761533460,
+                1519143629599610133,
+                6674804268309651740,
+                0,
+                6,
+                6,
+                5,
+                4,
+                3,
+                2,
+                1,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                8,
+                8,
+                8,
+                8,
+                8,
+                8,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
+              ],
+              [
+                18446744073709551611,
+                9223372036854775812,
+                781860207328,
+                781860207328,
+                845282253045697467,
+                845282253045697467,
+                795741901218843403,
+                1302123111085380114,
+                1374463283923456787,
+                1446803456761533460,
+                1519143629599610133,
+                6674804268309651740,
+                0,
+                2,
+                22,
+                21,
+                4,
+                3,
+                2,
+                1,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                8,
+                8,
+                8,
+                8,
+                8,
+                8,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
+              ],
+              [
+                18446744073709551610,
+                9223372036854775813,
+                781860207328,
+                781860207328,
+                845282253045697467,
+                845282253045697467,
+                795741901218843403,
+                1302123111085380114,
+                1374463283923456787,
+                1446803456761533460,
+                1519143629599610133,
+                6674804268309651740,
+                0,
+                3,
+                8,
+                7,
+                7,
+                3,
+                2,
+                1,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                8,
+                8,
+                8,
+                8,
+                8,
+                8,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
+              ],
+              [
+                18446744073709551609,
+                9223372036854775814,
+                781860207328,
+                781860207328,
+                845282253045697467,
+                845282253045697467,
+                795741901218843403,
+                1302123111085380114,
+                1374463283923456787,
+                1446803456761533460,
+                1519143629599610133,
+                6674804268309651740,
+                0,
+                16,
+                115,
+                114,
+                113,
+                112,
+                111,
+                110,
+                109,
+                108,
+                107,
+                106,
+                105,
+                104,
+                103,
+                102,
+                101,
+                100,
+                8,
+                8,
+                8,
+                8,
+                8,
+                8,
+                8,
+                8,
+                8,
+                8,
+                8,
+                8,
+                8,
+                8,
+                8,
+                8
+              ],
+              [
+                18446744073709551608,
+                9223372036854775815,
+                781860207328,
+                781860207328,
+                845282253045697467,
+                845282253045697467,
+                795741901218843403,
+                1302123111085380114,
+                1374463283923456787,
+                1446803456761533460,
+                1519143629599610133,
+                6674804268309651740,
+                0,
+                2,
+                10000000000000000000,
+                18446744073709551614,
+                113,
+                112,
+                111,
+                110,
+                109,
+                108,
+                107,
+                106,
+                105,
+                104,
+                103,
+                102,
+                101,
+                100,
+                8,
+                8,
+                8,
+                8,
+                8,
+                8,
+                8,
+                8,
+                8,
+                8,
+                8,
+                8,
+                8,
+                8,
+                8,
+                8
+              ]
+            ],
+            "expected": [
+              [
+                [
+                  18446744073709551615,
+                  9223372036854775808
+                ],
+                []
+              ],
+              [
+                [
+                  18446744073709551614,
+                  9223372036854775809
+                ],
+                [
+                  10
+                ]
+              ],
+              [
+                [
+                  18446744073709551613,
+                  9223372036854775810
+                ],
+                [
+                  12,
+                  11
+                ]
+              ],
+              [
+                [
+                  18446744073709551612,
+                  9223372036854775811
+                ],
+                [
+                  6,
+                  5,
+                  4,
+                  3,
+                  2,
+                  1
+                ]
+              ],
+              [
+                [
+                  18446744073709551611,
+                  9223372036854775812
+                ],
+                [
+                  22,
+                  21
+                ]
+              ],
+              [
+                [
+                  18446744073709551610,
+                  9223372036854775813
+                ],
+                [
+                  8,
+                  7,
+                  7
+                ]
+              ],
+              [
+                [
+                  18446744073709551609,
+                  9223372036854775814
+                ],
+                [
+                  115,
+                  114,
+                  113,
+                  112,
+                  111,
+                  110,
+                  109,
+                  108,
+                  107,
+                  106,
+                  105,
+                  104,
+                  103,
+                  102,
+                  101,
+                  100
+                ]
+              ],
+              [
+                [
+                  18446744073709551608,
+                  9223372036854775815
+                ],
+                [
+                  10000000000000000000,
+                  18446744073709551614
+                ]
+              ]
+            ]
+          },
+          {
+            "native": "native-release",
+            "normal_exit": true,
+            "observations": [
+              [
+                18446744073709551615,
+                9223372036854775808,
+                626461243520,
+                626461243520,
+                845282253045697467,
+                845282253045697467,
+                795741901218843403,
+                1302123111085380114,
+                1374463283923456787,
+                1446803456761533460,
+                1519143629599610133,
+                6674804268309651740,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
+              ],
+              [
+                18446744073709551614,
+                9223372036854775809,
+                626461243520,
+                626461243520,
+                845282253045697467,
+                845282253045697467,
+                795741901218843403,
+                1302123111085380114,
+                1374463283923456787,
+                1446803456761533460,
+                1519143629599610133,
+                6674804268309651740,
+                0,
+                1,
+                10,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                8,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
+              ],
+              [
+                18446744073709551613,
+                9223372036854775810,
+                626461243520,
+                626461243520,
+                845282253045697467,
+                845282253045697467,
+                795741901218843403,
+                1302123111085380114,
+                1374463283923456787,
+                1446803456761533460,
+                1519143629599610133,
+                6674804268309651740,
+                0,
+                2,
+                12,
+                11,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                8,
+                8,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
+              ],
+              [
+                18446744073709551612,
+                9223372036854775811,
+                626461243520,
+                626461243520,
+                845282253045697467,
+                845282253045697467,
+                795741901218843403,
+                1302123111085380114,
+                1374463283923456787,
+                1446803456761533460,
+                1519143629599610133,
+                6674804268309651740,
+                0,
+                6,
+                6,
+                5,
+                4,
+                3,
+                2,
+                1,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                8,
+                8,
+                8,
+                8,
+                8,
+                8,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
+              ],
+              [
+                18446744073709551611,
+                9223372036854775812,
+                626461243520,
+                626461243520,
+                845282253045697467,
+                845282253045697467,
+                795741901218843403,
+                1302123111085380114,
+                1374463283923456787,
+                1446803456761533460,
+                1519143629599610133,
+                6674804268309651740,
+                0,
+                2,
+                22,
+                21,
+                4,
+                3,
+                2,
+                1,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                8,
+                8,
+                8,
+                8,
+                8,
+                8,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
+              ],
+              [
+                18446744073709551610,
+                9223372036854775813,
+                626461243520,
+                626461243520,
+                845282253045697467,
+                845282253045697467,
+                795741901218843403,
+                1302123111085380114,
+                1374463283923456787,
+                1446803456761533460,
+                1519143629599610133,
+                6674804268309651740,
+                0,
+                3,
+                8,
+                7,
+                7,
+                3,
+                2,
+                1,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                8,
+                8,
+                8,
+                8,
+                8,
+                8,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
+              ],
+              [
+                18446744073709551609,
+                9223372036854775814,
+                626461243520,
+                626461243520,
+                845282253045697467,
+                845282253045697467,
+                795741901218843403,
+                1302123111085380114,
+                1374463283923456787,
+                1446803456761533460,
+                1519143629599610133,
+                6674804268309651740,
+                0,
+                16,
+                115,
+                114,
+                113,
+                112,
+                111,
+                110,
+                109,
+                108,
+                107,
+                106,
+                105,
+                104,
+                103,
+                102,
+                101,
+                100,
+                8,
+                8,
+                8,
+                8,
+                8,
+                8,
+                8,
+                8,
+                8,
+                8,
+                8,
+                8,
+                8,
+                8,
+                8,
+                8
+              ],
+              [
+                18446744073709551608,
+                9223372036854775815,
+                626461243520,
+                626461243520,
+                845282253045697467,
+                845282253045697467,
+                795741901218843403,
+                1302123111085380114,
+                1374463283923456787,
+                1446803456761533460,
+                1519143629599610133,
+                6674804268309651740,
+                0,
+                2,
+                10000000000000000000,
+                18446744073709551614,
+                113,
+                112,
+                111,
+                110,
+                109,
+                108,
+                107,
+                106,
+                105,
+                104,
+                103,
+                102,
+                101,
+                100,
+                8,
+                8,
+                8,
+                8,
+                8,
+                8,
+                8,
+                8,
+                8,
+                8,
+                8,
+                8,
+                8,
+                8,
+                8,
+                8
+              ]
+            ],
+            "expected": [
+              [
+                [
+                  18446744073709551615,
+                  9223372036854775808
+                ],
+                []
+              ],
+              [
+                [
+                  18446744073709551614,
+                  9223372036854775809
+                ],
+                [
+                  10
+                ]
+              ],
+              [
+                [
+                  18446744073709551613,
+                  9223372036854775810
+                ],
+                [
+                  12,
+                  11
+                ]
+              ],
+              [
+                [
+                  18446744073709551612,
+                  9223372036854775811
+                ],
+                [
+                  6,
+                  5,
+                  4,
+                  3,
+                  2,
+                  1
+                ]
+              ],
+              [
+                [
+                  18446744073709551611,
+                  9223372036854775812
+                ],
+                [
+                  22,
+                  21
+                ]
+              ],
+              [
+                [
+                  18446744073709551610,
+                  9223372036854775813
+                ],
+                [
+                  8,
+                  7,
+                  7
+                ]
+              ],
+              [
+                [
+                  18446744073709551609,
+                  9223372036854775814
+                ],
+                [
+                  115,
+                  114,
+                  113,
+                  112,
+                  111,
+                  110,
+                  109,
+                  108,
+                  107,
+                  106,
+                  105,
+                  104,
+                  103,
+                  102,
+                  101,
+                  100
+                ]
+              ],
+              [
+                [
+                  18446744073709551608,
+                  9223372036854775815
+                ],
+                [
+                  10000000000000000000,
+                  18446744073709551614
+                ]
+              ]
+            ]
+          },
+          {
+            "native": "bad-cleanup-rdx-good-debug",
+            "normal_exit": true,
+            "observations": [
+              [
+                18446744073709551613,
+                9223372036854775810,
+                448775846416,
+                448775846416,
+                845282253045697467,
+                845282253045697467,
+                795741901218843403,
+                1302123111085380114,
+                1374463283923456787,
+                1446803456761533460,
+                1519143629599610133,
+                6674804268309651740,
+                0,
+                2,
+                12,
+                11,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                8,
+                8,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
+              ]
+            ],
+            "expected": [
+              [
+                [
+                  18446744073709551613,
+                  9223372036854775810
+                ],
+                [
+                  12,
+                  11
+                ]
+              ]
+            ]
+          },
+          {
+            "native": "bad-cleanup-rdx-good-release",
+            "normal_exit": true,
+            "observations": [
+              [
+                18446744073709551613,
+                9223372036854775810,
+                218886042832,
+                218886042832,
+                845282253045697467,
+                845282253045697467,
+                795741901218843403,
+                1302123111085380114,
+                1374463283923456787,
+                1446803456761533460,
+                1519143629599610133,
+                6674804268309651740,
+                0,
+                2,
+                12,
+                11,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                8,
+                8,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
+              ]
+            ],
+            "expected": [
+              [
+                [
+                  18446744073709551613,
+                  9223372036854775810
+                ],
+                [
+                  12,
+                  11
+                ]
+              ]
+            ]
+          },
+          {
+            "native": "bad-cleanup-rdx-debug",
+            "normal_exit": true,
+            "observations": [
+              [
+                18446744073709551613,
+                17,
+                185295960592,
+                185295960592,
+                845282253045697467,
+                845282253045697467,
+                795741901218843403,
+                1302123111085380114,
+                1374463283923456787,
+                1446803456761533460,
+                1519143629599610133,
+                6674804268309651740,
+                0,
+                2,
+                12,
+                11,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                8,
+                8,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
+              ]
+            ],
+            "expected": [
+              [
+                [
+                  18446744073709551613,
+                  9223372036854775810
+                ],
+                [
+                  12,
+                  11
+                ]
+              ]
+            ]
+          },
+          {
+            "native": "bad-cleanup-rdx-release",
+            "normal_exit": true,
+            "observations": [
+              [
+                18446744073709551613,
+                17,
+                32627487984,
+                32627487984,
+                845282253045697467,
+                845282253045697467,
+                795741901218843403,
+                1302123111085380114,
+                1374463283923456787,
+                1446803456761533460,
+                1519143629599610133,
+                6674804268309651740,
+                0,
+                2,
+                12,
+                11,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                8,
+                8,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
+              ]
+            ],
+            "expected": [
+              [
+                [
+                  18446744073709551613,
+                  9223372036854775810
+                ],
+                [
+                  12,
+                  11
+                ]
+              ]
+            ]
+          },
+          {
+            "mutant": "bad-cleanup-rdx",
+            "compiled": true,
+            "normal_exit": true,
+            "rejected_by": "native value/status"
+          },
+          {
+            "native": "bad-cleanup-order-good-debug",
+            "normal_exit": true,
+            "observations": [
+              [
+                18446744073709551613,
+                9223372036854775810,
+                559515958192,
+                559515958192,
+                845282253045697467,
+                845282253045697467,
+                795741901218843403,
+                1302123111085380114,
+                1374463283923456787,
+                1446803456761533460,
+                1519143629599610133,
+                6674804268309651740,
+                0,
+                2,
+                12,
+                11,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                8,
+                8,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
+              ]
+            ],
+            "expected": [
+              [
+                [
+                  18446744073709551613,
+                  9223372036854775810
+                ],
+                [
+                  12,
+                  11
+                ]
+              ]
+            ]
+          },
+          {
+            "native": "bad-cleanup-order-good-release",
+            "normal_exit": true,
+            "observations": [
+              [
+                18446744073709551613,
+                9223372036854775810,
+                534163485728,
+                534163485728,
+                845282253045697467,
+                845282253045697467,
+                795741901218843403,
+                1302123111085380114,
+                1374463283923456787,
+                1446803456761533460,
+                1519143629599610133,
+                6674804268309651740,
+                0,
+                2,
+                12,
+                11,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                8,
+                8,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
+              ]
+            ],
+            "expected": [
+              [
+                [
+                  18446744073709551613,
+                  9223372036854775810
+                ],
+                [
+                  12,
+                  11
+                ]
+              ]
+            ]
+          },
+          {
+            "native": "bad-cleanup-order-debug",
+            "normal_exit": true,
+            "observations": [
+              [
+                18446744073709551613,
+                9223372036854775810,
+                657218075504,
+                657218075504,
+                845282253045697467,
+                845282253045697467,
+                795741901218843403,
+                1302123111085380114,
+                1374463283923456787,
+                1446803456761533460,
+                1519143629599610133,
+                6674804268309651740,
+                0,
+                2,
+                11,
+                12,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                8,
+                8,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
+              ]
+            ],
+            "expected": [
+              [
+                [
+                  18446744073709551613,
+                  9223372036854775810
+                ],
+                [
+                  12,
+                  11
+                ]
+              ]
+            ]
+          },
+          {
+            "native": "bad-cleanup-order-release",
+            "normal_exit": true,
+            "observations": [
+              [
+                18446744073709551613,
+                9223372036854775810,
+                248665602592,
+                248665602592,
+                845282253045697467,
+                845282253045697467,
+                795741901218843403,
+                1302123111085380114,
+                1374463283923456787,
+                1446803456761533460,
+                1519143629599610133,
+                6674804268309651740,
+                0,
+                2,
+                11,
+                12,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                8,
+                8,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
+              ]
+            ],
+            "expected": [
+              [
+                [
+                  18446744073709551613,
+                  9223372036854775810
+                ],
+                [
+                  12,
+                  11
+                ]
+              ]
+            ]
+          },
+          {
+            "mutant": "bad-cleanup-order",
+            "compiled": true,
+            "normal_exit": true,
+            "rejected_by": "call trace"
+          },
+          {
+            "mutant": "bad-capacity",
+            "compiled": true,
+            "normal_exit": true,
+            "rejected_by": "guard/atomicity"
+          },
+          {
+            "native": "rbx-good-debug",
+            "normal_exit": true,
+            "observations": [
+              [
+                18446744073709551613,
+                9223372036854775810,
+                816742136000,
+                816742136000,
+                845282253045697467,
+                845282253045697467,
+                795741901218843403,
+                1302123111085380114,
+                1374463283923456787,
+                1446803456761533460,
+                1519143629599610133,
+                6674804268309651740,
+                0,
+                2,
+                12,
+                11,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                8,
+                8,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
+              ]
+            ],
+            "expected": [
+              [
+                [
+                  18446744073709551613,
+                  9223372036854775810
+                ],
+                [
+                  12,
+                  11
+                ]
+              ]
+            ]
+          },
+          {
+            "native": "rbx-good-release",
+            "normal_exit": true,
+            "observations": [
+              [
+                18446744073709551613,
+                9223372036854775810,
+                781845527424,
+                781845527424,
+                845282253045697467,
+                845282253045697467,
+                795741901218843403,
+                1302123111085380114,
+                1374463283923456787,
+                1446803456761533460,
+                1519143629599610133,
+                6674804268309651740,
+                0,
+                2,
+                12,
+                11,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                8,
+                8,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
+              ]
+            ],
+            "expected": [
+              [
+                [
+                  18446744073709551613,
+                  9223372036854775810
+                ],
+                [
+                  12,
+                  11
+                ]
+              ]
+            ]
+          },
+          {
+            "native": "rbx-bad-debug-0",
+            "normal_exit": true,
+            "observations": [
+              [
+                18446744073709551613,
+                9223372036854775810,
+                990830917888,
+                990830917888,
+                845282253045697467,
+                845282253045697475,
+                795741901218843403,
+                1302123111085380114,
+                1374463283923456787,
+                1446803456761533460,
+                1519143629599610133,
+                6674804268309651740,
+                0,
+                2,
+                12,
+                11,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                8,
+                8,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
+              ]
+            ],
+            "expected": [
+              [
+                [
+                  18446744073709551613,
+                  9223372036854775810
+                ],
+                [
+                  12,
+                  11
+                ]
+              ]
+            ]
+          },
+          {
+            "native": "rbx-bad-release-0",
+            "normal_exit": true,
+            "observations": [
+              [
+                18446744073709551613,
+                9223372036854775810,
+                768553777936,
+                768553777936,
+                845282253045697467,
+                845282253045697475,
+                795741901218843403,
+                1302123111085380114,
+                1374463283923456787,
+                1446803456761533460,
+                1519143629599610133,
+                6674804268309651740,
+                0,
+                2,
+                12,
+                11,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                8,
+                8,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
+              ]
+            ],
+            "expected": [
+              [
+                [
+                  18446744073709551613,
+                  9223372036854775810
+                ],
+                [
+                  12,
+                  11
+                ]
+              ]
+            ]
+          },
+          {
+            "mutant": "bad-rbx",
+            "compiled": true,
+            "normal_exit": true,
+            "exits": 1,
+            "rejected_by": "callee-saved rbx"
+          }
+        ],
+        "summary_sha256": "4480e03d23dd7176d79865a0b7b1561eafac907656289f9dd4c2214f856828cb"
+      }
+    ]
+  },
+  "pool:GUEST1": {
+    "task": "pool:GUEST1",
+    "rev": 7,
+    "status": "submitted",
+    "verification": {
+      "passed": true,
+      "checks": [
+        {
+          "spec": "discover:pool-works/tests:test_guest_source_path.py",
+          "passed": true,
+          "tests": 19,
+          "skips": 0,
+          "returncode": 0,
+          "cancelled": false,
+          "timed_out": false,
+          "process_stopped": true,
+          "execution_exited": true,
+          "elapsed_seconds": 50.028
+        }
+      ],
+      "process_stopped": true,
+      "execution_exited": true,
+      "source_stable": true,
+      "fingerprint": {
+        "pool-works/lang/bootstrap/guest_source_path.dg": "80e046debce67153b7a655f7b7161985c99b9ce6e2cf318f7e3edfc5115044ee",
+        "pool-works/lang/bootstrap/guest_source_path.md": "319d28540ecf15a436110ae3860dfdc7cacd67450d8a3180c1e431dff99d171e",
+        "pool-works/tests/test_guest_source_path.py": "9cdeec44b23c8e5aee199374ca89fbfca770da11a6f50fd3d7e4d72f9403b466",
+        "pool-works/deliveries/GUEST1.md": "67c97ad430457270750bfc6f81fc481d2b3d772193a3fc36af2ff0246450ca4c"
+      },
+      "summary": "定向复验通过，等待源码/契约审查",
+      "finished_at": "2026-10-20T06:12:29+00:00",
+      "job": "60cfd4a66b364bd3885d847d2667e522"
+    },
+    "summaries": [
+      {
+        "path": "D:\\projects\\projects3\\2026\\dongos\\coordination\\dongos_works\\.local\\runs\\60cfd4a66b364bd3885d847d2667e522\\workspace\\pool-works\\build\\GUEST1\\run-d8ff23405971\\summary.json",
+        "artifact_hashes_checked": 266,
+        "records": [
+          {
+            "test": "absolute-empty-segments",
+            "cases": 10,
+            "modes": 2,
+            "passed": true
+          },
+          {
+            "test": "bad-accept-parent",
+            "compiled": true,
+            "native_executed": true,
+            "modes": 2,
+            "rejected_by": "status"
+          },
+          {
+            "test": "bad-accept-invalid-utf8",
+            "compiled": true,
+            "native_executed": true,
+            "modes": 2,
+            "rejected_by": "status"
+          },
+          {
+            "test": "bad-early-publish",
+            "compiled": true,
+            "native_executed": true,
+            "modes": 2,
+            "rejected_by": "guard/atomicity"
+          },
+          {
+            "test": "bad-truncate-capacity",
+            "compiled": true,
+            "native_executed": true,
+            "modes": 2,
+            "rejected_by": "guard/atomicity"
+          },
+          {
+            "test": "bad-reject-multibyte",
+            "compiled": true,
+            "native_executed": true,
+            "modes": 2,
+            "rejected_by": "status"
+          },
+          {
+            "test": "capacity-exact",
+            "cases": 5,
+            "modes": 2,
+            "passed": true
+          },
+          {
+            "test": "dot-segments",
+            "cases": 12,
+            "modes": 2,
+            "passed": true
+          },
+          {
+            "test": "drive-colon",
+            "cases": 7,
+            "modes": 2,
+            "passed": true
+          },
+          {
+            "test": "full-out-descriptor",
+            "cases": 4,
+            "modes": 2,
+            "compiled": true,
+            "native_executed": true,
+            "passed": true
+          },
+          {
+            "test": "invalid-before-capacity",
+            "cases": 4,
+            "modes": 2,
+            "passed": true
+          },
+          {
+            "test": "invalid-utf8",
+            "cases": 10,
+            "modes": 2,
+            "passed": true
+          },
+          {
+            "test": "nul-bytes",
+            "cases": 4,
+            "modes": 2,
+            "passed": true
+          },
+          {
+            "test": "output-canary-repeat",
+            "cases": 4,
+            "modes": 2,
+            "passed": true
+          },
+          {
+            "test": "bad-prefix-only",
+            "compiled": true,
+            "native_executed": true,
+            "modes": 2,
+            "rejected": {
+              "debug": {
+                "written-tail": 1,
+                "path-tail": 1,
+                "endpoint-wrap": 1
+              },
+              "release": {
+                "written-tail": 1,
+                "path-tail": 1,
+                "endpoint-wrap": 1
+              }
+            }
+          },
+          {
+            "test": "readonly-path-pages",
+            "cases": 5,
+            "modes": 2,
+            "passed": true
+          },
+          {
+            "test": "relative-paths-ascii",
+            "cases": 10,
+            "modes": 2,
+            "passed": true
+          },
+          {
+            "test": "reuses-mainline-strict-utf8",
+            "contract": true,
+            "passed": true
+          },
+          {
+            "test": "root-identifiers",
+            "cases": 5,
+            "modes": 2,
+            "passed": true
+          },
+          {
+            "test": "same-prefix-sibling",
+            "cases": 9,
+            "modes": 2,
+            "passed": true
+          },
+          {
+            "test": "segment-length-255",
+            "cases": 5,
+            "modes": 2,
+            "passed": true
+          },
+          {
+            "test": "total-length-4096",
+            "cases": 4,
+            "modes": 2,
+            "passed": true
+          },
+          {
+            "test": "utf8-names-multibyte",
+            "cases": 6,
+            "modes": 2,
+            "passed": true
+          }
+        ],
+        "summary_sha256": "22886c07dcddd88a01fa6de2179c8f9446b426978ea16927f4fa584d237d98b6"
+      }
+    ]
+  },
+  "pool:WINVERIFY1": {
+    "task": "pool:WINVERIFY1",
+    "rev": 7,
+    "status": "submitted",
+    "verification": {
+      "passed": true,
+      "checks": [
+        {
+          "spec": "discover:pool-works/tests:test_windows_verification_finish.py",
+          "passed": true,
+          "tests": 11,
+          "skips": 0,
+          "returncode": 0,
+          "cancelled": false,
+          "timed_out": false,
+          "process_stopped": true,
+          "execution_exited": true,
+          "elapsed_seconds": 48.706
+        }
+      ],
+      "process_stopped": true,
+      "execution_exited": true,
+      "source_stable": true,
+      "fingerprint": {
+        "pool-works/win-verify/dongos_coordination/runner.py": "40504e6f0ca2beca2d6e1a08b9c91735d978529854c575f3a4590cc325b08abe",
+        "pool-works/tests/test_windows_verification_finish.py": "6d756663e59ea4cb0a1cfd21b55372cebefc2bb61d7b3da422fc3a37a310fca1",
+        "pool-works/deliveries/WINVERIFY1.md": "32fec1d934155889d1f6013b12b8fe4304410f0f49f991856376191a951c0314"
+      },
+      "summary": "定向复验通过，等待源码/契约审查",
+      "finished_at": "2026-10-20T06:15:12+00:00",
+      "job": "c0f8c5285d28423e80eafea8e049c648"
+    },
+    "summaries": []
+  }
+}

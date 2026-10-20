@@ -96,3 +96,49 @@ GUEST4 实现完成并已本机真实编译执行定向测试。
 结果：5 tests / 0 fail / 0 skip，2459.350s。证据 pool-works/build/GUEST4/run-c7c86d48738b/。覆盖 debug/release、真实 frontend 构图（局部/分支循环/跨函数）、ELF validate + 宿主 SysV 调用返回 36、发射/汇编/容量失败原子性、18 预检、两个真实坏 Dong 负控（跳过汇编伪造 ELF、UNSUPPORTED 当 OK）。
 
 未改正式协调/内核/既有编译器模块；未运行 OS/VM；未自行验收或集成。
+
+## R1 Codex repair
+
+Independent review proved Graph.arena/Source array/path/source bytes could
+overlap mutable buffers, and empty labels/table slices bypassed alignment
+checks before driver mutation. Added complete read-only graph-region preflight
+against all mutable regions, source descriptor bounds/alignment and unconditional
+labels/table alignment consistent with native_assembler.valid.
+
+Targeted new permanent test completed: 1 test, 0 skips, 1236.420 seconds,
+pool-works/build/GUEST4/run-eb92f16f510d, source stable. Includes 11 readonly
+graph alias regions, two empty-slice alignment failures, unchanged graph/source
+and working buffers, legitimate unsupported control, actual bad graph-preflight
+implementation rejected in both modes, then legitimate frontend→ELF control.
+The normal preflight suite is now 20 checks. NASM uses -O0 in both formats.
+
+Independent review_io rebuilt/replayed own alignment witnesses on stable new
+debug/release objects and independently replayed four normal test methods in
+both modes, including ELF validation and entry return36. No new blockers.
+Report reviews/2026-10-20-independent-io-review.md; evidence under
+code/build/test/independent-io/image-cases and alignment-r1-*.
+
+Full six-test formal isolated verification still required. Initial worker's
+five-test receipt describes the old version and is not reused as R1 full-suite
+evidence. No guest launch, disk FLUSH or L3 completion claim.
+
+### Verification scheduling correction
+
+The first R1 formal job was explicitly cancelled after 495.648 seconds when
+the complete serial build schedule was found to exceed the coordinator's
+1800-second job limit. Cancellation is confirmed process_stopped/source_stable,
+0 tests completed; this is not passing evidence. Only test orchestration changed:
+debug/release builds and their two object formats now run in bounded thread
+pools with separate filenames. Every previous execution, negative control and
+assertion remains. Production .dg/.md is unchanged. A fresh full formal run is
+required; the original 1236.420-second targeted receipt remains historical.
+
+
+## AI交付 2026-10-20T08:18:11+00:00 · codex-mcp-d76b66689d824a70
+
+R1修复完整Graph/Source/path/bytes只读区域别名预检及零长labels/table无条件对齐；新增永久Graph真实坏体测试，目标1test/0skip/1236.420秒稳定通过。独立review_io两模式自身探针和四正常方法(含ELF/返回36)通过。交付已追加历史；需全6test正式隔离，旧5test不冒充R1完整证明。
+
+
+## AI交付 2026-10-20T08:28:35+00:00 · codex-mcp-d76b66689d824a70
+
+仅优化正式测试独立构建并行调度及文件隔离，生产实现不变、全部断言/坏体/两模式/两格式保留。上轮正式取消或复制失败均未通过；已确认停止，不据此验收。永久测试语法检查通过，新全套正式复验待运行，详见追加交付。

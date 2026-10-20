@@ -28,14 +28,15 @@
   "document": "pool-works/tasks/GUEST5-board.md",
   "historical": false,
   "id": "pool:GUEST5",
+  "integration_note": "已真实复制生产源码/接口说明至code/lang/bootstrap，永久测试适配至code/lang/tests/test_bootstrap_guest_artifact_commit.py。主线16 tests/0skip/108.351s全部通过；源码SHA0264475d...与已验收候选一致，清单code/build/test/guest-integration/GUEST5-files.json。沿用独立review_io及正式148.3秒稳定复验；仅组件集成，不声称真实DongOS FLUSH/重启或L3完成。",
   "legacy_hash": "6c1d72827a8c2092920475a8b96249b4ae6b53e7602cd4bd9ba0f08f12a9ccca",
   "number": "GUEST5",
   "owner": "codex",
-  "rev": 14,
-  "review_note": "R1旧PENDING_FLUSH未写满缺陷已修；正式隔离38dffc1e368b43f288d8eec1ba86a60a已16 tests/0skip/source_stable。但独立release安全原生探针发现计数器不变量仍漏：init(total=4)，status=WRITING、written=0、stalls=0、attempts=UINT64_MAX，step接受并先attempts+=1回绕到0，正常执行write_at确认4字节，发布PENDING_FLUSH(written=4,total=4,attempts=0)；下一次step立刻INVALID且0flush，自己的输出不能继续。没有崩溃或构建失败，探针只链接未改生产的release Dong对象。违反文档每次非INVALID发布一致State/计数有界。请在回调/State写入前拒绝不可能或会溢出的attempts组合（按已写字节/零进展次数约束，注意边界算术自身不溢出）；其余status的计数关系同审，保证step成功后产出的状态可被下一step接受。新增安全永久边界与正控/坏体灵敏度，不能只改文本或放宽后继检查。证据reviews/2026-10-20-GUEST5-R1-counter.c与-counter-evidence.json，source SHA c9e839cf203cb2cda9c6bca75d67fdacce87d3bf40ebfacf2c0d814bb57ddba0。仅改原四文件，重新原编号提交，不验收集成。",
-  "status": "submitted",
+  "rev": 16,
+  "review_note": "R2由独立子代理review_io重新读审全部源码/契约/永久测试，并从当前SHA0264475d79e0b38cbef38bfe195c1e1f175ec1d3f95c9840b6181ac1c891dcf8重新独立编译debug/release，各10000条随机短写/零进展/负错/超长/FLUSH/终态无后续调用计划，通过逐step偏移/指针/计数核对，全部exit0。正式隔离10c71d602ff848a996219f1232bc87cc 16 tests/0skip/148.3秒/source_stable/退出并停止，当前交付指纹一致。报告reviews/2026-10-20-independent-io-review.md及code/build/test/independent-io/commit/evidence.json，旧回绕缺陷关闭。准予组件验收，尚未主线集成，非真实FLUSH/重启或完整L3验收。",
+  "status": "integrated",
   "title": "[L3] 编译产物写入与FLUSH确认的有界状态机",
-  "updated_at": "2026-10-20T07:29:58+00:00",
+  "updated_at": "2026-10-20T08:07:00+00:00",
   "verification": {
     "checks": [
       {

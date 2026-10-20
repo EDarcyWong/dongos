@@ -6,6 +6,7 @@ module bootstrap.guest_compile_image;
 import bootstrap.frontend as front;
 import bootstrap.compiler_driver as driver;
 import bootstrap.native_assembler as nasm;
+import bootstrap.modules as modules;
 pub const OK:u64=0;pub const INVALID:u64=1;pub const CAPACITY:u64=2;
 pub const UNSUPPORTED:u64=3;pub const FRAME:u64=4;pub const INTERNAL:u64=5;
 pub const SYNTAX:u64=3;pub const SYMBOL:u64=4;pub const RANGE:u64=5;
@@ -40,7 +41,7 @@ unsafe fn preflight(g:*const front.Graph,limits:*const driver.Limits,storage:[]u
  let wd=(*w).data.ptr as u64;let wdn=(*w).data.len as u64;
  if !span(sp,sn)||!span(tp,tn)||!span(ep,en)||!span(op,on){return false;}
  if !span(lab,labn)||!span(tab,tabn)||!span(wt,wtn)||!span(wd,wdn){return false;}
- if (labn!=0&&(lab&7)!=0)||(tabn!=0&&(tab&7)!=0){return false;}
+ if (lab&7)!=0||(tab&7)!=0{return false;}
  // Mutable regions (full capacities) must be pairwise disjoint and free of input aliases.
  let muts=[Region{p:sp,n:sn},Region{p:tp,n:tn},Region{p:op,n:on},Region{p:rp,n:RESULT_BYTES},
   Region{p:lab,n:labn},Region{p:tab,n:tabn},Region{p:wt,n:wtn},Region{p:wd,n:wdn}];
@@ -54,6 +55,28 @@ unsafe fn preflight(g:*const front.Graph,limits:*const driver.Limits,storage:[]u
   if !span(inputs[i].p,inputs[i].n){return false;}
   var k:usize=0;while k<muts.len{if overlap(muts[k].p,muts[k].n,inputs[i].p,inputs[i].n){return false;}k+=1;}
   i+=1;
+ }
+ // Graph is borrowed read-only through both stages, including its unused
+ // arena tail and source catalog. The assembler does not know this input,
+ // so its own preflight cannot establish these lifetime constraints for us.
+ if (*g).sources.len>MAX/sizeof(modules.Source){return false;}
+ let source_bytes=(*g).sources.len*sizeof(modules.Source);
+ if (source_bytes!=0&&((*g).sources.ptr as u64&7)!=0){return false;}
+ let graph_inputs=[Region{p:(*g).arena.ptr as u64,n:(*g).arena.len},
+  Region{p:(*g).sources.ptr as u64,n:source_bytes}];
+ i=0;while i<graph_inputs.len{
+  if !span(graph_inputs[i].p,graph_inputs[i].n){return false;}
+  var k:usize=0;while k<muts.len{
+   if overlap(muts[k].p,muts[k].n,graph_inputs[i].p,graph_inputs[i].n){return false;}k+=1;
+  }i+=1;
+ }
+ i=0;while i<(*g).sources.len{
+  let source=(*g).sources[i];
+  let parts=[Region{p:source.path.ptr as u64,n:source.path.len},Region{p:source.bytes.ptr as u64,n:source.bytes.len}];
+  var j:usize=0;while j<parts.len{
+   if !span(parts[j].p,parts[j].n){return false;}
+   var k:usize=0;while k<muts.len{if overlap(muts[k].p,muts[k].n,parts[j].p,parts[j].n){return false;}k+=1;}j+=1;
+  }i+=1;
  }
  return true;
 }}

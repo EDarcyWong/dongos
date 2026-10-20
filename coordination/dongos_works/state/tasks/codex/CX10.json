@@ -1,0 +1,94 @@
+{
+  "assignment_owner": "codex",
+  "auto_dispatch": false,
+  "auto_verify": false,
+  "candidate": null,
+  "checks": [
+    "module:tests.test_services_frame_reader",
+    "module:tests.test_user_address_spaces",
+    "module:tests.test_service_handoff"
+  ],
+  "claim_from_status": "todo",
+  "claim_token": "6569b20e5fac41448994e4bc4afb2727",
+  "claimed_at": "2026-10-20T08:42:39+00:00",
+  "claimed_by": "codex-mcp-d76b66689d824a70",
+  "completed_at": "2026-10-20T09:13:24+00:00",
+  "complexity": "standard",
+  "created_at": "2026-10-20T08:42:39+00:00",
+  "delivery": "codex-works/deliveries/CX10.md",
+  "depends_on": [],
+  "description": "替代未实施即归档的CX9错误检查名。真实QEMU P5装载失败0x04060002；ELF实测shell需551页，三服务共712页+12栈页，超过旧512帧表。把既有memory.enable_arena(16384)在所有P5服务首次装载前启用，GRAPHICS不重复启用；64MiB物理总预算与普通16KiB栈不扩大，不增权限。更新真实P5物理校验读取动态EXTENDED帧表并验证其来源/长度在原arena内，保持所有代码/页表/W^X/guard/IPC/实际FLUSH检查，真实同盘双启动复验。主线既有memory/address和service_handoff定向回归；新增物理读取器边界/伪造帧表/读前拒绝测试。独立审查源码/验收脚本/真实物理证据后方验收。",
+  "document": "codex-works/tasks/CX10-board.md",
+  "historical": false,
+  "id": "codex:CX10",
+  "integration_note": "声明主线文件均已真实落盘，逐项匹配正式最终指纹；主线执行与独立审查证据如验收note。组件集成完成，不将其等同完整L3客体自举。",
+  "legacy_hash": "b81825dd23ffc5f61ef5d96a5d3bb96063c06bac3d96cff6571692ed8d901b3e",
+  "number": "CX10",
+  "owner": "codex",
+  "rev": 6,
+  "review_note": "独立review_stack重放真实两启各241原始物理chunk完整verify及175编译输入/179源码SHA，实际磁盘两FAT/clean/精确payload；两个原始单字节坏体被准确拒绝。最终7tests0skip独立28.726s，正式7167三模块共10tests0skip稳定通过。已审查P5trace窄限定、64MiB原额度及动态表PTE来源，功能正确性压力范围明确。",
+  "status": "integrated",
+  "title": "[L3] P5服务启用既有64MiB共享帧表并保留物理验收",
+  "updated_at": "2026-10-20T09:19:15+00:00",
+  "verification": {
+    "checks": [
+      {
+        "cancelled": false,
+        "elapsed_seconds": 15.088,
+        "execution_exited": true,
+        "passed": true,
+        "process_stopped": true,
+        "returncode": 0,
+        "skips": 0,
+        "spec": "module:tests.test_services_frame_reader",
+        "tests": 7,
+        "timed_out": false
+      },
+      {
+        "cancelled": false,
+        "elapsed_seconds": 18.365,
+        "execution_exited": true,
+        "passed": true,
+        "process_stopped": true,
+        "returncode": 0,
+        "skips": 0,
+        "spec": "module:tests.test_user_address_spaces",
+        "tests": 1,
+        "timed_out": false
+      },
+      {
+        "cancelled": false,
+        "elapsed_seconds": 33.527,
+        "execution_exited": true,
+        "passed": true,
+        "process_stopped": true,
+        "returncode": 0,
+        "skips": 0,
+        "spec": "module:tests.test_service_handoff",
+        "tests": 2,
+        "timed_out": false
+      }
+    ],
+    "execution_exited": true,
+    "fingerprint": {
+      "codex-works/deliveries/CX10.md": "dfcebb3ccc22b440cbbad212e8fdc3fac1cccae8d24901decf705fc93643651d",
+      "docs/l3-p5-memory-profile.md": "9397c4ccc45785085d02b642cf796bc3c0ec1a5d2448899ff1cbb539074d8275",
+      "kernel/user/services.dg": "8e5f632b847aacc13b468619111369ab3f67ce86f8893c5a68e166c63380bcf5",
+      "tests/run_services_qemu.py": "a1f24281bc9e3f0534f8f465e79aaf515120e8c7c73a31f5bf3407c7076bfca1",
+      "tests/test_services_frame_reader.py": "44a389cd8fcd0df9446e20d1e2f8c07c9b064006a57b57e85baf847f517a9a4e"
+    },
+    "finished_at": "2026-10-20T09:17:08+00:00",
+    "job": "7167db6da57b434b853a6e02c6c51183",
+    "passed": true,
+    "process_stopped": true,
+    "source_stable": true,
+    "summary": "定向复验通过，等待源码/契约审查"
+  },
+  "write_paths": [
+    "kernel/user/services.dg",
+    "tests/run_services_qemu.py",
+    "tests/test_services_frame_reader.py",
+    "docs/l3-p5-memory-profile.md",
+    "codex-works/deliveries/CX10.md"
+  ]
+}

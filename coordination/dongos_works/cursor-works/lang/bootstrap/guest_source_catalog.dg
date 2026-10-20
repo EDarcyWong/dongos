@@ -1,0 +1,74 @@
+// Explicit authorized file list -> borrowed frontend catalog. No filesystem API.
+module bootstrap.guest_source_catalog;
+import bootstrap.modules as modules;
+import bootstrap.guest_source_path as gate;
+import bootstrap.guest_source_reader as reader;
+pub const OK:u64=0;pub const INVALID:u64=1;pub const CAPACITY:u64=2;pub const SOURCE:u64=3;
+pub const MAX_FILES:usize=256;
+const MAX:usize=0xffff_ffff_ffff_ffff;
+pub struct Input{pub root:usize,pub path:[]const u8,pub file:u64,pub capacity:usize}
+pub struct Workspace{pub scratch:[]u8,pub staged:[]u8,pub storage:[]u8,
+ pub sizes:[]usize,pub sources:[]modules.Source}
+pub struct Result{pub status:u64,pub index:usize,pub code:u64,pub detail:u64,
+ pub used:usize,pub count:usize,pub entry:usize}
+struct Region{p:u64,n:usize}
+fn span(p:u64,n:usize)bool{return n==0||(p!=0&&n<=MAX-p);}
+fn overlap(a:*const Region,b:*const Region)bool{unsafe{return (*a).n!=0&&(*b).n!=0&&(*a).p<(*b).p+(*b).n&&(*b).p<(*a).p+(*a).n;}}
+fn equal(a:[]const u8,b:[]const u8)bool{
+ if a.len!=b.len{return false;}var i:usize=0;while i<a.len{if a[i]!=b[i]{return false;}i+=1;}return true;
+}
+pub unsafe fn load(inputs:[]const Input,entry:usize,w:*const Workspace,read_at:reader.ReadAt,r:*Result)u64{unsafe{
+ if w==null||r==null||(w as u64&7)!=0||(r as u64&7)!=0
+  ||!span(w as u64,sizeof(Workspace))||!span(r as u64,sizeof(Result))
+  ||inputs.len==0||inputs.len>MAX_FILES||entry>=inputs.len
+  ||!span(inputs.ptr as u64,inputs.len*sizeof(Input))||(inputs.ptr as u64&7)!=0{return INVALID;}
+ if (*w).sizes.len>MAX/8||(*w).sources.len>MAX/sizeof(modules.Source){return INVALID;}
+ let immutable=[Region{p:w as u64,n:sizeof(Workspace)},Region{p:inputs.ptr as u64,n:inputs.len*sizeof(Input)}];
+ let mutable=[Region{p:(*w).scratch.ptr as u64,n:(*w).scratch.len},
+  Region{p:(*w).staged.ptr as u64,n:(*w).staged.len},Region{p:(*w).storage.ptr as u64,n:(*w).storage.len},
+  Region{p:(*w).sizes.ptr as u64,n:(*w).sizes.len*8},Region{p:(*w).sources.ptr as u64,n:(*w).sources.len*sizeof(modules.Source)},
+  Region{p:r as u64,n:sizeof(Result)}];
+ if ((*w).sizes.len!=0&&((*w).sizes.ptr as u64&7)!=0)||((*w).sources.len!=0&&((*w).sources.ptr as u64&7)!=0){return INVALID;}
+ var i:usize=0;while i<mutable.len{
+  if !span(mutable[i].p,mutable[i].n){return INVALID;}
+  var j:usize=0;while j<immutable.len{if overlap(&mutable[i],&immutable[j]){return INVALID;}j+=1;}
+  j=0;while j<i{if overlap(&mutable[i],&mutable[j]){return INVALID;}j+=1;}i+=1;
+ }
+ var required:usize=0;var largest:usize=0;
+ i=0;while i<inputs.len{
+  let item=inputs[i];let path=Region{p:item.path.ptr as u64,n:item.path.len};
+  if item.root>=gate.ROOT_LIMIT||!span(path.p,path.n)||!gate.lexical(item.path)||item.path.len<4
+   ||item.path[item.path.len-3]!=46||item.path[item.path.len-2]!=100||item.path[item.path.len-1]!=103
+   ||item.capacity>reader.MAX_SOURCE{return INVALID;}
+  var j:usize=0;while j<mutable.len{if overlap(&path,&mutable[j]){return INVALID;}j+=1;}
+  j=0;while j<i{if inputs[j].root==item.root&&equal(inputs[j].path,item.path){return INVALID;}j+=1;}
+  if item.path.len>MAX-required{return INVALID;}required+=item.path.len;
+  if item.capacity>MAX-required{return INVALID;}required+=item.capacity;
+  if item.capacity>largest{largest=item.capacity;}i+=1;
+ }
+ if (*w).scratch.len>reader.MAX_SOURCE+1{return INVALID;}
+ if (*w).scratch.len<=largest||(*w).sizes.len<inputs.len||(*w).sources.len<inputs.len
+  ||(*w).staged.len<required||(*w).storage.len<required{return CAPACITY;}
+ // Stage complete files at reserved offsets. Final bytes/table remain intact.
+ var offset:usize=0;i=0;
+ while i<inputs.len{
+  let item=inputs[i];var j:usize=0;while j<item.path.len{(*w).staged[offset+j]=item.path[j];j+=1;}
+  offset+=item.path.len;
+  var rr=reader.EMPTY;
+  let status=reader.load(item.file,read_at,(*w).scratch,(*w).staged[offset..offset+item.capacity],&rr);
+  if status!=reader.OK{
+   *r=Result{status:SOURCE,index:i,code:status,detail:rr.code,used:0,count:0,entry:entry};return SOURCE;
+  }
+  (*w).sizes[i]=rr.size;offset+=item.capacity;i+=1;
+ }
+ // One publication phase, compacting away the unused per-file capacities.
+ offset=0;var used:usize=0;i=0;
+ while i<inputs.len{
+  let item=inputs[i];let n=item.path.len+(*w).sizes[i];
+  var j:usize=0;while j<n{(*w).storage[used+j]=(*w).staged[offset+j];j+=1;}
+  (*w).sources[i]=modules.Source{root:item.root,path:(*w).storage[used..used+item.path.len],
+   bytes:(*w).storage[used+item.path.len..used+n]};
+  used+=n;offset+=item.path.len+item.capacity;i+=1;
+ }
+ *r=Result{status:OK,index:MAX,code:0,detail:0,used:used,count:inputs.len,entry:entry};return OK;
+}}

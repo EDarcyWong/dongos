@@ -1,0 +1,63 @@
+{
+  "assignment_owner": "codex",
+  "auto_dispatch": false,
+  "auto_verify": false,
+  "candidate": null,
+  "checks": [
+    "module:lang.tests.test_bootstrap_compiler_job"
+  ],
+  "claim_from_status": "todo",
+  "claim_token": "4d0cdee2f7274ce0a345a9ce97747f1f",
+  "claimed_at": "2026-10-20T10:05:52+00:00",
+  "claimed_by": "codex-mcp-d76b66689d824a70",
+  "completed_at": "2026-10-20T10:06:31+00:00",
+  "complexity": "standard",
+  "created_at": "2026-10-20T10:05:51+00:00",
+  "delivery": "codex-works/deliveries/CX15.md",
+  "depends_on": [],
+  "description": "复核发现tools/compiler_job.py虽然有POSIX guarded mmap路径，但Linux -no-pie宿主默认占用0x400000，与待装载静态ELF冲突，且uint64_t在LP64是unsigned long而现有printf用%llu。仅将非Windows宿主测试exe链接到0x10000000并保留-no-pie，C夹具U明确unsigned long long/64bit ABI，不改Dong核心、guest ELF地址、64MiB预算或测试oracle。复用完整双模式双格式固定点定向测试，独立审查。当前Windows能实际复验；无Linux运行环境则明确未实际Linux执行，不编造跨平台通过。",
+  "document": "codex-works/tasks/CX15-board.md",
+  "historical": false,
+  "id": "codex:CX15",
+  "legacy_hash": "c1d2a8a07e991011bd56fb3a6fb64a0d3bf3af970db8201b8703f0aac8819e7e",
+  "number": "CX15",
+  "owner": "codex",
+  "rev": 4,
+  "review_note": "",
+  "status": "submitted",
+  "title": "[L3] 修正编译作业宿主验证器的Linux布局与u64格式兼容",
+  "updated_at": "2026-10-20T10:12:52+00:00",
+  "verification": {
+    "checks": [
+      {
+        "cancelled": false,
+        "elapsed_seconds": 358.667,
+        "execution_exited": true,
+        "passed": true,
+        "process_stopped": true,
+        "returncode": 0,
+        "skips": 0,
+        "spec": "module:lang.tests.test_bootstrap_compiler_job",
+        "tests": 1,
+        "timed_out": false
+      }
+    ],
+    "execution_exited": true,
+    "fingerprint": {
+      "codex-works/deliveries/CX15.md": "3d1b7e1460f819ff44aca949a95bd74967bcb29c6b23a1bc6a6f76bfb96ce7d6",
+      "docs/l3-compiler-job-host.md": "c18891fc8adee492e7db0270048d94b88df4c88e2637df49051d3d47c04cdd6a",
+      "tools/compiler_job.py": "4490cacbd83987f1472abe8d84069258649fec4d92644f2f56a180260d944e60"
+    },
+    "finished_at": "2026-10-20T10:12:52+00:00",
+    "job": "ccb0e44cff144b4d9da302e0a34b3fcd",
+    "passed": true,
+    "process_stopped": true,
+    "source_stable": true,
+    "summary": "定向复验通过，等待源码/契约审查"
+  },
+  "write_paths": [
+    "tools/compiler_job.py",
+    "docs/l3-compiler-job-host.md",
+    "codex-works/deliveries/CX15.md"
+  ]
+}

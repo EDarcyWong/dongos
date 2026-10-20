@@ -5,6 +5,7 @@ import user.abi as abi;
 import boot.trace as trace;
 import boot.trace_runtime as boot_trace;
 import user.memory as memory;
+import user.compiler_job as compiler_job;
 import user.devices as devices;
 import ipc.handles as handles;
 import ipc.core as ipc;
@@ -39,6 +40,7 @@ pub error UserFailure=0x050b_0003;
 const COUNT: usize=16;
 var ACTIVE: usize=3;
 var GRAPHICS: bool=false;
+var COMPILER:bool=false;
 const NONE: usize=memory.LIMIT;
 const BOOT_ADDRESS: u64=0x7000_0000;
 pub struct Report {
@@ -125,7 +127,7 @@ unsafe fn install_identity(id:usize,cfg:usize,generation:u64,argument:u64)!void{
     }
     if id==0{
         BOOTS[id].console=try handles.install(&STATES[id].table,handles.CONSOLE,devices.CONSOLE_OBJECT,handles.READ|handles.WRITE);
-        BOOTS[id].reserved3=try handles.install(&STATES[id].table,handles.DEVICE,power.POWER_OBJECT,handles.WRITE);
+        if !COMPILER{BOOTS[id].reserved3=try handles.install(&STATES[id].table,handles.DEVICE,power.POWER_OBJECT,handles.WRITE);}
         if GRAPHICS{try BOOTs_manager(id);BOOTS[id].reserved1=procs.CONFIGS as u64;}
     }
     if id==1{BOOTS[id].block=try handles.install(&STATES[id].table,handles.ENDPOINT,3,handles.CALL);}
@@ -200,8 +202,11 @@ pub unsafe fn prepare(kernel_physical:u64)!void{unsafe{
     var anchor=resources.Block{physical:0,virtual:0,pages:0};try resources.allocate(1,1,&anchor);
     try devices.initialize();try memory.initialize(kernel_physical);
     var clock=platform.EMPTY_REPORT;try platform.describe(&clock);if clock.tsc_hz==0{return error.Protocol;}CLOCK_HZ=clock.tsc_hz;
+    // All service profiles share the existing 16384-frame USER quota within
+    // the loader-held arena. The shell's
+    // current BSS already exceeds the old 512-frame diagnostic table alone.
+    try memory.enable_arena(16384);
     if GRAPHICS{
-        try memory.enable_arena(16384);
         var model=anchor;try resources.allocate((sizeof(procs.Catalog)+4095)/4096,1,&model);
         CATALOG=model.virtual as *procs.Catalog;try procs.initialize(CATALOG,CLOCK_HZ);boot_trace.configure((*CATALOG).count,0x3c000);try device_host.initialize();try shared.initialize();
     }
@@ -528,7 +533,14 @@ unsafe fn process_call(frame:*abi.Frame)!usize{unsafe{
         if managed(CURRENT){(*frame).rax=0;return CURRENT;}return try runnable();
     }
     if code==0x89{
-        if CATALOG==null||!managed(CURRENT)||(*frame).rsi!=0||(*frame).rdx!=0||(*frame).r10!=0||(*frame).r8!=0||(*frame).r9!=0{return error.Protocol;}
+        if (*frame).rsi!=0||(*frame).rdx!=0||(*frame).r10!=0||(*frame).r8!=0||(*frame).r9!=0{return error.Protocol;}
+        // P5's shell uses the same readiness diagnostic without a desktop
+        // trace/catalog. Accept only that exact mark; no timestamp is supplied.
+        if CATALOG==null{
+            if CURRENT!=0||(*frame).rdi!=1{return error.Protocol;}
+            (*frame).rax=0;return CURRENT;
+        }
+        if !managed(CURRENT){return error.Protocol;}
         let cfg=procs.current(CATALOG,CURRENT);
         if (cfg!=0||(*frame).rdi!=1)&&(cfg!=3||((*frame).rdi!=2&&(*frame).rdi!=3)){return error.Protocol;}
         (*frame).rax=boot_trace.mark(cfg,(*CATALOG).states[cfg as usize].generation,(*frame).rdi);return CURRENT;
@@ -829,6 +841,19 @@ unsafe fn capability_call(frame:*abi.Frame)!usize{unsafe{
 unsafe fn perform(frame:*abi.Frame)!usize {
     unsafe {
         let code=(*frame).rax; INFO.last_syscall=code; INFO.last_pid=CURRENT as u64+1;
+        if COMPILER&&CURRENT==compiler_job.SLOT{
+            if code!=0xff||!compiler_job.RUNNING{return error.Protocol;}
+            let finished=compiler_job.finish((*frame).rdi);match finished{ok=>{},err(e)=>{LAUNCH_FAILED=true;return error.Protocol;},}
+            STATES[0].waiting=0;(*process(0)).frame.rax=0;ACTIVE=3;return 0;
+        }
+        if code==0x8a{
+            if !COMPILER||GRAPHICS||CATALOG!=null||CURRENT!=0||ACTIVE!=3
+                ||(*frame).rsi!=0||(*frame).rdx!=0||(*frame).r10!=0||(*frame).r8!=0||(*frame).r9!=0{return error.Protocol;}
+            let started=compiler_job.start((*frame).rdi);match started{ok=>{},err(e)=>{
+                if compiler_job.FAILED||memory.STAGE_FAILED{LAUNCH_FAILED=true;}return error.Protocol;
+            },}
+            STATES[0].waiting=7;STATES[compiler_job.SLOT]=EMPTY_STATE;ACTIVE=4;return compiler_job.SLOT;
+        }
         if code>=0x80&&code<=0x89{return try process_call(frame);}
         if code>=capabi.CREATE&&code<=capabi.EXPORT_ENDPOINT{return try capability_call(frame);}
         if code>=shared_abi.CREATE&&code<=shared_abi.INFO{return try shared_call(frame);}
@@ -1125,6 +1150,7 @@ export("dong_user_dispatch") fn dispatch(frame:*abi.Frame)*abi.Frame {
     }
 }
 export("dong_desktop_enable") fn enable_desktop()void { unsafe { if INFO.process_count==0 { GRAPHICS=true;ACTIVE=COUNT; } } return; }
+export("dong_compiler_enable") fn enable_compiler()void{unsafe{if INFO.process_count==0&&!GRAPHICS{COMPILER=true;}}return;}
 unsafe fn pci_inventory_call(frame:*abi.Frame)!usize{unsafe{
  if !GRAPHICS||CATALOG==null||!managed(CURRENT)||(CURRENT!=2&&CURRENT!=4&&CURRENT!=13)
   ||(*frame).r10!=0||(*frame).r8!=0||(*frame).r9!=0{return error.Protocol;}

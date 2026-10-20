@@ -1,0 +1,37 @@
+{
+  "task": "GUEST1",
+  "checks": [
+    {
+      "command": [
+        "C:\\Python313\\python.exe",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "pool-works/tests",
+        "-p",
+        "test_guest_source_path.py",
+        "-v"
+      ],
+      "returncode": 0,
+      "tests": 17,
+      "skips": 0,
+      "elapsed_seconds": 71.008
+    }
+  ],
+  "before": {
+    "pool-works\\lang\\bootstrap\\guest_source_path.dg": "73b01a53f48e789bdc08f835b38fcab8b81b8444be393d12b511f175ca28bb78",
+    "pool-works\\lang\\bootstrap\\guest_source_path.md": "150966cbf02134daeac4d5082f210a4ab46524d08b01e3e5a2cd49f37f32410a",
+    "pool-works\\tests\\test_guest_source_path.py": "833156ee90b829df6e46a1dfeb65d27ed53410b3cff958208cbe015078c69c9f",
+    "pool-works\\deliveries\\GUEST1.md": "e16dfc75bdebde44f4255a2f20be9cfe954a23005cd3a0050f2cfb3fae5cef05"
+  },
+  "after": {
+    "pool-works\\lang\\bootstrap\\guest_source_path.dg": "73b01a53f48e789bdc08f835b38fcab8b81b8444be393d12b511f175ca28bb78",
+    "pool-works\\lang\\bootstrap\\guest_source_path.md": "150966cbf02134daeac4d5082f210a4ab46524d08b01e3e5a2cd49f37f32410a",
+    "pool-works\\tests\\test_guest_source_path.py": "833156ee90b829df6e46a1dfeb65d27ed53410b3cff958208cbe015078c69c9f",
+    "pool-works\\deliveries\\GUEST1.md": "e16dfc75bdebde44f4255a2f20be9cfe954a23005cd3a0050f2cfb3fae5cef05"
+  },
+  "source_stable": true,
+  "passed": true,
+  "formal_registration": false
+}

@@ -1,0 +1,45 @@
+module bootstrap.guest_diagnostic_sink;
+import bootstrap.frontend as front;
+import bootstrap.modules as modules;
+import bootstrap.frontend_diagnostics as diagnostic;
+pub const OK:u64=0;pub const INVALID:u64=1;pub const RENDER:u64=2;
+pub const IO:u64=3;pub const PROTOCOL:u64=4;pub const NO_PROGRESS:u64=5;
+pub type Write=unsafe fn(context:u64,bytes:*const u8,length:usize,moved:*usize)u64;
+pub struct Result{pub status:u64,pub stage:u64,pub code:u64,pub length:usize,pub sent:usize}
+const MAX:usize=0xffff_ffff_ffff_ffff;
+fn span(p:u64,n:usize)bool{return n==0||(p!=0&&n<=MAX-p);}
+fn overlap(a:u64,n:usize,b:u64,m:usize)bool{return n!=0&&m!=0&&a<b+m&&b<a+n;}
+unsafe fn finish(r:*Result,status:u64,stage:u64,code:u64,length:usize,sent:usize)u64{unsafe{
+ *r=Result{status:status,stage:stage,code:code,length:length,sent:sent};return status;
+}}
+pub unsafe fn emit(sources:[]const modules.Source,f:*const front.Result,scratch:[]u8,
+ context:u64,write:Write,r:*Result)u64{unsafe{
+ let rp=r as u64;let fp=f as u64;let sp=sources.ptr as u64;let op=scratch.ptr as u64;
+ if r==null||f==null||(rp&7)!=0||(fp&7)!=0||(sp&7)!=0
+  ||!span(rp,sizeof(Result))||!span(fp,sizeof(front.Result))||!span(op,scratch.len)
+  ||sources.len>MAX/sizeof(modules.Source)||!span(sp,sources.len*sizeof(modules.Source)){return INVALID;}
+ let sn=sources.len*sizeof(modules.Source);
+ if overlap(rp,sizeof(Result),fp,sizeof(front.Result))||overlap(rp,sizeof(Result),sp,sn)
+  ||overlap(rp,sizeof(Result),op,scratch.len)||overlap(op,scratch.len,fp,sizeof(front.Result))
+  ||overlap(op,scratch.len,sp,sn){return INVALID;}
+ var i:usize=0;while i<sources.len{
+  let p=sources[i].path;let b=sources[i].bytes;
+  if !span(p.ptr as u64,p.len)||!span(b.ptr as u64,b.len)
+   ||overlap(rp,sizeof(Result),p.ptr as u64,p.len)||overlap(rp,sizeof(Result),b.ptr as u64,b.len)
+   ||overlap(op,scratch.len,p.ptr as u64,p.len)||overlap(op,scratch.len,b.ptr as u64,b.len){return INVALID;}i+=1;
+ }
+ if (*f).status==front.OK{return finish(r,OK,0,0,0,0);}
+ var written:usize=0;
+ let rendered=diagnostic.render(sources,f,scratch,&written);
+ if rendered!=diagnostic.OK{return finish(r,RENDER,1,rendered,0,0);}
+ var sent:usize=0;
+ while sent<written{
+  let remaining=written-sent;var moved:usize=0;
+  let code=write(context,scratch.ptr+sent,remaining,&moved);
+  if code!=0{return finish(r,IO,2,code,written,sent);}
+  if moved>remaining{return finish(r,PROTOCOL,2,moved as u64,written,sent);}
+  if moved==0{return finish(r,NO_PROGRESS,2,0,written,sent);}
+  sent+=moved;
+ }
+ return finish(r,OK,2,0,written,sent);
+}}

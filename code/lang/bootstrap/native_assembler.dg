@@ -121,9 +121,9 @@ unsafe fn instruction(s:*State,name:[]const u8)bool{unsafe{
   reference_start=b.start;reference_length=b.length;
  }else if a.kind==3&&b.kind==1{ins.form=x86.STORE;ins.width=b.width;ins.src=b.reg;ins.base=a.base;ins.disp=a.disp;if a.width!=0&&a.width!=b.width{return fail(s,SYNTAX,24);}reference_start=a.start;reference_length=a.length;}
  else{return fail(s,SYNTAX,25);}
- var code:[15]u8=[0;15];var n:usize=0;let buffer=slice_from_raw_parts(&code[0],15);var status=x86.encode(buffer,&ins,&n);if status!=0{return fail(s,SYNTAX,100+status);}
+ var code:[15]u8=[0;15];var n:usize=0;let buffer=slice_from_raw_parts(&code[0],15);var status=x86.encode_compact(buffer,&ins,&n);if status!=0{return fail(s,SYNTAX,100+status);}
  if reference_length!=0&&(*s).pass!=0{var target:u64=0;if !address(s,reference_start,reference_length,&target){return false;}let current=elf.BASE+elf.TEXT_OFFSET+(*s).text+n;
-  let relative=wrapping_sub(target,current);if ins.form==x86.REL{ins.imm=relative;}else{ins.disp=relative;}status=x86.encode(buffer,&ins,&n);if status!=0{return fail(s,RANGE,26);}
+  let relative=wrapping_sub(target,current);if ins.form==x86.REL{ins.imm=relative;}else{ins.disp=relative;}status=x86.encode_compact(buffer,&ins,&n);if status!=0{return fail(s,RANGE,26);}
  }return bytes(s,slice_from_raw_parts(&code[0],n));
 }}
 unsafe fn data_values(s:*State,width:usize)bool{unsafe{

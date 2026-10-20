@@ -7,6 +7,7 @@ as a SysV function (never as OS _start). Failures keep Result/out atomic; at lea
 two real bad-Dong copies are compiled and rejected by named assertions.
 """
 from __future__ import annotations
+from concurrent.futures import ThreadPoolExecutor
 
 import hashlib
 import json
@@ -35,7 +36,7 @@ OK, INVALID, CAPACITY, UNSUPPORTED = 0, 1, 2, 3
 SYMBOL = 4
 WORKSPACE, LOWER, EMIT, ASSEMBLE = 0, 1, 2, 3
 MAX = 2 ** 64 - 1
-PREFLIGHTS = 18
+PREFLIGHTS = 20
 RESULT_FIELDS = ('status', 'stage', 'code', 'unit', 'node', 'detail', 'used', 'text', 'written')
 
 # module a / item f → CR3 mangling used by nasm_program.
@@ -229,6 +230,8 @@ static unsigned invalid_preflights(void){
    case 10:op=sp;break;case 11:tp=op;break;case 12:rp=(ImageResult*)op;break;
    case 13:w->labels.p=op;break;case 14:w->table.n=UINT64_MAX/8+1;break;
    case 15:w->labels.n=UINT64_MAX/32+1;break;case 16:sp=ep;sn=en?en:1;break;
+   case 18:w->labels.p=labels+1;w->labels.n=0;break;
+   case 19:w->table.p=table+1;w->table.n=0;break;
    default:op=(uint8_t*)(uintptr_t)(UINT64_MAX-7);on=16;break;
   }
   memcpy(saved,arena,sizeof arena);
@@ -317,6 +320,57 @@ def pack_case(source: str, path: str, entry: str, mode: int, limits=DEFAULT_LIMI
     return struct.pack('<12Q', len(sb), len(pb), len(eb), mode, *limits, kind) + sb + pb + eb
 
 
+
+GRAPH_ALIAS_MAIN = r"""
+int main(void){
+ _Alignas(16) char path[256],body[512];memset(path,0xa5,sizeof path);memset(body,0xa5,sizeof body);
+ memcpy(path,"a.dg",4);const char*program="module a;var g:u64=1;fn f()u64{return g;}";memcpy(body,program,strlen(program));
+ _Alignas(16) Source sources[4];memset(sources,0xa5,sizeof sources);sources[0]=(Source){0,{path,4},{body,strlen(program)}};
+ Options options={0,1,32};FrontLimits fl={{2048,2048,4096,64,2080,4096,65536,65536,2048,65536}};
+ const uint64_t cap=16ull<<20;uint8_t*arena=alloc_guard(cap);FrontResult fr={0};
+ if(dong_frontend_check(&options,sources,1,&fl,arena,cap,&fr)!=0)exit(90);
+ uint8_t*before=malloc(cap);if(!before)exit(95);memcpy(before,arena,cap);
+ uint8_t*storage=alloc_guard(4<<20),*text=alloc_guard(1<<20),*out=alloc_guard(1<<20);
+ Workspace base={{alloc_guard(128*32),128},{alloc_guard(512*8),512},{alloc_guard(1<<20),1<<20},{alloc_guard(1<<20),1<<20}};
+ EmitLimits el={64,4096,2048,1<<20,2048,64,128};const char*entry="__dong_m61_n66";
+ for(unsigned i=0;i<12;i++){
+  Workspace w=base;uint8_t*sp=storage,*tp=text,*op=out;ImageResult result,*rp=&result;memset(&result,0xa5,sizeof result);
+  uint8_t sources_before[sizeof sources],path_before[sizeof path],body_before[sizeof body];
+  memcpy(sources_before,sources,sizeof sources);memcpy(path_before,path,sizeof path);memcpy(body_before,body,sizeof body);
+  switch(i){
+   case 0:rp=(ImageResult*)(arena+cap-72);break;
+   case 1:op=arena+cap-(1<<20);break;
+   case 2:w.labels.p=arena+cap-4096;break;
+   case 3:w.table.p=arena+cap-4096;break;
+   case 4:w.text.p=arena+cap-(1<<20);break;
+   case 5:w.data.p=arena+cap-(1<<20);break;
+   case 6:sp=arena+cap-(4<<20);break;
+   case 7:tp=arena+cap-(1<<20);break;
+   case 8:rp=(ImageResult*)sources;break;
+   case 9:rp=(ImageResult*)path;break;
+   case 10:rp=(ImageResult*)body;break;
+   default:break;
+  }
+  uint64_t rc=dong_guest_compile_image(&fr.graph,&el,0,sp,4<<20,tp,1<<20,(const uint8_t*)entry,strlen(entry),&w,op,1<<20,rp);
+  uint64_t expected=i==11?3:1;
+  if(rc!=expected||memcmp(arena,before,cap)||memcmp(sources,sources_before,sizeof sources)||memcmp(path,path_before,sizeof path)||memcmp(body,body_before,sizeof body)){
+   fprintf(stderr,"graph readonly preflight %u failed rc=%llu\n",i,(unsigned long long)rc);return 90;
+  }
+ }
+ for(unsigned z=0;z<2;z++){
+  Workspace w=base;if(z==0){w.labels.p=(uint8_t*)w.labels.p+1;w.labels.n=0;}else{w.table.p=(uint8_t*)w.table.p+1;w.table.n=0;}
+  ImageResult result;memset(&result,0xa5,sizeof result);
+  uint8_t*old_storage=malloc(4<<20),*old_text=malloc(1<<20);if(!old_storage||!old_text)exit(95);
+  memcpy(old_storage,storage,4<<20);memcpy(old_text,text,1<<20);
+  uint64_t rc=dong_guest_compile_image(&fr.graph,&el,0,storage,4<<20,text,1<<20,(const uint8_t*)entry,strlen(entry),&w,out,1<<20,&result);
+  if(rc!=1||memcmp(old_storage,storage,4<<20)||memcmp(old_text,text,1<<20)||!filled(&result,sizeof result)){
+   fprintf(stderr,"empty alignment preflight %u failed rc=%llu\n",z,(unsigned long long)rc);return 90;
+  }free(old_storage);free(old_text);
+ }
+ puts("11 graph/source aliases + valid control + 2 empty-alignment checks passed");return 0;
+}
+"""
+
 class GuestCompileImageTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -339,7 +393,8 @@ class GuestCompileImageTests(unittest.TestCase):
         (cls.wrapper / 'probe').mkdir(parents=True)
         (cls.wrapper / 'probe/guest_compile_image_export.dg').write_text(WRAPPER, encoding='utf-8')
         cls.roots = [cls.wrapper, cls.snapshot / 'lang', cls.snapshot / 'lang/std', cls.snapshot]
-        cls.executables = {mode: cls.build(mode, mode) for mode in ('debug', 'release')}
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            cls.executables = dict(zip(('debug','release'),pool.map(lambda mode:cls.build(mode,mode),('debug','release'))))
 
     @classmethod
     def command(cls, cmd, name):
@@ -357,9 +412,11 @@ class GuestCompileImageTests(unittest.TestCase):
         native = 'win64' if os.name == 'nt' else 'elf64'
         obj = cls.work / (name + '.o')
         exe = cls.work / (name + ('.exe' if os.name == 'nt' else ''))
-        for fmt in ('elf64', 'win64'):
+        def assemble(fmt):
             output = obj if fmt == native else cls.work / (name + '.' + fmt + '.o')
-            cls.command([cls.nasm, '-f', fmt, *nasm_flags(cls.nasm), '-o', output, asm], name + '-' + fmt)
+            cls.command([cls.nasm, '-O0', '-f', fmt, *nasm_flags(cls.nasm), '-o', output, asm], name + '-' + fmt)
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            list(pool.map(assemble,('elf64','win64')))
         cls.command([cls.cc, '-std=c11', '-O2', '-Wall', '-Wextra', '-Werror',
                      cls.work / 'probe.c', obj, '-o', exe], name + '-link')
         return exe
@@ -504,7 +561,45 @@ class GuestCompileImageTests(unittest.TestCase):
         (root / 'exec').mkdir(parents=True)
         shutil.copy2(ROOT / 'kernel/exec/elf.dg', root / 'exec/elf.dg')
         roots = [self.wrapper, root / 'lang', root / 'lang/std', root]
-        return {mode: self.build(mode, name + '-' + mode, roots=roots) for mode in ('debug', 'release')}
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            return dict(zip(('debug','release'),pool.map(lambda mode:self.build(mode,name+'-'+mode,roots=roots),('debug','release'))))
+
+
+    def test_graph_readonly_aliases(self):
+        c = self.work / 'graph-alias.c'
+        c.write_text(HARNESS.split('int main(void){', 1)[0] + GRAPH_ALIAS_MAIN, encoding='utf-8')
+        def probe(name, expected):
+            obj = self.work / (name + '.o')
+            exe = self.work / (name + '-graph-alias' + ('.exe' if os.name == 'nt' else ''))
+            self.command([self.cc, '-std=c11', '-O2', '-Wall', '-Wextra', '-Werror',
+                          '-Wno-unused-function', c, obj, '-o', exe], name + '-graph-link')
+            r = subprocess.run([str(exe)], capture_output=True, timeout=120)
+            (self.work / (name + '-graph.stdout')).write_bytes(r.stdout)
+            (self.work / (name + '-graph.stderr')).write_bytes(r.stderr)
+            self.assertEqual(r.returncode, expected, r.stderr.decode(errors='replace'))
+            if expected:
+                self.assertIn(b'graph readonly preflight', r.stderr)
+        for mode in self.executables:
+            probe(mode, 0)
+        # Remove only the Graph backing/source checks. The previous descriptor
+        # checks still compile and execute, so this is a precise regression.
+        source = SOURCE.read_text(encoding='utf-8')
+        start = source.index(' // Graph is borrowed read-only through both stages')
+        end = source.index(' return true;', start)
+        bad = source[:start] + source[end:]
+        root = self.work / 'bad-graph-prefix'
+        shutil.copytree(self.snapshot, root)
+        (root / 'lang/bootstrap/guest_compile_image.dg').write_text(bad, encoding='utf-8')
+        roots = [self.wrapper, root / 'lang', root / 'lang/std', root]
+        def bad_graph(mode):
+            name = 'bad-graph-prefix-' + mode
+            self.build(mode, name, roots=roots)
+            probe(name,90)
+        with ThreadPoolExecutor(max_workers=2) as pool:
+            list(pool.map(bad_graph,('debug','release')))
+        self.run_both([self.case('legitimate', SAMPLE)], 'graph-valid-elf-control')
+        self.records.append(dict(test='graph-readonly-aliases', cases=14, modes=2,
+                                 actual_mutants_rejected=True))
 
     def test_actual_compiled_wrong_sources_are_rejected(self):
         good = [self.case('baseline', SAMPLE)]

@@ -12,6 +12,7 @@ import exec.elf as elf;
 import user.abi as abi;
 import boot.service_memory as resources;
 import user.entropy as entropy;
+import user.compiler_stack as compiler_stack;
 import ipc.shared_core as object_core;
 import lib.shared_abi as object_abi;
 
@@ -54,6 +55,11 @@ var RECYCLED: [FRAME_LIMIT]u8 = [0;FRAME_LIMIT];
 var EXTENDED_RECYCLED: *u8 = null;
 var GENERATIONS: [LIMIT]u64 = [0;LIMIT];
 var PINNED: [LIMIT]bool = [false;LIMIT];
+// The exact contiguous range a process currently holds for DMA. release_dma
+// consumes this record, so an unpinned or partially tracked process can never
+// name an arbitrary virtual range for withdrawal.
+var PINNED_BASE: [LIMIT]u64 = [0;LIMIT];
+var PINNED_PAGES: [LIMIT]usize = [0;LIMIT];
 // One exclusive BSP loader transaction. A journal includes fresh RAM before
 // either supervisor or USER publication can fail, including unmapped orphans.
 // The desktop journal lives in the arena, keeping the raw kernel bounded.
@@ -308,20 +314,21 @@ pub unsafe fn initialize(kernel_physical: u64) !void {
 
 // Load a complete validated static/PIE ELF. Code's temporary writable kernel
 // alias is removed before any executable user alias is published to a CPU.
-unsafe fn load_candidate(id: usize, image: []const u8, bias: u64, stack_top: u64) !void {
+unsafe fn load_candidate(id: usize, image: []const u8, bias: u64, stack_top: u64, compiler:bool) !void {
     unsafe {
         if id >= LIMIT || KERNEL_PHYSICAL == 0 || PROCESSES[id].ready != 0 || GENERATIONS[id]==0xffff_ffff_ffff_ffff
             || stack_top < 0x10_0000 || stack_top >= elf.USER_LIMIT || (stack_top & 4095) != 0 {
             return error.InvalidState;
         }
         try elf.validate(image,bias,&PROCESSES[id].plan);
-        if PROCESSES[id].plan.page_count + 4 > available_frames() as u64 { return error.Capacity; }
-        // Reserve both guard pages as well as the full four-page stack before
+        let stack_pages=compiler_stack.pages(compiler);
+        if PROCESSES[id].plan.page_count + stack_pages > available_frames() as u64 { return error.Capacity; }
+        // Reserve both guard pages as well as the complete selected stack before
         // allocating any memory. An ELF may not pre-map a guard on its own.
         var candidate: usize = 0;
         while candidate < PROCESSES[id].plan.segment_count as usize {
             let part = PROCESSES[id].plan.segments[candidate];
-            if part.map_start < stack_top + 4096 && stack_top - 5 * 4096 < part.map_start + part.map_size {
+            if part.map_start < stack_top + 4096 && stack_top - (stack_pages+1) * 4096 < part.map_start + part.map_size {
                 return error.InvalidAddress;
             }
             candidate += 1;
@@ -373,7 +380,7 @@ unsafe fn load_candidate(id: usize, image: []const u8, bias: u64, stack_top: u64
             write_unaligned(((*record(index)).virtual + (value.target & 4095)) as *u64,value.value);
             relocation += 1;
         }
-        var at = stack_top - 4 * 4096;
+        var at = stack_top - stack_pages * 4096;
         while at < stack_top { let index = try page(id,at,paging.WRITE); at += 4096; }
         // Kernel aliases now exist. Clone supervisor branches only after that
         // first shared branch was created; all subsequent aliases share it.
@@ -398,10 +405,17 @@ unsafe fn load_candidate(id: usize, image: []const u8, bias: u64, stack_top: u64
 // A candidate may be used by trusted setup-only mapping/copy APIs. It must not
 // enter a runnable catalog before commit. The caller owns the complete stage.
 pub unsafe fn stage(id:usize,image:[]const u8,bias:u64,stack_top:u64)!void {unsafe{
+    try stage_profile(id,image,bias,stack_top,false);
+}return;}
+// Trusted compiler startup only; no syscall accepts a stack profile or size.
+pub unsafe fn stage_compiler(id:usize,image:[]const u8,bias:u64,stack_top:u64)!void {unsafe{
+    try stage_profile(id,image,bias,stack_top,true);
+}return;}
+unsafe fn stage_profile(id:usize,image:[]const u8,bias:u64,stack_top:u64,compiler:bool)!void {unsafe{
     if UNSHARE_FAILED||STAGE_FAILED||STAGE_ID!=LIMIT||id>=LIMIT||KERNEL_PHYSICAL==0
         ||PROCESSES[id].ready!=0||PINNED[id]{return error.InvalidState;}
     STAGE_ID=id;STAGE_COUNT=0;STAGE_ROOT=0;STAGE_BOUND=false;STAGE_TABLES=false;
-    let loaded=load_candidate(id,image,bias,stack_top);
+    let loaded=load_candidate(id,image,bias,stack_top,compiler);
     match loaded{ok=>{},err(code)=>{
         try stage_abort(id);return loaded;
     },}
@@ -464,6 +478,12 @@ pub unsafe fn load(id:usize,image:[]const u8,bias:u64,stack_top:u64)!void {unsaf
 }return;}
 // Entropy failure is explicit; timing and process IDs are never substitutes.
 pub unsafe fn stage_random(id:usize,image:[]const u8)!void {
+    unsafe{try stage_random_profile(id,image,false);}return;
+}
+pub unsafe fn stage_compiler_random(id:usize,image:[]const u8)!void {
+    unsafe{try stage_random_profile(id,image,true);}return;
+}
+unsafe fn stage_random_profile(id:usize,image:[]const u8,compiler:bool)!void {
     unsafe {
         if UNSHARE_FAILED||STAGE_FAILED||STAGE_ID!=LIMIT{return error.InvalidState;}
         var layout=entropy.EMPTY_LAYOUT;try entropy.generate(&layout);
@@ -473,7 +493,7 @@ pub unsafe fn stage_random(id:usize,image:[]const u8)!void {
         if image.ptr!=null&&image.len>=18&&(image.ptr as u64)<=0xffff_ffff_ffff_ffff-image.len as u64{
             if read_unaligned((image.ptr+16) as *const u16)==2{layout.bias=0;}
         }
-        try stage(id,image,layout.bias,layout.stack);
+        try stage_profile(id,image,layout.bias,layout.stack,compiler);
     }return;
 }
 pub unsafe fn load_random(id:usize,image:[]const u8)!void {unsafe{
@@ -575,6 +595,33 @@ pub unsafe fn unshare_range(id:usize,base:u64,pages:usize)!void{unsafe{
     match detached{ok=>{},err(code)=>{UNSHARE_FAILED=true;return detached;},}
     UNSHARE_ACTIVE=false;
 }return;}
+// Release the single contiguous DMA lease after the trusted device broker has
+// verified that the faulting device is no longer able to write (MSI/BME off and
+// the old owner retired). The range comes only from contiguous(), never from a
+// caller argument. unshare_range revalidates every leaf, unmaps it, waits for
+// the translation barrier, zeroes each frame and only then marks it reusable.
+// A failure sets fail-stop state: the process is not destroyed and no page is
+// reused. Callers must not invoke this for a healthy or still-busy device.
+pub unsafe fn release_dma(id:usize)!void {
+    unsafe {
+        if UNSHARE_FAILED||STAGE_FAILED||UNSHARE_ACTIVE||STAGE_ID!=LIMIT||id>=LIMIT
+            ||PROCESSES[id].ready!=1||!PINNED[id]||user_current_root()==PROCESSES[id].root {
+            return error.InvalidState;
+        }
+        let base=PINNED_BASE[id];let pages=PINNED_PAGES[id];
+        if base==0||pages==0||pages>UNSHARE_LIMIT||base<elf.USER_MIN||base>=elf.USER_LIMIT
+            ||(base&4095)!=0||(pages as u64)>(elf.USER_LIMIT-base)/4096 {
+            return error.InvalidAddress;
+        }
+        // Clear the pin only after every argument check. unshare_range checks it
+        // again and performs the whole withdrawal; on any error UNSHARE_FAILED
+        // keeps scheduling stopped and the remaining pages unreused.
+        PINNED[id]=false;
+        let released=unshare_range(id,base,pages);
+        match released{ok=>{},err(code)=>{UNSHARE_FAILED=true;return released;},}
+        PINNED_BASE[id]=0;PINNED_PAGES[id]=0;
+    }return;
+}
 
 pub fn dma_pinned(id:usize)bool { unsafe { return id>=LIMIT || PINNED[id]; } }
 pub fn generation(id:usize)u64 { unsafe { if id>=LIMIT { return 0; }return GENERATIONS[id]; } }
@@ -827,6 +874,7 @@ pub unsafe fn contiguous(id: usize, virtual: u64, requested: usize) !u64 {
             || virtual < elf.USER_MIN || virtual >= elf.USER_LIMIT || (virtual & 4095) != 0 {
             return error.InvalidAddress;
         }
+        if PINNED[id] { return error.InvalidState; }
         var order: usize = 0; var pages: usize = 1;
         while pages < requested { pages *= 2; order += 1; }
         if pages > capacity() - FRAME_COUNT || (pages as u64) * 4096 > elf.USER_LIMIT - virtual { return error.Capacity; }
@@ -836,7 +884,7 @@ pub unsafe fn contiguous(id: usize, virtual: u64, requested: usize) !u64 {
             try resources.reserve(pages,pages,&held);physical=held.physical;
         } else { physical=try buddy.alloc(startup.allocator_pointer(),order); }
         var offset: usize = 0;
-        PINNED[id]=true;
+        PINNED[id]=true;PINNED_BASE[id]=virtual;PINNED_PAGES[id]=pages;
         while offset < pages {
             let index = try own_frame(physical + offset as u64 * 4096);
             *recycled(index)=2;

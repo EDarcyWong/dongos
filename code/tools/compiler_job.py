@@ -1,0 +1,206 @@
+"""Build and exercise the pure Dong compiler job; no guest success is implied."""
+from pathlib import Path
+import hashlib,json,os,struct,subprocess
+from lang.dongc import compile_file
+from lang.dongc.modules import Resolver
+from lang.tests.test_dongc import tool,nasm_flags
+ROOT=Path(__file__).resolve().parents[1]
+BRIDGE='''bits 64
+section .text
+global invoke_guarded
+invoke_guarded:
+ push rbp
+ push rbx
+ push r12
+ push r13
+ push r14
+ push r15
+ mov r12,rsp
+ mov r11,rdi
+ mov rbx,rdx
+ mov rsp,rsi
+ and rsp,-16
+ mov rdi,[rbx]
+ mov rsi,[rbx+8]
+ mov rdx,[rbx+16]
+ mov rcx,[rbx+24]
+ mov r8,[rbx+32]
+ mov r9,[rbx+40]
+ call r11
+ mov rsp,r12
+ pop r15
+ pop r14
+ pop r13
+ pop r12
+ pop rbx
+ pop rbp
+ ret
+'''
+HARNESS=r'''
+#define _GNU_SOURCE
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#ifdef _WIN32
+#include <windows.h>
+#else
+#include <sys/mman.h>
+#endif
+#define ABI __attribute__((sysv_abi))
+typedef unsigned long long U;
+_Static_assert(sizeof(U)==8,"64-bit job ABI");
+typedef struct{void*p;U n;} S;
+typedef struct{U root;S path,bytes;} Source;
+typedef struct{U status,stage,code,detail,written,offset,frontend,retained,backend;} R;
+extern U ABI dong_compile_job(const void*,U,Source*,void*,U,R*);
+extern U ABI invoke_guarded(void*,void*,const U*);
+static void check(int b,const char*s){if(!b){fprintf(stderr,"FAIL %s\n",s);exit(90);}}
+void ABI __attribute__((noreturn)) __dong_panic(uint32_t k,uint32_t l,const void*p,U n){(void)p;(void)n;fprintf(stderr,"PANIC %u/%u\n",k,l);exit(91);}
+static U rd(const unsigned char*p,U at,U width){U v=0;for(U i=0;i<width;i++)v|=(U)p[at+i]<<(8*i);return v;}
+static void protect(void*p,U n,int rx,int ro){
+#ifdef _WIN32
+ DWORD old;check(VirtualProtect(p,n,rx?PAGE_EXECUTE_READ:ro?PAGE_READONLY:PAGE_READWRITE,&old),"protect");
+#else
+ check(!mprotect(p,n,PROT_READ|(rx?PROT_EXEC:ro?0:PROT_WRITE)),"protect");
+#endif
+}
+static void*guarded(U n){
+#ifdef _WIN32
+ unsigned char*p=VirtualAlloc(NULL,n+8192,MEM_RESERVE,PAGE_NOACCESS);check(p!=NULL,"reserve");check(VirtualAlloc(p+4096,n,MEM_COMMIT,PAGE_READWRITE)!=NULL,"commit");
+#else
+ unsigned char*p=mmap(NULL,n+8192,PROT_NONE,MAP_PRIVATE|MAP_ANONYMOUS,-1,0);check(p!=MAP_FAILED,"reserve");check(!mprotect(p+4096,n,PROT_READ|PROT_WRITE),"commit");
+#endif
+ return p+4096;
+}
+static int filled(const void*p,U n){const unsigned char*q=p;while(n--)if(*q++!=0xa5)return 0;return 1;}
+static void preflight(unsigned char*a,Source*c,R*r){
+ const U cap=56ULL*1024*1024;unsigned char b[128];
+ // Descriptor and complete catalog validation must precede all publication.
+ for(U k=0;k<32;k++){
+  memset(b,0,sizeof b);U h[5]={1,0,0,4,0};memcpy(b,h,40);memcpy(b+40,"a.dg",4);
+  void*bp=b,*ap=a;Source*cp=c;R*rp=r;U bn=44,an=cap;
+  switch(k){case 0:bp=NULL;break;case 1:bp=(void*)(uintptr_t)(UINT64_MAX-10);break;case 2:bn=15;break;case 3:bn=524289;break;
+   case 4:an--;break;case 5:ap=NULL;break;case 6:ap=a+1;break;case 7:ap=(void*)(uintptr_t)(UINT64_MAX-7);break;
+   case 8:cp=NULL;break;case 9:cp=(Source*)((unsigned char*)c+1);break;case 10:cp=(Source*)a;break;
+   case 11:cp=(Source*)b;break;case 12:cp=(Source*)r;break;case 13:rp=NULL;break;case 14:rp=(R*)((unsigned char*)r+1);break;
+   case 15:rp=(R*)a;break;case 16:rp=(R*)b;break;case 17:rp=(R*)c;break;case 18:bp=a;break;case 19:bp=c;break;case 20:bp=r;break;
+   case 21:memset(b,0,8);break;case 22:b[0]=65;break;case 23:b[8]=1;break;case 24:bn=39;break;
+   case 25:b[16]=2;break;case 26:b[24]=0;break;case 27:memset(b+24,255,8);break;case 28:memset(b+32,255,8);break;
+   case 29:bn=45;break;case 30:cp=(Source*)(uintptr_t)(UINT64_MAX-7);break;case 31:rp=(R*)(uintptr_t)(UINT64_MAX-7);break;}
+  memset(a,0xa5,cap);memset(c,0xa5,64*sizeof *c);memset(r,0xa5,sizeof *r);unsigned char old[128];memcpy(old,b,sizeof b);
+  check(dong_compile_job(bp,bn,cp,ap,an,rp)==1,"invalid return");
+  check(filled(a,cap)&&filled(c,64*sizeof *c)&&filled(r,sizeof *r)&&!memcmp(b,old,sizeof b),"invalid atomicity");
+ }
+}
+static void save(const char*p,const void*b,U n){FILE*f=fopen(p,"wb");check(f!=NULL,"save open");check(fwrite(b,1,n,f)==n,"save bytes");check(!fclose(f),"save close");}
+static U mapped_extent;
+static void*load(const unsigned char*p,U n){
+ check(n>=4096&&n<=2*1024*1024&&!memcmp(p,"\177ELF\2\1\1",7),"ELF ident");
+ check(rd(p,16,2)==2&&rd(p,18,2)==62&&rd(p,20,4)==1&&rd(p,52,2)==64&&rd(p,54,2)==56,"ELF header");
+ U ph=rd(p,32,8),count=rd(p,56,2),extent=0,entry=rd(p,24,8),text_end=0,prev=0x400000;
+ check(count>=1&&count<=2&&ph>=64&&ph<=n&&count<=(n-ph)/56,"ELF table");
+ for(U i=0;i<count;i++){U q=ph+56*i,off=rd(p,q+8,8),va=rd(p,q+16,8),fs=rd(p,q+32,8),ms=rd(p,q+40,8),flags=rd(p,q+4,4);
+  check(rd(p,q,4)==1&&flags==(i?6:5)&&off<=n&&fs<=n-off&&ms>=fs&&ms>0,"ELF segment");
+  check(va>=prev&&va>=0x400000&&va<0xc00000&&ms<=0xc00000-va&&(va&4095)==0&&rd(p,q+48,8)==4096,"ELF range");
+  prev=(va+ms+4095)&~4095ULL;extent=prev-0x400000;if(!i)text_end=va+fs;
+ }
+ check(entry>=0x401000&&entry<text_end&&text_end-entry>=24,"ELF entry");mapped_extent=extent;
+#ifdef _WIN32
+ void*m=VirtualAlloc((void*)0x400000,extent,MEM_RESERVE|MEM_COMMIT,PAGE_READWRITE);check(m!=NULL,"ELF map");
+#else
+ void*m=mmap((void*)0x400000,extent,PROT_READ|PROT_WRITE,MAP_PRIVATE|MAP_ANONYMOUS|MAP_FIXED_NOREPLACE,-1,0);check(m!=MAP_FAILED,"ELF map");
+#endif
+ for(U i=0;i<count;i++){U q=ph+56*i,va=rd(p,q+16,8);memcpy((void*)(uintptr_t)va,p+rd(p,q+8,8),rd(p,q+32,8));protect((void*)(uintptr_t)va,(rd(p,q+40,8)+4095)&~4095ULL,!i,0);}
+#ifdef _WIN32
+ FlushInstructionCache(GetCurrentProcess(),m,extent);
+#endif
+ // Host calls the bridge's direct target, never executes its guest exit SYSCALL.
+ const unsigned char*e=(const unsigned char*)(uintptr_t)entry;
+ const unsigned char prefix[]={0x48,0x81,0xec,8,0,0,0,0xe8};
+ const unsigned char suffix[]={0x48,0x89,0xc7,0xb8,0xff,0,0,0,0x0f,0x05,0x0f,0x0b};
+ check(!memcmp(e,prefix,sizeof prefix)&&!memcmp(e+12,suffix,sizeof suffix),"entry call bridge");
+ int32_t rel;memcpy(&rel,e+8,4);U target=entry+12+(int64_t)rel;
+ check(target>=0x401000&&target<text_end,"entry target");return (void*)(uintptr_t)target;
+}
+int main(int argc,char**argv){
+ check(argc==2,"usage");FILE*f=fopen(argv[1],"rb");check(f!=NULL,"input open");check(!fseek(f,0,SEEK_END),"seek");long length=ftell(f);check(length>=16&&length<=524288,"input size");rewind(f);
+ U n=(U)length;unsigned char*blob=guarded((n+4095)&~4095ULL);check(fread(blob,1,n,f)==n,"input read");check(fgetc(f)==EOF&&!fclose(f),"input EOF");protect(blob,(n+4095)&~4095ULL,0,1);
+ const U cap=56ULL*1024*1024;unsigned char*a=guarded(cap),*stack=guarded(65536);Source*c=guarded(4096);R*r=guarded(4096);
+ preflight(a,c,r);
+ unsigned char small[256]={0};const char*simple="module a;export(\"dong_compile_job\") fn f()u64{return 37;}";U sh[5]={1,0,0,4,strlen(simple)};
+ memcpy(small,sh,40);memcpy(small+40,"a.dg",4);memcpy(small+44,simple,strlen(simple));
+ check(dong_compile_job(small,44+strlen(simple),c,a,cap,r)==0,"small bridge assembly");
+ U(ABI*tiny)(void)=(U(ABI*)(void))load(a+r->offset,r->written);check(tiny()==37,"small native code");
+#ifdef _WIN32
+ check(VirtualFree((void*)0x400000,0,MEM_RELEASE),"unmap small");
+#else
+ check(!munmap((void*)0x400000,mapped_extent),"unmap small");
+#endif
+ U args[6]={(U)(uintptr_t)blob,n,(U)(uintptr_t)c,(U)(uintptr_t)a,cap,(U)(uintptr_t)r};
+ memset(a,0xa5,cap);memset(c,0xa5,4096);memset(r,0,4096);
+ U status=invoke_guarded((void*)dong_compile_job,stack+65536,args);
+ printf("seed %llu/%llu/%llu/%llu bytes=%llu frontend=%llu retained=%llu backend=%llu\n",status,r->stage,r->code,r->detail,r->written,r->frontend,r->retained,r->backend);fflush(stdout);
+ check(status==0&&r->status==0&&r->written<=2*1024*1024&&r->offset==8*1024*1024,"seed result");
+ U bytes=r->written;unsigned char*first=malloc(bytes);check(first!=NULL,"save memory");memcpy(first,a+r->offset,bytes);save("stage1.elf",first,bytes);
+ void*fn=load(first,bytes);memset(a,0xa5,cap);memset(c,0xa5,4096);memset(r,0,4096);
+ status=invoke_guarded(fn,stack+65536,args);
+ printf("native %llu/%llu/%llu/%llu bytes=%llu frontend=%llu retained=%llu backend=%llu\n",status,r->stage,r->code,r->detail,r->written,r->frontend,r->retained,r->backend);fflush(stdout);
+ check(status==0&&r->status==0&&r->offset==8*1024*1024&&r->written==bytes,"native result");save("stage2.elf",a+r->offset,r->written);
+ check(!memcmp(first,a+r->offset,bytes),"fixed point differs");
+ // Invalid source semantics must fail on the native core, with no artifact.
+ unsigned char bad[128]={0};const char*source="module a;fn f()u64{return true;}";U h[5]={1,0,0,4,strlen(source)};memcpy(bad,h,40);memcpy(bad+40,"a.dg",4);memcpy(bad+44,source,strlen(source));
+ args[0]=(U)(uintptr_t)bad;args[1]=44+strlen(source);memset(r,0xa5,sizeof *r);
+ check(invoke_guarded(fn,stack+65536,args)==3&&r->stage==0&&r->written==0&&r->code!=0,"semantic rejection");
+ unsigned char*many=calloc(1,150000);check(many!=NULL,"capacity input");U used=44;
+ const char*head="module a;";memcpy(many+used,head,strlen(head));used+=strlen(head);
+ for(U i=0;i<1101;i++){int z=snprintf((char*)many+used,150000-used,"fn f%llu()u64{return %llu;}",(unsigned long long)i,(unsigned long long)i);check(z>0&&(U)z<150000-used,"capacity source");used+=(U)z;}
+ U mh[5]={1,0,0,4,used-44};memcpy(many,mh,40);memcpy(many+40,"a.dg",4);args[0]=(U)(uintptr_t)many;args[1]=used;
+ check(invoke_guarded(fn,stack+65536,args)==3&&r->stage==2&&r->code==2&&r->written==0,"backend capacity rejection");free(many);
+ puts("PASS exact ELF fixed point; seed/native guarded 56MiB arena and 64KiB stack; 32 atomic preflights; native semantic rejection; native backend capacity rejection");return 0;
+}
+'''
+
+def source_blob(root=ROOT):
+    roots=[root/'lang',root/'lang/std'];resolver=Resolver(roots)
+    resolver.load(root/'lang/bootstrap/compiler_job.dg')
+    rows=[(int(p.is_relative_to(roots[1])),name.replace('.','/')+'.dg',p.read_bytes()) for name,p in sorted(resolver.paths.items())]
+    entry=next(i for i,(_,p,_) in enumerate(rows) if p=='bootstrap/compiler_job.dg')
+    raw=bytearray(struct.pack('<QQ',len(rows),entry))
+    for r,p,b in rows:
+        p=p.encode();raw+=struct.pack('<QQQ',r,len(p),len(b))+p+b
+    return bytes(raw),{str(p.relative_to(root)):hashlib.sha256(p.read_bytes()).hexdigest() for p in resolver.paths.values()}
+
+def exercise(output,mode='release',root=ROOT):
+    output=Path(output).resolve();output.mkdir(parents=True,exist_ok=True)
+    payload,sources=source_blob(root);(output/'sources.bin').write_bytes(payload)
+    c=compile_file(root/'lang/bootstrap/compiler_job.dg',roots=[root/'lang',root/'lang/std'],mode=mode)
+    (output/'job.asm').write_text(c.assembly,encoding='utf-8');(output/'bridge.asm').write_text(BRIDGE,encoding='ascii');(output/'probe.c').write_text(HARNESS,encoding='utf-8')
+    nasm,cc=tool('nasm','NASM'),tool('gcc','CC')
+    if not nasm or not cc:raise RuntimeError('NASM and GCC required')
+    records=[]
+    def run(cmd,label,timeout=600):
+        (output/(label+'.command.json')).write_text(json.dumps({'command':list(map(str,cmd)),'cwd':str(output)},indent=2))
+        r=subprocess.run(list(map(str,cmd)),cwd=output,capture_output=True,timeout=timeout)
+        (output/(label+'.stdout')).write_bytes(r.stdout);(output/(label+'.stderr')).write_bytes(r.stderr)
+        records.append({'command':list(map(str,cmd)),'returncode':r.returncode})
+        if r.returncode:raise RuntimeError(label+': '+r.stdout.decode(errors='replace')+r.stderr.decode(errors='replace'))
+        return r.stdout.decode(errors='replace')
+    fmt='win64' if os.name=='nt' else 'elf64'
+    for part in ['job','bridge']:
+        run([nasm,'-O0','-f',fmt,*nasm_flags(nasm),'-o',output/(part+'.o'),output/(part+'.asm')],part)
+    run([nasm,'-O0','-f','elf64' if fmt=='win64' else 'win64',*nasm_flags(nasm),'-o',output/'job-other.o',output/'job.asm'],'other-format')
+    exe=output/('probe.exe' if os.name=='nt' else 'probe')
+    run([cc,'-std=c11','-O2','-Wall','-Wextra','-Werror',*([] if os.name=='nt' else ['-no-pie','-Wl,-Ttext-segment=0x10000000']),output/'probe.c',output/'job.o',output/'bridge.o','-o',exe],'link')
+    stdout=run([exe,output/'sources.bin'],'execute')
+    after={p:hashlib.sha256((root/p).read_bytes()).hexdigest() for p in sources}
+    if sources!=after:raise RuntimeError('compiler sources changed')
+    a=(output/'stage1.elf').read_bytes();b=(output/'stage2.elf').read_bytes()
+    if a!=b or len(a)>2*1024*1024:raise RuntimeError('ELF mismatch or limit')
+    result=dict(mode=mode,host_only=True,guest_executed=False,source_stable=True,sources=sources,blob_sha256=hashlib.sha256(payload).hexdigest(),elf_bytes=len(a),elf_sha256=hashlib.sha256(a).hexdigest(),exact_fixedpoint=True,arena_bytes=56*1024*1024,stack_bytes=65536,stdout=stdout,commands=records)
+    (output/'receipt.json').write_text(json.dumps(result,indent=2)+'\n',encoding='utf-8');return result
+
+if __name__=='__main__':
+    import argparse
+    p=argparse.ArgumentParser();p.add_argument('--output',type=Path,required=True);p.add_argument('--mode',choices=['debug','release'],default='release');a=p.parse_args()
+    print(json.dumps(exercise(a.output,a.mode),indent=2))
