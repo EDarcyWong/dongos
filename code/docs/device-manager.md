@@ -40,3 +40,39 @@ ISR顺序是屏蔽对应 IOAPIC 输入、signal单调 sequence、唤醒拥有者
 `tests.test_device_manager` 两模式实际执行生产 manager `service_main`，验证 AHCI+NVMe选择、3种绑定、移除后1次撤回、目录读取失败后全部3次撤回；独立 C 模型验证身份、容量、输出不变、1024次 IRQ signal/wait/ACK/重新绑定，以及旧 owner/代际/sequence拒绝。两个真实坏 Dong 副本分别接受替换设备和陈旧 ACK，均必须被拒绝。
 
 `tests.test_isa_irq` 两模式实际执行生产 IOAPIC 代码，覆盖15种多控制器、ISO、高低电平/触发、GSI/NMI冲突、读取失败、mask与目标读回、EOI场景；另移除两处真实生产读回，严格独立寄存器模型必须拒绝。原 `tests.test_irq_platform` 保留时钟、控制器身份、保留位、deadline次序全部既有模型。所有完整 OS 构建和真实 VM 启动由系统整合窗口串行执行。
+
+## P5 恢复账本候选（尚未接入运行时）
+
+`user.device_manager.recover` 是内核内部事务入口，不增加 syscall，也没有从
+`user.device_host` 调用。它只补齐恢复时的账本提交约束；目前驱动故障后的
+DMA 仍按原路径永久持有，不能据此关闭 P5 的同次启动恢复或 DMA 回收条目。
+
+调用者必须持有内核串行化锁，并传入可信回调和精确旧设备的内核上下文，
+不得接收用户提供的函数指针、上下文或“复位成功”标志。回调必须绑定旧
+owner/incarnation、旧 DMA lease 与传入的旧 device token/撤权后 generation；
+不得直接修改账本。事务顺序固定为：
+
+1. `quiesce`：硬件停止并确认 DMA 已排空/完成受支持控制器复位。单独关闭
+   PCI BME 或 MSI 不构成这个证明。
+2. `retire`：旧 owner 的能力、映射和所有 CPU 上的调度/地址翻译引用均已退休。
+3. `reclaim`：只回收上述精确旧租约，不允许接触其它 owner 的页。
+4. `read`：由内核重新读取完整硬件身份；必须仍为原设备，不自动接纳替换设备。
+5. 发布未绑定的新代际，并清除旧角色绑定；新 BAR/DMA/IRQ 授权仍需正常
+   BIND 和硬件身份复验。IRQ serial 保留，旧 IRQ token 不会复活。
+
+进入第一个回调前设置 `RECOVERY_HELD`。回调失败、身份改变、读取失败或
+重入均不能提前发布新 token。任何可能发生了硬件副作用的失败均保持 HELD，
+不自动重试、不允许同 boot 再次回收；即使最后身份读取失败前已经释放了租约，
+也不把失败当作重新分配授权。达到终端 generation 前拒绝恢复，保留再次撤权空间。
+旧 Table 布局保持4560字节，公共 syscall ABI 不变。
+
+待接线工作仍包括：受支持控制器的可信停止/排空证明；与全核 owner 退休及
+`user.memory` 中 pinned frame 管理一致的精确租约回收；清理 `user.devices`
+与 `device_host` 的旧授权状态；驱动新代际和依赖服务恢复；同 boot 客体故障注入、
+旧句柄/旧 DMA/旧 IRQ 负控与持久化回归。未实现这些回调之前不得调用此入口。
+
+候选测试执行实际 Dong 账本，C 独立回调模型检查顺序、各阶段失败、重入、
+身份替换/无效快照、输出不变、跨代旧 token 拒绝、IRQ serial 保留和代际耗尽，
+并提供跳过退休/复用旧 token 的真实坏源负控。当前仅完成 debug/release 编译和
+C fixture 严格语法检查；本云环境缺 NASM，native 链接执行与坏源负控尚未运行，
+更不代表真实 DMA 安全证明或完整 P5 验收。

@@ -93,6 +93,48 @@ pub unsafe fn revoke(t:*Table,token:u64,generation:u64)!void {unsafe {
     var n:usize=0;while n<4 {if (*t).bindings[n].device_token==token {(*t).bindings[n].flags|=abi.REVOKED;}n+=1;}
     n=0;while n<2 {if (*t).interrupts[n].device_token==token {(*t).interrupts[n].live=0;(*t).interrupts[n].view.flags=abi.MASKED;}n+=1;}
 }return;}
+// Kernel-only recovery transaction; intentionally not exposed by device_host
+// or the syscall ABI yet. Ops are trusted implementations, never user pointers.
+// Each callback receives the exact OLD token and its post-revoke generation.
+// quiesce must prove controller DMA drained/reset, not just BME cleared;
+// retire must prove caps/mappings and every CPU's old owner/translation retired;
+// reclaim may release the exact old DMA lease only after those proofs.
+// A nonzero result is uncertain: the device stays HELD until reboot, including
+// failures after reclaim. There is no automatic retry or caller-provided safe bit.
+pub const RECOVERY_HELD:u64=8;
+pub type RecoveryStep=unsafe fn(context:u64,token:u64,generation:u64)u64;
+pub type RecoveryRead=unsafe fn(context:u64,out:*abi.Device)u64;
+pub struct RecoveryOps {pub quiesce:RecoveryStep,pub retire:RecoveryStep,pub reclaim:RecoveryStep,pub read:RecoveryRead}
+pub unsafe fn recover(t:*Table,token:u64,generation:u64,ops:*const RecoveryOps,context:u64,out:*abi.Device)!void {unsafe {
+    try require(t);
+    if ops==null||out==null {return error.abi.Invalid;}
+    let slot=token&255;
+    if slot==0||slot>(*t).count as u64 {return error.abi.Stale;}
+    let i=(slot-1) as usize;let old=(*t).devices[i];
+    if old.token!=token||generation!=old.generation||generation!=(token>>8)+1
+        ||(old.flags&abi.REVOKED)==0 {return error.abi.Stale;}
+    if (old.flags&RECOVERY_HELD)!=0 {return error.abi.Busy;}
+    // Leave room for a subsequent revocation; never publish the terminal epoch.
+    if generation>=MAX {return error.abi.Capacity;}
+    var n:usize=0;
+    while n<2 {if (*t).interrupts[n].device_token==token&&(*t).interrupts[n].live!=0 {return error.abi.Busy;}n+=1;}
+    // Set before any callback so reentrant recovery and uncertain retries fail.
+    (*t).devices[i].flags|=RECOVERY_HELD;
+    if (*ops).quiesce(context,token,generation)!=0 {return error.abi.Readback;}
+    if (*ops).retire(context,token,generation)!=0 {return error.abi.Readback;}
+    if (*ops).reclaim(context,token,generation)!=0 {return error.abi.Readback;}
+    var raw=abi.EMPTY_DEVICE;
+    if (*ops).read(context,&raw)!=0 {return error.abi.Readback;}
+    try valid(&raw);
+    if !same_identity(&old,&raw) {return error.abi.Removed;}
+    // Publish only an unbound fresh catalog identity. BAR/DMA/IRQ authority is
+    // not granted here; normal bind must reread identity again. Preserve IRQ
+    // serials so a later bind can never resurrect an old IRQ token.
+    var fresh=raw;fresh.generation=generation;fresh.token=(generation<<8)|slot;
+    if rank(&fresh,abi.BLOCK)!=0||rank(&fresh,abi.TABLET)!=0||rank(&fresh,abi.PS2)!=0||rank(&fresh,abi.XHCI)!=0 {fresh.flags=abi.SUPPORTED;}
+    n=0;while n<4 {if (*t).bindings[n].device_token==token {(*t).bindings[n]=abi.EMPTY_BINDING;}n+=1;}
+    (*t).devices[i]=fresh;*out=fresh;
+}return;}
 unsafe fn irq_index(t:*const Table,token:u64,owner:u64)!usize {unsafe {
     try require(t);let slot=token&255;if slot==0||slot>2||owner==0 {return error.abi.Stale;}
     let i=(slot-1) as usize;let s=(*t).interrupts[i];
