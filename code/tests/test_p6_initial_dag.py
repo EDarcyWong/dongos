@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 import struct
 import tempfile
-from types import SimpleNamespace
+import threading
 import unittest
 from unittest import mock
 
@@ -346,14 +346,173 @@ class InitialDagTests(unittest.TestCase):
         base = ['qemu', '-accel', 'tcg', '-smp', '4', '-serial', 'old',
                 '-device', 'isa-debug-exit,iobase=0xf4,iosize=0x04']
         with mock.patch.object(r.clock.builder, 'qemu_command', return_value=base):
-            command = r.command_for(Path('/esp'), Path('/state'), Path('/disk'), 123, 456)
+            command = r.command_for(Path('/esp'), Path('/state'), Path('/disk'), 123)
         self.assertIn('tcg', command)
         self.assertNotIn('host,migratable=off', command)
         self.assertIn('-S', command)
+        self.assertEqual('unix:/state/qmp.sock,server=on,wait=off',
+                         command[command.index('-qmp') + 1])
         self.assertNotIn('isa-debug-exit,iobase=0xf4,iosize=0x04', command)
         with mock.patch.object(r.clock.builder, 'qemu_command', return_value=['qemu', '-accel', 'kvm', '-smp', '4']):
             with self.assertRaisesRegex(ValueError, 'TCG'):
-                r.command_for(Path('/esp'), Path('/state'), Path('/disk'), 1, 2)
+                r.command_for(Path('/esp'), Path('/state'), Path('/disk'), 1)
+
+    def test_unix_qmp_owned_path_length_and_failed_connect_cleanup(self):
+        # 1 leading slash + 97 bytes of parent + slash + eight-byte qmp.sock.
+        self.assertEqual(107, len(r.os.fsencode(r.qmp_socket_path('/' + 'a' * 97))))
+        for parent in ('/' + 'a' * 98, '/' + 'é' * 49):
+            with self.subTest(parent=parent), self.assertRaisesRegex(ValueError, '107 bytes'):
+                r.qmp_socket_path(parent)
+        with mock.patch.object(r.clock.builder, 'qemu_command') as builder:
+            with self.assertRaises(ValueError):
+                r.command_for(Path('/esp'), Path('/' + 'a' * 98), Path('/disk'), 123)
+        builder.assert_not_called()
+        process, connection = mock.Mock(), mock.Mock()
+        process.poll.return_value = 1
+        connection.connect.side_effect = ConnectionRefusedError('not listening')
+        with mock.patch.object(r.socket, 'socket', return_value=connection) as opened:
+            with self.assertRaises(ConnectionRefusedError):
+                r.UnixQMP(Path('/owned/qmp.sock'), process)
+        opened.assert_called_once_with(r.socket.AF_UNIX, r.socket.SOCK_STREAM)
+        connection.close.assert_called_once()
+        with self.assertRaisesRegex(ValueError, 'owned state path'):
+            r.UnixQMP(Path('/owned/foreign.sock'), process)
+
+    def test_unix_qmp_real_host_handshake_events_and_fail_closed(self):
+        # Host socket protocol only. This never starts QEMU or any guest code.
+        for case in ('valid', 'greeting', 'capabilities'):
+            with self.subTest(case=case), tempfile.TemporaryDirectory() as temp:
+                path = r.qmp_socket_path(temp)
+                received, failures = [], []
+                server = r.socket.socket(r.socket.AF_UNIX, r.socket.SOCK_STREAM)
+                server.bind(str(path))
+                server.listen(1)
+                server.settimeout(2)
+
+                def serve():
+                    try:
+                        with server.accept()[0] as peer:
+                            peer.settimeout(2)
+                            with peer.makefile('rwb') as stream:
+                                stream.write(json.dumps({'QMP': {}} if case != 'greeting' else {}).encode() + b'\n')
+                                stream.flush()
+                                if case == 'greeting':
+                                    received.append(stream.readline())
+                                    return
+                                received.append(json.loads(stream.readline()))
+                                stream.write(json.dumps({'error': {'desc': 'capability refused'}}
+                                                        if case == 'capabilities' else {'return': {}}).encode() + b'\n')
+                                stream.flush()
+                                if case == 'capabilities':
+                                    received.append(stream.readline())
+                                    return
+                                received.append(json.loads(stream.readline()))
+                                stream.write(b'{"event":"STOP"}\n{"return":{"running":false}}\n')
+                                stream.flush()
+                                received.append(stream.readline())
+                    except Exception as exc:
+                        failures.append(exc)
+
+                worker = threading.Thread(target=serve, daemon=True)
+                worker.start()
+                process = mock.Mock()
+                process.poll.return_value = None
+                try:
+                    if case == 'valid':
+                        qmp = r.UnixQMP(path, process)
+                        self.assertEqual({'running': False}, qmp.request('query-status'))
+                        qmp.close()
+                        self.assertEqual(-1, qmp.socket.fileno())
+                        self.assertIs(r.UnixQMP.request, r.clock.acpi.QMP.request)
+                    else:
+                        with self.assertRaises(ValueError if case == 'greeting' else RuntimeError):
+                            r.UnixQMP(path, process)
+                    worker.join(timeout=3)
+                    self.assertFalse(worker.is_alive())
+                    self.assertFalse(failures)
+                    self.assertEqual(b'', received[-1])
+                    if case != 'greeting':
+                        self.assertEqual({'execute': 'qmp_capabilities'}, received[0])
+                    if case == 'valid':
+                        self.assertEqual({'execute': 'query-status'}, received[1])
+                finally:
+                    server.close()
+
+    def test_unix_qmp_protocol_and_cleanup_without_host_socket_permissions(self):
+        for case, replies in (
+                ('valid', [b'{"QMP":{}}\n', b'{"return":{}}\n',
+                           b'{"event":"STOP"}\n', b'{"return":{"running":false}}\n']),
+                ('greeting', [b'{}\n']),
+                ('capabilities', [b'{"QMP":{}}\n', b'{"error":{"desc":"refused"}}\n'])):
+            with self.subTest(case=case):
+                connection, stream, process = mock.Mock(), mock.Mock(), mock.Mock()
+                connection.makefile.return_value = stream
+                stream.readline.side_effect = replies
+                with mock.patch.object(r.socket, 'socket', return_value=connection):
+                    if case == 'valid':
+                        qmp = r.UnixQMP(Path('/owned/qmp.sock'), process)
+                        self.assertEqual({'running': False}, qmp.request('query-status'))
+                        qmp.close()
+                        self.assertEqual([{'execute': 'qmp_capabilities'}, {'execute': 'query-status'}],
+                                         [json.loads(c.args[0]) for c in stream.write.call_args_list])
+                    else:
+                        with self.assertRaises(ValueError if case == 'greeting' else RuntimeError):
+                            r.UnixQMP(Path('/owned/qmp.sock'), process)
+                connection.connect.assert_called_once_with('/owned/qmp.sock')
+                stream.close.assert_called_once()
+                connection.close.assert_called_once()
+
+    def test_endpoint_cleanup_never_unlinks_preexisting_or_replacement(self):
+        # No real socket needed: reject an existing endpoint before Popen, then
+        # prove cleanup never deletes it or a later same-path replacement.
+        with tempfile.TemporaryDirectory() as temp:
+            g = object.__new__(r.InitialGuest)
+            g.state, g.chunks, g.evidence = Path(temp), [], {}
+            g.qmp_path = None
+            g.qmp = g.process = g.uart = g.reader = g.stderr = None
+            with mock.patch.object(r.clock, 'create'), \
+                 mock.patch.object(r.storage, 'free_port', return_value=123), \
+                 mock.patch.object(Path, 'exists', return_value=True), \
+                 mock.patch.object(Path, 'unlink') as unlink, \
+                 mock.patch.object(r.subprocess, 'Popen') as popen:
+                with self.assertRaisesRegex(ValueError, 'already exists'):
+                    g.start()
+                g.close()
+                popen.assert_not_called()
+                unlink.assert_not_called()
+                self.assertTrue(g.evidence['qmp_endpoint_path_present'])
+                self.assertEqual('not_removed_by_observer', g.evidence['qmp_endpoint_cleanup'])
+            # A socket replaced by another socket, regular file, or symlink has
+            # the same no-delete policy, independent of process completion.
+            g.process = mock.Mock()
+            for running in (True, False):
+                with self.subTest(running=running), \
+                     mock.patch.object(r.timing.KvmGuest, 'close') as close, \
+                     mock.patch.object(Path, 'exists', return_value=True), \
+                     mock.patch.object(Path, 'unlink') as unlink:
+                    g.process.poll.return_value = None if running else 0
+                    g.close()
+                    close.assert_called_once_with(g)
+                    unlink.assert_not_called()
+
+    def test_owned_unix_socket_cleanup_refuses_replacement(self):
+        for replacement in (False, True):
+            with self.subTest(replacement=replacement), tempfile.TemporaryDirectory() as temp:
+                g = object.__new__(r.InitialGuest)
+                g.state, g.chunks, g.evidence = Path(temp), [], {}
+                g.qmp_path = r.qmp_socket_path(g.state)
+                g.qmp = g.process = g.uart = g.reader = g.stderr = None
+                if replacement:
+                    g.qmp_path.write_text('not our socket')
+                    g.close()
+                    self.assertEqual('not our socket', g.qmp_path.read_text())
+                else:
+                    with r.socket.socket(r.socket.AF_UNIX, r.socket.SOCK_STREAM) as server:
+                        server.bind(str(g.qmp_path))
+                        g.close()
+                        self.assertTrue(g.qmp_path.exists())
+                self.assertTrue(g.evidence['qmp_endpoint_path_present'])
+                self.assertEqual('not_removed_by_observer', g.evidence['qmp_endpoint_cleanup'])
 
     def test_linked_and_arena_reads_do_not_share_linear_translation(self):
         g = object.__new__(r.InitialGuest)

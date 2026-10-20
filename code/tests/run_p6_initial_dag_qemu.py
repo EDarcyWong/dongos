@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import json
 import math
+import os
 from pathlib import Path
 import re
 import socket
@@ -50,6 +51,47 @@ def sampling_delay(initialized, have_gui, dense_index):
     if have_gui:
         return DENSE_DELAYS[dense_index % len(DENSE_DELAYS)]
     return .005 if initialized else .02
+
+
+def qmp_socket_path(state):
+    path = Path(state).resolve() / 'qmp.sock'
+    # Linux sockaddr_un.sun_path is 108 bytes including the terminating NUL.
+    check(b'\0' not in os.fsencode(path) and len(os.fsencode(path)) <= 107,
+          'owned QMP Unix socket path exceeds 107 bytes')
+    return path
+
+
+class UnixQMP(clock.acpi.QMP):
+    """Same QMP handshake/request/close protocol, without TCP event/reply delay."""
+    def __init__(self, path, process):
+        path = Path(path)
+        check(path == qmp_socket_path(path.parent), 'QMP socket must be the owned state path')
+        self.file = None
+        deadline = time.monotonic() + 15
+        while True:
+            connection = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
+            try:
+                connection.settimeout(1)
+                connection.connect(str(path))
+                self.socket = connection
+                break
+            except OSError:
+                connection.close()
+                if process.poll() is not None or time.monotonic() >= deadline:
+                    raise
+                time.sleep(.1)
+        try:
+            self.socket.settimeout(10)
+            self.file = self.socket.makefile('rwb')
+            greeting = json.loads(self.file.readline())
+            check(isinstance(greeting, dict) and 'QMP' in greeting, 'QMP greeting missing')
+            self.request('qmp_capabilities')
+        except BaseException:
+            try:
+                self.close()
+            except Exception:
+                pass
+            raise
 
 
 def words(raw, count):
@@ -331,7 +373,8 @@ def check_completion(raw):
           'initial readiness markers missing or repeated')
 
 
-def command_for(esp, state, disk, uart, qmp):
+def command_for(esp, state, disk, uart):
+    qmp = qmp_socket_path(state)
     command = clock.builder.qemu_command(esp, state / 'guest', test=True, accel='tcg')
     check(command.count('-smp') == 1 and command[command.index('-smp') + 1] == '4'
           and command.count('-accel') == 1 and command[command.index('-accel') + 1] == 'tcg',
@@ -341,7 +384,7 @@ def command_for(esp, state, disk, uart, qmp):
     del command[at - 1:at + 1]
     command[command.index('-serial') + 1] = f'tcp:127.0.0.1:{uart},server=on,wait=off'
     command += ['-cpu', 'max,+smep,+smap,+umip,-tsc-deadline', '-S', '-qmp',
-                f'tcp:127.0.0.1:{qmp},server=on,wait=off', '-drive',
+                'unix:' + str(qmp).replace(',', ',,') + ',server=on,wait=off', '-drive',
                 'if=none,id=data,format=raw,cache=writeback,file=' + str(disk.resolve()).replace(',', ',,'),
                 '-device', 'virtio-blk-pci,drive=data,disable-legacy=on', '-device', 'virtio-tablet-pci']
     return command
@@ -357,7 +400,6 @@ class InitialGuest(clock.ClockGuest):
     verify_process = life.ProcessGuest.verify_process
     trusted_kernel_pool = life.nvme.NvmeGuest.trusted_kernel_pool
     capture_failure = timing.KvmGuest.capture_failure
-    close = timing.KvmGuest.close
 
     def __init__(self, esp, state, timeout):
         super().__init__(esp, state, False, timeout, 7)
@@ -368,6 +410,21 @@ class InitialGuest(clock.ClockGuest):
         self.kernel_memory_layout = life.nvme.check_kernel_memory_layout(esp)
         self.deadline = None
         self.sampling = []
+        self.qmp_path = None
+
+    def close(self):
+        try:
+            timing.KvmGuest.close(self)
+        finally:
+            # Guest termination is mandatory; endpoint deletion is not. Never
+            # unlink a preexisting/replaced socket or introduce an inode race.
+            path = getattr(self, 'qmp_path', None)
+            if path is not None:
+                self.evidence['qmp_endpoint_cleanup'] = 'not_removed_by_observer'
+                try:
+                    self.evidence['qmp_endpoint_path_present'] = path.exists() or path.is_symlink()
+                except OSError as exc:
+                    self.evidence['qmp_endpoint_stat_error'] = str(exc)
 
     def alive(self):
         check(self.process.poll() is None, 'guest exited during initial DAG observation')
@@ -606,14 +663,18 @@ class InitialGuest(clock.ClockGuest):
     def start(self):
         disk = self.state / 'disk.img'
         clock.create(disk, 64)
-        up, qp = storage.free_port(), storage.free_port()
-        command = command_for(self.esp, self.state, disk, up, qp)
+        up = storage.free_port()
+        self.qmp_path = qmp_socket_path(self.state)
+        check(not self.qmp_path.exists() and not self.qmp_path.is_symlink(),
+              'owned QMP socket path already exists')
+        command = command_for(self.esp, self.state, disk, up)
         self.evidence['command'] = command
+        self.evidence.update(qmp_transport='unix', qmp_socket=str(self.qmp_path))
         write(self.state / 'command.json', command)
         self.stderr = (self.state / 'stderr.log').open('wb')
         self.process = subprocess.Popen(command, cwd=ROOT, stdout=subprocess.DEVNULL, stderr=self.stderr)
         self.evidence['actual_qemu_executed'] = True
-        self.qmp = clock.acpi.QMP(qp, self.process)
+        self.qmp = UnixQMP(self.qmp_path, self.process)
         check(self.qmp.request('query-kvm').get('enabled') is False, 'structural runner unexpectedly used KVM')
         check(self.qmp.request('query-status').get('running') is False, 'guest ran before observation setup')
         self.uart = socket.create_connection(('127.0.0.1', up))
