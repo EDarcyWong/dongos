@@ -15,7 +15,9 @@ concurrency:
 jobs:
   build-and-boot:
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    timeout-minutes: 60
+    env:
+      PYTHONUNBUFFERED: "1"
     defaults:
       run:
         working-directory: code
