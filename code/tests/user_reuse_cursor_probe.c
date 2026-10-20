@@ -1,3 +1,6 @@
+// 768 retirement receipts (64 bytes) plus u16 frame indices, rounded to pages.
+#define SCRATCH_PAGES ((768u * (64u + 2u) + 4095u) / 4096u)
+_Static_assert(SCRATCH_PAGES == 13, "Retired scratch ABI");
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -25,11 +28,11 @@ static void marker(U index){unsigned char*p=(void*)(uintptr_t)(alias+index*4096)
 static void grow(unsigned count){for(unsigned i=0;i<count;i++){CK(cursor_fresh()==i);CK(cursor_get(2,0)==i+1);}CK(cursor_get(1,0)==count-1);}
 int main(int argc,char**argv){CK(argc==2);
 #ifdef _WIN32
- void*ram=_aligned_malloc(N*4096ull,4096);void*scratch=_aligned_malloc(12*4096,4096);
+ void*ram=_aligned_malloc(N*4096ull,4096);void*scratch=_aligned_malloc(SCRATCH_PAGES*4096,4096);
 #else
- void*ram=aligned_alloc(4096,N*4096ull);void*scratch=aligned_alloc(4096,12*4096);
+ void*ram=aligned_alloc(4096,N*4096ull);void*scratch=aligned_alloc(4096,SCRATCH_PAGES*4096);
 #endif
- CK(ram&&scratch);alias=(U)(uintptr_t)ram;memset(ram,0xa5,N*4096ull);memset(scratch,0,12*4096);cursor_resources_setup((U)(uintptr_t)scratch);CK(!cursor_setup(alias)&&!cursor_kernel_setup());const char*s=argv[1];
+ CK(ram&&scratch);alias=(U)(uintptr_t)ram;memset(ram,0xa5,N*4096ull);memset(scratch,0,SCRATCH_PAGES*4096);cursor_resources_setup((U)(uintptr_t)scratch);CK(!cursor_setup(alias)&&!cursor_kernel_setup());const char*s=argv[1];
  if(!strcmp(s,"linear-new")){grow(N);CK(cursor_fresh()==0x04060002);CK(cursor_get(0,0)==N&&cursor_get(1,0)==N);zero(0);zero(N-1);}
  else if(!strcmp(s,"linear-reuse")){grow(N);for(unsigned wave=0;wave<3;wave++){cursor_recycle_wave();memset(ram,0xa5,N*4096ull);for(unsigned i=0;i<N;i++){CK(cursor_fresh()==i);CK(cursor_get(0,0)==i+1);}CK(cursor_get(1,0)==N&&cursor_get(2,0)==N);zero(0);zero(N-1);}}
  else {grow(64);cursor_change(0,0,64);memset(ram,0xa5,64*4096);

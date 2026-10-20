@@ -19,14 +19,19 @@ fn prefix(b:[]u8,w:u64,r:u64,m:u64,byte_reg:bool)usize{
  var rex:u64=0x40;if w==64{rex=rex|8;}if r>=8{rex=rex|4;}if m>=8&&m<16{rex=rex|1;}
  if rex!=0x40||byte_reg{b[n]=rex as u8;n+=1;}return n;
 }
-fn modrm(b:[]u8,at:usize,r:u64,m:u64,memory:bool,disp:u64)usize{
+fn modrm(b:[]u8,at:usize,r:u64,m:u64,memory:bool,disp:u64,compact:bool)usize{
  var n=at;if !memory{b[n]=(0xc0|((r&7)<<3)|(m&7))as u8;return n+1;}
  if m==RIP{b[n]=(((r&7)<<3)|5)as u8;return put(b,n+1,disp,4);}
- b[n]=(0x80|((r&7)<<3)|(m&7))as u8;n+=1;if (m&7)==4{b[n]=0x24;n+=1;}return put(b,n,disp,4);
+ var mode:u64=0x80;var bytes:usize=4;
+ if compact{
+  if disp==0&&(m&7)!=5{mode=0;bytes=0;}
+  else if disp<=127||disp>=0xffff_ffff_ffff_ff80{mode=0x40;bytes=1;}
+ }
+ b[n]=(mode|((r&7)<<3)|(m&7))as u8;n+=1;if (m&7)==4{b[n]=0x24;n+=1;}return put(b,n,disp,bytes);
 }
 fn group(op:u64)u64{if op==ADD{return 0;}if op==OR{return 1;}if op==AND{return 4;}if op==SUB{return 5;}if op==XOR{return 6;}return 7;}
 // Internal encoder only touches its private 15-byte scratch. Zero means invalid.
-unsafe fn build(b:[]u8,p:*const Instruction)usize{unsafe{
+unsafe fn build(b:[]u8,p:*const Instruction,compact:bool)usize{unsafe{
  let o=(*p).op;let f=(*p).form;let w=(*p).width;let d=(*p).dst;let s=(*p).src;let base=(*p).base;
  if (*p).reserved!=0||o<MOV||o>SYSCALL||f>INDEX{return 0;}
  if o!=SETCC&&o!=JCC&&(*p).cc!=0{return 0;}
@@ -35,13 +40,18 @@ unsafe fn build(b:[]u8,p:*const Instruction)usize{unsafe{
  if f!=LOAD&&f!=STORE&&f!=MEM&&f!=INDEX&&(base!=0||(*p).disp!=0){return 0;}
  if f!=RR&&f!=STORE&&f!=INDEX&&(*p).src!=0{return 0;}
  if f!=RR&&f!=RI&&f!=LOAD&&f!=REG&&f!=INDEX&&(*p).dst!=0{return 0;}
- // Restricted indexed LEA: always a base, index, scale and full disp32.
+ // Restricted indexed LEA: a base, index and scale; legacy mode uses disp32.
  if f==INDEX{
   if o!=LEA||w!=64||d>15||s>15||s==4||base>15||!i32fits((*p).disp){return 0;}
   let scale=(*p).imm;var ss:u64=0;if scale==1{ss=0;}else if scale==2{ss=1;}else if scale==4{ss=2;}else if scale==8{ss=3;}else{return 0;}
   var rex:u64=0x48;if d>=8{rex=rex|4;}if s>=8{rex=rex|2;}if base>=8{rex=rex|1;}
-  b[0]=rex as u8;b[1]=0x8d;b[2]=(0x84|((d&7)<<3))as u8;b[3]=((ss<<6)|((s&7)<<3)|(base&7))as u8;
-  return put(b,4,(*p).disp,4);
+  var mod:u64=0x80;var bytes:usize=4;
+  if compact{
+   if (*p).disp==0&&(base&7)!=5{mod=0;bytes=0;}
+   else if (*p).disp<=127||(*p).disp>=0xffff_ffff_ffff_ff80{mod=0x40;bytes=1;}
+  }
+  b[0]=rex as u8;b[1]=0x8d;b[2]=(mod|4|((d&7)<<3))as u8;b[3]=((ss<<6)|((s&7)<<3)|(base&7))as u8;
+  return put(b,4,(*p).disp,bytes);
  }
  if o>=CQO{
   if f!=NONE||w!=0{return 0;}
@@ -65,15 +75,15 @@ unsafe fn build(b:[]u8,p:*const Instruction)usize{unsafe{
   if f!=REG||w!=64{return 0;}var n:usize=0;if d>=8{b[n]=0x41;n+=1;}
   if o==PUSH{b[n]=(0x50+(d&7))as u8;return n+1;}
   if o==POP{b[n]=(0x58+(d&7))as u8;return n+1;}
-  b[n]=0xff;n+=1;var g:u64=2;if o==JMP{g=4;}return modrm(b,n,g,d,false,0);
+  b[n]=0xff;n+=1;var g:u64=2;if o==JMP{g=4;}return modrm(b,n,g,d,false,0,compact);
  }
  if o==SETCC{
-  if f!=REG||w!=8||(*p).cc>15{return 0;}var n=prefix(b,8,0,d,d>=4);b[n]=0x0f;b[n+1]=(0x90+(*p).cc)as u8;return modrm(b,n+2,0,d,false,0);
+  if f!=REG||w!=8||(*p).cc>15{return 0;}var n=prefix(b,8,0,d,d>=4);b[n]=0x0f;b[n+1]=(0x90+(*p).cc)as u8;return modrm(b,n+2,0,d,false,0,compact);
  }
  if o>=NEG&&o<=SAR&&o!=IMUL{
   if f!=REG{return 0;}var g:u64=0;
   if o==NEG{g=3;}else if o==NOT{g=2;}else if o==MUL{g=4;}else if o==DIV{g=6;}else if o==IDIV{g=7;}else if o==SHL{g=4;}else if o==SHR{g=5;}else if o==SAR{g=7;}else{return 0;}
-  var n=prefix(b,w,0,d,w==8&&d>=4);var opcode:u64=0xf7;if o>=SHL{opcode=0xd3;}if w==8{opcode-=1;}b[n]=opcode as u8;return modrm(b,n+1,g,d,false,0);
+  var n=prefix(b,w,0,d,w==8&&d>=4);var opcode:u64=0xf7;if o>=SHL{opcode=0xd3;}if w==8{opcode-=1;}b[n]=opcode as u8;return modrm(b,n+1,g,d,false,0,compact);
  }
  if o==MOV&&f==RI{
   if !immediate((*p).imm,w){return 0;}var n=prefix(b,w,0,d,w==8&&d>=4);var opcode:u64=0xb8;if w==8{opcode=0xb0;}b[n]=(opcode+(d&7))as u8;return put(b,n+1,(*p).imm,w/8);
@@ -81,7 +91,7 @@ unsafe fn build(b:[]u8,p:*const Instruction)usize{unsafe{
  if o>=ADD&&o<=TEST&&f==RI{
   if (w==64&&!i32fits((*p).imm))||(w!=64&&!immediate((*p).imm,w)){return 0;}
   var n=prefix(b,w,0,d,w==8&&d>=4);var opcode:u64=0x81;var g=group(o);if o==TEST{opcode=0xf7;g=0;}if w==8{opcode-=1;}
-  b[n]=opcode as u8;n=modrm(b,n+1,g,d,false,0);var bytes=w/8;if bytes>4{bytes=4;}return put(b,n,(*p).imm,bytes);
+  b[n]=opcode as u8;n=modrm(b,n+1,g,d,false,0,compact);var bytes=w/8;if bytes>4{bytes=4;}return put(b,n,(*p).imm,bytes);
  }
  if o==MOVZX||o==MOVSX||o==MOVSXD||o==LEA||o==IMUL{
   if f!=RR&&f!=LOAD{return 0;}if o==LEA&&(f!=LOAD||w==8){return 0;}if o==IMUL&&w==8{return 0;}
@@ -91,22 +101,30 @@ unsafe fn build(b:[]u8,p:*const Instruction)usize{unsafe{
   var m=s;if memory{m=base;}var n=prefix(b,w,d,m,!memory&&sw==8&&m>=4);
   if o==LEA{b[n]=0x8d;n+=1;}else if o==MOVSXD{b[n]=0x63;n+=1;}else{
    b[n]=0x0f;n+=1;var opcode:u64=0xaf;if o==MOVZX{opcode=0xb6;}if o==MOVSX{opcode=0xbe;}if (o==MOVZX||o==MOVSX)&&sw==16{opcode+=1;}b[n]=opcode as u8;n+=1;
-  }return modrm(b,n,d,m,memory,(*p).disp);
+  }return modrm(b,n,d,m,memory,(*p).disp,compact);
  }
  if o>=MOV&&o<=TEST&&(f==RR||f==LOAD||f==STORE){
   var r=s;var m=d;if f==LOAD{r=d;m=base;}if f==STORE{m=base;}
   var n=prefix(b,w,r,m,w==8&&(r>=4||(!memory&&m>=4)));
   var opcode:u64=0x89;if o==TEST{opcode=0x85;}else if o!=MOV{opcode=group(o)*8+1;}
-  if f==LOAD{if o==TEST{return 0;}opcode+=2;}if w==8{opcode-=1;}b[n]=opcode as u8;return modrm(b,n+1,r,m,memory,(*p).disp);
+  if f==LOAD{if o==TEST{return 0;}opcode+=2;}if w==8{opcode-=1;}b[n]=opcode as u8;return modrm(b,n+1,r,m,memory,(*p).disp,compact);
  }
  return 0;
 }}
 pub unsafe fn encode(out:[]u8,ins:*const Instruction,written:*usize)u64{unsafe{
+ return encode_mode(out,ins,written,false);
+}}
+// Opt-in canonical short base displacement. RIP and relative branches retain
+// fixed disp32 so symbol resolution has the same length in both passes.
+pub unsafe fn encode_compact(out:[]u8,ins:*const Instruction,written:*usize)u64{unsafe{
+ return encode_mode(out,ins,written,true);
+}}
+unsafe fn encode_mode(out:[]u8,ins:*const Instruction,written:*usize,compact:bool)u64{unsafe{
  let op=out.ptr as u64;let ip=ins as u64;let wp=written as u64;
  if ins==null||written==null||(ip&7)!=0||(wp&7)!=0{return INVALID;}
  if !span(op,out.len)||!span(ip,sizeof(Instruction))||!span(wp,8){return INVALID;}
  if overlap(op,out.len,ip,sizeof(Instruction))||overlap(op,out.len,wp,8)||overlap(ip,sizeof(Instruction),wp,8){return INVALID;}
- var scratch:[15]u8=[0;15];let b=slice_from_raw_parts(&scratch[0],15);let n=build(b,ins);
+ var scratch:[15]u8=[0;15];let b=slice_from_raw_parts(&scratch[0],15);let n=build(b,ins,compact);
  if n==0||n>15{return INVALID;}if n>out.len{return CAPACITY;}
  var k:usize=0;while k<n{out[k]=scratch[k];k+=1;}*written=n;return OK;
 }}

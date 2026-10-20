@@ -114,7 +114,10 @@ def build(*, test: bool = False, stage: str = "p1", cpu_case: str | None = None,
           output: Path | None = None, memory_case: str | None = None,
           permission_case: str | None = None, runtime_level: int = 0,
           ipc_rounds: int = 1_000_000, smp_case: str | None = None,
-          graphics_case: str | None = None, desktop_scale: int = 100) -> Path:
+          graphics_case: str | None = None, desktop_scale: int = 100,
+          compiler_job: bool = False) -> Path:
+    if compiler_job and (runtime_level!=5 or stage!='p1' or cpu_case or memory_case or permission_case):
+        raise ToolError('compiler job profile requires isolated P5')
     if desktop_scale not in (100,125,150,175,200) or (desktop_scale!=100 and runtime_level!=7):
         raise ToolError("desktop scale must be 100,125,150,175,200 and requires runtime7")
     if stage not in ("p0", "p1"):
@@ -148,6 +151,8 @@ def build(*, test: bool = False, stage: str = "p1", cpu_case: str | None = None,
     if runtime_level>=4:
         input_paths=sorted(p for tree in ('kernel','services','boot','include','lang/dongc','lang/std','lang/examples','tools','assets/fonts')
             for p in (ROOT/tree).rglob('*') if p.is_file() and p.suffix in ('.dg','.asm','.inc','.ld','.py','.dgfont','.txt'))
+        if compiler_job:
+            input_paths+=sorted((ROOT/'lang/bootstrap').glob('*.dg'))
     fingerprints=lambda:{p.relative_to(ROOT).as_posix():hashlib.sha256(p.read_bytes()).hexdigest() for p in input_paths}
     inputs_before=fingerprints()
     if input_paths:(output/'source-before.json').write_text(json.dumps(inputs_before,indent=2)+'\n')
@@ -202,7 +207,18 @@ def build(*, test: bool = False, stage: str = "p1", cpu_case: str | None = None,
             programs = []
             for name, path in (("block", "services/drivers/block_service.dg"),
                                ("fs", "services/fs/service.dg"), ("shell", "services/shell/main.dg")):
-                executable = build_service(ROOT / path, output / "services" / name)
+                if compiler_job and name=='shell':
+                    from lang.dongc import compile_file
+                    target=output/'services'/name;target.mkdir(parents=True,exist_ok=True)
+                    result=compile_file(ROOT/'services/compiler/controller.dg',roots=[ROOT/'services',ROOT/'lang',ROOT/'lang/std'],mode='release')
+                    source=target/'program.asm';source.write_text(result.assembly,encoding='utf-8')
+                    items=[assemble(source,target,fmt='elf64',test=False,stage=stage)]
+                    for part in ['services/lib/syscalls.asm','services/gfx/accelerated.asm','services/gfx/transform.asm']:
+                        items.append(assemble(ROOT/part,target,fmt='elf64',test=False,stage=stage))
+                    executable=target/'program.elf'
+                    execute([elf_linker,'-pie','--no-dynamic-linker','-z','norelro','--build-id=none','-T',str(ROOT/'services/lib/service.ld'),'-o',str(executable),*map(str,items)])
+                else:
+                    executable = build_service(ROOT / path, output / "services" / name)
                 programs.append((name, ELF, executable.read_bytes()))
             if runtime_level >= 7:
                 for name,path in (("compositor","services/desktop/service.dg"),("input","services/drivers/input_service.dg"),
@@ -226,6 +242,8 @@ def build(*, test: bool = False, stage: str = "p1", cpu_case: str | None = None,
         if runtime_level:
             defines["RUNTIME_LEVEL"] = runtime_level
             defines["P6_USER_SMP"] = int(runtime_level == 7)
+        if compiler_job:
+            defines['L3_COMPILER']=1
         if smp_case == "no-invalidate":
             defines["SMP_TEST_NO_INVALIDATE"] = 1
         if graphics_case == "drop-ymm":
@@ -346,7 +364,7 @@ def build(*, test: bool = False, stage: str = "p1", cpu_case: str | None = None,
              f"/map:{output / 'efi_main.map'}", f"/out:{boot_dir / 'BOOTX64.EFI'}", *map(str, objects)])
     if input_paths:
         after=fingerprints();(output/'source-after.json').write_text(json.dumps(after,indent=2)+'\n')
-        manifest=dict(desktop_scale=desktop_scale,runtime_level=runtime_level,kernel_mode=kernel_mode,test=test,graphics_case=graphics_case,smp_case=smp_case,
+        manifest=dict(desktop_scale=desktop_scale,runtime_level=runtime_level,kernel_mode=kernel_mode,test=test,graphics_case=graphics_case,smp_case=smp_case,compiler_job=compiler_job,
             source_unchanged=inputs_before==after,source_sha256=after,
             artifacts={str(p.resolve()):hashlib.sha256(p.read_bytes()).hexdigest() for p in
                 (output/'kernel.bin',output/'kernel.elf',esp/'DONGOS.IMG',esp/'EFI/BOOT/BOOTX64.EFI',*((esp/'SERVICES.BIN',) if runtime_level>=5 else ()))})
@@ -419,6 +437,7 @@ def main() -> int:
     parser.add_argument("--runtime-level", type=int, choices=[0, 3, 4, 5, 6, 7], default=0,
                         help="0: diagnostic; 3: threads; 4: IPC; 5: storage shell; 6: APs and TLB domain; 7: desktop integration")
     parser.add_argument("--ipc-rounds", type=int, default=1_000_000)
+    parser.add_argument('--compiler-job',action='store_true',help='P5 isolated pure compiler/controller profile')
     parser.add_argument("--headless", action="store_true", help="hide the QEMU display")
     parser.add_argument("--accel", choices=["tcg", "kvm", "whpx"], default="tcg")
     args = parser.parse_args()
@@ -439,7 +458,7 @@ def main() -> int:
                 execute([sys.executable, str(ROOT / "tests/run_acpi_qemu.py"), "--all"])
                 execute([sys.executable, str(ROOT / "tests/run_runtime_qemu.py"), "--all"])
             return 0
-        esp = build(stage=args.stage, runtime_level=args.runtime_level, ipc_rounds=args.ipc_rounds)
+        esp = build(stage=args.stage, runtime_level=args.runtime_level, ipc_rounds=args.ipc_rounds,compiler_job=args.compiler_job)
         if args.action in ("run", "debug"):
             if args.action == "debug":
                 print("QEMU paused; connect GDB with: target remote localhost:1234", flush=True)

@@ -1,0 +1,92 @@
+// Trusted P5-only synchronous pure compiler launch. No capability is inherited.
+module user.compiler_job;
+import user.memory as memory;
+import user.abi as abi;
+import exec.elf as elf;
+import boot.service_memory as resources;
+const M:u64=1048576;
+pub const SLOT:usize=3;
+pub const ARENA:u64=0x2000_0000;
+pub const META:u64=0x7000_0000;
+pub const STACK:u64=memory.STACK_TOP-3*0x0100_0000;
+pub error Invalid=0x0513_1001;
+pub struct Request{pub image:u64,pub image_bytes:u64,pub blob:u64,pub blob_bytes:u64,pub output:u64,pub result:u64}
+pub struct Result{pub status:u64,pub stage:u64,pub code:u64,pub detail:u64,pub written:u64,pub offset:u64,pub frontend:u64,pub retained:u64,pub backend:u64}
+pub const EMPTY_RESULT:Result=Result{status:0,stage:0,code:0,detail:0,written:0,offset:0,frontend:0,retained:0,backend:0};
+const EMPTY:Request=Request{image:0,image_bytes:0,blob:0,blob_bytes:0,output:0,result:0};
+fn span(p:u64,n:u64)bool{return p>=elf.USER_MIN&&p<elf.USER_LIMIT&&n<=elf.USER_LIMIT-p;}
+fn overlap(a:u64,an:u64,b:u64,bn:u64)bool{return a<b+bn&&b<a+an;}
+pub unsafe fn valid(q:*const Request,address:u64)bool{unsafe{
+ if (*q).image_bytes<4096||(*q).image_bytes>2*M||(*q).blob_bytes<16||(*q).blob_bytes>512*1024
+  ||!span(address,sizeof(Request))||!span((*q).image,(*q).image_bytes)||!span((*q).blob,(*q).blob_bytes)
+  ||!span((*q).output,2*M)||!span((*q).result,sizeof(Result))||((*q).result&7)!=0
+  ||(*q).blob<0x0100_0000||(*q).blob+(*q).blob_bytes>ARENA-4096{return false;}
+ let inputs=[address,(*q).image,(*q).blob];let sizes=[sizeof(Request)as u64,(*q).image_bytes,(*q).blob_bytes];
+ var i:usize=0;while i<3{
+  if overlap((*q).output,2*M,inputs[i],sizes[i])||overlap((*q).result,sizeof(Result),inputs[i],sizes[i]){return false;}i+=1;
+ }
+ return !overlap((*q).output,2*M,(*q).result,sizeof(Result));
+}}
+pub unsafe fn valid_result(r:*const Result,status:u64)bool{unsafe{
+ if status!=(*r).status||(*r).status>3||(*r).stage>3||(*r).frontend>56*M||(*r).retained>47*M||(*r).backend>47*M{return false;}
+ if (*r).status==0{return (*r).stage==3&&(*r).code==0&&(*r).detail==0&&(*r).written>=4096&&(*r).written<=2*M&&(*r).offset==8*M;}
+ return (*r).written==0&&(*r).offset==0;
+}}
+// LAUNCH_IMPLEMENTATION: pure request/result checks above are tested verbatim.
+pub var RUNNING:bool=false;
+pub var FAILED:bool=false;
+pub var RUNS:u64=0;
+pub var LAST:Result=EMPTY_RESULT;
+var REQUEST:Request=EMPTY;
+var IMAGE:*u8=null;
+var COPY:[4096]u8=[0;4096];
+unsafe fn prepare(q:*const Request)!void{unsafe{
+ var plan=elf.EMPTY_PLAN;let image=slice_from_raw_parts(IMAGE as *const u8,(*q).image_bytes as usize);
+ try elf.validate(image,0,&plan);
+ // Native static image only: bounded private code/data, no BSS expansion,
+ // relocation, or overlap with borrowed source, arena, metadata or stack.
+ if plan.relocation_count!=0||plan.segment_count==0||plan.segment_count>2{return error.Invalid;}
+ var i:usize=0;while i<plan.segment_count as usize{let s=plan.segments[i];
+  if s.virtual<0x0040_0000||s.virtual>=0x0080_0000||s.memory_size!=s.file_size
+   ||s.memory_size>0x0080_0000-s.virtual{return error.Invalid;}i+=1;
+ }
+ try memory.stage_compiler(SLOT,image,0,STACK);
+ // Controller cannot resume or receive IPC while this readonly loan exists.
+ var at=(*q).blob&~4095;let end=((*q).blob+(*q).blob_bytes+4095)&~4095;
+ while at<end{try memory.share(0,SLOT,at,false);at+=4096;}
+ let meta=try memory.anonymous(SLOT,META);
+ at=ARENA;while at<ARENA+56*M{let page=try memory.anonymous(SLOT,at);at+=4096;}
+ let p=memory.processes()+SLOT;
+ (*p).frame.rdi=(*q).blob;(*p).frame.rsi=(*q).blob_bytes;
+ // SYSRET consumes RCX/R11 for RIP/RFLAGS. The ELF entry bridge restores
+ // the fourth SysV argument from the preserved R10 startup register.
+ (*p).frame.rdx=META+128;(*p).frame.rcx=ARENA;(*p).frame.r10=ARENA;(*p).frame.r8=56*M;(*p).frame.r9=META;
+ try memory.stage_commit(SLOT);
+}return;}
+pub unsafe fn start(address:u64)!void{unsafe{
+ if RUNNING||FAILED||(* (memory.processes()+SLOT)).ready!=0{return error.Invalid;}
+ var q=EMPTY;try memory.copy_in(0,address,slice_from_raw_parts((&q)as *u8,sizeof(Request)));
+ if !valid(&q,address){return error.Invalid;}
+ try memory.check_range(0,q.image,q.image_bytes as usize,false);try memory.check_range(0,q.blob,q.blob_bytes as usize,false);
+ try memory.check_range(0,q.output,2*M as usize,true);try memory.check_range(0,q.result,sizeof(Result),true);
+ if IMAGE==null{var b=resources.Block{physical:0,virtual:0,pages:0};try resources.allocate(512,1,&b);IMAGE=b.virtual as *u8;}
+ try memory.copy_in(0,q.image,slice_from_raw_parts(IMAGE,q.image_bytes as usize));
+ let ready=prepare(&q);match ready{ok=>{},err(code)=>{
+  // stage() aborts its own load failures. Later setup failures still own stage.
+  if (*(memory.processes()+SLOT)).ready==1{let aborted=memory.stage_abort(SLOT);match aborted{ok=>{},err(e)=>{FAILED=true;return aborted;},}}
+  return ready;
+ },}
+ REQUEST=q;LAST=EMPTY_RESULT;RUNNING=true;RUNS+=1;
+}return;}
+pub unsafe fn finish(status:u64)!void{unsafe{
+ if !RUNNING||FAILED{return error.Invalid;}
+ try memory.copy_in(SLOT,META,slice_from_raw_parts((&LAST)as *u8,sizeof(Result)));
+ if !valid_result(&LAST,status){FAILED=true;return error.Invalid;}
+ var at:u64=0;while at<LAST.written{
+  var n=LAST.written-at;if n>4096{n=4096;}
+  try memory.copy_in(SLOT,ARENA+LAST.offset+at,COPY[0..n as usize]);
+  try memory.copy_out(0,REQUEST.output+at,COPY[0..n as usize]);at+=n;
+ }
+ try memory.copy_out(0,REQUEST.result,slice_from_raw_parts((&LAST)as *const u8,sizeof(Result)));
+ try memory.destroy(SLOT);RUNNING=false;REQUEST=EMPTY;
+}return;}

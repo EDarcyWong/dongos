@@ -1,4 +1,8 @@
-"""Generate/merge local client configuration without invoking an AI CLI."""
+"""Generate/merge local client configuration without invoking an AI CLI.
+
+DeepSeek / Claude / Cursor share SERVER_NAME and bind --owner at install time.
+Workers cannot override identity via tool arguments; no model auto-start.
+"""
 from datetime import datetime, timezone
 import json
 import os

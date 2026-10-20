@@ -1,0 +1,231 @@
+{
+  "task": "claude:C52",
+  "submission_rev": 15,
+  "formal_job": "ec1d698d5863424b8f0726a07d659303",
+  "formal": {
+    "independent_direct_run": true,
+    "note": "Coordinator Windows registration defect remains; no accepted state inferred"
+  },
+  "run": "D:\\projects\\projects3\\2026\\dongos\\coordination\\dongos_works\\claude-works\\build\\C52\\run-21cf1af0e02f",
+  "input_sha256": {
+    "nasm_u64_module.dg": "3ef6b5598d30b5a82345f1cdb80b705bcf7e02c49cd8d11a7a5b9adc4e32d2f7",
+    "nasm_u64_module.md": "fc43f2d553d3ed88ab0df65647a5405487fc9d01a57ecf0ee79a67f9da5ece0c",
+    "test_nasm_u64_module.py": "b63dba5d8c9159f4fe5a5a6ae970883ed23b62991e903c607938bc634a75e04b",
+    "nasm_u64_function.dg": "866e7ca16551a4c6b345f872984d1e3615a902b3e6d54172b2f7a67eabdbf51c",
+    "nasm_symbol.dg": "25675ec83d79c6f2b34bebfdd837e75d80dc384e900939be0c75d06a7bde4c06",
+    "decimal_integer.dg": "58a4e4d746393d0e5944656aeb4c6f2aff96acca047afd455c60a47464ce0b76",
+    "nasm_function_frame.dg": "08580fdf8ebbd75dc27812bb63f4e425a18e66b285fd5ccd7805d1d6dc55e9ff",
+    "nasm_sysv_incoming_args.dg": "bbaf9d38f0b7993e0d9da3ff86e8c0d86ecc0bbdca09e7617a878b57c3e3f714",
+    "sysv_integer_args.dg": "37ae1037b6895c753c47b05165aa6ba56114568dad301633fbcf5756a2531efa",
+    "nasm_memory_operand.dg": "e3d072a3ea1314975427bb0e24426da2adaf3de692101f3e3e8d6768697f1d24",
+    "nasm_integer_memory_load.dg": "88624e98077d19615117f2a0f9ac6c67e80993ce222609c376288da3e45d3fec",
+    "nasm_integer_memory_store.dg": "bab7c97377a90eb581ff25b681e7462fb4ab97bd082de1c203bca5b3587b0b24",
+    "nasm_integer_binary.dg": "3c46b9611ff547e8c3fe2216628d37793fd05870d1477d7597f2022a568a6c9a",
+    "nasm_sysv_function_exit.dg": "978690d960607abaa8952965c77b3e67dcd18544b8d9f48598a85286ef06b7f5",
+    "nasm_sysv_return_values.dg": "3b606d60aad016b4ca4b5d994e7473c85a895f8bd785bfaa6d8e1a5567520d0b",
+    "sysv_return_plan.dg": "f880c0e387e9561f00a51b87713fcdd7af24a065dd0be407325b3290e6a0c08e"
+  },
+  "artifact_hashes_checked": 713,
+  "native_observations": [
+    {
+      "label": "native-debug",
+      "vectors": 13,
+      "raw_sha256": "bc9c11542051658490367fbe55b1883095a6edd285cdd14e163851471b060765",
+      "all_abi_guards_checked": true,
+      "rbx_delta": 0,
+      "rax_mismatches": []
+    },
+    {
+      "label": "bad-slot-good-debug",
+      "vectors": 13,
+      "raw_sha256": "63912b179f580c70ea2bc0f9740e48f2a321f559ee7a7dfcb2af02db221beb9c",
+      "all_abi_guards_checked": true,
+      "rbx_delta": 0,
+      "rax_mismatches": []
+    },
+    {
+      "label": "bad-slot-debug",
+      "vectors": 13,
+      "raw_sha256": "b0d600e65a8888ab4168234a1759fea76e77cbfc123b28980b1db368aeca7c53",
+      "all_abi_guards_checked": true,
+      "rbx_delta": 0,
+      "rax_mismatches": [
+        {
+          "index": 4,
+          "expected": 18446744073709551613,
+          "actual": 9223372036854775807
+        },
+        {
+          "index": 8,
+          "expected": 18446744073709551614,
+          "actual": 3
+        }
+      ]
+    },
+    {
+      "label": "bad-rbx-good-debug",
+      "vectors": 13,
+      "raw_sha256": "e5a2dd6c08a1e9f181bce6cbada4d1895864cb533bc2411bcdc8a65519bc7782",
+      "all_abi_guards_checked": true,
+      "rbx_delta": 0,
+      "rax_mismatches": []
+    },
+    {
+      "label": "bad-rbx-debug",
+      "vectors": 13,
+      "raw_sha256": "a4d4b66499e8beb3464f069fda506df34d9424a6ead68d118dd751ba7334e057",
+      "all_abi_guards_checked": true,
+      "rbx_delta": 8,
+      "rax_mismatches": []
+    },
+    {
+      "label": "native-release",
+      "vectors": 13,
+      "raw_sha256": "bcd4c093197ce70989371e1f33f175dadc63751e453aa2b4ffc34e2e3ef1d707",
+      "all_abi_guards_checked": true,
+      "rbx_delta": 0,
+      "rax_mismatches": []
+    },
+    {
+      "label": "bad-slot-good-release",
+      "vectors": 13,
+      "raw_sha256": "a1425ea0cbacb059a335f01f57113d9b9f83baf230470909c57a7ea8e6b61aa9",
+      "all_abi_guards_checked": true,
+      "rbx_delta": 0,
+      "rax_mismatches": []
+    },
+    {
+      "label": "bad-slot-release",
+      "vectors": 13,
+      "raw_sha256": "1f16b5524017670702d5830f07c2fffceca44b30343e730846871f2be8d2ef79",
+      "all_abi_guards_checked": true,
+      "rbx_delta": 0,
+      "rax_mismatches": [
+        {
+          "index": 4,
+          "expected": 18446744073709551613,
+          "actual": 9223372036854775807
+        },
+        {
+          "index": 8,
+          "expected": 18446744073709551614,
+          "actual": 3
+        }
+      ]
+    },
+    {
+      "label": "bad-rbx-good-release",
+      "vectors": 13,
+      "raw_sha256": "083bb019256667902dfcdb34d2231f95fc7780df57eb69233ae138d86595024f",
+      "all_abi_guards_checked": true,
+      "rbx_delta": 0,
+      "rax_mismatches": []
+    },
+    {
+      "label": "bad-rbx-release",
+      "vectors": 13,
+      "raw_sha256": "af0fac2d78c7b27eb21d1ffbf88250c37c446ed78647b8d70dcb4872a068aed7",
+      "all_abi_guards_checked": true,
+      "rbx_delta": 8,
+      "rax_mismatches": []
+    }
+  ],
+  "test_records": [
+    {
+      "test": "bad-return-slot-swapped",
+      "compiled": true,
+      "linked": true,
+      "native_executed": true,
+      "modes": 2,
+      "rejected_by": "native rax"
+    },
+    {
+      "test": "bad-no-duplicate-check",
+      "compiled": true,
+      "native_executed": true,
+      "modes": 2,
+      "rejected_by": "status (not INVALID)"
+    },
+    {
+      "test": "bad-early-header-in-out",
+      "compiled": true,
+      "native_executed": true,
+      "modes": 2,
+      "rejected_by": "out/written atomicity guard"
+    },
+    {
+      "test": "bad-early-work-write",
+      "compiled": true,
+      "native_executed": true,
+      "modes": 2,
+      "rejected_by": "work dirty byte on WORKSPACE"
+    },
+    {
+      "test": "bad-rbx-clobbered",
+      "vectors": 13,
+      "compiled": true,
+      "linked": true,
+      "native_executed": true,
+      "modes": 2,
+      "rejected_by": "native rbx preserved (rax and rsp assertions passed first)"
+    },
+    {
+      "test": "bad-no-alias",
+      "compiled": true,
+      "native_executed": true,
+      "modes": 2,
+      "rejected_by": "preflights 13..18, 27..35"
+    },
+    {
+      "test": "native-module-link-and-call",
+      "modules": 4,
+      "vectors_per_mode": 13,
+      "modes": 2,
+      "formats": [
+        "elf64",
+        "win64"
+      ],
+      "nm_checked": true,
+      "exports": 16,
+      "passed": true
+    },
+    {
+      "test": "exact-text-priorities-work-out",
+      "modules": 4,
+      "cases_per_mode": 32,
+      "modes": 2,
+      "preflights_per_native": 36,
+      "passed": true
+    },
+    {
+      "test": "nested-prechecks-read-no-body-bytes",
+      "cases": 10,
+      "modes": 2,
+      "observation": "PAGE_GUARD per body page (POSIX: PROT_NONE + SIGSEGV)",
+      "passed": true
+    },
+    {
+      "test": "overlapping-duplicate-invalid",
+      "ok_cases": 5,
+      "invalid_cases": 36,
+      "modes": 2,
+      "passed": true
+    }
+  ],
+  "source_unchanged_since_formal": true,
+  "audit_script_sha256": "de2c8b136c760a8ccd0a1c8e018b47f964b3c7973fe733b103210d1b5af1deba",
+  "integrated": false,
+  "review_decision": "acceptance_eligible",
+  "independent_command_result": {
+    "command": "python -m unittest discover -s claude-works/tests -p test_nasm_u64_module.py -v",
+    "cwd": "D:/projects/projects3/2026/dongos/coordination/dongos_works",
+    "tests": 6,
+    "skips": 0,
+    "returncode": 0,
+    "elapsed_seconds": 338.87,
+    "output_conclusion": "OK",
+    "artifact_run": "claude-works/build/C52/run-21cf1af0e02f"
+  },
+  "formal_acceptance_registered": false,
+  "blocker": "WINVERIFY1 remains todo; coordinator Windows process-stop registration defect unchanged"
+}

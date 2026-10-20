@@ -1,0 +1,40 @@
+// Existing owner-bound file grant -> bounded bootstrap source reader.
+module lib.compiler_source;
+import lib.files as files;
+import bootstrap.guest_source_reader as reader;
+pub const PROTOCOL:u64=0x0513_0001;
+const MAX:u64=0xffff_ffff_ffff_ffff;
+const CHANNEL:usize=65536;
+const CHUNK:usize=61440;
+struct Context{session:*files.Session,token:u64}
+struct Region{p:u64,n:usize}
+fn span(p:u64,n:usize)bool{return n==0||(p!=0&&n<=MAX-p);}
+fn overlap(a:*const Region,b:*const Region)bool{unsafe{return (*a).n!=0&&(*b).n!=0&&(*a).p<(*b).p+(*b).n&&(*b).p<(*a).p+(*a).n;}}
+unsafe fn read_at(raw:u64,offset:u64,destination:*u8,capacity:usize,moved:*usize)u64{unsafe{
+ let c=raw as *Context;let s=(*c).session;
+ var count=capacity;if count>CHUNK{count=CHUNK;}
+ let status=files.read(s,(*c).token,offset,count as u64);
+ if status!=0{return status;}
+ let n=(*s).response.words[1];
+ if n>count as u64{return PROTOCOL;}
+ var i:usize=0;while i<n as usize{*(destination+i)=*(((*s).channel+4096) as *const u8+i);i+=1;}
+ *moved=n as usize;return 0;
+}}
+// Session/channel are borrowed exclusively until return; the caller retains
+// ownership of token. No root/open/close, write, flush or privilege operation.
+pub unsafe fn load(s:*files.Session,token:u64,scratch:[]u8,out:[]u8,result:*reader.Result)u64{unsafe{
+ if s==null||(s as u64&7)!=0||!span(s as u64,sizeof(files.Session)){return reader.INVALID;}
+ let channel=(*s).channel;
+ if token==0||(*s).endpoint==0||channel==0||(channel&4095)!=0||!span(channel,CHANNEL){return reader.INVALID;}
+ if result==null||(result as u64&7)!=0{return reader.INVALID;}
+ if out.len>reader.MAX_SOURCE||scratch.len>reader.MAX_SOURCE+1||scratch.len<=out.len{return reader.INVALID;}
+ let regions=[Region{p:s as u64,n:sizeof(files.Session)},Region{p:channel,n:CHANNEL},
+  Region{p:scratch.ptr as u64,n:scratch.len},Region{p:out.ptr as u64,n:out.len},
+  Region{p:result as u64,n:sizeof(reader.Result)}];
+ var i:usize=0;while i<regions.len{
+  if !span(regions[i].p,regions[i].n){return reader.INVALID;}
+  var j:usize=0;while j<i{if overlap(&regions[i],&regions[j]){return reader.INVALID;}j+=1;}i+=1;
+ }
+ var context=Context{session:s,token:token};
+ return reader.load(&context as u64,read_at,scratch,out,result);
+}}

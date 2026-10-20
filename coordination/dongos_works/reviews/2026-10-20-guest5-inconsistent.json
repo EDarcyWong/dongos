@@ -1,0 +1,20 @@
+[
+  {
+    "mode": "debug",
+    "return": 3,
+    "status": 3,
+    "written": 0,
+    "total": 4,
+    "write_calls": 0,
+    "flush_calls": 1
+  },
+  {
+    "mode": "release",
+    "return": 3,
+    "status": 3,
+    "written": 0,
+    "total": 4,
+    "write_calls": 0,
+    "flush_calls": 1
+  }
+]

@@ -5,8 +5,9 @@
   "checks": [
     "discover:claude-works/tests:test_nasm_u64_module.py"
   ],
+  "claim_token": null,
   "claimed_at": "2026-10-19T15:35:14+00:00",
-  "claimed_by": "claude-mcp-7375d33562084f6a",
+  "claimed_by": null,
   "complexity": "standard",
   "created_at": "2026-10-19T14:14:02+00:00",
   "delivery": "claude-works/deliveries/C52.md",
@@ -18,15 +19,45 @@
   "document": "claude-works/tasks/C52-board.md",
   "historical": false,
   "id": "claude:C52",
+  "integration_note": "已集成：主线 code/lang/bootstrap/nasm_u64_module.dg 与已验收交付逐字节相同，.md仅路径/平台措辞调整；2026-10-20主线 lang.tests.test_bootstrap_nasm_u64_module、nasm_pair_cleanup_function、cleanup_module_integration 合计11项通过、0失败、0skip（737.8秒）。未运行OS/VM，不宣称完整L3。",
   "legacy_hash": "64f2f3f1eb8c71efd06e8ef71c62b39e17e93366bb955eb5e513a1d1ed5c6500",
   "number": "C52",
   "owner": "claude",
-  "rev": 7,
-  "review_note": "[P2] 源码/契约审查不通过，不能因现有5项测试全过而验收。nasm_u64_module.dg:41-46 的嵌套预检缺少名字1..64和IR<=64等数量限制，57行重复名字same()先读字节，66行后才交C48拒绝非法数量，违反先完整嵌套数量预检、非法数量不读正文的契约。直接链接正式未修改Dong对象的安全PAGE_GUARD读观察证明：debug/release，module/item 65字节单函数INVALID且0次读，双函数同为65字节名字却在INVALID前读1次；64字节单函数读观察正控为1且WORKSPACE，12个观察均正常返回，输出/written/表不变，无崩溃/超时/构建失败。正式作业64634c302d0c434bbf0216f94eb8f495为5tests/0skip/146.640秒/source_stable=true，16输入和672产物SHA一致，130组原生负控审查正常，但未覆盖本缺口。返修仅原四文件：任何名字/IR正文读取前先完成所有函数嵌套名字及IR数量/描述符预检，保留C48实际语义预检；增加能使当前实现因提前读取而失败的安全永久回归，覆盖module/item、多函数/位置，保留现有负控、优先级和原子性。更新说明与交付原编号重新submit；不改C48/他人实现。证据reviews/2026-10-19-C52-evidence.json、-C52-name-preflight.c，详审reviews/2026-10-19-C52-D25-reviewed.md。",
-  "status": "submitted",
+  "pause_note": "执行器无法确认全部进程已停止；请在原机器停止并明确确认",
+  "rev": 19,
+  "review_note": "R1源码/完整任务契约/永久测试已实际审查；全部函数嵌套名字1..64及IR<=64/描述符先于正文读取，真实C48语义预检保留。正式作业72281b9c169340bd9124bf7eb7a7e7a1通过6tests/0skip，207.660秒，process_stopped=true/source_stable=true；16输入与713产物SHA一致。额外独立解析130组原生调用的RAX、全部callee-saved/RSP/canary及坏Dong数值负控，R1安全读观察正控/去预检坏体灵敏度均通过。当前四交付与正式指纹相同，原P2已关闭。证据reviews/2026-10-20-C52-formal-final-evidence.json。登记组件验收，未实际集成，不宣称完整L3。",
+  "status": "integrated",
   "title": "[L3] 复用C48组装多函数NASM模块及可链接导出",
-  "updated_at": "2026-10-19T15:42:48+00:00",
-  "verification": null,
+  "updated_at": "2026-10-20T07:34:39+00:00",
+  "verification": {
+    "checks": [
+      {
+        "cancelled": false,
+        "elapsed_seconds": 207.66,
+        "execution_exited": true,
+        "passed": true,
+        "process_stopped": true,
+        "returncode": 0,
+        "skips": 0,
+        "spec": "discover:claude-works/tests:test_nasm_u64_module.py",
+        "tests": 6,
+        "timed_out": false
+      }
+    ],
+    "execution_exited": true,
+    "fingerprint": {
+      "claude-works/deliveries/C52.md": "d4db6be6c1b976115846f47efddcfc04213a150947e870e9ace35fc4cc2b555a",
+      "claude-works/src/bootstrap/nasm_u64_module.dg": "3ef6b5598d30b5a82345f1cdb80b705bcf7e02c49cd8d11a7a5b9adc4e32d2f7",
+      "claude-works/src/bootstrap/nasm_u64_module.md": "fc43f2d553d3ed88ab0df65647a5405487fc9d01a57ecf0ee79a67f9da5ece0c",
+      "claude-works/tests/test_nasm_u64_module.py": "b63dba5d8c9159f4fe5a5a6ae970883ed23b62991e903c607938bc634a75e04b"
+    },
+    "finished_at": "2026-10-20T06:06:04+00:00",
+    "job": "72281b9c169340bd9124bf7eb7a7e7a1",
+    "passed": true,
+    "process_stopped": true,
+    "source_stable": true,
+    "summary": "定向复验通过，等待源码/契约审查"
+  },
   "write_paths": [
     "claude-works/src/bootstrap/nasm_u64_module.dg",
     "claude-works/src/bootstrap/nasm_u64_module.md",

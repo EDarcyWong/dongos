@@ -1,0 +1,38 @@
+[
+  {
+    "task": "GUEST1",
+    "mode": "debug",
+    "object": "D:\\projects\\projects3\\2026\\dongos\\coordination\\dongos_works\\pool-works\\build\\GUEST1\\run-c0a28ac2f1b3\\debug.o",
+    "observation": {
+      "status": 0,
+      "out_tail_changed_bytes": 8
+    }
+  },
+  {
+    "task": "GUEST1",
+    "mode": "release",
+    "object": "D:\\projects\\projects3\\2026\\dongos\\coordination\\dongos_works\\pool-works\\build\\GUEST1\\run-c0a28ac2f1b3\\release.o",
+    "observation": {
+      "status": 0,
+      "out_tail_changed_bytes": 8
+    }
+  },
+  {
+    "task": "GUEST3",
+    "mode": "debug",
+    "object": "D:\\projects\\projects3\\2026\\dongos\\coordination\\dongos_works\\pool-works\\build\\GUEST3\\run-baf88026b12b\\debug.o",
+    "observation": {
+      "status": 3,
+      "result_changed_bytes": 72
+    }
+  },
+  {
+    "task": "GUEST3",
+    "mode": "release",
+    "object": "D:\\projects\\projects3\\2026\\dongos\\coordination\\dongos_works\\pool-works\\build\\GUEST3\\run-baf88026b12b\\release.o",
+    "observation": {
+      "status": 3,
+      "result_changed_bytes": 72
+    }
+  }
+]

@@ -1,0 +1,80 @@
+// Offline 2 MiB <-> 4 KiB page-entry conversion. Pure data transformation over
+// caller-supplied entries: no CR3, no TLB instruction, no allocation. The
+// caller owns the page-directory slot and the 512-entry page table, applies
+// the returned Plan (flush, then retire the table after the flush), and never
+// mixes this with a live address space without its own barrier.
+//
+// The PAT selector sits in different bits: bit 12 of a 2 MiB PDE, bit 7 of a
+// 4 KiB PTE. Both directions move it explicitly; copying the raw bit would
+// silently turn a PAT=1 large page into a PS-adjacent reserved bit.
+//
+// split: PDE(P=1,PS=1) -> 512 PTEs, entry i = base + i*4096 with every
+//   attribute of the PDE preserved (P,RW,US,PWT,PCD,PAT,G,NX, software bits
+//   9..11 and 52..62). A/D are inherited by every PTE (the safe over-estimate
+//   for a dirty large page) unless CLEAR_AD is requested.
+// merge: only if all 512 PTEs are present, the first is 2 MiB aligned, frames
+//   are consecutive, and every attribute except A/D is identical. PDE A and D
+//   are the OR of the PTEs, so no dirty/accessed information is lost.
+// Statuses are checked in the order listed below; any non-OK leaves the
+// table, the PDE slot and the Plan byte-for-byte unchanged.
+module mm.huge_page_plan;
+pub const OK:u64=0;pub const INVALID:u64=1;pub const NOT_HUGE:u64=2;pub const NOT_PRESENT:u64=3;
+pub const RESERVED:u64=4;pub const MISALIGNED:u64=5;pub const NOT_CONTIGUOUS:u64=6;pub const ATTR_MISMATCH:u64=7;
+pub const CLEAR_AD:u64=1;
+pub const ENTRIES:usize=512;
+pub struct Plan{pub pages:u64,pub flush_required:u64,pub retire_table:u64}
+const MAX:u64=0xffff_ffff_ffff_ffff;
+const PRESENT:u64=0x1;const ACCESSED:u64=0x20;const DIRTY:u64=0x40;const PS:u64=0x80;
+const PDE_PAT:u64=0x1000;const PTE_PAT:u64=0x80;
+const PDE_ADDRESS:u64=0x000f_ffff_ffe0_0000;const PTE_ADDRESS:u64=0x000f_ffff_ffff_f000;
+const PDE_RESERVED:u64=0x001f_e000;       // bits 13..20 of a 2 MiB PDE
+const ALIGN_2M:u64=0x1f_ffff;
+const PLAN_BYTES:u64=24;const TABLE_BYTES:u64=4096;
+fn span(p:u64,n:u64)bool{return n==0||(p!=0&&n<=MAX-p);}
+fn overlap(a:u64,n:u64,b:u64,m:u64)bool{return n!=0&&m!=0&&a<b+m&&b<a+n;}
+pub unsafe fn split(pde:u64,flags:u64,table:[]u64,plan:*Plan)u64{unsafe{
+ if plan==null{return INVALID;}
+ let pp=plan as u64;let tp=table.ptr as u64;
+ if (pp&7)!=0||!span(pp,PLAN_BYTES){return INVALID;}
+ if table.len!=ENTRIES||table.ptr==null||(tp&7)!=0||!span(tp,TABLE_BYTES){return INVALID;}
+ if overlap(pp,PLAN_BYTES,tp,TABLE_BYTES){return INVALID;}
+ if (flags&(MAX^CLEAR_AD))!=0{return INVALID;}
+ if (pde&PRESENT)==0{return NOT_PRESENT;}
+ if (pde&PS)==0{return NOT_HUGE;}
+ if (pde&PDE_RESERVED)!=0{return RESERVED;}
+ var template:u64=pde&(MAX^(PDE_ADDRESS|PS|PDE_PAT));
+ if (pde&PDE_PAT)!=0{template=template|PTE_PAT;}
+ if (flags&CLEAR_AD)!=0{template=template&(MAX^(ACCESSED|DIRTY));}
+ let base=pde&PDE_ADDRESS;
+ var i:usize=0;
+ while i<ENTRIES{table[i]=template|(base+(i as u64)*4096);i+=1;}
+ *plan=Plan{pages:512,flush_required:1,retire_table:0};
+ return OK;
+}}
+pub unsafe fn merge(table:[]const u64,pde:*u64,plan:*Plan)u64{unsafe{
+ if plan==null||pde==null{return INVALID;}
+ let pp=plan as u64;let dp=pde as u64;let tp=table.ptr as u64;
+ if (pp&7)!=0||(dp&7)!=0||!span(pp,PLAN_BYTES)||!span(dp,8){return INVALID;}
+ if table.len!=ENTRIES||table.ptr==null||(tp&7)!=0||!span(tp,TABLE_BYTES){return INVALID;}
+ if overlap(pp,PLAN_BYTES,tp,TABLE_BYTES)||overlap(dp,8,tp,TABLE_BYTES)||overlap(pp,PLAN_BYTES,dp,8){return INVALID;}
+ var i:usize=0;
+ while i<ENTRIES{if (table[i]&PRESENT)==0{return NOT_PRESENT;}i+=1;}
+ let first=table[0];let start=first&PTE_ADDRESS;
+ if (start&ALIGN_2M)!=0{return MISALIGNED;}
+ i=0;
+ while i<ENTRIES{if (table[i]&PTE_ADDRESS)!=start+(i as u64)*4096{return NOT_CONTIGUOUS;}i+=1;}
+ let mask=MAX^(PTE_ADDRESS|ACCESSED|DIRTY);
+ let reference=first&mask;
+ var touched:u64=0;
+ i=0;
+ while i<ENTRIES{
+  if (table[i]&mask)!=reference{return ATTR_MISMATCH;}
+  touched=touched|(table[i]&(ACCESSED|DIRTY));
+  i+=1;
+ }
+ var entry:u64=reference&(MAX^PTE_PAT);
+ if (reference&PTE_PAT)!=0{entry=entry|PDE_PAT;}
+ *pde=entry|PS|start|touched;
+ *plan=Plan{pages:512,flush_required:1,retire_table:1};
+ return OK;
+}}

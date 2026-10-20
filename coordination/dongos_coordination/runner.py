@@ -19,6 +19,108 @@ ROOT_FILES = {'Makefile', 'PLAN.md', 'README.md', 'AGENTS.md', 'CLAUDE.md'}
 EXCLUDE = {'.git', '.local', 'build', 'esp', 'node_modules', '__pycache__', '.venv'}
 
 
+class WindowsJob:
+    """One Windows Job Object owning a whole executor process tree.
+
+    The leader is created suspended, assigned to the job and only then resumed,
+    so every descendant it starts is a job member from its first instruction.
+    Breakaway is not permitted, so a child cannot silently leave the job. An
+    active-process count of zero is therefore proof that the whole tree has
+    stopped; a leader exit alone never is. KILL_ON_JOB_CLOSE ends any member
+    still running if this service exits, but after a restart the new service
+    holds no handle and cannot prove anything: recovery keeps requiring an
+    explicit external confirmation.
+    """
+    CREATE_SUSPENDED = 0x00000004
+    KILL_ON_JOB_CLOSE = 0x00002000
+    EXTENDED_LIMIT_INFORMATION = 9
+    BASIC_ACCOUNTING_INFORMATION = 1
+
+    def __init__(self):
+        import ctypes
+        from ctypes import wintypes
+        self.ctypes = ctypes
+        kernel32 = ctypes.WinDLL('kernel32', use_last_error=True)
+        ntdll = ctypes.WinDLL('ntdll')
+
+        class BasicLimit(ctypes.Structure):
+            _fields_ = [('PerProcessUserTimeLimit', ctypes.c_int64), ('PerJobUserTimeLimit', ctypes.c_int64),
+                        ('LimitFlags', wintypes.DWORD), ('MinimumWorkingSetSize', ctypes.c_size_t),
+                        ('MaximumWorkingSetSize', ctypes.c_size_t), ('ActiveProcessLimit', wintypes.DWORD),
+                        ('Affinity', ctypes.c_size_t), ('PriorityClass', wintypes.DWORD),
+                        ('SchedulingClass', wintypes.DWORD)]
+
+        class ExtendedLimit(ctypes.Structure):
+            _fields_ = [('BasicLimitInformation', BasicLimit), ('IoInfo', ctypes.c_uint64 * 6),
+                        ('ProcessMemoryLimit', ctypes.c_size_t), ('JobMemoryLimit', ctypes.c_size_t),
+                        ('PeakProcessMemoryUsed', ctypes.c_size_t), ('PeakJobMemoryUsed', ctypes.c_size_t)]
+
+        class Accounting(ctypes.Structure):
+            _fields_ = [('TotalUserTime', ctypes.c_int64), ('TotalKernelTime', ctypes.c_int64),
+                        ('ThisPeriodTotalUserTime', ctypes.c_int64), ('ThisPeriodTotalKernelTime', ctypes.c_int64),
+                        ('TotalPageFaultCount', wintypes.DWORD), ('TotalProcesses', wintypes.DWORD),
+                        ('ActiveProcesses', wintypes.DWORD), ('TotalTerminatedProcesses', wintypes.DWORD)]
+
+        self.Accounting = Accounting
+        for name, restype, argtypes in (
+                ('CreateJobObjectW', wintypes.HANDLE, [wintypes.LPVOID, wintypes.LPCWSTR]),
+                ('SetInformationJobObject', wintypes.BOOL, [wintypes.HANDLE, ctypes.c_int, wintypes.LPVOID, wintypes.DWORD]),
+                ('QueryInformationJobObject', wintypes.BOOL,
+                 [wintypes.HANDLE, ctypes.c_int, wintypes.LPVOID, wintypes.DWORD, wintypes.LPVOID]),
+                ('AssignProcessToJobObject', wintypes.BOOL, [wintypes.HANDLE, wintypes.HANDLE]),
+                ('TerminateJobObject', wintypes.BOOL, [wintypes.HANDLE, wintypes.UINT]),
+                ('CloseHandle', wintypes.BOOL, [wintypes.HANDLE])):
+            function = getattr(kernel32, name)
+            function.restype, function.argtypes = restype, argtypes
+        ntdll.NtResumeProcess.restype, ntdll.NtResumeProcess.argtypes = ctypes.c_long, [wintypes.HANDLE]
+        self.kernel32, self.ntdll = kernel32, ntdll
+        self.handle = kernel32.CreateJobObjectW(None, None)
+        if not self.handle:
+            raise OSError(ctypes.get_last_error(), 'CreateJobObjectW failed')
+        limits = ExtendedLimit()
+        limits.BasicLimitInformation.LimitFlags = self.KILL_ON_JOB_CLOSE   # no BREAKAWAY_OK flags
+        if not kernel32.SetInformationJobObject(self.handle, self.EXTENDED_LIMIT_INFORMATION,
+                                                ctypes.byref(limits), ctypes.sizeof(limits)):
+            error = ctypes.get_last_error()
+            self.close()
+            raise OSError(error, 'SetInformationJobObject failed')
+
+    def adopt(self, process):
+        """Assign a suspended leader, then resume it. False leaves it suspended."""
+        if not self.kernel32.AssignProcessToJobObject(self.handle, int(process._handle)):
+            return False
+        return self.ntdll.NtResumeProcess(int(process._handle)) == 0
+
+    def active(self):
+        """Live member count, or None when it cannot be determined."""
+        if not self.handle:
+            return None
+        info = self.Accounting()
+        if not self.kernel32.QueryInformationJobObject(self.handle, self.BASIC_ACCOUNTING_INFORMATION,
+                                                       self.ctypes.byref(info), self.ctypes.sizeof(info), None):
+            return None
+        return int(info.ActiveProcesses)
+
+    def terminate(self):
+        return bool(self.handle) and bool(self.kernel32.TerminateJobObject(self.handle, 1))
+
+    def wait_empty(self, seconds):
+        deadline = time.monotonic() + seconds
+        while True:
+            count = self.active()
+            if count == 0:
+                return True
+            if count is None or time.monotonic() >= deadline:
+                return False
+            time.sleep(0.05)
+
+    def close(self):
+        """Only called once the job is proven empty (or was never used)."""
+        if self.handle:
+            self.kernel32.CloseHandle(self.handle)
+            self.handle = None
+
+
 def inventory(root, *, source_filter=False, works_root=None):
     root = Path(root).resolve()
     result = {}
@@ -155,7 +257,12 @@ class Runner:
     @staticmethod
     def terminate(process):
         if os.name == 'nt':
-            if process.poll() is None:
+            job = getattr(process, 'coordination_job', None)
+            if job is not None:
+                # Ends every member, including descendants of an exited leader.
+                job.terminate()
+                process.coordination_tree_terminated = job.wait_empty(15)
+            elif process.poll() is None:
                 result = subprocess.run(['taskkill', '/PID', str(process.pid), '/T', '/F'], capture_output=True,
                                         creationflags=subprocess.CREATE_NO_WINDOW, timeout=15)
                 process.coordination_tree_terminated = result.returncode == 0
@@ -174,7 +281,12 @@ class Runner:
         Unknown group state is conservative and must never unlock transfer.
         """
         if os.name == 'nt':
-            return process.poll() is not None and getattr(process, 'coordination_tree_terminated', False)
+            if process.poll() is None:
+                return False
+            job = getattr(process, 'coordination_job', None)
+            if job is not None:
+                return job.active() == 0   # None (unknown) is never a proof
+            return getattr(process, 'coordination_tree_terminated', False)
         try:
             os.killpg(process.pid, 0)
         except ProcessLookupError:
@@ -212,8 +324,25 @@ class Runner:
                     path = next((str(p) for p in (self.store.root / '.tools').glob('**/' + name + '.exe')), None)
                 if path:
                     env[variable] = path
+        container = None
+        if os.name == 'nt':
+            try:
+                container = WindowsJob()
+                flags['creationflags'] |= WindowsJob.CREATE_SUSPENDED
+            except OSError:
+                container = None   # no containment: completion stays unproven as before
         process = subprocess.Popen(argv, cwd=cwd, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                                    stderr=subprocess.STDOUT, env=env, **flags)
+        if container is not None:
+            if container.adopt(process):
+                process.coordination_job = container
+            else:
+                # Never run an uncontained leader: it is still suspended here.
+                process.kill()
+                process.wait(timeout=10)
+                process.stdout.close()
+                container.close()
+                raise OSError('无法把执行进程放入Windows作业对象，未启动执行')
         with self.process_lock:
             self.processes[job['id']] = process
         chunks = []
@@ -257,6 +386,8 @@ class Runner:
                 process.wait(timeout=20)
             except subprocess.TimeoutExpired:
                 if os.name == 'nt':
+                    if container is not None:
+                        container.terminate()
                     process.kill()
                 else:
                     import signal
@@ -274,11 +405,18 @@ class Runner:
                 deadline = time.monotonic() + 5
                 while not self.tree_stopped(process) and time.monotonic() < deadline:
                     time.sleep(0.05)
+            if container is not None and not container.wait_empty(2):
+                # Same rule as the POSIX group above: a descendant outliving the
+                # leader is not a normal completion. End the job and prove it.
+                cancelled = True
+                container.terminate()
+                container.wait_empty(5)
             thread.join(timeout=10)
             stop_requested = cancelled or timed_out or self.stop_event.is_set() or self.store.cancellation(job['id'])
-            # Windows normal completion reports a leader exit, not a proof that
-            # all descendants stopped. A concurrent pause therefore needs the
-            # explicit external confirmation path unless taskkill verified it.
+            # With a job object, Windows completion is proven by an empty job.
+            # Without one (job creation failed), a leader exit is not a proof
+            # that all descendants stopped, so a concurrent pause still needs
+            # the explicit external confirmation path unless taskkill verified it.
             stopped = self.tree_stopped(process)
             if os.name == 'nt' and not stopped and not stop_requested:
                 stopped = None
@@ -286,8 +424,12 @@ class Runner:
                         elapsed_seconds=round(time.monotonic() - start, 3)), b''.join(chunks).decode('utf-8', 'replace')
         finally:
             with self.process_lock:
-                if self.tree_stopped(process) or (os.name == 'nt' and not cancelled and process.poll() is not None):
+                proven = self.tree_stopped(process)
+                if proven or (os.name == 'nt' and container is None and not cancelled and process.poll() is not None):
                     self.processes.pop(job['id'], None)
+            # An unproven job stays registered so close() can still end it.
+            if container is not None and proven:
+                container.close()
             process.stdout.close()
 
     def execute(self, job):

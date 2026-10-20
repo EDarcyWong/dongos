@@ -1,0 +1,135 @@
+// Offline memory-type planning for PAT write-combining and aliased frames. No
+// MSR is read or written and no instruction is issued; every function maps
+// caller-supplied values to a decision or an ordered step list.
+//
+// Provided here: IA32_PAT validation, the PAT index of a PTE (PAT<<2|PCD<<1|PWT),
+// the type that index selects, MTRR range validation/overlap resolution for a
+// physical address, the single-type-per-frame alias rule, and the ordered
+// migration of one frame between types, and the combined PAT x MTRR effective
+// type (effective_type, Intel SDM Vol. 3A Table 14-7).
+//
+// Memory-type encodings are the architectural ones: UC=0 WC=1 WT=4 WP=5 WB=6
+// UC-=7. IA32_PAT is eight such bytes, entry n in bits 8n..8n+7; every byte
+// must be one of those six values.
+// MTRR overlap (Intel SDM Vol. 3A 11.11.4.1): UC wins over everything; WT with
+// WB resolves to WT; any other mixture is architecturally undefined and is
+// reported as CONFLICT instead of being resolved. MTRR types are UC WC WT WP WB
+// only (UC- is a PAT type, not an MTRR type).
+// Alias rule: every alias of one frame must use the same PAT type. Different
+// cacheable types (WB vs WT) are rejected too: the check is conservative.
+// Migration (A != B) is the standard safe order, always with both flushes,
+// because the cache may hold lines of the old type:
+//     REVOKE_ALIASES -> FLUSH_TLB -> FLUSH_CACHE -> REMAP(B) -> FLUSH_TLB
+// and A == B needs no steps. Failures leave every output unchanged.
+module mm.cache_type_plan;
+pub const OK:u64=0;pub const INVALID:u64=1;pub const CAPACITY:u64=2;pub const CONFLICT:u64=3;
+pub const UC:u64=0;pub const WC:u64=1;pub const WT:u64=4;pub const WP:u64=5;pub const WB:u64=6;pub const UCM:u64=7;
+pub const PWT:u64=1;pub const PCD:u64=2;pub const PAT:u64=4;
+pub const REVOKE_ALIASES:u64=1;pub const FLUSH_TLB:u64=2;pub const FLUSH_CACHE:u64=3;pub const REMAP:u64=4;
+pub const MAX_RANGES:usize=88;pub const MAX_ALIASES:usize=256;pub const MIN_RANGE:u64=4096;
+pub struct Range{pub base:u64,pub size:u64,pub kind:u64}
+pub struct Step{pub kind:u64,pub arg:u64}
+const MAX:u64=0xffff_ffff_ffff_ffff;
+const RANGE_BYTES:u64=24;const STEP_BYTES:u64=16;
+fn span(p:u64,n:u64)bool{return n==0||(p!=0&&n<=MAX-p);}
+fn overlap(a:u64,n:u64,b:u64,m:u64)bool{return n!=0&&m!=0&&a<b+m&&b<a+n;}
+fn pat_kind(k:u64)bool{return k==UC||k==WC||k==WT||k==WP||k==WB||k==UCM;}
+fn mtrr_kind(k:u64)bool{return k==UC||k==WC||k==WT||k==WP||k==WB;}
+pub fn pat_valid(pat:u64)bool{
+ var i:u64=0;
+ while i<8{if !pat_kind((pat>>(i*8))&255){return false;}i+=1;}
+ return true;
+}
+pub unsafe fn page_type(pat:u64,bits:u64,out:*u64)u64{unsafe{
+ if out==null||((out as u64)&7)!=0||!span(out as u64,8){return INVALID;}
+ if bits>7||!pat_valid(pat){return INVALID;}
+ let index=((bits&PAT)!=0) as u64*4+((bits&PCD)!=0) as u64*2+((bits&PWT)!=0) as u64;
+ *out=(pat>>(index*8))&255;
+ return OK;
+}}
+pub unsafe fn mtrr_type(ranges:[]const Range,default_kind:u64,phys:u64,out:*u64)u64{unsafe{
+ if out==null{return INVALID;}
+ let op=out as u64;let rp=ranges.ptr as u64;
+ if (op&7)!=0||!span(op,8)||ranges.len>MAX_RANGES{return INVALID;}
+ let rn=(ranges.len as u64)*RANGE_BYTES;
+ if !span(rp,rn)||(rn!=0&&(rp&7)!=0)||overlap(op,8,rp,rn){return INVALID;}
+ if !mtrr_kind(default_kind){return INVALID;}
+ var i:usize=0;
+ while i<ranges.len{
+  let r=ranges[i];
+  if !mtrr_kind(r.kind)||r.size<MIN_RANGE||(r.size&(r.size-1))!=0||(r.base&(r.size-1))!=0||r.base>MAX-r.size{return INVALID;}
+  i+=1;
+ }
+ var seen:u64=0;i=0;
+ while i<ranges.len{
+  let r=ranges[i];
+  if phys>=r.base&&phys-r.base<r.size{seen=seen|(1<<r.kind);}
+  i+=1;
+ }
+ var result:u64=default_kind;
+ if seen!=0{
+  if (seen&(1<<UC))!=0{result=UC;}
+  else if (seen&(seen-1))==0{
+   var k:u64=0;while ((seen>>k)&1)==0{k+=1;}
+   result=k;
+  }else if seen==((1<<WT)|(1<<WB)){result=WT;}
+  else{return CONFLICT;}
+ }
+ *out=result;
+ return OK;
+}}
+// Effective type of an MTRR type combined with a PAT type: Intel SDM Vol. 3A
+// Table 14-7 "Effective Page-Level Memory Types for Pentium III and More
+// Recent Processor Families" (order 325384-093), normal caching (CR0.CD=NW=0):
+//   PAT UC -> UC; PAT WC -> WC; PAT WB -> the MTRR type;
+//   PAT UC- -> WC with MTRR WC or WP, otherwise UC;
+//   PAT WT/WP with MTRR UC or WC -> UC;
+//   PAT WT with MTRR WT/WP/WB -> WT; PAT WP with MTRR WT/WP/WB -> WP.
+// The SDM notes that some of these were "undefined" in earlier editions but
+// all PAT+MTRR processors now resolve them as listed.
+pub unsafe fn effective_type(mtrr:u64,pat:u64,out:*u64)u64{unsafe{
+ if out==null||((out as u64)&7)!=0||!span(out as u64,8){return INVALID;}
+ if !mtrr_kind(mtrr)||!pat_kind(pat){return INVALID;}
+ var result:u64=UC;
+ if pat==UC{result=UC;}
+ else if pat==WC{result=WC;}
+ else if pat==WB{result=mtrr;}
+ else if pat==UCM{
+  if mtrr==WC||mtrr==WP{result=WC;}else{result=UC;}
+ }else if mtrr==UC||mtrr==WC{result=UC;}
+ else{result=pat;}   // pat is WT or WP; MTRR WT/WP/WB keep the PAT type
+ *out=result;
+ return OK;
+}}
+pub unsafe fn check_aliases(kinds:[]const u64,first_different:*usize)u64{unsafe{
+ if first_different==null{return INVALID;}
+ let fp=first_different as u64;let kp=kinds.ptr as u64;
+ if (fp&7)!=0||!span(fp,8)||kinds.len>MAX_ALIASES{return INVALID;}
+ let kn=(kinds.len as u64)*8;
+ if !span(kp,kn)||(kn!=0&&(kp&7)!=0)||overlap(fp,8,kp,kn){return INVALID;}
+ var i:usize=0;
+ while i<kinds.len{if !pat_kind(kinds[i]){return INVALID;}i+=1;}
+ i=1;
+ while i<kinds.len{
+  if kinds[i]!=kinds[0]{*first_different=i;return CONFLICT;}
+  i+=1;
+ }
+ return OK;
+}}
+pub unsafe fn plan_migration(old_kind:u64,new_kind:u64,steps:[]Step,count:*usize)u64{unsafe{
+ if count==null{return INVALID;}
+ let cp=count as u64;let sp=steps.ptr as u64;
+ if (cp&7)!=0||!span(cp,8)||steps.len>MAX/STEP_BYTES{return INVALID;}
+ let sn=(steps.len as u64)*STEP_BYTES;
+ if !span(sp,sn)||(sn!=0&&(sp&7)!=0)||overlap(cp,8,sp,sn){return INVALID;}
+ if !pat_kind(old_kind)||!pat_kind(new_kind){return INVALID;}
+ if old_kind==new_kind{*count=0;return OK;}
+ if steps.len<5{return CAPACITY;}
+ steps[0]=Step{kind:REVOKE_ALIASES,arg:0};
+ steps[1]=Step{kind:FLUSH_TLB,arg:0};
+ steps[2]=Step{kind:FLUSH_CACHE,arg:old_kind};
+ steps[3]=Step{kind:REMAP,arg:new_kind};
+ steps[4]=Step{kind:FLUSH_TLB,arg:0};
+ *count=5;
+ return OK;
+}}

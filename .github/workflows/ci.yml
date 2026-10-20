@@ -84,6 +84,9 @@ jobs:
             code/build/test/ci-inventory/
             code/build/test/**/validation-summary.json
             code/build/test/**/summary.json
+            code/build/test/compiler-job/**/receipt.json
+            code/build/test/compiler-job/**/stage1.elf
+            code/build/test/compiler-job/**/stage2.elf
           if-no-files-found: error
           retention-days: 14
   boot-tests:

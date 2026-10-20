@@ -1,0 +1,21 @@
+module p2_extensions_probe;
+import mm.huge_page_plan as hp;
+import mm.alias_policy as ap;
+import mm.cache_type_plan as ct;
+export("p2_hp_split") fn hp_split(pde:u64,flags:u64,table:*u64,count:usize,plan:*hp.Plan)u64{unsafe{
+ return hp.split(pde,flags,slice_from_raw_parts(table,count),plan);}}
+export("p2_hp_merge") fn hp_merge(table:*const u64,count:usize,pde:*u64,plan:*hp.Plan)u64{unsafe{
+ return hp.merge(slice_from_raw_parts(table,count),pde,plan);}}
+export("p2_ap_check") fn ap_check(aliases:*const ap.Alias,count:usize,found:*[2]u64)u64{unsafe{
+ return ap.check(slice_from_raw_parts(aliases,count),found);}}
+export("p2_ap_plan") fn ap_plan(aliases:*const ap.Alias,count:usize,frame:u64,target:u64,grantee:usize,cpus:u64,steps:*ap.Step,capacity:usize,written:*usize)u64{unsafe{
+ return ap.plan_transition(slice_from_raw_parts(aliases,count),frame,target,grantee,cpus,slice_from_raw_parts(steps,capacity),written);}}
+export("p2_ct_page_type") fn ct_page_type(pat:u64,bits:u64,out:*u64)u64{unsafe{return ct.page_type(pat,bits,out);}}
+export("p2_ct_pat_valid") fn ct_pat_valid(pat:u64)u64{if ct.pat_valid(pat){return 1;}return 0;}
+export("p2_ct_mtrr") fn ct_mtrr(ranges:*const ct.Range,count:usize,default_kind:u64,phys:u64,out:*u64)u64{unsafe{
+ return ct.mtrr_type(slice_from_raw_parts(ranges,count),default_kind,phys,out);}}
+export("p2_ct_aliases") fn ct_aliases(kinds:*const u64,count:usize,first:*usize)u64{unsafe{
+ return ct.check_aliases(slice_from_raw_parts(kinds,count),first);}}
+export("p2_ct_migrate") fn ct_migrate(old_kind:u64,new_kind:u64,steps:*ct.Step,capacity:usize,written:*usize)u64{unsafe{
+ return ct.plan_migration(old_kind,new_kind,slice_from_raw_parts(steps,capacity),written);}}
+export("p2_ct_effective") fn ct_effective(mtrr:u64,pat:u64,out:*u64)u64{unsafe{return ct.effective_type(mtrr,pat,out);}}

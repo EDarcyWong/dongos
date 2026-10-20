@@ -1,0 +1,27 @@
+// SysV exports for the offline recovery ledger. Pointers are caller-owned
+// buffers; the probe adds no policy of its own.
+module device_recovery_probe;
+import user.device_recovery as dr;
+export("dr_init") fn init(t:*dr.Table)u64{unsafe{return dr.initialize(t);}}
+export("dr_register") fn register(t:*dr.Table,generation:u64,role:u64,identity:u64,owner:u64,incarnation:u64,out_token:*u64)u64{unsafe{
+    return dr.register(t,generation,role,identity,owner,incarnation,out_token);}}
+export("dr_allocate") fn allocate(t:*dr.Table,token:u64,generation:u64,owner:u64,pages:u64,physical:u64,zeroed:u64,out_lease:*u64)u64{unsafe{
+    return dr.allocate(t,token,generation,owner,pages,physical,zeroed,out_lease);}}
+export("dr_fault") fn fault(t:*dr.Table,token:u64,generation:u64,steps:*dr.Step,capacity:usize,written:*usize)u64{unsafe{
+    return dr.fault(t,token,generation,slice_from_raw_parts(steps,capacity),written);}}
+export("dr_confirm") fn confirm_safe(t:*dr.Table,token:u64,generation:u64,irq_masked:u64,bme_off:u64,steps:*dr.Step,capacity:usize,written:*usize)u64{unsafe{
+    return dr.confirm_safe(t,token,generation,irq_masked,bme_off,slice_from_raw_parts(steps,capacity),written);}}
+export("dr_quiesce") fn quiesce(t:*dr.Table,token:u64,generation:u64,inflight:u64,mappings:u64,steps:*dr.Step,capacity:usize,written:*usize)u64{unsafe{
+    return dr.quiesce(t,token,generation,inflight,mappings,slice_from_raw_parts(steps,capacity),written);}}
+export("dr_reclaim") fn reclaim(t:*dr.Table,token:u64,generation:u64,zeroed:u64,steps:*dr.Step,capacity:usize,written:*usize,out_token:*u64)u64{unsafe{
+    return dr.reclaim(t,token,generation,zeroed,slice_from_raw_parts(steps,capacity),written,out_token);}}
+export("dr_reset") fn reset_device(t:*dr.Table,token:u64,generation:u64,reset_ok:u64,identity:u64)u64{unsafe{
+    return dr.reset_device(t,token,generation,reset_ok,identity);}}
+// Eight-step capacity is fixed here so the SysV call stays within nine arguments.
+export("dr_reauthorize") fn reauthorize(t:*dr.Table,token:u64,generation:u64,role:u64,owner:u64,incarnation:u64,steps:*dr.Step,written:*usize,out_token:*u64)u64{unsafe{
+    return dr.reauthorize(t,token,generation,role,owner,incarnation,slice_from_raw_parts(steps,8),written,out_token);}}
+export("dr_retire") fn retire(t:*dr.Table,token:u64,generation:u64)u64{unsafe{return dr.retire(t,token,generation);}}
+export("dr_device") fn device(t:*const dr.Table,index:usize,out:*dr.Device)u64{unsafe{return dr.inspect_device(t,index,out);}}
+export("dr_lease") fn lease(t:*const dr.Table,index:usize,out:*dr.Lease)u64{unsafe{return dr.inspect_lease(t,index,out);}}
+export("dr_lease_check") fn lease_check(t:*const dr.Table,lease_token:u64,device_token:u64,generation:u64,owner:u64)u64{unsafe{
+    return dr.lease_check(t,lease_token,device_token,generation,owner);}}

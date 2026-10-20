@@ -14,3 +14,5 @@
 {"at":"2026-10-18T11:21:29+00:00","data":{"rev":10,"status":"accepted"},"kind":"accept","task_id":"deepseek:D16"}
 {"at":"2026-10-18T11:38:12+00:00","data":{"rev":11,"status":"integrated"},"kind":"integrate","task_id":"deepseek:D16"}
 {"at":"2026-10-19T11:42:09+00:00","data":{"rev":13,"status":"integrated"},"kind":"state_reconciled","task_id":"deepseek:D16"}
+{"at":"2026-10-19T04:21:48+00:00","data":{"rev":1,"status":"todo"},"kind":"imported","task_id":"deepseek:D16"}
+{"at":"2026-10-19T04:43:01+00:00","data":{"rev":12,"status":"integrated"},"kind":"state_restored","task_id":"deepseek:D16"}

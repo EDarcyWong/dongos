@@ -33,6 +33,13 @@ def tool(name: str, override: str):
 
 def nasm_flags(nasm: str):
     help_text = subprocess.run([nasm, "-h"], capture_output=True, text=True, check=True).stdout
+    # NASM 3 groups warning help under "-h -w". Ask for that group only when
+    # the help advertises grouped "-h -opt" syntax: older assemblers can reject
+    # the extra option. Both actual probes must still report process failures.
+    if re.search(r'(?m)^\s*-h\s+-\S+', help_text):
+        help_text += '\n' + subprocess.run(
+            [nasm, "-h", "-w"], capture_output=True, text=True, check=True,
+        ).stdout
     # Some 2.x builds backport these optional warnings. Detect each warning:
     # valid PC32/REL32 references and absolute 64-bit pointer data must assemble, while other warnings
     # remain errors. Old assemblers must not receive an unknown warning option.

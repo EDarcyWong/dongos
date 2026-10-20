@@ -1,0 +1,60 @@
+{
+  "task": "MCPPOOL1",
+  "checks": [
+    {
+      "command": [
+        "C:\\Python313\\python.exe",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "pool-works/tests",
+        "-p",
+        "test_mcp_pool.py",
+        "-v"
+      ],
+      "returncode": 0,
+      "tests": 6,
+      "skips": 0,
+      "elapsed_seconds": 46.313
+    },
+    {
+      "command": [
+        "C:\\Python313\\python.exe",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "pool-works/tests",
+        "-p",
+        "test_mcp_pool_config.py",
+        "-v"
+      ],
+      "returncode": 0,
+      "tests": 6,
+      "skips": 0,
+      "elapsed_seconds": 3.157
+    }
+  ],
+  "before": {
+    "pool-works\\mcp-pool\\dongos_coordination\\mcp_server.py": "5417cb1321b84043a81b93589e1243b591044b93d21ca4169c01c6a5b4ca6a51",
+    "pool-works\\mcp-pool\\dongos_coordination\\mcp_config.py": "a91518fed911f286db1b92e5087772513a18b0a411fa1f01bae51c5b176b3c8f",
+    "pool-works\\mcp-pool\\dongos_coordination\\docs\\MCP.md": "32030a82a27295b282bbf6e02156f4cef881ec3d10e98592b90f171b71763c4d",
+    "pool-works\\mcp-pool\\README.md": "f58c9232ede99ff4065229288f4988fd628a927b20c9483c2b1ec9fbbcbbee42",
+    "pool-works\\tests\\test_mcp_pool.py": "412638a73cbd6fa854d2f83ab55e3db60973b695566f7cf088d1c997a9512885",
+    "pool-works\\tests\\test_mcp_pool_config.py": "e170f4002a0d94e3419859204fed0e29e620086765c5dc8f5a47c1544b557755",
+    "pool-works\\deliveries\\MCPPOOL1.md": "6440bd6cde535a8d9c0f5c8f83496fdc21a047176325c32b3e5e6ed3e480e807"
+  },
+  "after": {
+    "pool-works\\mcp-pool\\dongos_coordination\\mcp_server.py": "5417cb1321b84043a81b93589e1243b591044b93d21ca4169c01c6a5b4ca6a51",
+    "pool-works\\mcp-pool\\dongos_coordination\\mcp_config.py": "a91518fed911f286db1b92e5087772513a18b0a411fa1f01bae51c5b176b3c8f",
+    "pool-works\\mcp-pool\\dongos_coordination\\docs\\MCP.md": "32030a82a27295b282bbf6e02156f4cef881ec3d10e98592b90f171b71763c4d",
+    "pool-works\\mcp-pool\\README.md": "f58c9232ede99ff4065229288f4988fd628a927b20c9483c2b1ec9fbbcbbee42",
+    "pool-works\\tests\\test_mcp_pool.py": "412638a73cbd6fa854d2f83ab55e3db60973b695566f7cf088d1c997a9512885",
+    "pool-works\\tests\\test_mcp_pool_config.py": "e170f4002a0d94e3419859204fed0e29e620086765c5dc8f5a47c1544b557755",
+    "pool-works\\deliveries\\MCPPOOL1.md": "6440bd6cde535a8d9c0f5c8f83496fdc21a047176325c32b3e5e6ed3e480e807"
+  },
+  "source_stable": true,
+  "passed": true,
+  "formal_registration": false
+}

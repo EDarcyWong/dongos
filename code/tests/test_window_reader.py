@@ -43,7 +43,7 @@ class Tests(unittest.TestCase):
                 (d/'kernel/boot/service_memory.dg').write_text((ROOT/names[7]).read_text(encoding='utf-8'),encoding='utf-8')
                 c=compile_file(path,roots=[d/'kernel',ROOT/'services',ROOT/'lang/std',ROOT/'lang/examples'],mode=mode)
                 layouts={item['full_name']:item for item in c.layout_manifest['types']}
-                self.assertEqual(1288,layouts['user.memory.Process']['size']);self.assertEqual(24,layouts['user.memory.Frame']['size']);self.assertEqual(56,layouts['mm.paging.Retired']['size'])
+                self.assertEqual(1288,layouts['user.memory.Process']['size']);self.assertEqual(24,layouts['user.memory.Frame']['size']);self.assertEqual(64,layouts['mm.paging.Retired']['size'])
                 asm=d/'probe.asm';asm.write_text(c.assembly)
                 mocked={'__dong_panic','user_current_root','user_pcid_flush_all','user_pcid_unbind','user_pcid_bind','user_entropy64','runtime_invalidate','runtime_copy_bytes','user_pcid_invalidate_root'}
                 externs={m.group(1).lstrip('$') for m in re.finditer(r'^extern (\$?\w+)',c.assembly,re.M)}-mocked

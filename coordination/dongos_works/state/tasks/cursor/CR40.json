@@ -5,8 +5,11 @@
   "checks": [
     "discover:cursor-works/tests:test_nasm_pair_cleanup_function.py"
   ],
-  "claimed_at": "2026-10-19T15:51:53+00:00",
-  "claimed_by": "codex-direct-cursor",
+  "claim_from_status": "rework",
+  "claim_token": null,
+  "claimed_at": "2026-10-20T04:51:40+00:00",
+  "claimed_by": null,
+  "completed_at": "2026-10-20T06:03:16+00:00",
   "complexity": "standard",
   "created_at": "2026-10-19T15:04:33+00:00",
   "delivery": "cursor-works/deliveries/CR40.md",
@@ -23,20 +26,24 @@
   "document": "cursor-works/tasks/CR40-board.md",
   "historical": false,
   "id": "cursor:CR40",
+  "integration_note": "已集成：主线 nasm_pair_cleanup_function.dg 与已验收交付逐字节相同，.md仅标题/说明调整；同轮主线测试11项零skip通过。未运行OS/VM，不宣称完整L3。",
   "legacy_hash": "bc440567c7d40d66d3078e612bd62067615dde47d896fcbbfd2884dd084f1fd3",
   "number": "CR40",
   "owner": "cursor",
-  "rev": 12,
-  "review_note": "Codex最终自审：仅补强测试夹具，总count超限案例应保证每个区间合法，以独立验证C36错误传播；生产实现不变。原queued复验已取消，未中断运行作业。",
-  "status": "submitted",
+  "pause_note": "执行器无法确认全部进程已停止；请在原机器停止并明确确认",
+  "rev": 24,
+  "review_note": "实际审查PAIR清理函数源码、完整契约和永久测试：复用C44/C36/C42及CR12/13，预检重放后才发布输出，清理后保持真实RAX/RDX，不重装输入掩盖错误。总count超限夹具各区间合法、独立验证C36传播。正式隔离作业0919979e89d041859d477e9a36491e01通过4tests/0skip/returncode0，process_stopped=true/source_stable=true；当前四交付与正式指纹一致。真实debug/release、ELF64/COFF组装及显式SysV桥原生执行；独立pair/清理ID轨迹模型、完整保存寄存器/RSP/canary和安全RBX/RDX/顺序/容量坏董负控均通过。前次等待停止确认已清除，无活动作业。登记组件验收，未实际集成主线。",
+  "status": "integrated",
   "title": "[L3] 作用域清理后保持双字返回值的完整SysV函数",
-  "updated_at": "2026-10-19T15:58:29+00:00",
+  "updated_at": "2026-10-20T07:34:42+00:00",
   "verification": {
     "checks": [
       {
         "cancelled": false,
-        "elapsed_seconds": 124.406,
+        "elapsed_seconds": 221.623,
+        "execution_exited": true,
         "passed": true,
+        "process_stopped": true,
         "returncode": 0,
         "skips": 0,
         "spec": "discover:cursor-works/tests:test_nasm_pair_cleanup_function.py",
@@ -44,15 +51,17 @@
         "timed_out": false
       }
     ],
+    "execution_exited": true,
     "fingerprint": {
-      "cursor-works/deliveries/CR40.md": "e7562486a13f6fec505e0ed68a3bc2266dc383cc58e88fdff39f1e3533a1bf5c",
+      "cursor-works/deliveries/CR40.md": "bd84f24327466b7e2cd2043801b32e9e00078ea7340207c1ccac636043eaa47d",
       "cursor-works/src/bootstrap/nasm_pair_cleanup_function.dg": "22522c485b9650f59d05a6ae3a7237f706a06e3ac6199e55782e1d67b24f6e8e",
       "cursor-works/src/bootstrap/nasm_pair_cleanup_function.md": "65d09a2ca8c5970277b1a4ae3e9d10df77d73e900d84e09d55eb606468ce56e4",
       "cursor-works/tests/test_nasm_pair_cleanup_function.py": "2145159da40db85d4348c5b437bb8f2fbcac1a887c25e8ef7895f5a71255175e"
     },
-    "finished_at": "2026-10-19T15:58:29+00:00",
-    "job": "a848152c07fc46b687edd4b6971c65fa",
+    "finished_at": "2026-10-20T06:11:19+00:00",
+    "job": "0919979e89d041859d477e9a36491e01",
     "passed": true,
+    "process_stopped": true,
     "source_stable": true,
     "summary": "定向复验通过，等待源码/契约审查"
   },

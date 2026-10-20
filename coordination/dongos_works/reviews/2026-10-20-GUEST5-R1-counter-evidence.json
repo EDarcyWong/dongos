@@ -1,0 +1,50 @@
+{
+  "source_sha256": "c9e839cf203cb2cda9c6bca75d67fdacce87d3bf40ebfacf2c0d814bb57ddba0",
+  "records": [
+    {
+      "command": [
+        "C:\\Users\\Administrator\\AppData\\Local\\Microsoft\\WinGet\\Packages\\BrechtSanders.WinLibs.POSIX.UCRT_Microsoft.Winget.Source_8wekyb3d8bbwe\\mingw64\\bin\\nasm.EXE",
+        "-f",
+        "win64",
+        "-Wall",
+        "-Werror",
+        "-w-reloc-rel-dword",
+        "-w-reloc-abs-qword",
+        "-o",
+        "D:\\projects\\projects3\\2026\\dongos\\code\\build\\test\\guest5-independent-counter\\release.o",
+        "D:\\projects\\projects3\\2026\\dongos\\code\\build\\test\\guest5-independent-counter\\release.asm"
+      ],
+      "returncode": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "command": [
+        "C:\\Users\\Administrator\\AppData\\Local\\Microsoft\\WinGet\\Packages\\BrechtSanders.WinLibs.POSIX.UCRT_Microsoft.Winget.Source_8wekyb3d8bbwe\\mingw64\\bin\\gcc.EXE",
+        "-O2",
+        "-Wall",
+        "-Wextra",
+        "-Werror",
+        "D:\\projects\\projects3\\2026\\dongos\\code\\build\\test\\guest5-independent-counter\\counter.c",
+        "D:\\projects\\projects3\\2026\\dongos\\code\\build\\test\\guest5-independent-counter\\release.o",
+        "-o",
+        "D:\\projects\\projects3\\2026\\dongos\\code\\build\\test\\guest5-independent-counter\\counter.exe"
+      ],
+      "returncode": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "command": [
+        "D:\\projects\\projects3\\2026\\dongos\\code\\build\\test\\guest5-independent-counter\\counter.exe"
+      ],
+      "returncode": 0,
+      "stdout": "{\"return\":0,\"status\":2,\"written\":4,\"total\":4,\"write_calls\":1,\"flush_calls\":0}\r\n",
+      "stderr": ""
+    }
+  ],
+  "counter_detail": {
+    "stdout": "{\"return\":0,\"status\":2,\"written\":4,\"total\":4,\"write_calls\":1,\"flush_calls\":0}\r\nattempts=0\r\nnext=1;flush_calls=0\r\n",
+    "returncode": 0
+  }
+}

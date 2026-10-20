@@ -15,17 +15,19 @@ from .store import OWNERS, STATES
 VERSIONS = ('2025-06-18', '2025-03-26', '2024-11-05')
 MAX_MESSAGE = 1024 * 1024
 CLIENT_OWNERS = ('claude', 'cursor', 'lmstudio', 'deepseek', 'codex')
-INSTRUCTIONS = '''本机可信任务协作。先list_projects确认project，再list_tasks/get_task/read_document。
-只领取当前owner或未指定负责人的todo/rework，读取完整任务书、review_note、write_paths和依赖，领取成功才开始。
-所有变更显式提供最新rev；409后重新查询，不盲重试，不抢占别人的领取/活动作业。
+INSTRUCTIONS = '''本机可信任务协作。新任务默认发布到公共池（省略owner）；DeepSeek、Claude、Cursor自主领取执行，不依赖旧定向派单偏好。
+先list_projects确认project，再list_tasks（列出不等于领取）/get_task/read_document。
+只领取当前owner或公共池（owner为空/unassigned）的todo/rework；先读完整任务书、最新rev、depends_on、review_note、write_paths，claim成功才开始编辑。
+依赖未验收、路径被进行中任务占用、活动作业、版本或claim_token冲突会409：重新查询原因，不盲重试、不抢占。
 pause_requested_at存在时先停止编辑和外部进程，再acknowledge_pause确认；不能把状态暂停当作进程已停止。
 只能修改授权文件，路径按项目source_root/works_root映射；候选副本不等于主目录，需负责人完成迁移再改。
 由客户端自己的编辑工具修改实现；本MCP不上传源码、不提供文件或shell工具。LM Studio只做符合文件范围限制的简单任务；
 若客户端无文件工具，不能只交报告冒充实现落盘，应先说明阻塞并释放任务。
 submit_task追加真实交付报告，未执行测试须明确写未执行；submitted不是验收。执行者不得自行验收/集成、改库或索引。
-Cursor始终由用户在客户端手动发起；本服务不唤起Agent、不轮询派单。agent_id是归属标签，不是安全身份。
+Cursor始终由用户在客户端手动发起；本服务不唤起Agent、不轮询派单。启动参数绑定owner/agent_id，工具参数不能覆盖；agent_id是归属标签，不是安全身份。
 '''
 COORDINATOR_INSTRUCTIONS = '''你是Codex协调角色：list_tasks默认查看所选项目的全部负责人。
+create_task省略owner发布公共池任务（稳定pool:编号与pool-works路径）；显式owner保留旧定向派单兼容。
 可发布任务、记录返修、暂停/恢复、排队定向复验并读作业日志。其它客户端不提供这些管理工具。
 验收前必须实际审查源码、契约和测试有效性；通过独立定向测试、零skip且源文件稳定，填写真实审查note。
 change_task的accept/integrate沿用协调器状态及指纹检查，不是修改文件或直接宣布成功；integrate前必须已完成真实文件集成。
@@ -48,32 +50,32 @@ def text_schema(description='', **extra):
 
 def tools(role='worker'):
     project = text_schema('list_projects返回的明确项目编号', maxLength=40)
-    task = text_schema('完整任务编号，例如claude:C17', maxLength=81)
+    task = text_schema('完整任务编号，例如claude:C17或pool:MCPPOOL1', maxLength=81)
     identity = dict(project=project, task_id=task)
     revision = dict(identity, rev=dict(type='integer', minimum=1))
     claim_revision = dict(revision, claim_token=text_schema('本轮领取响应的令牌；客户端重启后可显式回传', maxLength=32))
     specs = [
         ('get_workflow', '查看当前客户端负责人、领取标识和执行约定。', schema(), True),
         ('list_projects', '列出项目及source_root、works_root；不依赖网页当前选中的项目。', schema(), True),
-        ('list_tasks', '查询任务。owner默认当前客户端及公共待领取任务；可只读查看其它负责人。返回摘要及分页。',
+        ('list_tasks', '查询任务。worker默认当前客户端及公共待领取；owner=unassigned仅公共池；可只读查看其它负责人。列出不等于领取；依赖/路径冲突在claim时拒绝。返回去重摘要及分页。',
          schema(dict(project=project, owner=dict(type='string', enum=[*OWNERS, 'unassigned']),
                      status=dict(type='string', enum=list(STATES)), q=dict(type='string', maxLength=180),
                      offset=dict(type='integer', minimum=0), limit=dict(type='integer', minimum=1, maximum=100)), ['project']), True),
         ('get_task', '读取完整任务、最新rev、依赖、审查/返修说明和候选信息。', schema(identity, identity), True),
         ('read_document', '读取任务书或最新交付，保留原API的截断标识和SHA256。',
          schema(dict(identity, kind=dict(type='string', enum=['task', 'delivery'])), identity), True),
-        ('claim_task', '领取当前负责人或公共任务池的任务。必须使用最新rev；活动作业/依赖/文件冲突会拒绝。',
+        ('claim_task', '领取当前负责人或公共任务池的任务。必须使用最新rev；活动作业/依赖/文件冲突会拒绝。相同rev并发仅一胜者。',
          schema(revision, revision), False),
-        ('release_task', '释放由本客户端领取的任务；先自行停止外部工作，不会停止CLI作业或删除文件。', schema(claim_revision, revision), False),
+        ('release_task', '释放由本客户端领取的任务；公共任务回到公共池可供其它成员领取。先自行停止外部工作，不会停止CLI作业或删除文件。', schema(claim_revision, revision), False),
         ('acknowledge_pause', '原领取者确认已停止外部编辑/进程。必须确实停止，不能只修改状态；停止后才允许协调者转派。', schema(claim_revision, revision), False),
-        ('submit_task', '提交本客户端领取的任务，追加交付报告且进入submitted，等待独立复验。不能自行验收。',
+        ('submit_task', '提交本客户端领取的任务，追加交付报告且进入submitted，等待独立复验。不能自行验收。旧轮次令牌/版本会被拒绝。',
          schema(dict(claim_revision, report=text_schema('真实实现、实际测试和限制；未运行须明确写未运行', maxLength=24000)), revision), False),
     ]
     if role == 'coordinator':
-        specs=[(name,description.replace('owner默认当前客户端','owner默认全部负责人') if name=='list_tasks' else description,inputs,readonly)
+        specs=[(name,description.replace('worker默认当前客户端','owner默认全部负责人') if name=='list_tasks' else description,inputs,readonly)
                for name,description,inputs,readonly in specs]
         specs += [
-            ('create_task', 'Codex协调：发布一项任务，不调用模型。保留各负责人路径/复杂度/依赖校验，Cursor手动执行。',
+            ('create_task', 'Codex协调：发布一项任务，不调用模型。省略owner创建公共池（pool:编号、pool-works）；显式owner保留旧定向派单。保留路径/复杂度/依赖校验，Cursor手动执行。',
              schema(dict(project=project, id=text_schema(maxLength=40), owner=dict(type='string', enum=list(OWNERS)),
                          title=text_schema(maxLength=180), description=dict(type='string', maxLength=24000),
                          write_paths=dict(type='array', minItems=1, maxItems=40, items=text_schema(maxLength=500)),
@@ -158,6 +160,14 @@ class TaskMCP:
             values = self.client.tasks(a['project'], owner=a.get('owner', '' if self.role=='coordinator' else self.owner), status=a.get('status', ''), q=a.get('q', ''))
             if self.role == 'worker' and 'owner' not in a:
                 values += self.client.tasks(a['project'], owner='unassigned', status=a.get('status', ''), q=a.get('q', ''))
+            seen, unique = set(), []
+            for task in values:
+                key = task.get('id')
+                if key in seen:
+                    continue
+                seen.add(key)
+                unique.append(task)
+            values = sorted(unique, key=lambda task: task.get('id') or '')
             start, limit = a.get('offset', 0), a.get('limit', 25)
             fields = ('id', 'owner', 'title', 'status', 'rev', 'claimed_by', 'claimed_at', 'completed_at', 'pause_requested_at', 'pause_control', 'updated_at', 'depends_on')
             return dict(project=a['project'], total=len(values), offset=start,

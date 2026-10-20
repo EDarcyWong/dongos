@@ -3,7 +3,10 @@
 // output storage, owns them exclusively, and keeps their addresses/lifetimes.
 // Tables form this module's private, uniquely-parented tree, not an imported
 // hierarchy or a DAG. Outside writes may simulate hardware A/D updates only.
-// W^X applies per leaf, not across distinct physical aliases.
+// W^X applies per leaf, not across distinct physical aliases; see mm.alias_policy.
+// 2 MiB leaves (PS=1 in a PD entry) are supported: map_large*, split_large_live
+// and merge_large_live (conversion by mm.huge_page_plan). 4 KiB operations on an
+// address covered by a 2 MiB leaf fail with LargePage until it is split.
 // The original map/protect/unmap API is offline only. The *_live API performs
 // atomic entry publication but requires exclusive CPU ownership and a caller
 // supplied TLB barrier. Never mix offline mutations with a live address space.
@@ -11,12 +14,18 @@ module mm.paging;
 
 import mm.errors as errors;
 import mm.paging_errors as paging_errors;
+import mm.huge_page_plan as huge;
 
 pub const PAGE_SIZE: usize = 4096;
 pub const WRITE: u64 = 1;
 pub const USER: u64 = 2;
 pub const EXECUTE: u64 = 4;
 pub const UNCACHED: u64 = 8;
+// 4 KiB PTE: PAT[7]=1, PCD=PWT=0 selects IA32_PAT entry 4; a 2 MiB PDE carries
+// the same selector in bit 12. The caller programs entry 4 = WC (1) and follows
+// the mm.cache_type_plan migration order before using this flag.
+pub const WRITE_COMBINING: u64 = 16;
+pub const LARGE_PAGE_SIZE: u64 = 0x20_0000;
 
 const PRESENT: u64 = 1;
 const ENTRY_WRITE: u64 = 2;
@@ -29,6 +38,10 @@ const ENTRY_UNCACHED: u64 = 0x18;
 const ACCESSED: u64 = 0x20;
 const DIRTY: u64 = 0x40;
 const NX: u64 = 0x8000_0000_0000_0000;
+const LARGE: u64 = 0x80;          // PS in a PD entry
+const PTE_PAT: u64 = 0x80;        // PAT selector in a 4 KiB PTE
+const PDE_PAT: u64 = 0x1000;      // PAT selector in a 2 MiB PDE
+const LARGE_OFFSET: u64 = 0x1f_ffff;
 const PARENT_BITS: u64 = 7;
 
 pub align(4096) struct Table { pub entries: [512]u64 }
@@ -57,9 +70,11 @@ pub struct Mapping { pub physical: u64, pub flags: u64 }
 // its private fields, or reclaim it before every old translation is invalid.
 pub struct Retired {
     pending: bool, owner: *Space, root: u64, indices: [3]usize, count: usize,
+    zero_on_reclaim: bool,
 }
 pub const EMPTY_RETIRED: Retired = Retired {
     pending: false, owner: null, root: 0, indices: [0; 3], count: 0,
+    zero_on_reclaim: false,
 };
 pub error InvalidRetirement = 0x0203_0005;
 
@@ -68,11 +83,12 @@ struct Path {
     slots: [4]usize,
     depth: usize,
     present: bool,
+    large: bool,
     leaf: u64,
 }
 
 const EMPTY_PATH: Path = Path {
-    tables: [0; 4], slots: [0; 4], depth: 0, present: false, leaf: 0,
+    tables: [0; 4], slots: [0; 4], depth: 0, present: false, large: false, leaf: 0,
 };
 
 fn initialized(space: *const Space) bool {
@@ -113,7 +129,8 @@ fn validate_address(virtual: u64, aligned: bool) !void {
 }
 
 fn validate_flags(space: *const Space, virtual: u64, flags: u64) !void {
-    if (flags & ~15) != 0 { return error.errors.InvalidArgument; }
+    if (flags & ~31) != 0 { return error.errors.InvalidArgument; }
+    if (flags & UNCACHED) != 0 && (flags & WRITE_COMBINING) != 0 { return error.errors.InvalidArgument; }
     if (flags & WRITE) != 0 && (flags & EXECUTE) != 0 { return error.errors.InvalidArgument; }
     if (virtual >> 63) != 0 && (flags & USER) != 0 { return error.errors.InvalidArgument; }
     unsafe {
@@ -129,7 +146,14 @@ fn permission_bits(flags: u64) u64 {
     if (flags & WRITE) != 0 { result |= ENTRY_WRITE; }
     if (flags & USER) != 0 { result |= ENTRY_USER; }
     if (flags & UNCACHED) != 0 { result |= ENTRY_UNCACHED; }
+    if (flags & WRITE_COMBINING) != 0 { result |= PTE_PAT; }
     if (flags & EXECUTE) == 0 { result |= NX; }
+    return result;
+}
+
+fn large_bits(flags: u64) u64 {
+    var result: u64 = permission_bits(flags & ~WRITE_COMBINING) | LARGE;
+    if (flags & WRITE_COMBINING) != 0 { result |= PDE_PAT; }
     return result;
 }
 
@@ -138,8 +162,29 @@ fn logical_flags(entry: u64) u64 {
     if (entry & ENTRY_WRITE) != 0 { result |= WRITE; }
     if (entry & ENTRY_USER) != 0 { result |= USER; }
     if (entry & ENTRY_UNCACHED) == ENTRY_UNCACHED { result |= UNCACHED; }
+    if (entry & PTE_PAT) != 0 { result |= WRITE_COMBINING; }
     if (entry & NX) == 0 { result |= EXECUTE; }
     return result;
+}
+
+fn logical_large(entry: u64) u64 {
+    var result: u64 = logical_flags(entry & ~LARGE);
+    if (entry & PDE_PAT) != 0 { result |= WRITE_COMBINING; }
+    return result;
+}
+
+// Shared leaf rules for 4 KiB and 2 MiB entries: only WB, UC (PCD|PWT) or WC
+// (the PAT selector alone); W^X per leaf; no USER in the kernel half.
+fn leaf_ok(space: *const Space, virtual: u64, entry: u64, pat: u64) bool {
+    unsafe {
+        let cache_bits: u64 = entry & ENTRY_UNCACHED;
+        if cache_bits != 0 && cache_bits != ENTRY_UNCACHED { return false; }
+        if cache_bits != 0 && (entry & pat) != 0 { return false; }
+        if (entry & NX) != 0 && !(*space).nx_supported { return false; }
+        if (entry & ENTRY_WRITE) != 0 && (entry & NX) == 0 { return false; }
+        if (virtual >> 63) != 0 && (entry & ENTRY_USER) != 0 { return false; }
+    }
+    return true;
 }
 
 // Read-only walk. Local Path may change on error; caller-owned Space, pool,
@@ -167,14 +212,22 @@ fn walk(space: *const Space, virtual: u64, path: *Path) !void {
                 return;
             }
             if level == 3 {
-                let allowed: u64 = (*space).address_mask | PRESENT | ENTRY_WRITE | ENTRY_USER | ENTRY_UNCACHED | ACCESSED | DIRTY | NX;
-                if (entry & ~allowed) != 0 { return error.paging_errors.MalformedEntry; }
-                let cache_bits: u64 = entry & ENTRY_UNCACHED;
-                if cache_bits != 0 && cache_bits != ENTRY_UNCACHED { return error.paging_errors.MalformedEntry; }
-                if (entry & NX) != 0 && !(*space).nx_supported { return error.paging_errors.MalformedEntry; }
-                if (entry & ENTRY_WRITE) != 0 && (entry & NX) == 0 { return error.paging_errors.MalformedEntry; }
-                if (virtual >> 63) != 0 && (entry & ENTRY_USER) != 0 { return error.paging_errors.MalformedEntry; }
+                let allowed: u64 = (*space).address_mask | PRESENT | ENTRY_WRITE | ENTRY_USER | ENTRY_UNCACHED | PTE_PAT | ACCESSED | DIRTY | NX;
+                if (entry & ~allowed) != 0 || !leaf_ok(space, virtual, entry, PTE_PAT) {
+                    return error.paging_errors.MalformedEntry;
+                }
                 (*path).present = true;
+                (*path).leaf = entry;
+                return;
+            }
+            if level == 2 && (entry & LARGE) != 0 {
+                let allowed: u64 = ((*space).address_mask & ~LARGE_OFFSET) | PRESENT | ENTRY_WRITE | ENTRY_USER
+                    | ENTRY_UNCACHED | ACCESSED | DIRTY | LARGE | PDE_PAT | NX;
+                if (entry & ~allowed) != 0 || !leaf_ok(space, virtual, entry, PDE_PAT) {
+                    return error.paging_errors.MalformedEntry;
+                }
+                (*path).present = true;
+                (*path).large = true;
                 (*path).leaf = entry;
                 return;
             }
@@ -316,6 +369,7 @@ pub unsafe fn unmap(space: *Space, virtual: u64) !void {
     var path: Path = EMPTY_PATH;
     try walk(space, virtual, &path);
     if !path.present { return error.paging_errors.NotMapped; }
+    if path.large { return error.paging_errors.LargePage; }
     unsafe {
         let leaf = table_at(space, path.tables[3]);
         (*leaf).entries[path.slots[3]] = 0;
@@ -340,6 +394,7 @@ pub unsafe fn protect(space: *Space, virtual: u64, flags: u64) !void {
     var path: Path = EMPTY_PATH;
     try walk(space, virtual, &path);
     if !path.present { return error.paging_errors.NotMapped; }
+    if path.large { return error.paging_errors.LargePage; }
     unsafe {
         let leaf = table_at(space, path.tables[3]);
         (*leaf).entries[path.slots[3]] = (path.leaf & ((*space).address_mask | ACCESSED | DIRTY)) | permission_bits(flags);
@@ -360,6 +415,7 @@ unsafe fn change_live(space: *Space, virtual: u64, physical: u64, flags: u64,
     var path: Path = EMPTY_PATH;
     try walk(space,virtual,&path);
     if !path.present { return error.paging_errors.NotMapped; }
+    if path.large { return error.paging_errors.LargePage; }
     unsafe {
         let table = table_at(space,path.tables[3]);
         let entry = &(*table).entries[path.slots[3]];
@@ -407,6 +463,7 @@ pub unsafe fn unmap_live(space: *Space, virtual: u64, retired: *Retired) !void {
     var path: Path = EMPTY_PATH;
     try walk(space,virtual,&path);
     if !path.present { return error.paging_errors.NotMapped; }
+    if path.large { return error.paging_errors.LargePage; }
     // Calculate the entire retirement before writing any caller-owned state.
     var receipt: Retired = EMPTY_RETIRED;
     var level: usize = 3;
@@ -455,7 +512,7 @@ pub unsafe fn reclaim(space: *Space, retired: *Retired) !void {
         while index < receipt.count {
             let child: usize = receipt.indices[index];
             if child == 0 || child >= (*space).pool_count || *((*space).metadata + child) != 2
-                || !empty_table(table_at(space,child)) {
+                || (!receipt.zero_on_reclaim && !empty_table(table_at(space,child))) {
                 return error.InvalidRetirement;
             }
             var earlier: usize = 0;
@@ -467,6 +524,9 @@ pub unsafe fn reclaim(space: *Space, retired: *Retired) !void {
         }
         index = 0;
         while index < receipt.count {
+            // A merged page table still holds its old entries; it is only safe
+            // to clear once the caller's full invalidation has completed.
+            if receipt.zero_on_reclaim { zero_table(table_at(space,receipt.indices[index])); }
             *((*space).metadata + receipt.indices[index]) = 0;
             index += 1;
         }
@@ -483,8 +543,144 @@ pub unsafe fn query(space: *const Space, virtual: u64, out: *Mapping) !void {
     try walk(space, virtual, &path);
     if !path.present { return error.paging_errors.NotMapped; }
     unsafe {
-        (*out).physical = (path.leaf & (*space).address_mask) + (virtual & 4095);
-        (*out).flags = logical_flags(path.leaf);
+        if path.large {
+            (*out).physical = (path.leaf & (*space).address_mask & ~LARGE_OFFSET) + (virtual & LARGE_OFFSET);
+            (*out).flags = logical_large(path.leaf);
+        } else {
+            (*out).physical = (path.leaf & (*space).address_mask) + (virtual & 4095);
+            (*out).flags = logical_flags(path.leaf);
+        }
+    }
+    return;
+}
+
+unsafe fn map_large_impl(space: *Space, virtual: u64, physical: u64, flags: u64, live: bool) !void {
+    if !initialized(space) { return error.errors.NotInitialized; }
+    try validate_address(virtual, true);
+    if (virtual & LARGE_OFFSET) != 0 || (physical & LARGE_OFFSET) != 0 { return error.errors.InvalidArgument; }
+    unsafe {
+        if (physical & ~(*space).address_mask) != 0 { return error.errors.InvalidArgument; }
+    }
+    try validate_flags(space, virtual, flags);
+    var path: Path = EMPTY_PATH;
+    try walk(space, virtual, &path);
+    // A present leaf, or a page table already in this PD slot, owns the range.
+    if path.present || path.depth > 2 { return error.paging_errors.AlreadyMapped; }
+    let needed: usize = 2 - path.depth;
+    var selected: [2]usize = [0; 2];
+    var found: usize = 0;
+    var index: usize = 0;
+    unsafe {
+        while index < (*space).pool_count && found < needed {
+            if *((*space).metadata + index) == 0 {
+                selected[found] = index;
+                found += 1;
+            }
+            index += 1;
+        }
+    }
+    if found != needed { return error.errors.OutOfMemory; }
+    var level: usize = path.depth;
+    index = 0;
+    unsafe {
+        while level < 2 {
+            let child: usize = selected[index];
+            zero_table(table_at(space, child));
+            *((*space).metadata + child) = 1;
+            (*space).used_total += 1;
+            let parent = table_at(space, path.tables[level]);
+            let entry: u64 = ((*space).pool_physical + (child as u64) * 4096) | PARENT_BITS;
+            if live { atomic_store(&(*parent).entries[path.slots[level]], entry); }
+            else { (*parent).entries[path.slots[level]] = entry; }
+            path.tables[level + 1] = child;
+            level += 1;
+            index += 1;
+        }
+        let directory = table_at(space, path.tables[2]);
+        let entry: u64 = physical | large_bits(flags);
+        if live { atomic_store(&(*directory).entries[path.slots[2]], entry); }
+        else { (*directory).entries[path.slots[2]] = entry; }
+    }
+    return;
+}
+
+pub unsafe fn map_large(space: *Space, virtual: u64, physical: u64, flags: u64) !void {
+    unsafe { return map_large_impl(space,virtual,physical,flags,false); }
+}
+
+// Same publication rule as map_live: invalidate the range before using it.
+pub unsafe fn map_large_live(space: *Space, virtual: u64, physical: u64, flags: u64) !void {
+    unsafe { return map_large_impl(space,virtual,physical,flags,true); }
+}
+
+// Replaces a 2 MiB leaf with a page table holding the identical 512
+// translations (mm.huge_page_plan.split). The new table is filled while it is
+// still unreachable, then linked with one atomic store. The caller must perform
+// a full invalidation (same-root CR3 reload) before relying on 4 KiB changes,
+// because a cached 2 MiB translation may outlive the store.
+pub unsafe fn split_large_live(space: *Space, virtual: u64) !void {
+    if !initialized(space) { return error.errors.NotInitialized; }
+    try validate_address(virtual, true);
+    if (virtual & LARGE_OFFSET) != 0 { return error.errors.InvalidArgument; }
+    var path: Path = EMPTY_PATH;
+    try walk(space, virtual, &path);
+    if !path.present { return error.paging_errors.NotMapped; }
+    if !path.large { return error.errors.InvalidArgument; }
+    var child: usize = 0;
+    var found: bool = false;
+    unsafe {
+        var index: usize = 0;
+        while index < (*space).pool_count && !found {
+            if *((*space).metadata + index) == 0 { child = index; found = true; }
+            index += 1;
+        }
+    }
+    if !found { return error.errors.OutOfMemory; }
+    unsafe {
+        let table = table_at(space, child);
+        var plan: huge.Plan = huge.Plan { pages: 0, flush_required: 0, retire_table: 0 };
+        let status: u64 = huge.split(path.leaf, 0, slice_from_raw_parts(table as *u64, 512), &plan);
+        // walk() already validated the leaf, so split cannot reject it.
+        if status != huge.OK { return error.paging_errors.MalformedEntry; }
+        *((*space).metadata + child) = 1;
+        (*space).used_total += 1;
+        let directory = table_at(space, path.tables[2]);
+        atomic_store(&(*directory).entries[path.slots[2]], ((*space).pool_physical + (child as u64) * 4096) | PARENT_BITS);
+    }
+    return;
+}
+
+// Replaces a fully populated, contiguous, uniform page table with one 2 MiB
+// leaf (mm.huge_page_plan.merge; A/D are OR-ed). The page table is detached and
+// quarantined in the receipt; the caller performs a full invalidation and only
+// then calls reclaim, which clears and frees it.
+pub unsafe fn merge_large_live(space: *Space, virtual: u64, retired: *Retired) !void {
+    if !initialized(space) { return error.errors.NotInitialized; }
+    unsafe { if (*retired).pending { return error.InvalidRetirement; } }
+    try validate_address(virtual, true);
+    if (virtual & LARGE_OFFSET) != 0 { return error.errors.InvalidArgument; }
+    var path: Path = EMPTY_PATH;
+    try walk(space, virtual, &path);
+    if path.large { return error.errors.InvalidArgument; }
+    if path.depth != 3 { return error.paging_errors.NotMapped; }
+    unsafe {
+        let child: usize = path.tables[3];
+        var entry: u64 = 0;
+        var plan: huge.Plan = huge.Plan { pages: 0, flush_required: 0, retire_table: 0 };
+        let status: u64 = huge.merge(slice_from_raw_parts(table_at(space, child) as *const u64, 512), &entry, &plan);
+        if status == huge.NOT_PRESENT { return error.paging_errors.NotMapped; }
+        if status != huge.OK { return error.paging_errors.NotMergeable; }
+        var receipt: Retired = EMPTY_RETIRED;
+        receipt.indices[0] = child;
+        receipt.count = 1;
+        receipt.zero_on_reclaim = true;
+        receipt.pending = true;
+        receipt.owner = space;
+        receipt.root = (*space).pool_physical;
+        let directory = table_at(space, path.tables[2]);
+        atomic_store(&(*directory).entries[path.slots[2]], entry);
+        *((*space).metadata + child) = 2;
+        *retired = receipt;
     }
     return;
 }

@@ -1,0 +1,19 @@
+{
+  "source_sha256": "fee93611ba01fcb3103ca1a812ffc6347f5e8a933d909ee7595b64f1f855904c",
+  "object_sha256": "8d5291ff524419c631773d85912f92293ae4a47152674957be3e54a01aea4116",
+  "command": [
+    "C:\\Users\\Administrator\\AppData\\Local\\Microsoft\\WinGet\\Packages\\BrechtSanders.WinLibs.POSIX.UCRT_Microsoft.Winget.Source_8wekyb3d8bbwe\\mingw64\\bin\\gcc.EXE",
+    "-O2",
+    "-Wall",
+    "-Wextra",
+    "-Werror",
+    "-Wno-unused-function",
+    "D:\\projects\\projects3\\2026\\dongos\\code\\build\\test\\guest4-independent-alias\\probe.c",
+    "D:\\projects\\projects3\\2026\\dongos\\coordination\\dongos_works\\pool-works\\build\\GUEST4\\run-c7c86d48738b\\debug.o",
+    "-o",
+    "D:\\projects\\projects3\\2026\\dongos\\code\\build\\test\\guest4-independent-alias\\probe.exe"
+  ],
+  "returncode": 0,
+  "stdout": "{\"return\":3,\"result_status\":3,\"stage\":1,\"graph_tail_changed\":1}\r\n",
+  "stderr": ""
+}

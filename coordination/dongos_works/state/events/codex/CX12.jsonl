@@ -1,0 +1,14 @@
+{"at":"2026-10-20T09:01:10+00:00","data":{"rev":1,"status":"todo"},"kind":"created","task_id":"codex:CX12"}
+{"at":"2026-10-20T09:01:10+00:00","data":{"claimed_at":"2026-10-20T09:01:10+00:00","claimed_by":"codex-mcp-d76b66689d824a70","completed_at":null,"owner":"codex","resume_status":null,"rev":2,"status":"in_progress"},"kind":"claim","task_id":"codex:CX12"}
+{"at":"2026-10-20T09:05:34+00:00","data":{"claimed_at":"2026-10-20T09:01:10+00:00","claimed_by":"codex-mcp-d76b66689d824a70","completed_at":"2026-10-20T09:05:34+00:00","owner":"codex","resume_status":null,"rev":3,"status":"submitted"},"kind":"submit","task_id":"codex:CX12"}
+{"at":"2026-10-20T09:05:35+00:00","data":{"job":"227e6ea6629941e9bef76b7e9c72c20a","kind":"verify","provider":"python"},"kind":"queued","task_id":"codex:CX12"}
+{"at":"2026-10-20T09:11:20+00:00","data":{"job":"227e6ea6629941e9bef76b7e9c72c20a"},"kind":"cancel_requested","task_id":"codex:CX12"}
+{"at":"2026-10-20T09:11:52+00:00","data":{"rev":4,"status":"rework"},"kind":"rework","task_id":"codex:CX12"}
+{"at":"2026-10-20T09:11:52+00:00","data":{"claimed_at":"2026-10-20T09:11:52+00:00","claimed_by":"codex-mcp-d76b66689d824a70","completed_at":null,"owner":"codex","resume_status":null,"rev":5,"status":"in_progress"},"kind":"claim","task_id":"codex:CX12"}
+{"at":"2026-10-20T09:13:23+00:00","data":{"claimed_at":"2026-10-20T09:11:52+00:00","claimed_by":"codex-mcp-d76b66689d824a70","completed_at":"2026-10-20T09:13:23+00:00","owner":"codex","resume_status":null,"rev":6,"status":"submitted"},"kind":"submit","task_id":"codex:CX12"}
+{"at":"2026-10-20T09:13:23+00:00","data":{"job":"f4a7fcba7ea345c891aeb6c4c93e4469","kind":"verify","provider":"python"},"kind":"queued","task_id":"codex:CX12"}
+{"at":"2026-10-20T09:14:15+00:00","data":{"job":"f4a7fcba7ea345c891aeb6c4c93e4469"},"kind":"verification_started","task_id":"codex:CX12"}
+{"at":"2026-10-20T09:15:39+00:00","data":{"rev":7,"status":"submitted"},"kind":"verified","task_id":"codex:CX12"}
+{"at":"2026-10-20T09:15:39+00:00","data":{"job":"f4a7fcba7ea345c891aeb6c4c93e4469","status":"completed"},"kind":"job_finished","task_id":"codex:CX12"}
+{"at":"2026-10-20T09:19:08+00:00","data":{"rev":8,"status":"accepted"},"kind":"accept","task_id":"codex:CX12"}
+{"at":"2026-10-20T09:19:10+00:00","data":{"rev":9,"status":"integrated"},"kind":"integrate","task_id":"codex:CX12"}

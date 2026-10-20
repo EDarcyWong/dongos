@@ -1,0 +1,68 @@
+{
+  "assignment_owner": "codex",
+  "auto_dispatch": false,
+  "auto_verify": false,
+  "candidate": null,
+  "checks": [
+    "discover:tests:test_compiler_stack.py"
+  ],
+  "claim_from_status": "rework",
+  "claim_token": "1166544bcb184666bbde5cc21aeed9ed",
+  "claimed_at": "2026-10-20T08:30:02+00:00",
+  "claimed_by": "codex-mcp-d76b66689d824a70",
+  "completed_at": "2026-10-20T08:30:03+00:00",
+  "complexity": "standard",
+  "created_at": "2026-10-20T08:07:19+00:00",
+  "delivery": "codex-works/deliveries/CX7.md",
+  "depends_on": [],
+  "description": "用户已要求协调者选择栈约束，选择仅编译器专用64KiB，普通进程仍16KiB，两侧guard，全部映射来自既有64MiB共享arena。实现窄profile及内核可信专用stage入口，容量预检和ELF guard碰撞覆盖完整16页，stage失败回收保持。不得扩大arena、暴露用户自选栈大小或赋予额外权限。独立审查+真实编译debug/release测试、边界与旧4页坏实现负控；本项只是专用装载能力，真实编译器启动/自举另需集成。",
+  "document": "codex-works/tasks/CX7-board.md",
+  "historical": false,
+  "id": "codex:CX7",
+  "integration_note": "此任务声明路径即主线真实文件，已落盘并逐项与正式指纹一致；主线先前1test0skip267.672s及独立全面执行、正式最终288.257s均通过。完成组件真实集成；尚未宣称客体编译链完成。",
+  "legacy_hash": "b93d4c3c54572a48692d8b64fad66f10e9b04291aa9a2d190bd156b5f3017a2e",
+  "number": "CX7",
+  "owner": "codex",
+  "rev": 12,
+  "review_note": "用户明确委托选择栈约束，采用专用64KiB上下guard且计入既有64MiB，普通仍16KiB。独立review_stack每模式2729145实测检查全17失败位置/回滚/复用清零/边界/ET_DYN通过，报告2026-10-20-independent-compiler-stack-review.md；正式003019复验1test0skip288.257s源码稳定/停止确认。已审查profile封闭入口与容量/保护保留，无用户选择大小或权限扩张。",
+  "status": "integrated",
+  "title": "[L3] 编译器专用64KiB受保护栈配置与装载入口",
+  "updated_at": "2026-10-20T09:16:29+00:00",
+  "verification": {
+    "checks": [
+      {
+        "cancelled": false,
+        "elapsed_seconds": 288.257,
+        "execution_exited": true,
+        "passed": true,
+        "process_stopped": true,
+        "returncode": 0,
+        "skips": 0,
+        "spec": "discover:tests:test_compiler_stack.py",
+        "tests": 1,
+        "timed_out": false
+      }
+    ],
+    "execution_exited": true,
+    "fingerprint": {
+      "codex-works/deliveries/CX7.md": "d3b0b932b9f1ef18cb0548d008632099b9945c7337d8f9d2a024e9a069694a5b",
+      "docs/l3-compiler-stack.md": "93d0205ccb269b66bc16b5a6eba5cfba86e118601f1415d42f9a5461ae622d56",
+      "kernel/user/compiler_stack.dg": "ca725ad53b4bf6f1b291c1c777f451abe171834614bebe6489ebab48f90d8a26",
+      "kernel/user/memory.dg": "6fae95b3919a399d5e4af0f57cb45b0478c15bb6c3dbc03618273b530fc4375c",
+      "tests/test_compiler_stack.py": "ec8448901c5d9193646c68624e76f5688e97d62dfbaa46bae7a413ab78773d2d"
+    },
+    "finished_at": "2026-10-20T09:14:15+00:00",
+    "job": "00301938c43645479a2a6233b804fd2d",
+    "passed": true,
+    "process_stopped": true,
+    "source_stable": true,
+    "summary": "定向复验通过，等待源码/契约审查"
+  },
+  "write_paths": [
+    "kernel/user/compiler_stack.dg",
+    "kernel/user/memory.dg",
+    "tests/test_compiler_stack.py",
+    "docs/l3-compiler-stack.md",
+    "codex-works/deliveries/CX7.md"
+  ]
+}

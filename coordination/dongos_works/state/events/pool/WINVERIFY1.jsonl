@@ -1,0 +1,15 @@
+{"at":"2026-10-20T05:01:44+00:00","data":{"rev":1,"status":"todo"},"kind":"created","task_id":"pool:WINVERIFY1"}
+{"at":"2026-10-20T05:30:33+00:00","data":{"claimed_at":"2026-10-20T05:30:33+00:00","claimed_by":"claude-worker-winverify1","completed_at":null,"owner":"claude","resume_status":null,"rev":2,"status":"in_progress"},"kind":"claim","task_id":"pool:WINVERIFY1"}
+{"at":"2026-10-20T05:49:37+00:00","data":{"claimed_at":"2026-10-20T05:30:33+00:00","claimed_by":"claude-worker-winverify1","completed_at":"2026-10-20T05:49:37+00:00","owner":"claude","resume_status":null,"rev":3,"status":"submitted"},"kind":"submit","task_id":"pool:WINVERIFY1"}
+{"at":"2026-10-20T05:57:40+00:00","data":{"job":"3a1e52c0272f460fbc7aa900b3c10232","kind":"verify","provider":"python"},"kind":"queued","task_id":"pool:WINVERIFY1"}
+{"at":"2026-10-20T05:57:40+00:00","data":{"job":"3a1e52c0272f460fbc7aa900b3c10232"},"kind":"verification_started","task_id":"pool:WINVERIFY1"}
+{"at":"2026-10-20T05:58:03+00:00","data":{"rev":4,"status":"rework"},"kind":"verified","task_id":"pool:WINVERIFY1"}
+{"at":"2026-10-20T05:58:03+00:00","data":{"job":"3a1e52c0272f460fbc7aa900b3c10232","status":"failed"},"kind":"job_finished","task_id":"pool:WINVERIFY1"}
+{"at":"2026-10-20T05:58:39+00:00","data":{"claimed_at":"2026-10-20T05:58:39+00:00","claimed_by":"manual:claude","completed_at":null,"owner":"claude","resume_status":null,"rev":5,"status":"in_progress"},"kind":"claim","task_id":"pool:WINVERIFY1"}
+{"at":"2026-10-20T06:14:02+00:00","data":{"claimed_at":"2026-10-20T05:58:39+00:00","claimed_by":"manual:claude","completed_at":"2026-10-20T06:14:02+00:00","owner":"claude","resume_status":null,"rev":6,"status":"submitted"},"kind":"submit","task_id":"pool:WINVERIFY1"}
+{"at":"2026-10-20T06:14:04+00:00","data":{"job":"c0f8c5285d28423e80eafea8e049c648","kind":"verify","provider":"python"},"kind":"queued","task_id":"pool:WINVERIFY1"}
+{"at":"2026-10-20T06:14:04+00:00","data":{"job":"c0f8c5285d28423e80eafea8e049c648"},"kind":"verification_started","task_id":"pool:WINVERIFY1"}
+{"at":"2026-10-20T06:15:12+00:00","data":{"rev":7,"status":"submitted"},"kind":"verified","task_id":"pool:WINVERIFY1"}
+{"at":"2026-10-20T06:15:12+00:00","data":{"job":"c0f8c5285d28423e80eafea8e049c648","status":"completed"},"kind":"job_finished","task_id":"pool:WINVERIFY1"}
+{"at":"2026-10-20T06:15:41+00:00","data":{"rev":8,"status":"accepted"},"kind":"accept","task_id":"pool:WINVERIFY1"}
+{"at":"2026-10-20T06:15:44+00:00","data":{"rev":9,"status":"integrated"},"kind":"integrate","task_id":"pool:WINVERIFY1"}

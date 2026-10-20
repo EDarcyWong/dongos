@@ -1,0 +1,81 @@
+{
+  "published_at_note": "发布回执，由协调器API返回",
+  "receipts": [
+    {
+      "id": "cursor:CR43",
+      "status": "todo",
+      "rev": 1,
+      "document": "cursor-works/tasks/CR43-board.md",
+      "delivery": "cursor-works/deliveries/CR43.md",
+      "write_paths": [
+        "cursor-works/src/bootstrap/u64_source_function.dg",
+        "cursor-works/src/bootstrap/u64_source_function.md",
+        "cursor-works/tests/test_u64_source_function.py",
+        "cursor-works/deliveries/CR43.md"
+      ],
+      "checks": [
+        "discover:cursor-works/tests:test_u64_source_function.py"
+      ],
+      "depends_on": [
+        "claude:C51",
+        "claude:C48"
+      ],
+      "created_at": "2026-10-20T04:03:54+00:00"
+    },
+    {
+      "id": "cursor:CR44",
+      "status": "todo",
+      "rev": 1,
+      "document": "cursor-works/tasks/CR44-board.md",
+      "delivery": "cursor-works/deliveries/CR44.md",
+      "write_paths": [
+        "cursor-works/src/bootstrap/u64_block_ir.dg",
+        "cursor-works/src/bootstrap/u64_block_ir.md",
+        "cursor-works/tests/test_u64_block_ir.py",
+        "cursor-works/deliveries/CR44.md"
+      ],
+      "checks": [
+        "discover:cursor-works/tests:test_u64_block_ir.py"
+      ],
+      "depends_on": [
+        "claude:C51",
+        "claude:C48"
+      ],
+      "created_at": "2026-10-20T04:03:54+00:00"
+    },
+    {
+      "id": "deepseek:D28",
+      "status": "todo",
+      "rev": 1,
+      "document": "deepseek-works/tasks/D28-board.md",
+      "delivery": "deepseek-works/deliveries/D28.md",
+      "write_paths": [
+        "deepseek-works/src/bootstrap/module_function_index.dg",
+        "deepseek-works/src/bootstrap/module_function_index.md",
+        "deepseek-works/tests/test_module_function_index.py",
+        "deepseek-works/deliveries/D28.md"
+      ],
+      "checks": [
+        "discover:deepseek-works/tests:test_module_function_index.py"
+      ],
+      "depends_on": [],
+      "created_at": "2026-10-20T04:03:55+00:00"
+    },
+    {
+      "id": "lmstudio:LM9",
+      "status": "todo",
+      "rev": 1,
+      "document": "lmstudio-works/tasks/LM9-board.md",
+      "delivery": "lmstudio-works/deliveries/LM9.md",
+      "write_paths": [
+        "lmstudio-works/fixtures/u64-ir-operation-codes.json",
+        "lmstudio-works/deliveries/LM9.md"
+      ],
+      "checks": [
+        "discover:lmstudio-works/tests:test_u64_ir_operation_codes.py"
+      ],
+      "depends_on": [],
+      "created_at": "2026-10-20T04:03:55+00:00"
+    }
+  ]
+}

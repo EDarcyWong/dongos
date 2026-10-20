@@ -1,0 +1,18 @@
+{
+  "task": "pool:WINVERIFY1",
+  "revision": 3,
+  "command": "python -m unittest discover -s pool-works/tests -p test_windows_verification_finish.py -v",
+  "cwd": "D:\\projects\\projects3\\2026\\dongos\\coordination\\dongos_works",
+  "tests": 11,
+  "skips": 0,
+  "returncode": 0,
+  "elapsed_seconds": 35.621,
+  "input_sha256": {
+    "pool-works\\win-verify\\dongos_coordination\\runner.py": "40504e6f0ca2beca2d6e1a08b9c91735d978529854c575f3a4590cc325b08abe",
+    "pool-works\\tests\\test_windows_verification_finish.py": "90d953a072d6ed9398b647f423efadf7dd2b5a245a7c0828aad8d929d5cc60dd",
+    "pool-works\\deliveries\\WINVERIFY1.md": "430b8f675d8729675699acc64d8a06425e1c4663a3eb9ae126cbc02160613a27"
+  },
+  "review": "Reviewed WindowsJob accounting, suspended assignment before resume, residual descendant termination, conservative fallback and restart handling. Declared tests use real processes and temporary isolated package/store. No new blocking source finding. Candidate only, formal runner unchanged.",
+  "accepted": false,
+  "integrated": false
+}

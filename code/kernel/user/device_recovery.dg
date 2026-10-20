@@ -1,0 +1,416 @@
+// Offline contract for same-boot device recovery and faulting-DMA reclamation.
+//
+// This is a pure authority/state ledger over caller-supplied identifiers. It
+// reads no PCI configuration space, writes no MMIO/MSR, performs no mapping or
+// TLB operation and allocates no memory. The kernel half that applies these
+// transitions (user.device_host, user.devices, user.memory) still has to read
+// the hardware and execute the returned steps; this module only defines what
+// may happen, in which order, and what must be observed before the next step.
+//
+// Why this exists: user.device_manager.revoke() retires a token but keeps the
+// DMA lease held forever, so a faulted controller cannot be recovered in the
+// same boot. Reusing those pages without proving that no engine or CPU can
+// still write them would be a use-after-reclaim. The contract below therefore
+// separates fault, quiescence, reclamation, reset and re-authorization, and
+// refuses every shortcut:
+//
+//   ACTIVE --fault--> FAULTED        emit MASK_IRQ, DISABLE_BME, RETIRE_OWNER
+//   FAULTED --confirm_safe--> SAFE    requires IRQ masked AND BME read back 0
+//   SAFE --quiesce--> QUIESCED        requires in-flight DMA and mappings == 0
+//   QUIESCED --reclaim--> RECLAIMED   requires every reclaimed page zeroed
+//   RECLAIMED --reset_device--> RESET requires same hardware identity + reset
+//   RESET --reauthorize--> ACTIVE     new generation/token, bounded attempts
+//
+// Every transition bumps the incarnation where the old token must stop being
+// accepted: reclamation and re-authorization each consume a generation. Device
+// tokens are generation<<8|slot; lease tokens are serial<<8|slot and are NEVER
+// reused, so a stale holder can never pass a later check.
+//
+// Recovery is bounded: a device that already used MAX_ATTEMPTS successful
+// recoveries is marked DEAD on its next fault. Uncertain reset/re-authorization
+// failures must call retire(), which holds the lease forever (a permanently
+// quarantined device is safe; a guessed reclaim is not).
+//
+// Failures write no output and leave the table byte-for-byte unchanged. The
+// only intentionally non-atomic case is a caller that has already executed
+// hardware steps: this ledger still refuses to advance until the observations
+// listed above are supplied.
+module user.device_recovery;
+
+// Status codes. DEAD is a status as well as a terminal state: callers must
+// treat it as "this device will not be recovered in this boot".
+pub const OK:u64=0;
+pub const INVALID:u64=1;
+pub const DENIED:u64=2;
+pub const BUSY:u64=3;
+pub const STALE:u64=4;
+pub const CAPACITY:u64=5;
+pub const STATE:u64=6;
+pub const IDENTITY:u64=7;
+pub const RETIRED:u64=8;
+
+// Device states. There is no direct FAULTED -> QUIESCED edge.
+pub const ACTIVE:u64=1;
+pub const FAULTED:u64=2;
+pub const SAFE:u64=3;
+pub const QUIESCED:u64=4;
+pub const RECLAIMED:u64=5;
+pub const RESET:u64=6;
+pub const DEAD:u64=7;
+
+// Lease states. HELD is the normal DMA lease; QUARANTINED keeps the same pages
+// mapped after a fault; RECLAIMED means the pages have been scrubbed and the
+// lease token is dead. There is deliberately no FREE state: a token is never
+// valid again.
+pub const LEASE_HELD:u64=1;
+pub const LEASE_QUARANTINED:u64=2;
+pub const LEASE_RECLAIMED:u64=3;
+
+// Ordered steps returned by the transitions. The caller executes them in the
+// order written and must not batch or reorder them. RESET_DEVICE here means
+// "controller/queue reset with the device stopped", not a firmware reboot.
+pub const MASK_IRQ:u64=1;
+pub const DISABLE_BME:u64=2;
+pub const RETIRE_OWNER:u64=3;
+pub const WAIT_QUIESCE:u64=4;
+pub const FLUSH_MAPPINGS:u64=5;
+pub const ZERO_PAGES:u64=6;
+pub const RECLAIM:u64=7;
+pub const RESET_DEVICE:u64=8;
+pub const REBIND_DEVICE:u64=9;
+pub const REAUTHORIZE:u64=10;
+
+// Role values are the ones in lib.device_abi: BLOCK=1, TABLET=2, PS2=3,
+// XHCI=4. PS2 never owns DMA.
+pub const BLOCK:u64=1;
+pub const TABLET:u64=2;
+pub const PS2:u64=3;
+pub const XHCI:u64=4;
+
+pub const DEVICES:usize=4;
+pub const LEASES:usize=4;
+pub const MAX_ATTEMPTS:u64=3;
+pub const MAX_PAGES:u64=32;
+pub const MAX_GENERATION:u64=0x00ff_ffff_ffff_ffff;
+pub const MAX_LEASE_SERIAL:u64=0x00ff_ffff_ffff_ffff;
+
+pub struct Device {
+    pub token:u64,pub generation:u64,pub slot:u64,pub role:u64,pub identity:u64,
+    pub state:u64,pub owner:u64,pub incarnation:u64,pub lease:u64,pub attempts:u64,
+}
+pub const EMPTY_DEVICE:Device=Device {token:0,generation:0,slot:0,role:0,identity:0,
+    state:0,owner:0,incarnation:0,lease:0,attempts:0};
+pub struct Lease {
+    pub token:u64,pub device_token:u64,pub device_generation:u64,pub owner:u64,
+    pub physical:u64,pub pages:u64,pub state:u64,
+}
+pub const EMPTY_LEASE:Lease=Lease {token:0,device_token:0,device_generation:0,owner:0,
+    physical:0,pages:0,state:0};
+pub struct Step {pub kind:u64,pub arg:u64}
+pub struct Table {
+    pub initialized:u64,pub count:usize,pub serial:u64,
+    pub devices:[4]Device,pub leases:[4]Lease,
+}
+pub const EMPTY:Table=Table {initialized:0,count:0,serial:0,
+    devices:[EMPTY_DEVICE;4],leases:[EMPTY_LEASE;4]};
+
+const MAX:u64=0xffff_ffff_ffff_ffff;
+const PAGE:u64=4096;
+const DEVICE_BYTES:u64=80;
+const LEASE_BYTES:u64=56;
+const STEP_BYTES:u64=16;
+const TABLE_BYTES:u64=568;
+fn span(p:u64,n:u64)bool{return n==0||(p!=0&&n<=MAX-p);}
+fn overlap(a:u64,n:u64,b:u64,m:u64)bool{return n!=0&&m!=0&&a<b+m&&b<a+n;}
+fn table_ok(t:*const Table)bool{unsafe{
+    if t==null{return false;}
+    let p=t as u64;
+    return (p&7)==0&&span(p,TABLE_BYTES);
+}}
+fn word_ok(out:*u64,t:*const Table)bool{unsafe{
+    if out==null{return false;}
+    let p=out as u64;let tp=t as u64;
+    return (p&7)==0&&span(p,8)&&!overlap(p,8,tp,TABLE_BYTES);
+}}
+fn device_out_ok(out:*Device,t:*const Table)bool{unsafe{
+    if out==null{return false;}
+    let p=out as u64;let tp=t as u64;
+    return (p&7)==0&&span(p,DEVICE_BYTES)&&!overlap(p,DEVICE_BYTES,tp,TABLE_BYTES);
+}}
+fn lease_out_ok(out:*Lease,t:*const Table)bool{unsafe{
+    if out==null{return false;}
+    let p=out as u64;let tp=t as u64;
+    return (p&7)==0&&span(p,LEASE_BYTES)&&!overlap(p,LEASE_BYTES,tp,TABLE_BYTES);
+}}
+// steps may be empty (len 0, ptr null); written must be a private u64.
+fn plan_ok(steps:[]Step,written:*usize,t:*const Table)bool{unsafe{
+    if written==null{return false;}
+    let wp=written as u64;let sp=steps.ptr as u64;let tp=t as u64;
+    if (wp&7)!=0||!span(wp,8){return false;}
+    let sn=(steps.len as u64)*STEP_BYTES;
+    if !span(sp,sn)||(sn!=0&&(sp&7)!=0){return false;}
+    return !overlap(wp,8,tp,TABLE_BYTES)&&!overlap(wp,8,sp,sn)&&!overlap(sp,sn,tp,TABLE_BYTES);
+}}
+fn word_and_plan_ok(out:*u64,steps:[]Step,written:*usize,t:*const Table)bool{unsafe{
+    if !word_ok(out,t)||!plan_ok(steps,written,t){return false;}
+    return !overlap(out as u64,8,steps.ptr as u64,(steps.len as u64)*STEP_BYTES);
+}}
+fn find(t:*const Table,token:u64,generation:u64)usize{unsafe{
+    var i:usize=0;
+    while i<(*t).count{
+        if (*t).devices[i].token==token&&(*t).devices[i].generation==generation{return i;}
+        i+=1;
+    }
+    return DEVICES;
+}}
+fn find_lease(t:*const Table,token:u64)usize{unsafe{
+    var i:usize=0;
+    while i<LEASES{
+        if (*t).leases[i].token==token&&(*t).leases[i].state!=0{return i;}
+        i+=1;
+    }
+    return LEASES;
+}}
+fn role_ok(role:u64)bool{return role==BLOCK||role==TABLET||role==PS2||role==XHCI;}
+
+pub unsafe fn initialize(t:*Table)u64{unsafe{
+    if !table_ok(t)||(*t).initialized!=0{return INVALID;}
+    *t=EMPTY;(*t).initialized=1;
+    return OK;
+}}
+// Register one boot-time device incarnation. Roles are unique: the kernel's
+// binding table has one slot per role and a second live binding would alias it.
+pub unsafe fn register(t:*Table,generation:u64,role:u64,identity:u64,owner:u64,incarnation:u64,out_token:*u64)u64{unsafe{
+    if !table_ok(t)||!word_ok(out_token,t)||(*t).initialized!=1{return INVALID;}
+    if generation==0||generation>MAX_GENERATION||!role_ok(role)||identity==0||owner==0||incarnation==0{return INVALID;}
+    var i:usize=0;
+    while i<(*t).count{
+        if (*t).devices[i].role==role{return BUSY;}
+        i+=1;
+    }
+    if (*t).count>=DEVICES{return CAPACITY;}
+    let slot=(*t).count as u64+1;
+    let token=(generation<<8)|slot;
+    if token==0{return INVALID;}
+    (*t).devices[(*t).count]=Device {token:token,generation:generation,slot:slot,role:role,
+        identity:identity,state:ACTIVE,owner:owner,incarnation:incarnation,lease:0,attempts:0};
+    (*t).count+=1;
+    *out_token=token;
+    return OK;
+}}
+// Create the private DMA lease. zeroed must be 1: the allocator contract is
+// that a fresh lease is zero-filled before a device can see it. The lease token
+// encodes a monotonically increasing serial, never a reused slot number.
+pub unsafe fn allocate(t:*Table,token:u64,generation:u64,owner:u64,pages:u64,physical:u64,zeroed:u64,out_lease:*u64)u64{unsafe{
+    if !table_ok(t)||!word_ok(out_lease,t)||(*t).initialized!=1{return INVALID;}
+    let i=find(t,token,generation);
+    if i==DEVICES{return STALE;}
+    let d=(*t).devices[i];
+    if d.state==DEAD{return RETIRED;}
+    if d.state!=ACTIVE{return STATE;}
+    if d.owner!=owner||owner==0{return DENIED;}
+    if d.role==PS2{return DENIED;}
+    if d.lease!=0{return BUSY;}
+    if zeroed!=1{return DENIED;}
+    if pages==0||pages>MAX_PAGES{return DENIED;}
+    let bytes=pages*PAGE;
+    if bytes/PAGE!=pages||physical==0||(physical&(PAGE-1))!=0||physical>MAX-bytes{return INVALID;}
+    if (*t).serial>=MAX_LEASE_SERIAL{return CAPACITY;}
+    var slot:usize=0;
+    while slot<LEASES{
+        let state=(*t).leases[slot].state;
+        if state==0||state==LEASE_RECLAIMED{break;}
+        slot+=1;
+    }
+    if slot==LEASES{return CAPACITY;}
+    let serial=(*t).serial+1;
+    let lease_token=(serial<<8)|(slot as u64+1);
+    if lease_token==0{return INVALID;}
+    (*t).leases[slot]=Lease {token:lease_token,device_token:token,device_generation:generation,
+        owner:owner,physical:physical,pages:pages,state:LEASE_HELD};
+    (*t).serial=serial;
+    (*t).devices[i].lease=lease_token;
+    *out_lease=lease_token;
+    return OK;
+}}
+// Fault entry. Emits the three revocation steps even for the last allowed
+// recovery; the device becomes DEAD after MAX_ATTEMPTS completed recoveries so
+// the caller cannot loop forever. The lease is quarantined, not freed.
+pub unsafe fn fault(t:*Table,token:u64,generation:u64,steps:[]Step,written:*usize)u64{unsafe{
+    if !table_ok(t)||!plan_ok(steps,written,t)||(*t).initialized!=1{return INVALID;}
+    let i=find(t,token,generation);
+    if i==DEVICES{return STALE;}
+    let d=(*t).devices[i];
+    if d.state==DEAD{return RETIRED;}
+    if d.state!=ACTIVE{return STATE;}
+    if steps.len<3{return CAPACITY;}
+    if d.lease!=0{
+        let l=find_lease(t,d.lease);
+        if l==LEASES{return INVALID;}
+        (*t).leases[l].state=LEASE_QUARANTINED;
+    }
+    (*t).devices[i].state=FAULTED;
+    if d.attempts>=MAX_ATTEMPTS{(*t).devices[i].state=DEAD;}
+    steps[0]=Step {kind:MASK_IRQ,arg:0};
+    steps[1]=Step {kind:DISABLE_BME,arg:0};
+    steps[2]=Step {kind:RETIRE_OWNER,arg:d.owner};
+    *written=3;
+    return OK;
+}}
+// Hardware observation gate: both the IRQ mask and BME=0 must have been read
+// back from the device, not merely requested. Only then may the caller wait for
+// in-flight DMA and flush every alias of the quarantined pages.
+pub unsafe fn confirm_safe(t:*Table,token:u64,generation:u64,irq_masked:u64,bme_off:u64,steps:[]Step,written:*usize)u64{unsafe{
+    if !table_ok(t)||!plan_ok(steps,written,t)||(*t).initialized!=1{return INVALID;}
+    let i=find(t,token,generation);
+    if i==DEVICES{return STALE;}
+    let d=(*t).devices[i];
+    if d.state==DEAD{return RETIRED;}
+    if d.state!=FAULTED{return STATE;}
+    if irq_masked!=1||bme_off!=1{return DENIED;}
+    if steps.len<2{return CAPACITY;}
+    (*t).devices[i].state=SAFE;
+    steps[0]=Step {kind:WAIT_QUIESCE,arg:0};
+    steps[1]=Step {kind:FLUSH_MAPPINGS,arg:0};
+    *written=2;
+    return OK;
+}}
+// Quiescence gate: the caller supplies the actual counts after its barrier
+// (including every user alias and every queued descriptor). Zeroing is the next
+// step and is mandatory when a lease exists.
+pub unsafe fn quiesce(t:*Table,token:u64,generation:u64,inflight:u64,mappings:u64,steps:[]Step,written:*usize)u64{unsafe{
+    if !table_ok(t)||!plan_ok(steps,written,t)||(*t).initialized!=1{return INVALID;}
+    let i=find(t,token,generation);
+    if i==DEVICES{return STALE;}
+    let d=(*t).devices[i];
+    if d.state==DEAD{return RETIRED;}
+    if d.state!=SAFE{return STATE;}
+    if inflight!=0||mappings!=0{return BUSY;}
+    var need:usize=0;
+    if d.lease!=0{
+        let l=find_lease(t,d.lease);
+        if l==LEASES{return INVALID;}
+        if (*t).leases[l].state!=LEASE_QUARANTINED{return STATE;}
+        need=1;
+    }
+    if steps.len<need{return CAPACITY;}
+    (*t).devices[i].state=QUIESCED;
+    if need==1{steps[0]=Step {kind:ZERO_PAGES,arg:0};}
+    *written=need;
+    return OK;
+}}
+// Reclaim gate. The pages must have been zeroed after quiescence; the lease is
+// retired permanently and the device incarnation is bumped so every old token
+// (capability, IRQ, lease) is stale before reset starts.
+pub unsafe fn reclaim(t:*Table,token:u64,generation:u64,zeroed:u64,steps:[]Step,written:*usize,out_token:*u64)u64{unsafe{
+    if !table_ok(t)||!word_and_plan_ok(out_token,steps,written,t)||(*t).initialized!=1{return INVALID;}
+    let i=find(t,token,generation);
+    if i==DEVICES{return STALE;}
+    let d=(*t).devices[i];
+    if d.state==DEAD{return RETIRED;}
+    if d.state!=QUIESCED{return STATE;}
+    if generation>=MAX_GENERATION{return CAPACITY;}
+    var lease_slot:usize=LEASES;
+    if d.lease!=0{
+        lease_slot=find_lease(t,d.lease);
+        if lease_slot==LEASES{return INVALID;}
+        if (*t).leases[lease_slot].state!=LEASE_QUARANTINED{return STATE;}
+        if zeroed!=1{return DENIED;}
+    }
+    if steps.len<1{return CAPACITY;}
+    if lease_slot!=LEASES{
+        (*t).leases[lease_slot].state=LEASE_RECLAIMED;
+        (*t).devices[i].lease=0;
+    }
+    let next_generation=generation+1;
+    let next_token=(next_generation<<8)|d.slot;
+    (*t).devices[i].generation=next_generation;
+    (*t).devices[i].token=next_token;
+    (*t).devices[i].state=RECLAIMED;
+    steps[0]=Step {kind:RECLAIM,arg:d.lease};
+    *written=1;
+    *out_token=next_token;
+    return OK;
+}}
+// Reset gate. The controller may only be reset after reclamation, and only if
+// the hardware still reports the same identity. A replaced device must be
+// retired instead: its old identity must never be re-authorized.
+pub unsafe fn reset_device(t:*Table,token:u64,generation:u64,reset_ok:u64,identity:u64)u64{unsafe{
+    if !table_ok(t)||(*t).initialized!=1{return INVALID;}
+    let i=find(t,token,generation);
+    if i==DEVICES{return STALE;}
+    let d=(*t).devices[i];
+    if d.state==DEAD{return RETIRED;}
+    if d.state!=RECLAIMED{return STATE;}
+    if reset_ok!=1{return DENIED;}
+    if identity!=d.identity{return IDENTITY;}
+    (*t).devices[i].state=RESET;
+    return OK;
+}}
+// Re-authorization is a new binding generation, not a resurrection of the old
+// one. Role and identity are re-checked; the attempt counter is bounded.
+pub unsafe fn reauthorize(t:*Table,token:u64,generation:u64,role:u64,owner:u64,incarnation:u64,steps:[]Step,written:*usize,out_token:*u64)u64{unsafe{
+    if !table_ok(t)||!word_and_plan_ok(out_token,steps,written,t)||(*t).initialized!=1{return INVALID;}
+    let i=find(t,token,generation);
+    if i==DEVICES{return STALE;}
+    let d=(*t).devices[i];
+    if d.state==DEAD{return RETIRED;}
+    if d.state!=RESET{return STATE;}
+    if d.attempts>=MAX_ATTEMPTS{return RETIRED;}
+    if !role_ok(role)||role!=d.role||owner==0||incarnation==0{return DENIED;}
+    if generation>=MAX_GENERATION{return CAPACITY;}
+    if steps.len<2{return CAPACITY;}
+    let next_generation=generation+1;
+    let next_token=(next_generation<<8)|d.slot;
+    (*t).devices[i].generation=next_generation;
+    (*t).devices[i].token=next_token;
+    (*t).devices[i].state=ACTIVE;
+    (*t).devices[i].owner=owner;
+    (*t).devices[i].incarnation=incarnation;
+    (*t).devices[i].attempts=d.attempts+1;
+    (*t).devices[i].lease=0;
+    steps[0]=Step {kind:REBIND_DEVICE,arg:role};
+    steps[1]=Step {kind:REAUTHORIZE,arg:next_token};
+    *written=2;
+    *out_token=next_token;
+    return OK;
+}}
+// Terminal failure. The lease (if any) stays quarantined forever; no later
+// operation on this token is accepted. This is the only safe response to an
+// uncertain reset, an identity change, or an exhausted retry budget.
+pub unsafe fn retire(t:*Table,token:u64,generation:u64)u64{unsafe{
+    if !table_ok(t)||(*t).initialized!=1{return INVALID;}
+    let i=find(t,token,generation);
+    if i==DEVICES{return STALE;}
+    if (*t).devices[i].state==DEAD{return RETIRED;}
+    (*t).devices[i].state=DEAD;
+    return OK;
+}}
+pub unsafe fn inspect_device(t:*const Table,index:usize,out:*Device)u64{unsafe{
+    if !table_ok(t)||!device_out_ok(out,t)||(*t).initialized!=1{return INVALID;}
+    if index>=(*t).count{return STALE;}
+    *out=(*t).devices[index];
+    return OK;
+}}
+pub unsafe fn inspect_lease(t:*const Table,index:usize,out:*Lease)u64{unsafe{
+    if !table_ok(t)||!lease_out_ok(out,t)||(*t).initialized!=1{return INVALID;}
+    if index>=LEASES{return STALE;}
+    *out=(*t).leases[index];
+    return OK;
+}}
+// Gate for every DMA descriptor submission. Only a HELD lease of the current
+// device incarnation and owner may start a new operation: a quarantined lease
+// must not accept more work while quiescing, and a reclaimed token is dead.
+pub unsafe fn lease_check(t:*const Table,lease_token:u64,device_token:u64,generation:u64,owner:u64)u64{unsafe{
+    if !table_ok(t)||(*t).initialized!=1{return INVALID;}
+    let i=find(t,device_token,generation);
+    if i==DEVICES{return STALE;}
+    let d=(*t).devices[i];
+    if d.state==DEAD{return RETIRED;}
+    let l=find_lease(t,lease_token);
+    if l==LEASES||d.lease!=lease_token{return STALE;}
+    let lease=(*t).leases[l];
+    if lease.device_token!=device_token||lease.device_generation!=generation||lease.owner!=owner{return DENIED;}
+    if lease.state!=LEASE_HELD{return STATE;}
+    return OK;
+}}

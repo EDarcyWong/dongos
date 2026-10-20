@@ -12,6 +12,7 @@ import exec.elf as elf;
 import user.abi as abi;
 import boot.service_memory as resources;
 import user.entropy as entropy;
+import user.compiler_stack as compiler_stack;
 import ipc.shared_core as object_core;
 import lib.shared_abi as object_abi;
 
@@ -324,20 +325,21 @@ pub unsafe fn initialize(kernel_physical: u64) !void {
 
 // Load a complete validated static/PIE ELF. Code's temporary writable kernel
 // alias is removed before any executable user alias is published to a CPU.
-unsafe fn load_candidate(id: usize, image: []const u8, bias: u64, stack_top: u64) !void {
+unsafe fn load_candidate(id: usize, image: []const u8, bias: u64, stack_top: u64, compiler:bool) !void {
     unsafe {
         if id >= LIMIT || KERNEL_PHYSICAL == 0 || PROCESSES[id].ready != 0 || GENERATIONS[id]==0xffff_ffff_ffff_ffff
             || stack_top < 0x10_0000 || stack_top >= elf.USER_LIMIT || (stack_top & 4095) != 0 {
             return error.InvalidState;
         }
         try elf.validate(image,bias,&PROCESSES[id].plan);
-        if PROCESSES[id].plan.page_count + 4 > available_frames() as u64 { return error.Capacity; }
-        // Reserve both guard pages as well as the full four-page stack before
+        let stack_pages=compiler_stack.pages(compiler);
+        if PROCESSES[id].plan.page_count + stack_pages > available_frames() as u64 { return error.Capacity; }
+        // Reserve both guard pages as well as the complete selected stack before
         // allocating any memory. An ELF may not pre-map a guard on its own.
         var candidate: usize = 0;
         while candidate < PROCESSES[id].plan.segment_count as usize {
             let part = PROCESSES[id].plan.segments[candidate];
-            if part.map_start < stack_top + 4096 && stack_top - 5 * 4096 < part.map_start + part.map_size {
+            if part.map_start < stack_top + 4096 && stack_top - (stack_pages+1) * 4096 < part.map_start + part.map_size {
                 return error.InvalidAddress;
             }
             candidate += 1;
@@ -389,7 +391,7 @@ unsafe fn load_candidate(id: usize, image: []const u8, bias: u64, stack_top: u64
             write_unaligned(((*record(index)).virtual + (value.target & 4095)) as *u64,value.value);
             relocation += 1;
         }
-        var at = stack_top - 4 * 4096;
+        var at = stack_top - stack_pages * 4096;
         while at < stack_top { let index = try page(id,at,paging.WRITE); at += 4096; }
         // Kernel aliases now exist. Clone supervisor branches only after that
         // first shared branch was created; all subsequent aliases share it.
@@ -414,10 +416,17 @@ unsafe fn load_candidate(id: usize, image: []const u8, bias: u64, stack_top: u64
 // A candidate may be used by trusted setup-only mapping/copy APIs. It must not
 // enter a runnable catalog before commit. The caller owns the complete stage.
 pub unsafe fn stage(id:usize,image:[]const u8,bias:u64,stack_top:u64)!void {unsafe{
+    try stage_profile(id,image,bias,stack_top,false);
+}return;}
+// Trusted compiler startup only; no syscall accepts a stack profile or size.
+pub unsafe fn stage_compiler(id:usize,image:[]const u8,bias:u64,stack_top:u64)!void {unsafe{
+    try stage_profile(id,image,bias,stack_top,true);
+}return;}
+unsafe fn stage_profile(id:usize,image:[]const u8,bias:u64,stack_top:u64,compiler:bool)!void {unsafe{
     if UNSHARE_FAILED||STAGE_FAILED||STAGE_ID!=LIMIT||id>=LIMIT||KERNEL_PHYSICAL==0
         ||PROCESSES[id].ready!=0||PINNED[id]{return error.InvalidState;}
     STAGE_ID=id;STAGE_COUNT=0;STAGE_ROOT=0;STAGE_BOUND=false;STAGE_TABLES=false;
-    let loaded=load_candidate(id,image,bias,stack_top);
+    let loaded=load_candidate(id,image,bias,stack_top,compiler);
     match loaded{ok=>{},err(code)=>{
         try stage_abort(id);return loaded;
     },}
@@ -480,6 +489,12 @@ pub unsafe fn load(id:usize,image:[]const u8,bias:u64,stack_top:u64)!void {unsaf
 }return;}
 // Entropy failure is explicit; timing and process IDs are never substitutes.
 pub unsafe fn stage_random(id:usize,image:[]const u8)!void {
+    unsafe{try stage_random_profile(id,image,false);}return;
+}
+pub unsafe fn stage_compiler_random(id:usize,image:[]const u8)!void {
+    unsafe{try stage_random_profile(id,image,true);}return;
+}
+unsafe fn stage_random_profile(id:usize,image:[]const u8,compiler:bool)!void {
     unsafe {
         if UNSHARE_FAILED||STAGE_FAILED||STAGE_ID!=LIMIT{return error.InvalidState;}
         var layout=entropy.EMPTY_LAYOUT;try entropy.generate(&layout);
@@ -489,7 +504,7 @@ pub unsafe fn stage_random(id:usize,image:[]const u8)!void {
         if image.ptr!=null&&image.len>=18&&(image.ptr as u64)<=0xffff_ffff_ffff_ffff-image.len as u64{
             if read_unaligned((image.ptr+16) as *const u16)==2{layout.bias=0;}
         }
-        try stage(id,image,layout.bias,layout.stack);
+        try stage_profile(id,image,layout.bias,layout.stack,compiler);
     }return;
 }
 pub unsafe fn load_random(id:usize,image:[]const u8)!void {unsafe{

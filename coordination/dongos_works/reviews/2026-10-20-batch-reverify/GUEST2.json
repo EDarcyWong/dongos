@@ -1,0 +1,37 @@
+{
+  "task": "GUEST2",
+  "checks": [
+    {
+      "command": [
+        "C:\\Python313\\python.exe",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "pool-works/tests",
+        "-p",
+        "test_guest_source_reader.py",
+        "-v"
+      ],
+      "returncode": 0,
+      "tests": 21,
+      "skips": 0,
+      "elapsed_seconds": 60.715
+    }
+  ],
+  "before": {
+    "pool-works\\lang\\bootstrap\\guest_source_reader.dg": "131afe98052cd8c28ffbbb53b3c1ddadccb8f87196b4a4f9f2084240f7c93db4",
+    "pool-works\\lang\\bootstrap\\guest_source_reader.md": "55a46f3b39f11ee5467a30ae10be3dfa0843bd4fafec544104997f4adb491cc5",
+    "pool-works\\tests\\test_guest_source_reader.py": "3b286a2c8823f1212357e50254a81e8a5d3d811c510c152bfb3487b5366bbb6c",
+    "pool-works\\deliveries\\GUEST2.md": "7f170a1915970ccae2b6d94db9d1c10a2dde7da1ec526b7b7df3d31aaa498ca8"
+  },
+  "after": {
+    "pool-works\\lang\\bootstrap\\guest_source_reader.dg": "131afe98052cd8c28ffbbb53b3c1ddadccb8f87196b4a4f9f2084240f7c93db4",
+    "pool-works\\lang\\bootstrap\\guest_source_reader.md": "55a46f3b39f11ee5467a30ae10be3dfa0843bd4fafec544104997f4adb491cc5",
+    "pool-works\\tests\\test_guest_source_reader.py": "3b286a2c8823f1212357e50254a81e8a5d3d811c510c152bfb3487b5366bbb6c",
+    "pool-works\\deliveries\\GUEST2.md": "7f170a1915970ccae2b6d94db9d1c10a2dde7da1ec526b7b7df3d31aaa498ca8"
+  },
+  "source_stable": true,
+  "passed": true,
+  "formal_registration": false
+}

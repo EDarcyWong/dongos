@@ -1,0 +1,91 @@
+// Bounded, allocation-free guest-source loader adapter. The caller has already
+// authorized and validated one file identifier (for example through
+// bootstrap.guest_source_path); this module never parses a root, opens a host
+// file, or grants I/O rights. It sequentially pulls bytes through the caller's
+// read_at callback into a caller-owned staging buffer, confirms EOF and the
+// final size, and only then publishes the bytes into the caller's final out
+// buffer. This module performs no allocation, keeps no global state and has no
+// OS dependency.
+//
+// Callback ABI (SysV, the language default): the callback is passed as a
+// function pointer, not an integer, so the type system already excludes null.
+//
+//   unsafe fn read_at(context:u64, offset:u64, destination:*u8,
+//                     capacity:usize, moved:*usize) u64;
+//
+// Contract, which the caller's authorized reader must honour:
+//   * destination is writable for capacity bytes, capacity is always >= 1 and
+//     moved is a valid pointer; the callback must not write past capacity.
+//   * return 0 for success, any nonzero value is the caller's error code. On
+//     error the callback's moved value is ignored.
+//   * on success moved is the number of bytes stored at destination, 0..=capacity.
+//     moved == capacity is a full chunk; 0 < moved < capacity is a short read and
+//     the next call continues at offset + moved; moved == 0 is the only EOF
+//     indication. A successful moved == 0 is therefore normal termination, not
+//     a stall, and the loader stops: progress is bounded by out.len + 1 calls.
+//   * moved > capacity is a protocol violation; the loader reports PROTOCOL and
+//     publishes nothing.
+//   * calls are sequential (offsets only grow), never after EOF, and only the
+//     final probe may ask for exactly 1 byte at offset == out.len.
+//
+// Result: out is published exactly once, only after EOF (or after the exact-fill
+// probe confirms EOF), so every failure leaves out and its tail untouched;
+// scratch may hold partial data. size is the confirmed staged prefix length at
+// termination: OK = full file, CAPACITY = out.len (the file is longer),
+// IO/PROTOCOL = bytes staged before the callback fault. Descriptor/alias
+// failures return INVALID and write nothing, including Result.
+module bootstrap.guest_source_reader;
+pub const OK:u64=0;pub const INVALID:u64=1;pub const CAPACITY:u64=2;
+pub const IO:u64=3;pub const PROTOCOL:u64=4;
+pub const PHASE_NONE:u64=0;pub const PHASE_DESCRIPTOR:u64=1;
+pub const PHASE_READ:u64=2;pub const PHASE_PROBE:u64=3;
+// Largest accepted source, in bytes: current mainline bootstrap sources are at
+// most 82,667 bytes, so 128 KiB leaves room without becoming unbounded.
+pub const MAX_SOURCE:usize=131072;
+const PROBE_CAPACITY:usize=1;
+pub struct Result{pub status:u64,pub size:usize,pub phase:u64,pub code:u64}
+pub const EMPTY:Result=Result{status:OK,size:0,phase:PHASE_NONE,code:0};
+pub type ReadAt=unsafe fn(context:u64,offset:u64,destination:*u8,capacity:usize,moved:*usize)u64;
+const MAX:u64=0xffff_ffff_ffff_ffff;
+fn span(p:u64,n:u64)bool{return n==0||(p!=0&&n<=MAX-p);}
+fn overlap(a:u64,n:u64,b:u64,m:u64)bool{return n!=0&&m!=0&&a<b+m&&b<a+n;}
+unsafe fn publish(result:*Result,status:u64,size:usize,phase:u64,code:u64)u64{unsafe{
+ *result=Result{status:status,size:size,phase:phase,code:code};
+ return status;
+}}
+// The single publication point: copy the fully confirmed prefix and record OK.
+unsafe fn complete(scratch:[]const u8,out:[]u8,size:usize,result:*Result)u64{unsafe{
+ var i:usize=0;while i<size{out[i]=scratch[i];i+=1;}
+ return publish(result,OK,size,PHASE_NONE,0);
+}}
+pub unsafe fn load(context:u64,read_at:ReadAt,scratch:[]u8,out:[]u8,result:*Result)u64{unsafe{
+ if result==null{return INVALID;}
+ let rp=result as u64;let rs=sizeof(Result);
+ if (rp&7)!=0||!span(rp,rs){return INVALID;}
+ // Bounds: out <= MAX_SOURCE, scratch must hold out plus one probe byte. The
+ // staging and final buffers are separate and neither contains Result.
+ if out.len>MAX_SOURCE||scratch.len>MAX_SOURCE+1||scratch.len<=out.len{return INVALID;}
+ let sp=scratch.ptr as u64;let op=out.ptr as u64;
+ if !span(sp,scratch.len)||!span(op,out.len){return INVALID;}
+ if overlap(sp,scratch.len,op,out.len)||overlap(rp,rs,sp,scratch.len)||overlap(rp,rs,op,out.len){return INVALID;}
+ // Fill the staging prefix. total < out.len <= MAX_SOURCE, so total+moved
+ // cannot wrap because moved <= out.len-total.
+ var total:usize=0;
+ while total<out.len{
+  let cap=out.len-total;
+  var moved:usize=0;
+  let code=read_at(context,total as u64,&scratch[total],cap,&moved);
+  if code!=0{return publish(result,IO,total,PHASE_READ,code);}
+  if moved>cap{return publish(result,PROTOCOL,total,PHASE_READ,moved as u64);}
+  if moved==0{return complete(scratch,out,total,result);}
+  total+=moved;
+ }
+ // The buffer is exactly full. Only a one-byte probe can distinguish "file ends
+ // exactly here" from "file is longer"; truncating at capacity is never success.
+ var moved:usize=0;
+ let code=read_at(context,total as u64,&scratch[total],PROBE_CAPACITY,&moved);
+ if code!=0{return publish(result,IO,total,PHASE_PROBE,code);}
+ if moved>PROBE_CAPACITY{return publish(result,PROTOCOL,total,PHASE_PROBE,moved as u64);}
+ if moved==0{return complete(scratch,out,total,result);}
+ return publish(result,CAPACITY,total,PHASE_PROBE,0);
+}}

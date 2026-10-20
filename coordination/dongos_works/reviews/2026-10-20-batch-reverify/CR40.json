@@ -1,0 +1,37 @@
+{
+  "task": "CR40",
+  "checks": [
+    {
+      "command": [
+        "C:\\Python313\\python.exe",
+        "-m",
+        "unittest",
+        "discover",
+        "-s",
+        "cursor-works/tests",
+        "-p",
+        "test_nasm_pair_cleanup_function.py",
+        "-v"
+      ],
+      "returncode": 0,
+      "tests": 4,
+      "skips": 0,
+      "elapsed_seconds": 165.945
+    }
+  ],
+  "before": {
+    "cursor-works\\src\\bootstrap\\nasm_pair_cleanup_function.dg": "22522c485b9650f59d05a6ae3a7237f706a06e3ac6199e55782e1d67b24f6e8e",
+    "cursor-works\\src\\bootstrap\\nasm_pair_cleanup_function.md": "65d09a2ca8c5970277b1a4ae3e9d10df77d73e900d84e09d55eb606468ce56e4",
+    "cursor-works\\tests\\test_nasm_pair_cleanup_function.py": "2145159da40db85d4348c5b437bb8f2fbcac1a887c25e8ef7895f5a71255175e",
+    "cursor-works\\deliveries\\CR40.md": "bd84f24327466b7e2cd2043801b32e9e00078ea7340207c1ccac636043eaa47d"
+  },
+  "after": {
+    "cursor-works\\src\\bootstrap\\nasm_pair_cleanup_function.dg": "22522c485b9650f59d05a6ae3a7237f706a06e3ac6199e55782e1d67b24f6e8e",
+    "cursor-works\\src\\bootstrap\\nasm_pair_cleanup_function.md": "65d09a2ca8c5970277b1a4ae3e9d10df77d73e900d84e09d55eb606468ce56e4",
+    "cursor-works\\tests\\test_nasm_pair_cleanup_function.py": "2145159da40db85d4348c5b437bb8f2fbcac1a887c25e8ef7895f5a71255175e",
+    "cursor-works\\deliveries\\CR40.md": "bd84f24327466b7e2cd2043801b32e9e00078ea7340207c1ccac636043eaa47d"
+  },
+  "source_stable": true,
+  "passed": true,
+  "formal_registration": false
+}

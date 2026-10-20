@@ -1,0 +1,103 @@
+// Guest-source path gate: lexical-only, allocation-free validation of one
+// known logical root identifier plus one relative UTF-8 path, followed by
+// verbatim publication of the path bytes into the caller's output buffer.
+//
+// This gate is deliberately *only* lexical. It never opens a file, resolves a
+// root, joins a root string, follows symlinks/hardlinks, normalizes case or
+// grants a filesystem right. A caller that later opens out[0..written] must
+// still apply its own real-root confinement (openat/no-follow/realpath policy),
+// symlink and mount checks, and read permission. Passing this gate therefore
+// proves only that the bytes are a well-formed relative path for the named
+// root, never that the target exists, is readable, or is inside the root.
+//
+// Accepted input: a root id in 0..ROOT_LIMIT-1, and a non-empty path of at most
+// MAX_PATH bytes made of '/'-separated segments, each 1..MAX_SEGMENT bytes of
+// strict shortest-form UTF-8, with no leading/trailing '/', no empty segment,
+// no "." or ".." segment, and no NUL (0x00), ASCII ':' (drive letters, NTFS
+// alternate data streams) or '\' byte. Chinese and any other valid multibyte
+// names are accepted and preserved byte-for-byte; bytes are never case-folded,
+// rewritten, truncated, or compared as a string prefix of any root.
+//
+// Descriptors are checked against the *whole declared* out range
+// [out.ptr,out.ptr+out.len): it must not wrap the address space and must not
+// alias path or written at any offset, not merely beyond the published prefix.
+// This descriptor check runs before the capacity decision, so CAPACITY is only
+// ever reported for a well-formed, disjoint out range.
+//
+// Result: OK publishes out[0..len] = the exact path bytes and *written = len.
+// INVALID rejects an unknown root, an illegal descriptor/alias, or illegal path
+// bytes; CAPACITY means the path is valid but out is shorter than it. INVALID
+// and CAPACITY write nothing at all: no partial path and no *written update.
+// No allocation, no global mutable state, no OS calls.
+module bootstrap.guest_source_path;
+import core.utf8 as utf8;
+pub const OK:u64=0;pub const INVALID:u64=1;pub const CAPACITY:u64=2;
+// Logical roots a guest compile may read from. The id selects the caller's
+// confinement policy; it is not a host path and confers no permission.
+pub const ROOT_SOURCE:u64=0;
+pub const ROOT_INCLUDE:u64=1;
+pub const ROOT_LIMIT:u64=2;
+pub const MAX_PATH:usize=4096; // total relative path bytes, no terminator
+pub const MAX_SEGMENT:usize=255; // bytes in one '/'-separated segment
+const MAX:u64=0xffff_ffff_ffff_ffff;
+const DOT:u8=46;
+const SLASH:u8=47;
+const COLON:u8=58;
+const BACKSLASH:u8=92;
+fn span(p:u64,n:u64)bool{return n==0||(p!=0&&n<=MAX-p);}
+fn overlap(a:u64,n:u64,b:u64,m:u64)bool{return n!=0&&m!=0&&a<b+m&&b<a+n;}
+// One segment must be non-empty, at most MAX_SEGMENT bytes, and not "." or
+// "..". Nothing here looks at the root or at any earlier segment.
+fn segment(path:[]const u8,start:usize,end:usize)bool{
+ let n=end-start;
+ if n==0||n>MAX_SEGMENT{return false;}
+ if n==1&&path[start]==DOT{return false;}
+ if n==2&&path[start]==DOT&&path[start+1]==DOT{return false;}
+ return true;
+}
+// Pure lexical decision over the path bytes; no pointers are dereferenced
+// beyond path.len. Order: length, strict UTF-8, forbidden bytes, then every
+// '-separated segment. Rejects absolute paths through their leading '/' or
+// empty first segment; a Windows drive/UNC form is rejected by ':' or '\'.
+pub fn lexical(path:[]const u8)bool{
+ if path.len==0||path.len>MAX_PATH{return false;}
+ if !utf8.validate(path){return false;}
+ var start:usize=0;var i:usize=0;
+ while i<path.len{
+  let b=path[i];
+  if b==0||b==COLON||b==BACKSLASH{return false;}
+  if b==SLASH{if !segment(path,start,i){return false;}start=i+1;}
+  i+=1;
+ }
+ return segment(path,start,path.len);
+}
+// Descriptor gate, then lexical gate, then the full out descriptor, then
+// capacity, then a single verbatim publication. Every rejection happens before
+// the first byte of out or written is touched, so a failed call leaves all
+// caller storage unchanged.
+pub unsafe fn validate(root:u64,path:[]const u8,out:[]u8,written:*usize)u64{unsafe{
+ if written==null{return INVALID;}
+ let wp=written as u64;
+ if (wp&7)!=0||!span(wp,8){return INVALID;}
+ if root>=ROOT_LIMIT{return INVALID;}
+ if path.len==0||path.len>MAX_PATH{return INVALID;}
+ let pp=path.ptr as u64;
+ if !span(pp,path.len){return INVALID;}
+ if !lexical(path){return INVALID;}
+ if overlap(wp,8,pp,path.len){return INVALID;}
+ // Validate the whole *declared* destination range. Checking only the first
+ // path.len bytes would let a caller pass out=64 bytes with written or the
+ // path itself sitting in out[path.len..64]: publishing would then corrupt
+ // storage beyond the reported prefix, and a huge out.len could wrap while
+ // the used prefix still looked in-range.
+ let op=out.ptr as u64;
+ let on=out.len as u64;
+ if !span(op,on){return INVALID;}
+ if overlap(op,on,pp,path.len){return INVALID;}
+ if overlap(op,on,wp,8){return INVALID;}
+ if on<path.len{return CAPACITY;}
+ var i:usize=0;
+ while i<path.len{out[i]=path[i];i+=1;}
+ *written=path.len;
+ return OK;
+}}

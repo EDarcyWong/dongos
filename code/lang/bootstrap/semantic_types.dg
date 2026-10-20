@@ -562,7 +562,33 @@ unsafe fn rt_truth(c:*Runtime,id:usize)u64{unsafe{
  let s=(*c).s;let g=gid(s,(*c).unit,id);let w=(*s).w;
  if (*w).value_states[g]==2&&(*w).values[g].kind==arithmetic.BOOLEAN{if (*w).values[g].used==0{return 0;}return 1;}return 2;
 }}
+// Keep the common recursive dispatch out of the large cold leaf frame.
+// All checks/depths and final contextual coercion are identical to the general
+// implementation; only allocation lifetimes change. No shared mutable scratch.
 unsafe fn rt_expr(c:*Runtime,id:usize,expected:usize,read:bool,depth:usize)usize{unsafe{
+ let s=(*c).s;let u=(*c).unit;if !enter(s,u,id,depth){return NONE;}
+ let kind=(*at(s,u,id)).kind;
+ let fast=kind==ast.BINARY||kind==ast.CALL||kind==ast.TRY||kind==ast.ORELSE
+  ||kind==ast.SLICE||kind==ast.CAST||kind==ast.ARRAY||kind==ast.REPEAT||kind==ast.STRUCT;
+ if !fast||rt_pure(c,id,0){return rt_expr_general(c,id,expected,read,depth);}
+ let info=rt_info(c,id);*info=Info{typ:NONE,flags:0,length:0};var typ:usize=NONE;
+ if kind==ast.BINARY{typ=rt_binary(c,id,expected,depth+1);}
+ else if kind==ast.CALL{typ=rt_call(c,id,expected,depth+1);}
+ else if kind==ast.TRY{typ=rt_try(c,id,depth+1);}
+ else if kind==ast.ORELSE{typ=rt_orelse(c,id,depth+1);}
+ else if kind==ast.SLICE{typ=rt_slice(c,id,depth+1);}
+ else if kind==ast.CAST{typ=rt_cast(c,id,depth+1);}
+ else if kind==ast.ARRAY||kind==ast.REPEAT{typ=rt_array(c,id,expected,depth+1);}
+ else{typ=rt_struct(c,id,depth+1);}
+ if (*s).status!=0{return NONE;}
+ var flags=(*info).flags;
+ if kind==ast.CAST{flags|=(*rt_info(c,(*at(s,u,id)).a)).flags&NEVER;}
+ if rt_kind(c,typ)==ARRAY{flags|=LENGTH;(*info).length=(*(*s).w).types[typ].count;}
+ (*info).typ=typ;(*info).flags=flags;
+ if typ==NORETURN{(*info).flags|=NEVER;}
+ let result=rt_accept(c,id,expected);if ((*info).flags&NEVER)!=0{(*c).live=false;}return result;
+}}
+unsafe fn rt_expr_general(c:*Runtime,id:usize,expected:usize,read:bool,depth:usize)usize{unsafe{
  let s=(*c).s;let u=(*c).unit;if !enter(s,u,id,depth){return NONE;}let n=*at(s,u,id);let w=(*s).w;
  let info=rt_info(c,id);*info=Info{typ:NONE,flags:0,length:0};var typ:usize=NONE;var flags:u64=0;
  if rt_pure(c,id,0){
