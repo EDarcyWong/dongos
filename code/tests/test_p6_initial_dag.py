@@ -119,6 +119,104 @@ def initial_fixture():
 
 
 class InitialDagTests(unittest.TestCase):
+    def test_dense_cadence_is_deterministic_and_records_host_boundaries(self):
+        expected = [.0002, .0005, .0013, .0021] * 3
+        self.assertEqual(expected, [r.sampling_delay(True, True, i) for i in range(12)])
+        self.assertEqual(.02, r.sampling_delay(False, False, 0))
+        self.assertEqual(.005, r.sampling_delay(True, False, 0))
+        for index in (-1, .5):
+            with self.assertRaises(ValueError):
+                r.sampling_delay(True, True, index)
+        g = object.__new__(r.InitialGuest)
+        g.sampling, g.stop_id = [], 9
+        g.resume, g.pause = mock.Mock(), mock.Mock()
+        with mock.patch.object(r.time, 'monotonic', side_effect=[10, 10.02, 10.021, 10.05]), \
+             mock.patch.object(r.time, 'sleep') as sleep:
+            g.sample_after(.0002)
+        sleep.assert_called_once_with(.0002)
+        sample = g.sampling[0]
+        self.assertEqual(.0002, sample['requested_sleep_seconds'])
+        self.assertEqual(10.021, sample['stop_request_monotonic'])
+        self.assertEqual(10.05, sample['stopped_monotonic'])
+        self.assertEqual(9, sample['stop_id'])
+        self.assertTrue(sample['diagnostic_only'])
+        self.assertNotIn('passed', sample)
+
+    def test_candidate_domain_validates_identity_before_cpu_read(self):
+        g = object.__new__(r.InitialGuest)
+        g.stopped = True
+        pointer, domain_va, contexts = r.ARENA + 4096, r.ARENA + 8192, 0xffffffff80300000
+        report = [1, 0, 1, 4, 15, domain_va, pointer + 256, contexts, 0x400000, 1000000000]
+        domain = [1, 0, 1, 0, 15, 8, 8, 15, 7, 0x400000,
+                  domain_va + 128, domain_va + 128 + 12992,
+                  domain_va + 128 + 12992 + 1920, domain_va, 65536]
+        g.kval = mock.Mock(return_value=pointer)
+        g.ksym = mock.Mock(return_value=contexts)
+        g.evidence = {'trusted_kernel_page_table_pool': {'root_physical': 0x400000}}
+        cpus = [4, 0, 0, 16, 0, 0, 0, 8, 7, 0, 0, 0, 0, 0, 0] * 4
+
+        def bounded_read(va, size, role):
+            if va == pointer:
+                return struct.pack('<10Q', *report)
+            if va == domain_va:
+                return struct.pack('<15Q', *domain)
+            self.assertEqual((domain[11], 480), (va, size))
+            return struct.pack('<60Q', *cpus)
+        g.read = mock.Mock(side_effect=bounded_read)
+        value = g.candidate_domain()
+        # Active/incomplete barrier is diagnostic data, never silently a PASS.
+        self.assertEqual(8, value['domain'][6])
+        self.assertEqual(7, value['cpus'][3][8])
+        original_report, original_domain = report[:], domain[:]
+        for target, field, bad in ((report, 5, 0xffffffff80300000),
+                                   (report, 7, contexts + 256), (report, 8, 0xdead000),
+                                   (domain, 11, r.ARENA + 0xdead000),
+                                   (domain, 13, domain_va + 4096), (domain, 14, 131072)):
+            with self.subTest(field=field, bad=bad):
+                target[field] = bad
+                g.read.reset_mock()
+                with self.assertRaises(ValueError):
+                    g.candidate_domain()
+                self.assertFalse(any(call.args[1] == 480 for call in g.read.call_args_list))
+                report[:], domain[:] = original_report, original_domain
+        # Exact layout alone is insufficient: real read() must reject an
+        # otherwise valid CPU span outside the allocated arena before I/O.
+        g._arena_limit = domain[11] + 120
+        g.physical = mock.Mock()
+        g.read = mock.Mock(side_effect=lambda va, size, role:
+                           r.InitialGuest.read(g, va, size, role) if size == 480
+                           else bounded_read(va, size, role))
+        with self.assertRaisesRegex(ValueError, 'escaped allocated'):
+            g.candidate_domain()
+        g.physical.assert_not_called()
+        g.stopped = False
+        g.read.reset_mock()
+        with self.assertRaisesRegex(ValueError, 'stopped'):
+            g.candidate_domain()
+        g.read.assert_not_called()
+
+    def test_complete_candidate_diagnostic_cannot_replace_hardware_cpl3(self):
+        with tempfile.TemporaryDirectory() as temp:
+            g = object.__new__(r.InitialGuest)
+            g.state, g.stop_id, g.chunks = Path(temp), 4, []
+            g.qmp = mock.Mock()
+            g.qmp.request.side_effect = lambda command, *args: (
+                {'running': False} if command == 'query-status' else 'raw hardware registers')
+            record = initial_fixture()
+            g.candidate_domain = mock.Mock(return_value={
+                key: record[key] for key in ('report', 'domain', 'cpus')})
+            with mock.patch.object(r.oracle, 'registers', return_value={'CS': 8}), \
+                 mock.patch.object(r, 'validate_initial') as validate:
+                with self.assertRaisesRegex(ValueError, 'fewer than two APs'):
+                    g.capture_initial(record['catalog'])
+            validate.assert_not_called()
+            diagnostic = json.loads((Path(temp) / 'candidate-4.json').read_text())
+            self.assertTrue(diagnostic['diagnostic_only'])
+            self.assertTrue(diagnostic['complete'])
+            self.assertNotIn('passed', diagnostic)
+            self.assertNotIn('proof', diagnostic)
+            self.assertEqual(4, len(diagnostic['hardware_dumps']))
+
     def test_current_catalog_and_cheap_window(self):
         raw = catalog_bytes()
         self.assertTrue(r.gui_window(raw[r.GUI_OFFSET:r.GUI_OFFSET + 256]))
@@ -324,8 +422,11 @@ class InitialDagTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             guest = mock.Mock()
             guest.evidence = {'actual_qemu_executed': True}
+            guest.chunks = [{'stop_id': 4, 'physical': 4096, 'bytes': 8, 'role': 'bounded fixture'}]
+            guest.sampling = [{'stop_id': 4, 'requested_sleep_seconds': .0002, 'diagnostic_only': True}]
             guest.process.poll.return_value = 0
             guest.start.side_effect = ValueError('initial AP/STARTING window missed')
+            guest.close.side_effect = RuntimeError('cleanup diagnostic failed')
             with mock.patch.object(r.timing, 'verify_build', return_value={'esp': '/esp'}), \
                  mock.patch.object(r, 'bind_auxiliary', return_value={'bound': 'hash'}), \
                  mock.patch.object(r.timing, 'runner_fingerprints', return_value={'observer': 'hash'}), \
@@ -339,6 +440,9 @@ class InitialDagTests(unittest.TestCase):
             self.assertEqual(0, result['actual_kvm_boots'])
             self.assertIn('window missed', result['error'])
             self.assertTrue((Path(temp) / 'run/result.json').is_file())
+            self.assertIn('cleanup diagnostic failed', result['cleanup_error'])
+            self.assertEqual(guest.chunks, json.loads((Path(temp) / 'run/physical-manifest.json').read_text()))
+            self.assertEqual(guest.sampling, json.loads((Path(temp) / 'run/sampling.json').read_text()))
 
     def test_actual_source_layouts_match_narrow_observer_contract(self):
         for source, expected in (

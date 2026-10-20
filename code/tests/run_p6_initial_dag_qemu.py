@@ -41,6 +41,15 @@ CATALOG_BYTES = 10776
 NONE = (1 << 64) - 1
 THREADS_OFFSET = 32 + 16 * (5 + 32 + 32) * 8
 MARKERS = (b'DONGOS_SHELL_READY\r\n', b'DONGOS_P7_CLIENTS_READY\r\n')
+DENSE_DELAYS = (.0002, .0005, .0013, .0021)
+
+
+def sampling_delay(initialized, have_gui, dense_index):
+    """Deterministic host delays, not a claim about guest/TCG elapsed time."""
+    check(isinstance(dense_index, int) and dense_index >= 0, 'invalid sampling index')
+    if have_gui:
+        return DENSE_DELAYS[dense_index % len(DENSE_DELAYS)]
+    return .005 if initialized else .02
 
 
 def words(raw, count):
@@ -358,6 +367,7 @@ class InitialGuest(clock.ClockGuest):
         self.symbols = read_elf_symbols(esp.parent / 'kernel.elf')
         self.kernel_memory_layout = life.nvme.check_kernel_memory_layout(esp)
         self.deadline = None
+        self.sampling = []
 
     def alive(self):
         check(self.process.poll() is None, 'guest exited during initial DAG observation')
@@ -376,6 +386,19 @@ class InitialGuest(clock.ClockGuest):
         check(self.stopped, 'unpaired observation resume')
         self.qmp.request('cont')
         self.stopped = False
+
+    def sample_after(self, delay):
+        # QMP latency and host scheduling make requested sleep != guest runtime.
+        # Preserve both boundaries; never derive acceptance/timing from them.
+        sample = dict(requested_sleep_seconds=delay, diagnostic_only=True,
+                      cont_request_monotonic=time.monotonic())
+        self.sampling.append(sample)
+        self.resume()
+        sample['cont_reply_monotonic'] = time.monotonic()
+        time.sleep(delay)
+        sample['stop_request_monotonic'] = time.monotonic()
+        self.pause()
+        sample.update(stopped_monotonic=time.monotonic(), stop_id=self.stop_id)
 
     def kernel(self, va, n, role):
         check(self.stopped, 'linked-kernel read while guest is running')
@@ -484,6 +507,32 @@ class InitialGuest(clock.ClockGuest):
               'init global escaped owned writable ELF segment')
         return self.user(5, image['bias'] + va, size, 'init original ' + name)
 
+    def candidate_domain(self):
+        """688 bytes of typed identity/epoch data, never sufficient for PASS."""
+        check(self.stopped, 'candidate domain read requires a stopped guest')
+        pointer = self.kval('sched.user_boot', 'INFO')
+        check(ARENA <= pointer <= ARENA + 0x8000000 - 80 and pointer % 4096 == 0,
+              'invalid SMP Report pointer')
+        report = self.readwords(pointer, 10, 'user SMP report')
+        check(report[:5] == [1, 0, 1, 4, 15], 'SMP not fully published')
+        check(report[6] == pointer + 256 and report[7] == self.ksym('smp.runtime', 'CPUS'),
+              'report does not identify actual Header table / linked CPU contexts')
+        check(ARENA <= report[5] <= ARENA + 0x8000000 - 65536 and report[5] % 4096 == 0
+              and report[8] == self.evidence['trusted_kernel_page_table_pool']['root_physical'],
+              'report domain/root identity differs')
+        domain = self.readwords(report[5], 15, 'user domain')
+        check(domain[:2] == [1, 0] and domain[4] == report[4] and domain[9] == report[8]
+              and domain[13] == report[5] and domain[14] == 65536
+              and domain[10] == report[5] + 128
+              and domain[11] == domain[10] + 12992
+              and domain[12] == domain[11] + 1920,
+              'domain-owned arena layout differs')
+        # read() validates the allocated arena and exact physical mapping before
+        # every access. No unvalidated Domain CPU pointer is dereferenced.
+        raw_cpus = self.read(domain[11], 4 * 120, 'four CPU ownership records')
+        cpus = [words(raw_cpus[i * 120:(i + 1) * 120], 15) for i in range(4)]
+        return dict(report=report, domain=domain, cpus=cpus)
+
     def capture_initial(self, catalog):
         stopped_before = self.qmp.request('query-status').get('running') is False
         check(stopped_before, 'candidate capture requires a stopped guest')
@@ -496,24 +545,28 @@ class InitialGuest(clock.ClockGuest):
             hardware_dumps.append(dict(cpu=i, file=path.name, sha256=timing.sha(path),
                                        stop_id=self.stop_id))
             registers.append(oracle.registers(text))
+        diagnostic = dict(diagnostic_only=True, stop_id=self.stop_id,
+                          hardware_dumps=hardware_dumps, registers=registers, complete=False)
+        try:
+            ownership = self.candidate_domain()
+            diagnostic.update(ownership)
+            check(self.qmp.request('query-status').get('running') is False,
+                  'candidate diagnostic did not remain stopped')
+            diagnostic['complete'] = True
+        except Exception as exc:
+            diagnostic['error'] = type(exc).__name__ + ': ' + str(exc)
+            raise
+        finally:
+            diagnostic['physical_reads'] = [chunk for chunk in self.chunks
+                                            if chunk['stop_id'] == self.stop_id]
+            write(self.state / f'candidate-{self.stop_id}.json', diagnostic)
+        # Diagnostic acquisition never substitutes for simultaneous AP CPL3.
         check(sum(reg['CS'] & 3 == 3 for reg in registers[1:]) >= 2,
               'candidate has fewer than two APs in hardware CPL3')
-        pointer = self.kval('sched.user_boot', 'INFO')
-        report = self.readwords(pointer, 10, 'user SMP report')
-        check(report[:5] == [1, 0, 1, 4, 15], 'SMP not fully published')
-        check(report[6] == pointer + 256 and report[7] == self.ksym('smp.runtime', 'CPUS'),
-              'report does not identify actual Header table / linked CPU contexts')
-        domain = self.readwords(report[5], 15, 'user domain')
-        check(domain[13] == report[5] and domain[14] == 65536
-              and domain[10] == report[5] + 128
-              and domain[11] == domain[10] + 12992
-              and domain[12] == domain[11] + 1920,
-              'domain-owned arena layout differs')
+        report, domain, cpus = (ownership[key] for key in ('report', 'domain', 'cpus'))
         addresses = self.readwords(report[6], 4, 'private Header pointers')
         check(len(set(addresses)) == 4 and all(a % 4096 == 0 for a in addresses),
               'private Header pages overlap or are unaligned')
-        raw_cpus = self.read(domain[11], 4 * 120, 'four CPU ownership records')
-        cpus = [words(raw_cpus[i * 120:(i + 1) * 120], 15) for i in range(4)]
         raw_processes = self.read(domain[12], 16 * 56, 'sixteen process ownership records')
         processes = [words(raw_processes[i * 56:(i + 1) * 56], 7) for i in range(16)]
         raw_threads = self.read(domain[10] + THREADS_OFFSET, 64 * 64, 'bounded queue thread array')
@@ -594,15 +647,17 @@ class InitialGuest(clock.ClockGuest):
         self.boot = struct.unpack('<20Q', self.physical(int(matches[0], 16) - clock.acpi.HHDM, 160, 'original BootInfo'))
         check(self.boot[1:3] == (1, 160) and self.boot[15] > 0 and self.boot[15] % 4096 == 0,
               'invalid original BootInfo')
-        attempts = []
+        attempts, dense_index = [], 0
         while True:
             self.alive()
             pointer = self.catalog_pointer()
             initialized = pointer and self.readwords(pointer, 3, 'Catalog publication')[:2] == [1, 18]
             window = self.read(pointer + GUI_OFFSET, 256, 'GUI startup prefilter') if initialized else None
             if window is not None and gui_window(window):
-                catalog = self.catalog()
                 try:
+                    # QMP may stop BSP between the Snapshot copy and its slot-map
+                    # commit. That partial candidate is not acceptance evidence.
+                    catalog = self.catalog()
                     initial = self.capture_initial(catalog)
                 except ValueError as exc:
                     attempts.append(dict(stop_id=self.stop_id, reason=str(exc)))
@@ -615,10 +670,12 @@ class InitialGuest(clock.ClockGuest):
             # Do not pay dense observer overhead during firmware/CPL0 setup.
             # This only adjusts sampling cadence, never the same-stop oracle.
             have_gui = window is not None and any(struct.unpack_from('<Q', window, i * 64 + 16)[0] for i in range(4))
-            delay = .001 if have_gui else .005 if initialized else .02
-            self.resume()
-            time.sleep(delay)
-            self.pause()
+            # Vary the dense cadence rather than repeatedly requesting the same
+            # 1ms as the optional user quantum. This does not guarantee overlap.
+            delay = sampling_delay(initialized, have_gui, dense_index)
+            if have_gui:
+                dense_index += 1
+            self.sample_after(delay)
         self.resume()
         while not all(marker in self.raw for marker in MARKERS):
             self.alive()
@@ -666,6 +723,13 @@ def run(esp, state, timeout):
                 guest.close()
             except Exception as exc:
                 result.update(passed=False, cleanup_error=str(exc))
+            # Retain receipts independently of close()/diagnostic success.
+            for name, content in (('physical-manifest.json', guest.chunks),
+                                  ('sampling.json', guest.sampling)):
+                try:
+                    write(state / name, content)
+                except Exception as exc:
+                    result.update(passed=False, receipt_error=type(exc).__name__ + ': ' + str(exc))
             result['guest'] = guest.evidence
             result['actual_qemu_executed'] = guest.evidence['actual_qemu_executed']
             result['actual_qemu_boots'] = int(guest.evidence['actual_qemu_executed'])
