@@ -1,0 +1,9 @@
+{
+  "candidate_to_main_byte_identical": true,
+  "files": {
+    "tools\\g5_differential.py": "db5b2b5e134ca0bf351f112a73faf91f4135faf9278458307b54fbddde8bb6f7",
+    "docs\\g5-differential.md": "ff728057fc045dc02b7f8618fcc527bbf477d01c1f27fba1edb76889c88bdd53"
+  },
+  "formal_sources": 155,
+  "accept_note_source_count_correction": "accepted note had incidental158; actual formal coverage is155 and remains authoritative"
+}

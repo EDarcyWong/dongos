@@ -1,7 +1,9 @@
 // Synchronous, BSP-only edits of a private live four-level root. The caller
 // supplies a fresh actual control-register snapshot for each operation; this
-// module cannot inspect hardware. Only the BSP may use this root, with IF=0,
+// module cannot inspect hardware. Direct callers require a BSP-private root, IF=0,
 // and no interrupt/NMI/exception handler may touch the managed VA window.
+// mm.shared_paging is the explicit adapter for an online reader domain: it
+// checks that domain and supplies a BSP+all-readers synchronous barrier.
 // The window is disjoint from code, stacks, tables and all runtime resources.
 // Owned frames are ordinary WB RAM, remain held through invalidation, and have
 // no conflicting cache or executable aliases. No resource is freed here.
@@ -193,6 +195,104 @@ pub unsafe fn unmap(context: *Context, state: *const preflight.State, virtual: u
         compiler_fence();
         // With exclusive ownership and an honest callback this cannot fail:
         // the receipt was created above and detached tables cannot be reused.
+        try paging.reclaim((*context).space,&retired);
+        (*context).totals.full_flush += 1;
+        (*context).totals.retired_tables += count;
+        (*context).busy = false;
+    }
+    return;
+}
+
+// A large transaction owns every page, including its final page. Subtraction
+// keeps both the extent check and an address near u64::MAX overflow-free.
+fn inside_span(address: u64, count: u64, base: u64, pages: u64) bool {
+    if !inside(address,base,pages) || count == 0 { return false; }
+    return count <= pages - (address - base) / 4096;
+}
+
+unsafe fn large_checks(context: *const Context, state: *const preflight.State,
+                       virtual: u64, physical: u64, flags: u64, has_frame: bool) !void {
+    unsafe {
+        try check(context,state,virtual,physical,flags,has_frame);
+        if (virtual & 0x1f_ffff) != 0 || !inside_span(virtual,512,(*context).window_base,(*context).window_pages)
+            || (has_frame && ((physical & 0x1f_ffff) != 0
+                || !inside_span(physical,512,(*context).frame_base,(*context).frame_pages))) {
+            return error.errors.InvalidArgument;
+        }
+    }
+    return;
+}
+
+// Do not convert a table whose backing or permissions escaped this Context.
+// Query propagates malformed/absent entries without changing any output.
+unsafe fn owned_large(context: *const Context, virtual: u64) !void {
+    unsafe {
+        var index: u64 = 0;
+        var mapping = paging.Mapping { physical: 0, flags: 0 };
+        while index < 512 {
+            try paging.query((*context).space,virtual + index * 4096,&mapping);
+            if !inside(mapping.physical,(*context).frame_base,(*context).frame_pages)
+                || (mapping.flags != 0 && mapping.flags != paging.WRITE) {
+                return error.errors.InvalidArgument;
+            }
+            index += 1;
+        }
+    }
+    return;
+}
+
+// Caller keeps busy set from before publication through this full-root
+// callback. A cached 2 MiB translation or parent walk cannot survive it.
+unsafe fn flush_root_only(context: *Context, virtual: u64) void {
+    unsafe {
+        compiler_fence();
+        (*context).flush(FLUSH_ROOT,virtual);
+        compiler_fence();
+        (*context).totals.full_flush += 1;
+    }
+    return;
+}
+
+pub unsafe fn map_large(context: *Context, state: *const preflight.State,
+                         virtual: u64, physical: u64, flags: u64) !void {
+    unsafe {
+        try large_checks(context,state,virtual,physical,flags,true);
+        (*context).busy = true;
+        let mapped = paging.map_large_live((*context).space,virtual,physical,flags);
+        match mapped { ok => {}, err(code) => { (*context).busy = false; return mapped; }, }
+        flush_root_only(context,virtual);
+        (*context).busy = false;
+    }
+    return;
+}
+
+pub unsafe fn split_large(context: *Context, state: *const preflight.State, virtual: u64) !void {
+    unsafe {
+        try large_checks(context,state,virtual,0,0,false);
+        try owned_large(context,virtual);
+        (*context).busy = true;
+        let split = paging.split_large_live((*context).space,virtual);
+        match split { ok => {}, err(code) => { (*context).busy = false; return split; }, }
+        flush_root_only(context,virtual);
+        (*context).busy = false;
+    }
+    return;
+}
+
+pub unsafe fn merge_large(context: *Context, state: *const preflight.State, virtual: u64) !void {
+    unsafe {
+        try large_checks(context,state,virtual,0,0,false);
+        try owned_large(context,virtual);
+        (*context).busy = true;
+        var retired = paging.EMPTY_RETIRED;
+        let merged = paging.merge_large_live((*context).space,virtual,&retired);
+        match merged { ok => {}, err(code) => { (*context).busy = false; return merged; }, }
+        let count = paging.retired_tables(&retired) as u64;
+        compiler_fence();
+        // The old PT is still populated, metadata=2 and counted as used.
+        // Flush must return before reclaim zeroes or releases its slot.
+        (*context).flush(FLUSH_ROOT,virtual);
+        compiler_fence();
         try paging.reclaim((*context).space,&retired);
         (*context).totals.full_flush += 1;
         (*context).totals.retired_tables += count;

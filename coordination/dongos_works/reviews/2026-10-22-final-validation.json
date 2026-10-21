@@ -1,0 +1,130 @@
+{
+  "coordinator": {
+    "tests": 39,
+    "skips": 0,
+    "elapsed_seconds": 16.6,
+    "modules": [
+      "test_roadmap",
+      "test_source_snapshot",
+      "test_projects_local",
+      "test_windows_verification_finish"
+    ],
+    "exit_code": 0
+  },
+  "main_L3A": {
+    "tests": 10,
+    "skips": 0,
+    "elapsed_seconds": 945.799,
+    "exit_code": 0,
+    "modules": [
+      "lang.tests.test_l3a_globals",
+      "lang.tests.test_l3a_native_regression"
+    ]
+  },
+  "P2ALIAS8": {
+    "development_tests": 7,
+    "development_skips": 0,
+    "elapsed_seconds": 78.247,
+    "formal_job": "808396a46c8b4c4d8b85962a52e41522",
+    "formal_tests": 7,
+    "formal_skips": 0,
+    "integrated_rev": 6
+  },
+  "publication": {
+    "authorized": true,
+    "report_is_pre_publication_snapshot": true,
+    "PR_created": false,
+    "final_commit_push_shutdown_receipt": "coordination/dongos_works/.local/publication/"
+  },
+  "updated_at": "2026-10-22T02:39:13.821116+08:00",
+  "coordinator_dom": {
+    "tests": 9,
+    "skips": 0,
+    "exit_code": 0
+  },
+  "L3REG11": {
+    "formal_tests": 3,
+    "formal_skips": 0,
+    "elapsed_seconds": 462.359,
+    "formal_job": "cd42e4f7eebf434dab86b6e871f7e2c7",
+    "integrated_rev": 6
+  },
+  "historical_tasks": {
+    "count": 19,
+    "classification": "historical=true accepted records already in main, not newly active uncompleted tasks; no verification fabricated"
+  },
+  "broad_main_regression": {
+    "tests": 23,
+    "skips": 0,
+    "elapsed_seconds": 274.091,
+    "exit_code": 0,
+    "modules": [
+      "tests.test_smp",
+      "tests.test_user_smp_services",
+      "tests.test_service_gui_wiring",
+      "tests.test_build_assembler",
+      "tests.test_paging_view",
+      "tests.test_p5_recovery_context",
+      "tests.test_p5_recovery_context_guest"
+    ]
+  },
+  "publish_preflight": {
+    "branch": "main",
+    "remote_head": "28fae186eade64aac9eec17fcc2fb30913b948f6",
+    "local_head_matches_remote": true,
+    "unignored_total_bytes": 51767134,
+    "large_files_only_existing_fonts": true,
+    "source_profile_ignore_fixed": true,
+    "nested_test_database_excluded": true,
+    "push_dry_run_authenticated": true,
+    "push_dry_run_result": "Everything up-to-date; no actual commit/push",
+    "diff_check": "Pass excluding two unchanged historical Claude Markdown deliveries whose intentional two-space hard breaks are retained to preserve accepted fingerprints"
+  },
+  "L3": {
+    "formal_tests": 4,
+    "formal_skips": 0,
+    "elapsed_seconds": 899.078,
+    "formal_job": "5672d2e5c9f24ce995ac8d17a4edc476",
+    "source_count": 155,
+    "source_stable": true,
+    "integrated_rev": 13,
+    "scope_complete": false,
+    "known_gap_cases": 16
+  },
+  "L3MAIN12": {
+    "formal_tests": 2,
+    "formal_skips": 0,
+    "elapsed_seconds": 0.609,
+    "formal_job": "cc5b26202326434f93b154f6718aabbf",
+    "integrated_rev": 6
+  },
+  "L3HOST13": {
+    "formal_windows_outer_tests": 1,
+    "formal_windows_inner_tests": 3,
+    "skips": 0,
+    "elapsed_seconds": 466.032,
+    "formal_job": "ff16d33a6bb345e79c8a796eade946ab",
+    "linux_tests": 15,
+    "linux_skips": 0,
+    "linux_seconds": 703.7079202379999,
+    "linux_source_count": 1335,
+    "integrated_rev": 9
+  },
+  "L3REG14": {
+    "formal_windows_tests": 1,
+    "skips": 0,
+    "elapsed_seconds": 200.828,
+    "formal_job": "5b2cade114724fb98e5a63be607b9001",
+    "linux_tests": 1,
+    "linux_skips": 0,
+    "linux_seconds": 176.721168123,
+    "integrated_rev": 9
+  },
+  "task_audit": {
+    "total_active_records": 141,
+    "integrated": 122,
+    "historical_accepted": 19,
+    "nonhistorical_remaining": 0,
+    "active_jobs": 0
+  }
+}

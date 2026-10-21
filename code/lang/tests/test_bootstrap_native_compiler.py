@@ -63,7 +63,15 @@ int main(int argc,char**argv){
  bad=lw;bad.functions.p=lw.code.p;
  REQUIRE(native_lower(&fr.graph,&bad,mode,&lr)==1&&!memcmp(&lr,&before,sizeof(lr))&&scratch_hash==hash_lower(&lw));
  U exact_functions=lr.program.functions.n,exact_code=lr.program.code.n,exact_args=lr.program.args.n;
- for(U which=0;which<4;which++){bad=lw;if(which==0)bad.functions.n=exact_functions-1;if(which==1)bad.code.n=exact_code-1;if(which==2)bad.args.n=exact_args-1;if(which==3)bad.node_slots.n=fr.graph.nodes.n-1;
+ for(U which=0;which<4;which++){bad=lw;
+  if(which==2&&exact_args==0){
+   LowerResult preserved=lr;U whole=hash_lower(&lw);bad.args.n=UINT64_MAX;
+   REQUIRE(native_lower(&fr.graph,&bad,mode,&lr)==1&&!memcmp(&lr,&preserved,sizeof(lr))&&whole==hash_lower(&lw));continue;
+  }
+  if(which==0){bad.functions.n=exact_functions-1;}
+  if(which==1){bad.code.n=exact_code-1;}
+  if(which==2){bad.args.n=exact_args-1;}
+  if(which==3){bad.node_slots.n=fr.graph.nodes.n-1;}
   REQUIRE(native_lower(&fr.graph,&bad,mode,&lr)==2&&unpublished(&lr));}
  lw.functions.n=exact_functions;lw.code.n=exact_code;lw.args.n=exact_args;lw.node_slots.n=fr.graph.nodes.n;
  REQUIRE(native_lower(&fr.graph,&lw,mode,&lr)==0);
@@ -73,7 +81,14 @@ int main(int argc,char**argv){
  if(rc){fprintf(stderr,"emit status=%llu\n",(unsigned long long)rc);return 12;}
  U exact=written;Slice snapshot=alloc(exact,1);memcpy(snapshot.p,out.p,exact);memset(out.p,0xa9,out.n);U out_hash=hash(out.p,out.n);written=999;
  REQUIRE(native_emit(&lr.program,&ew,out.p,exact-1,&written)==2&&written==999&&out_hash==hash(out.p,out.n));
- for(U which=0;which<4;which++){EmitWorkspace badw=ew;if(which==0)badw.text.n=exact-1;if(which==1)badw.piece.n=1023;if(which==2)badw.kinds.n=0;if(which==3)badw.locations.n=0;
+ if(exact_args==0){
+  for(U spare=0;spare<2;spare++){
+   EmitWorkspace unused=ew;if(spare==0){unused.kinds.n=0;}else{unused.locations.n=0;}
+   REQUIRE(native_emit(&lr.program,&unused,out.p,out.n,&written)==0&&written==exact&&!memcmp(out.p,snapshot.p,exact));
+   memset(out.p,0xa9,exact);REQUIRE(out_hash==hash(out.p,out.n));written=999;
+  }
+ }
+ for(U which=0;which<4;which++){if(exact_args==0&&which>=2){continue;}EmitWorkspace badw=ew;if(which==0)badw.text.n=exact-1;if(which==1)badw.piece.n=1023;if(which==2)badw.kinds.n=0;if(which==3)badw.locations.n=0;
   REQUIRE(native_emit(&lr.program,&badw,out.p,out.n,&written)==2&&written==999&&out_hash==hash(out.p,out.n));}
  U emit_hash=hash_emit(&ew);
  REQUIRE(native_emit(&lr.program,&ew,source.p,source.n,&written)==1&&written==999);
@@ -340,9 +355,14 @@ int main(int argc,char**argv){
     p=subprocess.run([str(exe),case],capture_output=True,text=True,timeout=10)
     self.records.append({'name':mode+'-subslice-'+case,'returncode':p.returncode,'expected':-signal.SIGILL,'stderr':p.stderr})
     self.assertEqual(p.returncode,-signal.SIGILL,(mode,case,p.stdout,p.stderr))
+ def test_global_storage_is_supported(self):
+  source=self.work/'global-supported.dg';source.write_text('module unsupported; var x:u64=1; pub fn f()u64{return x;}')
+  observer=self.work/'global-supported.c';observer.write_text('#include <stdint.h>\nextern uint64_t f(void) __asm__("'+label('unsupported','f')+'");\nint main(void){return f()!=1;}\n')
+  for mode in ('debug','release'):
+   exe,_=self.generated(mode,source,'unsupported.dg',mode+'-global-supported',observer)
+   self.command([exe],mode+'-global-supported-observe')
  def test_unsupported_source_fails_closed(self):
   sources={
-   'global':'module unsupported; var x:u64=1; pub fn f()u64{return x;}',
    'extern':'module unsupported; extern "sysv64" fn f()u64;',
   }
   for mode in ('debug','release'):

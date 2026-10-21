@@ -1,0 +1,37 @@
+[
+  {
+    "candidate": "D:\\projects\\2026\\dongos\\coordination\\dongos_works\\deepseek-works\\l3a\\src\\bootstrap\\lower_program.dg",
+    "main": "D:\\projects\\2026\\dongos\\code\\lang\\bootstrap\\lower_program.dg",
+    "sha256": "f62da738600f5f5e8118b2814296434bab45bd2fb9659e2c0e08ddc9ad5de0c1"
+  },
+  {
+    "candidate": "D:\\projects\\2026\\dongos\\coordination\\dongos_works\\deepseek-works\\l3a\\src\\bootstrap\\nasm_program.dg",
+    "main": "D:\\projects\\2026\\dongos\\code\\lang\\bootstrap\\nasm_program.dg",
+    "sha256": "c39b74991e6badcfd2c5dfe233476610a5f3bc0539cd48ffa7d9514403597f3e"
+  },
+  {
+    "candidate": "D:\\projects\\2026\\dongos\\coordination\\dongos_works\\deepseek-works\\l3a\\src\\bootstrap\\native_assembler.dg",
+    "main": "D:\\projects\\2026\\dongos\\code\\lang\\bootstrap\\native_assembler.dg",
+    "sha256": "fb1cea1338a34527e3070e2f457405e124ba7d1fa0e33dcadc3870359cd8c173"
+  },
+  {
+    "candidate": "D:\\projects\\2026\\dongos\\coordination\\dongos_works\\deepseek-works\\tests\\test_l3a_globals.py",
+    "main": "D:\\projects\\2026\\dongos\\code\\lang\\tests\\test_l3a_globals.py",
+    "sha256": "8c0816fd960bc1a72989262461e596521c9688c0081428d1f641c1b0fefceb73"
+  },
+  {
+    "candidate": "D:\\projects\\2026\\dongos\\coordination\\dongos_works\\deepseek-works\\tests\\test_l3a_native_regression.py",
+    "main": "D:\\projects\\2026\\dongos\\code\\lang\\tests\\test_l3a_native_regression.py",
+    "sha256": "943156321767b19dc838639091d074911b4829e3d256b279d8c80d07c5622900"
+  },
+  {
+    "candidate": "D:\\projects\\2026\\dongos\\coordination\\dongos_works\\deepseek-works\\l3a\\lower_program.md",
+    "main": "D:\\projects\\2026\\dongos\\code\\docs\\l3a-lower-program.md",
+    "sha256": "fb9317bdc8715a1823d9a0bcc9376ad1cb00c66bc46c061ca93d478e4dcb34dd"
+  },
+  {
+    "candidate": "D:\\projects\\2026\\dongos\\coordination\\dongos_works\\deepseek-works\\l3a\\nasm_program.md",
+    "main": "D:\\projects\\2026\\dongos\\code\\docs\\l3a-nasm-program.md",
+    "sha256": "f6387063819240599d2b89695add96d52edebc8fb011d4232a06d7d0c786f251"
+  }
+]

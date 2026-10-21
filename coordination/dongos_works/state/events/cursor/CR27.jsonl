@@ -1,17 +1,2 @@
 {"at":"2026-10-18T15:46:00+00:00","data":{"rev":1,"status":"todo"},"kind":"created","task_id":"cursor:CR27"}
 {"at":"2026-10-19T11:42:09+00:00","data":{"rev":12,"status":"integrated"},"kind":"state_reconciled","task_id":"cursor:CR27"}
-{"at":"2026-10-19T04:21:48+00:00","data":{"rev":1,"status":"todo"},"kind":"imported","task_id":"cursor:CR27"}
-{"at":"2026-10-19T04:43:01+00:00","data":{"rev":2,"status":"todo"},"kind":"state_restored","task_id":"cursor:CR27"}
-{"at":"2026-10-19T06:28:17+00:00","data":{"rev":3,"status":"in_progress"},"kind":"claim","task_id":"cursor:CR27"}
-{"at":"2026-10-19T06:35:03+00:00","data":{"rev":4,"status":"submitted"},"kind":"submit","task_id":"cursor:CR27"}
-{"at":"2026-10-19T06:35:19+00:00","data":{"job":"836614ca3684496496d1482ee4d5dfef","kind":"verify","provider":"python"},"kind":"queued","task_id":"cursor:CR27"}
-{"at":"2026-10-19T06:35:54+00:00","data":{"rev":5,"status":"submitted"},"kind":"verified","task_id":"cursor:CR27"}
-{"at":"2026-10-19T06:35:54+00:00","data":{"job":"836614ca3684496496d1482ee4d5dfef","status":"completed"},"kind":"job_finished","task_id":"cursor:CR27"}
-{"at":"2026-10-19T06:36:20+00:00","data":{"rev":6,"status":"rework"},"kind":"rework","task_id":"cursor:CR27"}
-{"at":"2026-10-19T06:47:47+00:00","data":{"rev":7,"status":"in_progress"},"kind":"claim","task_id":"cursor:CR27"}
-{"at":"2026-10-19T06:51:39+00:00","data":{"rev":8,"status":"submitted"},"kind":"submit","task_id":"cursor:CR27"}
-{"at":"2026-10-19T06:52:32+00:00","data":{"job":"4c0397e5f26f425b85e02923715c959a","kind":"verify","provider":"python"},"kind":"queued","task_id":"cursor:CR27"}
-{"at":"2026-10-19T06:54:42+00:00","data":{"rev":9,"status":"submitted"},"kind":"verified","task_id":"cursor:CR27"}
-{"at":"2026-10-19T06:54:42+00:00","data":{"job":"4c0397e5f26f425b85e02923715c959a","status":"completed"},"kind":"job_finished","task_id":"cursor:CR27"}
-{"at":"2026-10-19T06:56:14+00:00","data":{"rev":10,"status":"accepted"},"kind":"accept","task_id":"cursor:CR27"}
-{"at":"2026-10-19T06:59:44+00:00","data":{"rev":11,"status":"integrated"},"kind":"integrate","task_id":"cursor:CR27"}

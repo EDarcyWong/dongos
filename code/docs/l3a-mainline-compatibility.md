@@ -1,0 +1,7 @@
+# L3A 主线兼容门禁
+
+旧native compiler测试将GLOBAL从不支持表移为实际执行正例，原extern拒绝与字段偏移语义负控保留。旧native assembler将.data从非法section移为实际字节正例，.bss及其它非法操作继续拒绝；完整Linux ABI/陷阱/ELF进程执行检查保持。
+
+本机Windows不能把Linux专用测试的skip计为通过。新增test_l3a_mainline_compatibility复用已审查L3A SysV桥，重新引导实际Dong编译器：原GLOBAL源码debug/release真实组装ELF64/COFF并执行两次返回1；extern仍lower3、输出不变；真实native assembler ELF在原0x400000执行.data变量更新返回42，并检查原始8字节初值；六类非法section/重定位等保持拒绝。源码/桥/只读闭包SHA稳定，无seed fallback或ELF指针修补。
+
+开发首轮3项中2通过、GLOBAL观察C被-Wmisleading-indentation拒绝，不计成功。已将if加明确花括号，并用原只读Dong driver在新唯一目录实测debug/release值均通过；正式门禁另完整重新引导，不能用局部重跑冒作正式3项。既有完整Linux两套未在本机执行，明确保留平台范围。L3A主目录6+4项已实际10tests/0skip/945.799s通过，与本兼容门禁独立。

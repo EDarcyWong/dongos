@@ -29,7 +29,7 @@ var BUFFER_BYTES:u64=0;
 var FRAMEBUFFER_PHYSICAL:u64=0;
 var FRAMEBUFFER_BYTES:u64=0;
 unsafe fn private_display(compositor:usize)!void {unsafe {
-    try memory.map_device(compositor,0x6000_0000,FRAMEBUFFER_PHYSICAL,FRAMEBUFFER_BYTES);
+    try memory.map_framebuffer(compositor,0x6000_0000,FRAMEBUFFER_PHYSICAL,FRAMEBUFFER_BYTES);
     var i:u64=0;while i<(BUFFER_BYTES+4095)/4096 {
         let back=try memory.anonymous(compositor,0x5800_0000+i*4096);
         let background=try memory.anonymous(compositor,0x5500_0000+i*4096);i+=1;

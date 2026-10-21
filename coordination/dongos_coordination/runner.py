@@ -127,7 +127,12 @@ def inventory(root, *, source_filter=False, works_root=None):
     total = 0
     for directory, dirs, files in os.walk(root):
         base = Path(directory)
-        dirs[:] = [d for d in dirs if d not in EXCLUDE and (not source_filter or not d.startswith('.'))]
+        # kernel/build is a real Dong source-module directory (for explicit
+        # build configuration), not the root's generated build output. Keep
+        # its bytes in both the isolated copy and the stability inventory.
+        source_module = base.relative_to(root).parts == ('kernel',)
+        dirs[:] = [d for d in dirs if (d not in EXCLUDE or (source_module and d == 'build'))
+                   and (not source_filter or not d.startswith('.'))]
         if base == root and 'state' in dirs and (base / 'state' / 'tasks').is_dir() and (base / 'state' / '.gitattributes').is_file():
             dirs.remove('state')   # the coordinator's own task-state snapshot (works root == project root layout)
         dirs[:] = [d for d in dirs if not (base / d).is_symlink() and not (base / d).is_junction()]

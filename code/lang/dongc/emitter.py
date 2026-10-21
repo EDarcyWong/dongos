@@ -23,6 +23,7 @@ class Compilation:
     sources: list[str] | None = None
     optimization: dict | None = None
     debug_information: dict | None = None
+    function_sections: bool = False
 
     def manifest(self):
         result = {"schema": 1, "spec_version": "0.1", "compiler_subset": "l1-language",
@@ -36,6 +37,8 @@ class Compilation:
             result["optimization"] = self.optimization
         if self.debug_information is not None:
             result["debug_information"] = self.debug_information
+        if self.function_sections:
+            result["function_sections"] = True
         return result
 
 
@@ -50,7 +53,7 @@ class Emitter:
     WIDTH = {1: "byte", 2: "word", 4: "dword", 8: "qword"}
     ACC = {1: "al", 2: "ax", 4: "eax", 8: "rax"}
 
-    def __init__(self, module: Module, path: str, mode: str, *, optimize=0, debug_info=False):
+    def __init__(self, module: Module, path: str, mode: str, *, optimize=0, debug_info=False, function_sections=False):
         self.module, self.path, self.mode = module, path, mode
         self.types = module.type_system
         self.runtime = set()
@@ -59,6 +62,7 @@ class Emitter:
         self.external_symbols = set()
         self.serial = 0
         self.optimize = optimize
+        self.function_sections = function_sections
         self.optimization = []
         self.debug = None
         if debug_info:
@@ -105,6 +109,11 @@ class Emitter:
         pieces = []
         for function in self.module.functions:
             if not getattr(function, "external", False):
+                if self.function_sections:
+                    section = ".text.dg_" + function.symbol.encode("utf-8").hex()
+                    pieces.extend(["%ifidn __OUTPUT_FORMAT__,elf64",
+                                   "section " + section + " progbits alloc exec nowrite align=16",
+                                   "%else", "section " + section + " code align=16", "%endif"])
                 if self.optimize and self.mode == "release" and self.debug is None:
                     from .ssa_lower import compile_function, Unsupported
                     try:
@@ -159,7 +168,8 @@ class Emitter:
         return Compilation("\n".join(header + pieces), self.module.name, self.mode, sorted(self.runtime),
                            [function.export for function in self.module.functions if function.export and not getattr(function, "external", False)], manifest, modules, sources,
                            {"level": self.optimize, "functions": self.optimization} if self.optimize else None,
-                           {"format": "DWARF", "backend": "l1"} if self.debug is not None else None)
+                           {"format": "DWARF", "backend": "l1"} if self.debug is not None else None,
+                           self.function_sections)
 
     @staticmethod
     def static_bytes(data):

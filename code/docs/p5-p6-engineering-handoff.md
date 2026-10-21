@@ -1,8 +1,10 @@
 # P5/P6 工程交接：设备恢复、输入 IRQ 与启动验证
 
-快照截止：2026-10-20 12:11 UTC。本文是可以脱离聊天历史使用的工程入口，不是阶段验收结论。动态 CI 状态必须按下述精确 SHA 重新查询。
+最新接续（2026-10-20 23:28 Asia/Shanghai）：PR#7/#10/#8均已合并，本地main为`244b18c`。已有全核owner停止、隔离及现代VirtIO reset-hold路径已接线；DMA仍保持PINNED，可信在途排空、撤映射后的全核退休及精确整块回收仍待完成。新 [Cursor P5CTX1](../../coordination/dongos_works/cursor-works/tasks/P5CTX1-board.md) 接续真实DMA申请/退休的精确持有上下文，当前仅待领取，验收前不算生产已接线。C52/CXNASM3已按新正式复验登记集成；G6既有双启runner可并行推进，其CI入口只有提案、尚未安装或运行。当前状态见[整体任务图](../../coordination/dongos_works/progress-map.md)和[接续回执](../../coordination/dongos_works/reviews/2026-10-20-p5-g6-next-actions.md)。
 
-## 当前结论
+以下保留合并前工程快照及其后补充的原始证据；旧“PR待合/依赖缺失/尚未接线”须按上述最新入口核对，不代表当前状态。原快照截止：2026-10-20 12:11 UTC，不是阶段验收结论。动态CI必须重新查询精确SHA。
+
+## 历史快照结论
 
 - **P5 partial**：恢复账本与 DMA 整块记录已通过原生/完整 CI 并合入 main；未接入实际驱动故障恢复路径，不能宣称同次启动恢复或 DMA 回收完成。
 - **P6 partial**：输入 IRQ 丢边沿修复已单独通过检查并合入 main；原实验 PR 保留 KVM 门禁失败证据。尚无成功的真实 Linux/KVM 启动计时。

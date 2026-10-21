@@ -1,0 +1,87 @@
+{
+  "assignment_owner": "codex",
+  "auto_dispatch": false,
+  "auto_verify": false,
+  "candidate": null,
+  "checks": [
+    "module:tests.test_p5_recovery_context_guest",
+    "module:tests.test_virtio_reset_guest"
+  ],
+  "claim_from_status": "todo",
+  "claim_token": "d68d0e7ffb8e409cb3007f9cb687c438",
+  "claimed_at": "2026-10-21T11:34:01+00:00",
+  "claimed_by": "codex-mcp-6fe7be60df984d37",
+  "completed_at": "2026-10-21T11:54:43+00:00",
+  "complexity": "standard",
+  "created_at": "2026-10-21T11:33:52+00:00",
+  "delivery": "codex-works/deliveries/P5CTX2.md",
+  "depends_on": [
+    "cursor:P5CTX1"
+  ],
+  "description": "所属阶段：P5设备故障恢复。接续已integrated rev7的cursor:P5CTX1，按用户明确要求由Codex直接实现、测试、独立验收与本地集成，不建PR、不提交或推送。当前基线Git main的最新提交及本地P5CTX1源码SHA必须另行封存，不能用G6/旧reset-hold CI覆盖本次变更。\n\n本项只完成真实客体故障下的DmaContext核验，不实现DMA drain/unpin/free/reuse/新token发布或驱动重启，不修改内核生产算法/公共ABI。复用现有run_virtio_reset_qemu、只读QMP物理转储及隔离UD2 fixture；不重写另一套虚拟机执行器。新增严格ABI驱动的DmaContext嵌套字段/原始字节解码与验证：实际0x63成功申请记录需绑定Catalog owner/incarnation、slot/configuration、原设备token/generation/完整identity与ECAM、memory root/独立generation以及全部DmaLease字段，正常control与故障fault均核对。故障核对原owner已停止、全核已有ACK、路由/隔离/reset/撤权记录及真实ledger代际、sticky held=1、drain=UNKNOWN，lease/原身份在两次稳定观察间不变，不能把撤映射前ACK当TLB回收证明。不虚构请求后错误/partial lease的guest结果（P5CTX1已有native证据）；本项真实guest范围为initialized-queue UD2和正常control。原始物理转储、布局manifest、symbols、ESP/源码前后SHA、运行命令/退出/串口/清理结果都保留，validator须能离线独立重放，禁止guest内存/寄存器写入和生产后门。新增源码mutant或实际原始回执逐字段篡改负控必须确定拒绝，不能仅text存在；结构/短读/错layout/身份每字段/代际/partial租约/错误phase/drain伪造/后次身份租约覆盖都需要host controls。不要把mock guest结果记作真实通过。\n\n用户已明确授权本项真实客体测试。协调器身份在独立冻结副本中构建运行本机QEMU TCG control/fault，使用新建临时ESP/数据盘和匹配固件，不接触物理盘/现有VM；CLI worker不启动OS/VM。受限checks只运行host unittest并零skip，真实客体结果由Codex协调者另行实际运行并独审后记录。任何环境失败保留原失败并修复/复测，未有真实control/fault证据不得登记任务验收或集成。现有fixture如需Windows路径规范化/模块导入适配只修必要边界，保留旧断言。主线文件范围为本任务显式声明的7个路径，其它变更保留不混入。\n\n验收：声明的host定向checks独立隔离通过且源稳定；现有test_virtio_reset_guest和P5CTX1 native回归通过；新的完整runtime7 normal/fault构建、真实4CPU control/fault各至少一次，两次只读稳定观察及完整原始字节可重放。独立审查源码/契约/host负控和真实guest物理证据后accepted，核对主线文件与验收SHA及实际运行来源后登记integrated。docs必须保留P5 partial、drain UNKNOWN、无回收/重启和无PR边界。",
+  "document": "codex-works/tasks/P5CTX2-board.md",
+  "historical": false,
+  "id": "codex:P5CTX2",
+  "integration_note": "已完成真实本地文件集成：七授权路径均实际位于主工作区；逐一重算SHA与正式rev4 verification的七项fingerprint完全一致，五测试/观测文件还与真实control/fault冻结副本及独立审查SHA一致。文件映射与证明封存reviews/2026-10-21-P5CTX2-integration.json。P5CTX1两生产文件SHA保持既定823fc277...及548c6daf...，HEAD仍28fae186eade64aac9eec17fcc2fb30913b948f6，其它既有改动保留。accepted rev5已通过；本次只登记本地集成，不建PR、不commit、不push；P5范围仍为partial，held1/drain UNKNOWN，无DMA回收或重启。",
+  "legacy_hash": "865db60a761e7aa32a151d93858eb476c3caebf122bebfdae3ed89de32f86e83",
+  "number": "P5CTX2",
+  "owner": "codex",
+  "rev": 6,
+  "review_note": "独立源码/契约/测试与真实guest证据审查通过，报告reviews/2026-10-21-P5CTX2-independent-review.md/.json，无返修。协调器job b15f655e12ea439bbe3af0aef39cf8be：12+9 tests、零skip、exit0、process_stopped/execution_exited/source_stable=true；七授权文件SHA吻合。完整runtime7 control/fault构建与真实4CPU TCG两次稳定观察均通过，1050/1049原始转储、1293/1294冻结源及全部构建产物独立SHA复核；完整未stub重放control/fault通过。实际424byte各53字段共106raw mutants全拒；drain改raw并同步全部hash+savedcontext后完整Replay仍语义拒绝，原archive未改。P5CTX1 native debug/release及两类mutants通过；保留首次NASM/ABI失败与修正证据。仅验收initialized-queue context/reset/hold，P5 partial、drain UNKNOWN，无post-unmap TLB/drain/free/unpin/reuse/新token/重启证明。",
+  "status": "integrated",
+  "title": "[P5] 真实客体故障下的精确DMA持有上下文核验",
+  "updated_at": "2026-10-21T11:57:55+00:00",
+  "verification": {
+    "checks": [
+      {
+        "cancelled": false,
+        "elapsed_seconds": 0.609,
+        "execution_exited": true,
+        "passed": true,
+        "process_stopped": true,
+        "returncode": 0,
+        "skips": 0,
+        "spec": "module:tests.test_p5_recovery_context_guest",
+        "tests": 12,
+        "timed_out": false
+      },
+      {
+        "cancelled": false,
+        "elapsed_seconds": 0.406,
+        "execution_exited": true,
+        "passed": true,
+        "process_stopped": true,
+        "returncode": 0,
+        "skips": 0,
+        "spec": "module:tests.test_virtio_reset_guest",
+        "tests": 9,
+        "timed_out": false
+      }
+    ],
+    "execution_exited": true,
+    "fingerprint": {
+      "codex-works/deliveries/P5CTX2.md": "af4ebcd8a5282f1a873e7ad7f8897879e57ff3ea2d6ab9f97ca187971320171b",
+      "docs/p5-recovery-context-guest.md": "e6c585d336cb7b27a4eb6ec26d8be5c34277585a2743e2781b8d7a807e56ff33",
+      "tests/p5_recovery_context_guest.py": "ff14b043aea5e4f7fd0e72a8ee0fd465a8acb4351b6b189cfbd54dde3a97af75",
+      "tests/p5_virtio_reset_fixture.py": "535e6b1fbe18507db4f09dc18a87e3b4b605396395b09bba3f29ad4998c898f1",
+      "tests/run_virtio_reset_qemu.py": "46f6315cad0af1d1d331f21f98b4e596dd32767c5e25cdfe10a1542dd9321d59",
+      "tests/test_p5_recovery_context_guest.py": "81bdd8d2550cd7aa1e35fe388cda9a2e343bd99a38e6c82d105591a25958d97a",
+      "tests/test_virtio_reset_guest.py": "a9916ad252147eb8ca728735bedf17f8a2741a64a58d9e5c35e2c0ae40abf89b"
+    },
+    "finished_at": "2026-10-21T11:54:57+00:00",
+    "job": "b15f655e12ea439bbe3af0aef39cf8be",
+    "passed": true,
+    "process_stopped": true,
+    "source_stable": true,
+    "summary": "定向复验通过，等待源码/契约审查"
+  },
+  "write_paths": [
+    "tests/p5_recovery_context_guest.py",
+    "tests/test_p5_recovery_context_guest.py",
+    "tests/run_virtio_reset_qemu.py",
+    "tests/test_virtio_reset_guest.py",
+    "tests/p5_virtio_reset_fixture.py",
+    "docs/p5-recovery-context-guest.md",
+    "codex-works/deliveries/P5CTX2.md"
+  ]
+}

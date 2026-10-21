@@ -64,6 +64,14 @@ pub const EMPTY_SPACE: Space = Space {
 
 pub struct Mapping { pub physical: u64, pub flags: u64 }
 
+// Read-only identity of an actual initialized Space. Consumers still own the
+// lifetime and exclusive access to this storage; this is not a snapshot of the
+// table bytes. Used by closed-alias auditors without guessing private offsets.
+pub struct PoolView {
+    pub tables: *const Table, pub metadata: *const u8, pub count: usize,
+    pub physical: u64, pub address_mask: u64, pub used: usize, pub nx: bool,
+}
+
 // A detached table remains unavailable to allocation (metadata=2) and counted
 // as used until the caller has completed a full paging-structure/TLB flush.
 // Receipts are linear caller-owned objects: never copy a pending receipt, edit
@@ -301,6 +309,43 @@ pub unsafe fn used_tables(space: *const Space) !usize {
 pub unsafe fn physical_address_mask(space: *const Space) !u64 {
     if !initialized(space) { return error.errors.NotInitialized; }
     unsafe { return (*space).address_mask; }
+}
+
+// space must be readable valid Space storage; out must be writable storage
+// when its numeric range is valid. All rejected descriptors write nothing.
+pub unsafe fn inspect(space: *const Space, out: *PoolView) !void {
+    unsafe {
+        let sp = space as u64; let op = out as u64;
+        let maximum: u64 = 0xffff_ffff_ffff_ffff;
+        let bytes = sizeof(PoolView) as u64;
+        if sp == 0 || (sp & 7) != 0 || sp > maximum - (sizeof(Space) as u64)
+            || op == 0 || (op & 7) != 0 || op > maximum - bytes {
+            return error.errors.InvalidArgument;
+        }
+        if op < sp + (sizeof(Space) as u64) && sp < op + bytes {
+            return error.errors.InvalidArgument;
+        }
+        if !(*space).initialized { return error.errors.NotInitialized; }
+        let count = (*space).pool_count;
+        let pool = (*space).pool as u64; let meta = (*space).metadata as u64;
+        if count == 0 || (count as u64) > maximum / 4096 {
+            return error.errors.InvalidArgument;
+        }
+        let pool_bytes = (count as u64) * 4096;
+        if pool == 0 || (pool & 4095) != 0 || pool > maximum - pool_bytes
+            || meta == 0 || meta > maximum - (count as u64) {
+            return error.errors.InvalidArgument;
+        }
+        if (op < pool + pool_bytes && pool < op + bytes)
+            || (op < meta + (count as u64) && meta < op + bytes) {
+            return error.errors.InvalidArgument;
+        }
+        *out = PoolView { tables: (*space).pool, metadata: (*space).metadata,
+            count: count, physical: (*space).pool_physical,
+            address_mask: (*space).address_mask, used: (*space).used_total,
+            nx: (*space).nx_supported };
+    }
+    return;
 }
 
 unsafe fn map_impl(space: *Space, virtual: u64, physical: u64, flags: u64, live: bool) !void {

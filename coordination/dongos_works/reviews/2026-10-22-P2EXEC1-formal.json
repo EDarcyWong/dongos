@@ -1,0 +1,541 @@
+{
+  "project": "dongos",
+  "task": {
+    "id": "claude:P2EXEC1",
+    "number": "P2EXEC1",
+    "owner": "codex",
+    "title": "[P2] 动态执行别名的真实降权、同步与授权事务",
+    "description": "用户于2026-10-21明确要求给Claude分配任务。本项属于P2剩余正常消费者的接续实现，非重做已有纯planner；用户要求不建PR，完成测试、独立验收和本地集成。Claude此前C52等队列已integrated，无本人未结在途。本人客户端worker MCP先读取完整原任务、依赖最新rev及写路径，claim成功后手动执行；不自动启动模型/AI CLI。\n\n只修改声明的claude-works文件，主线和其它负责人的候选全部只读，尤其不改Codex在途P2SMP3、DeepSeek L3/L3A、lang/dongc或tools/build.py。任务编号与模块全新，不恢复已归档pool:P2ALIAS1/P2PAT1/P2HUGE1，不把旧组件重新贴牌。本任务不自行运行OS/VM、不提交/推送/建PR，不自行accept/integrate。实际正常内核hook、硬件回调、客体正反例、最终验收与文件集成由Codex后续完成；本项submitted或组件验收不等于整个P2/EXEC/WC完成。\n\n实现必须实际调用现有Dong planner与mm.paging live API，不能返回一个未执行的step列表。单BSP写者、IF=0，管理固定共享内核根、PGE/PCIDE关闭，调度/user多CR3接管前使用并封存；不能声称任意活动用户根已受支持。需要硬件失效/缓存动作的地方用明确的unsafe同步回调，返回成功意味着实际全部读者完成。任何回调失败或中途页表错误，禁止后续grant/remap/reclaim、禁止free/reuse；Context记录poisoned/held、阶段、原始错误、完成的回调与退休回执，后续入口永久拒绝修改，保留可审计现场。首次发布前非法参数必须完整不变，发布后的失败只能承诺安全降权与持有，不能伪称回滚原子性。\n所有unsafe描述符完整端点/对齐/乘法/全部声明尾部别名预检，实际绑定Space/根/管理范围/物理所有权/读者epoch必须明确；不把“调用者列表完整”当任意系统证明。受控窗口/物理帧不含代码、栈、页表和普通运行时资源，不接受USER、global、PCID或未知缓存组合；大页覆盖明确拒绝，别顺手隐式拆分。已有大页事务/Context ABI不改。\n\n测试仅定向checks：真实Dong debug/release编译、NASM ELF64/COFF组装、显式SysV原生call及安全恢复后检查callee-saved/RSP；COFF组装不当Win64ABI证明。独立C直接遍历完整真实页表与元数据并记录每个硬件回调前后状态，不以生产query/planner作唯一期望，不用手写C/Python算法替代Dong生产事务。有限边界、同夹具好体先通过、源码/说明/测试/只读传递闭包前后SHA稳定、0skip。每类真实坏Dong成功构建链接并正常运行后由指定数值/内存/回调顺序/发布原子性断言拒绝；崩溃、构建失败、超时、纯文本差异不能代替语义负控。\n临时产物本人works/build/本编号/<唯一目录>。交付列完整API/unsafe前提、主线集成路径、真实命令/exit/tests/skips、输入与产物SHA、所有失败/负控观察及未运行限制。需要声明外文件先说明具体接线阻塞，由协调者发布后续范围，不能越权。\n\n生产模块mm.exec_alias_owner，候选claude-works/src/mm/exec_alias_owner.dg，未来集成kernel/mm同名路径；依赖已验收的mm.alias_policy/mm.paging及smp.tlb，只读参考user.memory静态ELF撤销supervisor写别名流程。不要放宽mm.active_paging现有WB/NX契约。\n\n最小可完整验收范围：一个真正持有的4KiB WB RAM帧、同一受控Space内最多16个已存在别名，初始状态由绑定逐项核对实际paging.query的PA/权限/缓存；调用者必须提供完整封闭别名集合和实际根表池视图。绑定还须遍历有界完整根表池检查该帧不存在未申报别名（包括HHDM）；允许其它不相干映射，只读扫描，验证所有父项范围/唯一父/无环。遇到该帧的大页别名、额外写或执行别名、未申报alias、坏父表、根/表池不一致或非法权限即拒绝且不改任何输入。绑定到固定smp.tlb.Domain的root/count/online epoch；在首次写入前重新核验，epoch变化拒绝。别名窗口与全部事务存储相互独立，unsafe前提清楚给出真实pool虚拟视图对应物理pool的映射关系，不能从数字指针推断可访问性。\n\ntransition(frame,target,grantee)实际调用alias_policy.plan_transition，执行REVOKE所有冲突alias（protect_live为只读NX且保留WB）→本地失效→全部AP同步→GRANT目标RW/NX或RO/RX。每一步用独立原始页表检查完整跨别名W^X，授EXEC前必须已经没有任何可写的实际映射/缓存授权；转回可写同理先撤全部执行。初始无冲突planner只GRANT时仍核对完整闭包。回调传精确阶段/root/VA并记录结果，不能以记一个ACK数值冒充硬件完成。支持只读查询、审计stats及seal；禁止在poisoned/busy/sealed时再改页表。\n\n永久原生测试覆盖两别名及多别名往返、多个读者与count1、同帧隐藏别名/HHDM、大页隐藏别名、某次revoke失败、local/AP回调逐点失败、重复/越界/尾部别名/根与epoch变化、错误grantee/flags以及seal。所有失败逐步核对PTE/retirement/held状态和回调轨迹，不能只测最终返回码。真实坏体至少漏REVOKE后直接GRANT、漏AP同步、失败仍继续GRANT三类，在物理安全C模型中正常返回后由跨别名W^X/顺序/失败持有断言拒绝。硬件执行新代码及热取指/陈旧可写别名客体证明留给Codex接线，不可用宿主raw模型冒充它。",
+    "assignment_owner": "codex",
+    "status": "submitted",
+    "rev": 16,
+    "write_paths": [
+      "claude-works/src/mm/exec_alias_owner.dg",
+      "claude-works/src/mm/exec_alias_owner.md",
+      "claude-works/tests/exec_alias_owner_probe.dg",
+      "claude-works/tests/exec_alias_owner_probe.c",
+      "claude-works/tests/test_exec_alias_owner.py",
+      "claude-works/deliveries/P2EXEC1.md"
+    ],
+    "depends_on": [],
+    "checks": [
+      "discover:claude-works/tests:test_exec_alias_owner.py"
+    ],
+    "auto_dispatch": false,
+    "auto_verify": false,
+    "complexity": "standard",
+    "created_at": "2026-10-21T14:21:13+00:00",
+    "updated_at": "2026-10-21T16:43:43+00:00",
+    "historical": false,
+    "document": "claude-works/tasks/P2EXEC1-board.md",
+    "delivery": "claude-works/deliveries/P2EXEC1.md",
+    "claimed_at": "2026-10-21T15:37:13+00:00",
+    "completed_at": "2026-10-21T16:43:00+00:00",
+    "claimed_by": "codex-mcp-6fe7be60df984d37",
+    "candidate": null,
+    "verification": {
+      "passed": true,
+      "checks": [
+        {
+          "spec": "discover:claude-works/tests:test_exec_alias_owner.py",
+          "passed": true,
+          "tests": 1,
+          "skips": 0,
+          "returncode": 0,
+          "cancelled": false,
+          "timed_out": false,
+          "process_stopped": true,
+          "execution_exited": true,
+          "elapsed_seconds": 30.859
+        }
+      ],
+      "process_stopped": true,
+      "execution_exited": true,
+      "source_stable": true,
+      "fingerprint": {
+        "claude-works/src/mm/exec_alias_owner.dg": "bde5ce44e9fdfdce178e06eb72d923ae16cc7349b6e3fe4cb3046b489b115f28",
+        "claude-works/src/mm/exec_alias_owner.md": "ec349fa64efecb8538938f8ec13e78a16068b152921c99ac0f327409cde430c1",
+        "claude-works/tests/exec_alias_owner_probe.dg": "553ce3c7e9ca14d65bfc8fe472edbb30c4b098b9f19b6860fe9a9c85b1abe5d5",
+        "claude-works/tests/exec_alias_owner_probe.c": "5e675418e2c6de53bddc0287cb9998c5ba83fc65c7513b5b14c94803fd368290",
+        "claude-works/tests/test_exec_alias_owner.py": "b4cc7409cf1f9f8f5bb287e01baa3cc7cd3d8138c9fc6f56ae9b92509d27a3d2",
+        "claude-works/deliveries/P2EXEC1.md": "829b3ab7f83c06051a5cf34d7d3e4876e1e66b2c37359243c9ae6cc14d6fea2e"
+      },
+      "summary": "定向复验通过，等待源码/契约审查",
+      "finished_at": "2026-10-21T16:43:43+00:00",
+      "job": "923958831cb9466098acdd60483f28f4"
+    },
+    "review_note": "R1返修，未验收/未集成。已实际读六文件和原任务书，并运行正式独立job d8f6fc5662e843e09a01719d59f621da：Ran0tests/NO TESTS RAN，exit5/source_stable=true，非缺工具环境。另在现有Python312+lang.dongc.compile_file以候选src、code/kernel、code/lang/std为根真正编译，release首先失败E0201：exec_alias_owner.dg:397不存在paging.READ。声明独立布局编译证明Binding=712B、Context=2392B、AliasView=40B，bind:158/179硬写224B导致out端点/完整尾部别名漏检。\n\n须按原契约完成，不扩大为任意用户根，仍只六文件，不改主线：\n1. 修正真实DongAPI/类型/错误处理：RO/NX flags为0，不存在paging.READ、error.OK；!void用match/try处理。不得构造并改写mm.paging.Space私有字段（364..378，metadata=null、伪造mask/count）；接口绑定真实已init的*Space与完整pool/meta视图，用已验收公开API验证同一根。不要放宽主线privacy/checker或active数据API。\n2. bind:237隐藏alias扫描TODO必须实现：有界完整根池遍历、范围/唯一父/无环/父项与大页检查，逐个实际query/原始PTE核对frame、权限、WB，额外HHDM/隐藏别名或大页alias拒绝。禁止把列表完整性/未实现扫描写成“原任务允许的限制”。USER、非法cache、root/out/aliases/domain/pool/metadata完整端点和全部声明尾部重叠必须独立先验，sizeof(Binding)取编译器真实值712而非224，失败写前完整不变。\n3. FLUSH_LOCAL:418..432目前只记succeeded=true不执行，是阻塞项。按任务原先允许的unsafe同步回调实际调用，返回0才记成功；全部local/AP ACK后才GRANT。缺ACK/任意中途错误poison并保留原始错误、阶段、held现场，不能仅统统CALLBACK_FAILED丢因果。不要要求宿主执行特权指令；C独立模型提供可审计callback，根协调者后续接真实硬件。\n4. initial_epoch目前错用tlb.Domain.epoch：它是每次broadcast递增的序列，第一次SHOOTDOWN后第二次合法往返即失败。固定拓扑应校验实际CPU online_epoch/epoch、root/count/状态、PGE/PCIDE与pending，参考已integrated的kernel/mm/shared_paging.dg；不得因正常广播序列增长拒绝合法往返，真正reader epoch/root变化必须写前拒绝。\n5. 测试必须unittest.TestCase可由给定discover真实收集，不能仅__main__/自定义TestResult；编译用现有lang.dongc.compile_file，不用不存在的dongc --target nasm；NASM/GCC工具与nasm_flags参考code/tests/test_shared_large.py或test_smp.py。缺工具/编译失败/链接失败必须fail，不能skip且exit0。debug/release实际Dong→ELF64/COFF→显式SysV原生调用，真实导出wrapper或正确符号桥；成功后恢复检查callee-saved/RSP。\n6. C:walk_page_tables、test_wx_transition_verified仍stub；现有5个bind/query/seal案例根本未执行transition。实现独立完整raw pool/metadata oracle，观察每个回调当下跨aliasW^X、实际PTE、正常往返、count1/多reader、seal/busy/reentrancy、所有failure点、未申报/大页alias、descriptor边界、真实坏Dong漏revoke/漏AP同步/失败仍grant三类。坏体正常构建返回后由指定不变量拒绝，不以文本/崩溃/无关预检替代。\n7. 测试运行不得重写交付报告/受测源；前后hash实际比较所有输入与只读闭包，临时产物唯一build子目录。修正文档/交付中“全部实现/限制属原任务/正常skip”不实完成声明，保留旧失败历史并追加真实新结果。单帧/固定根/不支持USER属于允许范围，扫描/flush/raw oracle不是未来工作。零skip正式复验及实际源码审查后才可验收。\n证据reviews/2026-10-21-P2EXEC1-first-compile.json，布局code/build/reviews/P2EXEC1/run-a2eaca1f/layout.json。原任务返修优先；本人已领取其它任务时自行遵守安全暂停/归还流程，不越范围或覆盖在途。\n本次rev6仅替换date时间戳，不修复上述阻塞，生产DG SHA仍b3419f3d6a05a1b14ce6a5327afc092b381af32bfafd70f5382cc57c9ee64d78；不接受跳过测试或虚称Dong不可用。已安装Python312+仓库真实Dong编译API+NASM/GCC可用。请先读本review_note及reviews/2026-10-21-P2EXEC1-R1.md，修全部原契约阻塞后再提交。",
+    "legacy_hash": "57fe9f1682925de0b4b51f59b7a15ff05ddc64845008eebcfdf5dbff36bf1a5f",
+    "claim_token": "833c392be029435ab7624f4128b36139",
+    "assignment_history": [
+      {
+        "at": "2026-10-21T15:37:12+00:00",
+        "from_owner": "claude",
+        "to_owner": "codex",
+        "previous_claimed_by": "claude-mcp-20a536f9b9a3478e",
+        "note": "用户于本轮明确要求Codex接手P2EXEC1与P2WC1修改，覆盖原负责人返修分工。P2EXEC1 rev11第三交正式复验job adde48cffa8642ca836599585e7e5798失败：0tests/exit5，源码稳定/全进程停止；现rework rev12，无活动实现作业。原六文件/原契约/历史均保留，由Codex领取后修复，仍不建PR。独立正确根编译证据code/build/reviews/P2EXEC1/reverify-b5b0a4b9ba，生产debug/release函数类型语法失败，probe export语法失败；隐藏别名扫描/回调空值假成功、固定712B已过期、C独立状态未连接等仍需修复。禁止把转交当验收/集成。"
+      }
+    ],
+    "claim_from_status": "rework",
+    "timing": {
+      "as_of": "2026-10-21T16:44:20+00:00",
+      "published_at": "2026-10-21T14:21:13+00:00",
+      "first_claimed_at": "2026-10-21T14:36:39+00:00",
+      "last_submitted_at": "2026-10-21T16:43:00+00:00",
+      "last_verified_at": "2026-10-21T16:43:43+00:00",
+      "last_modified_at": null,
+      "rounds": [
+        {
+          "number": 1,
+          "kind": "initial",
+          "owner": "claude",
+          "claimed_by": "claude-mcp-bd39e3658d2d4673",
+          "requested_at": null,
+          "claimed_at": "2026-10-21T14:36:39+00:00",
+          "submitted_at": "2026-10-21T14:50:49+00:00",
+          "ended_at": "2026-10-21T14:50:49+00:00",
+          "end_reason": "submit",
+          "paused_seconds": 0,
+          "waiting_seconds": 926,
+          "elapsed_seconds": 850,
+          "active_seconds": 850,
+          "ongoing": false
+        },
+        {
+          "number": 2,
+          "kind": "rework",
+          "owner": "claude",
+          "claimed_by": "claude-mcp-20a536f9b9a3478e",
+          "requested_at": "2026-10-21T14:54:44+00:00",
+          "claimed_at": "2026-10-21T14:58:00+00:00",
+          "submitted_at": "2026-10-21T14:58:37+00:00",
+          "ended_at": "2026-10-21T14:58:37+00:00",
+          "end_reason": "submit",
+          "paused_seconds": 0,
+          "waiting_seconds": 196,
+          "elapsed_seconds": 37,
+          "active_seconds": 37,
+          "ongoing": false
+        },
+        {
+          "number": 3,
+          "kind": "rework",
+          "owner": "claude",
+          "claimed_by": "claude-mcp-20a536f9b9a3478e",
+          "requested_at": "2026-10-21T15:02:12+00:00",
+          "claimed_at": "2026-10-21T15:04:55+00:00",
+          "submitted_at": null,
+          "ended_at": "2026-10-21T15:11:55+00:00",
+          "end_reason": "release",
+          "paused_seconds": 0,
+          "waiting_seconds": 163,
+          "elapsed_seconds": 420,
+          "active_seconds": 420,
+          "ongoing": false
+        },
+        {
+          "number": 4,
+          "kind": "rework",
+          "owner": "claude",
+          "claimed_by": "claude-mcp-20a536f9b9a3478e",
+          "requested_at": "2026-10-21T15:02:12+00:00",
+          "claimed_at": "2026-10-21T15:14:46+00:00",
+          "submitted_at": "2026-10-21T15:33:18+00:00",
+          "ended_at": "2026-10-21T15:33:18+00:00",
+          "end_reason": "submit",
+          "paused_seconds": 0,
+          "waiting_seconds": 171,
+          "elapsed_seconds": 1112,
+          "active_seconds": 1112,
+          "ongoing": false
+        },
+        {
+          "number": 5,
+          "kind": "rework",
+          "owner": "codex",
+          "claimed_by": "codex-mcp-6fe7be60df984d37",
+          "requested_at": "2026-10-21T15:35:07+00:00",
+          "claimed_at": "2026-10-21T15:37:13+00:00",
+          "submitted_at": "2026-10-21T16:43:00+00:00",
+          "ended_at": "2026-10-21T16:43:00+00:00",
+          "end_reason": "submit",
+          "paused_seconds": 0,
+          "waiting_seconds": 1,
+          "elapsed_seconds": 3947,
+          "active_seconds": 3947,
+          "ongoing": false
+        }
+      ],
+      "timeline": [
+        {
+          "seq": 1185,
+          "at": "2026-10-21T14:21:13+00:00",
+          "task_id": "claude:P2EXEC1",
+          "kind": "created",
+          "data": {
+            "rev": 1,
+            "status": "todo"
+          }
+        },
+        {
+          "seq": 1194,
+          "at": "2026-10-21T14:36:39+00:00",
+          "task_id": "claude:P2EXEC1",
+          "kind": "claim",
+          "data": {
+            "rev": 2,
+            "status": "in_progress",
+            "owner": "claude",
+            "claimed_by": "claude-mcp-bd39e3658d2d4673",
+            "claimed_at": "2026-10-21T14:36:39+00:00",
+            "completed_at": null,
+            "resume_status": null
+          }
+        },
+        {
+          "seq": 1197,
+          "at": "2026-10-21T14:50:49+00:00",
+          "task_id": "claude:P2EXEC1",
+          "kind": "submit",
+          "data": {
+            "rev": 3,
+            "status": "submitted",
+            "owner": "claude",
+            "claimed_by": "claude-mcp-bd39e3658d2d4673",
+            "claimed_at": "2026-10-21T14:36:39+00:00",
+            "completed_at": "2026-10-21T14:50:49+00:00",
+            "resume_status": null
+          }
+        },
+        {
+          "seq": 1198,
+          "at": "2026-10-21T14:54:34+00:00",
+          "task_id": "claude:P2EXEC1",
+          "kind": "queued",
+          "data": {
+            "job": "d8f6fc5662e843e09a01719d59f621da",
+            "kind": "verify",
+            "provider": "python"
+          }
+        },
+        {
+          "seq": 1199,
+          "at": "2026-10-21T14:54:34+00:00",
+          "task_id": "claude:P2EXEC1",
+          "kind": "verification_started",
+          "data": {
+            "job": "d8f6fc5662e843e09a01719d59f621da"
+          }
+        },
+        {
+          "seq": 1200,
+          "at": "2026-10-21T14:54:44+00:00",
+          "task_id": "claude:P2EXEC1",
+          "kind": "verified",
+          "data": {
+            "rev": 4,
+            "status": "rework"
+          }
+        },
+        {
+          "seq": 1201,
+          "at": "2026-10-21T14:54:44+00:00",
+          "task_id": "claude:P2EXEC1",
+          "kind": "job_finished",
+          "data": {
+            "job": "d8f6fc5662e843e09a01719d59f621da",
+            "status": "failed"
+          }
+        },
+        {
+          "seq": 1203,
+          "at": "2026-10-21T14:58:00+00:00",
+          "task_id": "claude:P2EXEC1",
+          "kind": "claim",
+          "data": {
+            "rev": 5,
+            "status": "in_progress",
+            "owner": "claude",
+            "claimed_by": "claude-mcp-20a536f9b9a3478e",
+            "claimed_at": "2026-10-21T14:58:00+00:00",
+            "completed_at": null,
+            "resume_status": null
+          }
+        },
+        {
+          "seq": 1204,
+          "at": "2026-10-21T14:58:37+00:00",
+          "task_id": "claude:P2EXEC1",
+          "kind": "submit",
+          "data": {
+            "rev": 6,
+            "status": "submitted",
+            "owner": "claude",
+            "claimed_by": "claude-mcp-20a536f9b9a3478e",
+            "claimed_at": "2026-10-21T14:58:00+00:00",
+            "completed_at": "2026-10-21T14:58:37+00:00",
+            "resume_status": null
+          }
+        },
+        {
+          "seq": 1205,
+          "at": "2026-10-21T15:02:12+00:00",
+          "task_id": "claude:P2EXEC1",
+          "kind": "rework",
+          "data": {
+            "rev": 7,
+            "status": "rework"
+          }
+        },
+        {
+          "seq": 1213,
+          "at": "2026-10-21T15:04:55+00:00",
+          "task_id": "claude:P2EXEC1",
+          "kind": "claim",
+          "data": {
+            "rev": 8,
+            "status": "in_progress",
+            "owner": "claude",
+            "claimed_by": "claude-mcp-20a536f9b9a3478e",
+            "claimed_at": "2026-10-21T15:04:55+00:00",
+            "completed_at": null,
+            "resume_status": null
+          }
+        },
+        {
+          "seq": 1220,
+          "at": "2026-10-21T15:11:55+00:00",
+          "task_id": "claude:P2EXEC1",
+          "kind": "release",
+          "data": {
+            "rev": 9,
+            "status": "rework",
+            "owner": "claude",
+            "claimed_by": null,
+            "claimed_at": null,
+            "completed_at": null,
+            "resume_status": null
+          }
+        },
+        {
+          "seq": 1223,
+          "at": "2026-10-21T15:14:46+00:00",
+          "task_id": "claude:P2EXEC1",
+          "kind": "claim",
+          "data": {
+            "rev": 10,
+            "status": "in_progress",
+            "owner": "claude",
+            "claimed_by": "claude-mcp-20a536f9b9a3478e",
+            "claimed_at": "2026-10-21T15:14:46+00:00",
+            "completed_at": null,
+            "resume_status": null
+          }
+        },
+        {
+          "seq": 1231,
+          "at": "2026-10-21T15:33:18+00:00",
+          "task_id": "claude:P2EXEC1",
+          "kind": "submit",
+          "data": {
+            "rev": 11,
+            "status": "submitted",
+            "owner": "claude",
+            "claimed_by": "claude-mcp-20a536f9b9a3478e",
+            "claimed_at": "2026-10-21T15:14:46+00:00",
+            "completed_at": "2026-10-21T15:33:18+00:00",
+            "resume_status": null
+          }
+        },
+        {
+          "seq": 1232,
+          "at": "2026-10-21T15:34:53+00:00",
+          "task_id": "claude:P2EXEC1",
+          "kind": "queued",
+          "data": {
+            "job": "adde48cffa8642ca836599585e7e5798",
+            "kind": "verify",
+            "provider": "python"
+          }
+        },
+        {
+          "seq": 1233,
+          "at": "2026-10-21T15:34:53+00:00",
+          "task_id": "claude:P2EXEC1",
+          "kind": "verification_started",
+          "data": {
+            "job": "adde48cffa8642ca836599585e7e5798"
+          }
+        },
+        {
+          "seq": 1234,
+          "at": "2026-10-21T15:35:07+00:00",
+          "task_id": "claude:P2EXEC1",
+          "kind": "verified",
+          "data": {
+            "rev": 12,
+            "status": "rework"
+          }
+        },
+        {
+          "seq": 1235,
+          "at": "2026-10-21T15:35:07+00:00",
+          "task_id": "claude:P2EXEC1",
+          "kind": "job_finished",
+          "data": {
+            "job": "adde48cffa8642ca836599585e7e5798",
+            "status": "failed"
+          }
+        },
+        {
+          "seq": 1236,
+          "at": "2026-10-21T15:37:12+00:00",
+          "task_id": "claude:P2EXEC1",
+          "kind": "assignment_changed",
+          "data": {
+            "at": "2026-10-21T15:37:12+00:00",
+            "from_owner": "claude",
+            "to_owner": "codex",
+            "previous_claimed_by": "claude-mcp-20a536f9b9a3478e",
+            "note": "用户于本轮明确要求Codex接手P2EXEC1与P2WC1修改，覆盖原负责人返修分工。P2EXEC1 rev11第三交正式复验job adde48cffa8642ca836599585e7e5798失败：0tests/exit5，源码稳定/全进程停止；现rework rev12，无活动实现作业。原六文件/原契约/历史均保留，由Codex领取后修复，仍不建PR。独立正确根编译证据code/build/reviews/P2EXEC1/reverify-b5b0a4b9ba，生产debug/release函数类型语法失败，probe export语法失败；隐藏别名扫描/回调空值假成功、固定712B已过期、C独立状态未连接等仍需修复。禁止把转交当验收/集成。"
+          }
+        },
+        {
+          "seq": 1237,
+          "at": "2026-10-21T15:37:12+00:00",
+          "task_id": "claude:P2EXEC1",
+          "kind": "reassign",
+          "data": {
+            "rev": 13,
+            "status": "rework",
+            "owner": "codex",
+            "claimed_by": null,
+            "claimed_at": null,
+            "completed_at": null,
+            "resume_status": null
+          }
+        },
+        {
+          "seq": 1239,
+          "at": "2026-10-21T15:37:13+00:00",
+          "task_id": "claude:P2EXEC1",
+          "kind": "claim",
+          "data": {
+            "rev": 14,
+            "status": "in_progress",
+            "owner": "codex",
+            "claimed_by": "codex-mcp-6fe7be60df984d37",
+            "claimed_at": "2026-10-21T15:37:13+00:00",
+            "completed_at": null,
+            "resume_status": null
+          }
+        },
+        {
+          "seq": 1270,
+          "at": "2026-10-21T16:43:00+00:00",
+          "task_id": "claude:P2EXEC1",
+          "kind": "submit",
+          "data": {
+            "rev": 15,
+            "status": "submitted",
+            "owner": "codex",
+            "claimed_by": "codex-mcp-6fe7be60df984d37",
+            "claimed_at": "2026-10-21T15:37:13+00:00",
+            "completed_at": "2026-10-21T16:43:00+00:00",
+            "resume_status": null
+          }
+        },
+        {
+          "seq": 1271,
+          "at": "2026-10-21T16:43:00+00:00",
+          "task_id": "claude:P2EXEC1",
+          "kind": "queued",
+          "data": {
+            "job": "923958831cb9466098acdd60483f28f4",
+            "kind": "verify",
+            "provider": "python"
+          }
+        },
+        {
+          "seq": 1272,
+          "at": "2026-10-21T16:43:01+00:00",
+          "task_id": "claude:P2EXEC1",
+          "kind": "verification_started",
+          "data": {
+            "job": "923958831cb9466098acdd60483f28f4"
+          }
+        },
+        {
+          "seq": 1275,
+          "at": "2026-10-21T16:43:43+00:00",
+          "task_id": "claude:P2EXEC1",
+          "kind": "verified",
+          "data": {
+            "rev": 16,
+            "status": "submitted"
+          }
+        },
+        {
+          "seq": 1276,
+          "at": "2026-10-21T16:43:43+00:00",
+          "task_id": "claude:P2EXEC1",
+          "kind": "job_finished",
+          "data": {
+            "job": "923958831cb9466098acdd60483f28f4",
+            "status": "completed"
+          }
+        }
+      ],
+      "last_rework_requested_at": "2026-10-21T15:35:07+00:00",
+      "duration_basis": "经过时长为领取至执行完成（提交）的自然时间；办理时长另扣除明确暂停，不代表实际编辑净耗时",
+      "total_active_seconds": 6366,
+      "rework_active_seconds": 5516,
+      "latest_round": {
+        "number": 5,
+        "kind": "rework",
+        "owner": "codex",
+        "claimed_by": "codex-mcp-6fe7be60df984d37",
+        "requested_at": "2026-10-21T15:35:07+00:00",
+        "claimed_at": "2026-10-21T15:37:13+00:00",
+        "submitted_at": "2026-10-21T16:43:00+00:00",
+        "ended_at": "2026-10-21T16:43:00+00:00",
+        "end_reason": "submit",
+        "paused_seconds": 0,
+        "waiting_seconds": 1,
+        "elapsed_seconds": 3947,
+        "active_seconds": 3947,
+        "ongoing": false
+      },
+      "history_incomplete": false,
+      "verifications": [
+        {
+          "id": "d8f6fc5662e843e09a01719d59f621da",
+          "status": "failed",
+          "queued_at": "2026-10-21T14:54:34+00:00",
+          "started_at": "2026-10-21T14:54:34+00:00",
+          "finished_at": "2026-10-21T14:54:44+00:00",
+          "elapsed_seconds": 10,
+          "check_seconds": 0.203
+        },
+        {
+          "id": "adde48cffa8642ca836599585e7e5798",
+          "status": "failed",
+          "queued_at": "2026-10-21T15:34:53+00:00",
+          "started_at": "2026-10-21T15:34:53+00:00",
+          "finished_at": "2026-10-21T15:35:07+00:00",
+          "elapsed_seconds": 14,
+          "check_seconds": 0.219
+        },
+        {
+          "id": "923958831cb9466098acdd60483f28f4",
+          "status": "completed",
+          "queued_at": "2026-10-21T16:43:00+00:00",
+          "started_at": "2026-10-21T16:43:01+00:00",
+          "finished_at": "2026-10-21T16:43:43+00:00",
+          "elapsed_seconds": 42,
+          "check_seconds": 30.859
+        }
+      ]
+    }
+  }
+}

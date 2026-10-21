@@ -15,6 +15,15 @@ default rel
 extern kernel_exception_panic
 extern sched_parallel_idle
 extern user_smp_try_handoff,sched_parallel_timer_entry,sched_parallel_ipi_entry
+%ifdef RUNTIME_LEVEL
+%if RUNTIME_LEVEL >= 5
+%define SMP_ALIAS_HOOK 1
+extern alias_ap_command
+%endif
+%endif
+%ifndef SMP_ALIAS_HOOK
+%define SMP_ALIAS_HOOK 0
+%endif
 global smp_prepare_trampoline
 global smp_send_ipi
 global smp_ap_entry
@@ -723,6 +732,29 @@ smp_check_mtrrs:
 smp_ping_entry:
     push rax
     push rdx
+%if SMP_ALIAS_HOOK
+    push rcx
+    push rsi
+    push rdi
+    push r8
+    push r9
+    push r10
+    push r11
+    push rbp
+    mov rbp,rsp
+    and rsp,-16
+    cld
+    call alias_ap_command
+    mov rsp,rbp
+    pop rbp
+    pop r11
+    pop r10
+    pop r9
+    pop r8
+    pop rdi
+    pop rsi
+    pop rcx
+%endif
     cld
     pushfq
     and qword [rsp], ~(1 << 18)

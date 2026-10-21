@@ -1,0 +1,78 @@
+{
+  "assignment_history": [
+    {
+      "at": "2026-10-21T18:19:33+00:00",
+      "from_owner": "deepseek",
+      "note": "用户授权两项完成后继续所有剩余任务并由Codex直接修复DeepSeek错误。L3A已经独立验收rev10，L3仍todo无claim/活动作业；为连续完成本轮剩余任务，Codex直接接手有限G5 runner与真实缺口记录，不自动启动DeepSeek AI CLI，不扩展为虚称整个自举完成。保留原四授权路径、任务书和定向门禁。",
+      "previous_claimed_by": null,
+      "to_owner": "codex"
+    }
+  ],
+  "assignment_owner": "codex",
+  "auto_dispatch": false,
+  "auto_verify": false,
+  "candidate": null,
+  "checks": [
+    "discover:deepseek-works/tests:test_l3_g5_differential.py"
+  ],
+  "claim_from_status": "rework",
+  "claim_token": "62dc356c3b4647a1b5f513f628257323",
+  "claimed_at": "2026-10-21T18:51:37+00:00",
+  "claimed_by": "codex-mcp-6fe7be60df984d37",
+  "completed_at": "2026-10-21T18:52:20+00:00",
+  "complexity": "standard",
+  "created_at": "2026-10-21T13:59:45+00:00",
+  "delivery": "deepseek-works/deliveries/L3.md",
+  "depends_on": [
+    "deepseek:L3A"
+  ],
+  "description": "所属阶段：L3（Dong编译器自举）/G5差分覆盖。用户要求DeepSeek接续L3、L3A；本项在deepseek:L3A通过独立验收后领取，使用届时最新已验收/集成候选，不抢其生产文件。目标是实际整程序差分执行与可复现缺口回归，不重写已完成的49模块固定点/读取/栈/持久化，不以组件数或语法树检查宣称完整自举完成。\n\n当前主线lower_program明确拒绝GLOBAL/METHOD/ERROR/ENUM以及若干语句，L3A本批实现全局量，其余差集必须真实复测并逐项记录。第一阶段补一套有限、可扩展的源码级G5差分runner：同一明确源码目录与入口，种子Python编译器和真正Dong frontend→lower→nasm两条独立路径；宿主只做种子引导、进程编排与独立观察，不能宿主构建目标IR/NASM或失败时seed fallback。生产runner位于本人works文件，之后由Codex本地集成；禁止编辑L3A或任何主线源码。\n\n至少覆盖两模式的整数窄宽、checked/wrapping、短路副作用、循环break/continue、嵌套调用与大于6整数参数、slice双字整体ABI、单次求值lvalue、结构体/数组精确字节与padding、静态常量与新可变全局量、两个模块导入/同名符号/pub-private。固定有界样本与可复现种子生成，成功对比完整返回寄存器、可观察内存/轨迹，失败对比阶段/诊断类别/源码定位；错误文本格式可分开，不以两条路径共享算法互相证明。使用独立C/Python语义oracle或固定已人工核定数值。实际SysV桥验证所有callee-saved和RSP后恢复；COFF组装不能冒充Win64ABI执行。NASM ELF64及COFF均组装，另至少一组真实native_assembler生成完整ELF并实际执行。\n\n为方法、enum、error/try/orelse/defer、extern SysV/Win64等尚未实现的完整语言构造准备可由seed实际执行/诊断的最小真实源码。每例记录原生路径的精确失败阶段/状态和输出保持；coverage.json将它们标记为已证实缺口，不能标supported、xfail-pass或skip，也不能把“按预期不支持”计入G5成功覆盖。用独立TestCase断言scope_complete=false、remaining逐项非空，最终交付分别列supported-pass、known-gap、failure、skip，不能让全套测试退出0变成整体G5完成。本项的验收只覆盖runner及有限受支持矩阵；其余语言实现需后续独立任务，若用户另有授权也必须先补可写范围。\n\n真实负控至少两类：候选Dong lowering/发射代码小范围语义变异（例如全局错址、slice第二字或短路求值），成功构建/链接/正常执行后被返回值/完整内存/调用轨迹准确拒绝；runner漏掉一项原生失败并尝试seed fallback的坏体应被路径证据/结果状态拒绝。构建失败、崩溃、超时、仅汇编文本不同不算语义负控；每个相同输入先证明好体通过。\n\n单次运行保留源码目录/编译器/只读闭包SHA256、确切工具版本/命令/env allowlist（无密钥）、模式/对象格式、进程退出/timeout、每个case的输入/期望/实际/原生产物SHA与首次差异。快照发生变化即失败，失败现场不可覆盖，缺工具明确阻塞不skip。只运行本项定向检查，不启动OS/VM/AI CLI、无PR/commit/push，不改协调器数据库/index或任务图状态。临时目录deepseek-works/build/L3/<唯一目录>。\n\n本人客户端worker MCP读最新rev与完整task/依赖，claim后只修改四个声明文件。交付L3.md列真实tests/skips/支持覆盖/已证实缺口、负控具体拒绝依据及未运行限制。交付后Codex实际审查、独立复验零skip且source_stable、再验收并本地集成。不得自行accept/integrate，不把本有限里程碑等同整个L3/L3A/G5完成。",
+  "document": "deepseek-works/tasks/L3-board.md",
+  "historical": false,
+  "id": "deepseek:L3",
+  "integration_note": "已验收的runner/说明原字节真实集成code/tools/g5_differential.py及code/docs/g5-differential.md，候选4文件和永久完整矩阵测试留在版本仓库；主线独立L3MAIN12实际CLI/根/防覆盖2tests/0skip/0.609s并源码审查/指纹后integrated6，记录reviews/2026-10-22-L3-main-copy.json及L3MAIN12-main-files.json。L3正式5672d2e5为4tests/0skip/899.078s，全矩阵和源码稳定；明确更正accept说明随手数量158，真实原始coverage为155源，未修改原证据。整个G5仍false，16真实known-gap保留；Windows执行范围明确。后继L3HOST13仅适配测试桥Linux链接、L3REG14修旧测试容量0边界，不回写旧L3正式指纹。",
+  "legacy_hash": "0332aa9b95758281307a6b47ab8a5ffb69bb8e628565874cdc3250bc32d6550a",
+  "number": "L3",
+  "owner": "codex",
+  "pause_note": "主动源码审查发现有限runner只最终fingerprint生产/只读闭包，运行时创建的目标fixture源虽同轮正常观察一致且归档，尚未全部纳入最终源稳定清单。此为任务契约缺口，不能据当前轮验收。请求官方停止验证7b0221ae，保留interrupted/现场；确认实际子进程退出后Codex直接补fixture指纹登记和独立篡改拒绝负控，再完整冷复验，不回交DeepSeek，不修改DB/index。",
+  "rev": 13,
+  "review_note": "已实际审查4声明文件及完整形式产物/契约。两目标路径是同一磁盘源码目录→Python seed和真正Dong frontend/lower/nasm；无host构造目标IR/NASM或fallback。种子仅观察符号名/可见性适配，原汇编和private对象保留，原COFF每个代码/数据字节一致，只BFD节尾补零。6条supported两模式各audit/globals/generated，独立完整值/12字节padding/canary/trace、20参数/slice双字返回/全部callee-saved/RSP/单次求值/循环/多模块；22实际checked/wrapping/边界/移位/除法，seed真实panic及Dong真实UD2精确观察（非任意崩溃）；2真实private前端拒绝。8种语言构造两模式16个真实known-gap精确phase/status/source/node/offset/line/column，seed实际执行，原生失败输出不变，scope_complete=false和非空remaining不伪装支持。两真实Dong发射唯一坏体各两模式全部构建/链接/正常返回2，被wrong-global-address或narrow-store-canary精确拒绝；实际坏Python runner对真实拒绝用seed冒替被driver/路径/成功原生进程证据拒绝。实际native_assembler完整ELF在原4MiB静态指针执行，原指针/ELF未修补。独审主动停止旧7b0221ae补目标源创建即SHA登记和执行前/完成时核对，永久真实7→8源篡改同时在两管道前拒绝，旧中断不算通过。新正式5672d2e5c9f24ce995ac8d17a4edc476完整4tests/0skip/899.078s，source_stable/process_stopped/execution_exited全部true，实际矩阵及全部158源前后稳定已核（源数量以formal-matrix实际记录为准），工具版本/命令/允许env/对象/原生产物/driver进程路径绑定。验收仅当前Windows宿主有限runner，整个G5仍partial；后继主线入口L3MAIN12和CI测试桥L3HOST13分别执行，不扩大为整语言完成。",
+  "status": "integrated",
+  "title": "[L3/G5] 原生整程序语言与ABI差分执行、真实缺口回归",
+  "updated_at": "2026-10-21T19:18:58+00:00",
+  "verification": {
+    "checks": [
+      {
+        "cancelled": false,
+        "elapsed_seconds": 899.078,
+        "execution_exited": true,
+        "passed": true,
+        "process_stopped": true,
+        "returncode": 0,
+        "skips": 0,
+        "spec": "discover:deepseek-works/tests:test_l3_g5_differential.py",
+        "tests": 4,
+        "timed_out": false
+      }
+    ],
+    "execution_exited": true,
+    "fingerprint": {
+      "deepseek-works/deliveries/L3.md": "c3fb5d624f33190da5b3b29c943107fccfa85e7329695d93a27269fdb26f292b",
+      "deepseek-works/l3/g5_differential.md": "ff728057fc045dc02b7f8618fcc527bbf477d01c1f27fba1edb76889c88bdd53",
+      "deepseek-works/l3/g5_differential.py": "db5b2b5e134ca0bf351f112a73faf91f4135faf9278458307b54fbddde8bb6f7",
+      "deepseek-works/tests/test_l3_g5_differential.py": "a644b91e4450cb0889732ddd0817f625a59dcf0100a8152e5a8da371aab09221"
+    },
+    "finished_at": "2026-10-21T19:07:28+00:00",
+    "job": "5672d2e5c9f24ce995ac8d17a4edc476",
+    "passed": true,
+    "process_stopped": true,
+    "source_stable": true,
+    "summary": "定向复验通过，等待源码/契约审查"
+  },
+  "write_paths": [
+    "deepseek-works/l3/g5_differential.py",
+    "deepseek-works/l3/g5_differential.md",
+    "deepseek-works/tests/test_l3_g5_differential.py",
+    "deepseek-works/deliveries/L3.md"
+  ]
+}

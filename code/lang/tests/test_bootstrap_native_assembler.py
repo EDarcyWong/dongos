@@ -330,7 +330,7 @@ dd 4294967295, -2147483648
                       'ret rax', 'syscall rax', 'shl rax', 'shr eax', 'sar al', 'mov rax, 18446744073709551616',
                       'mov rax, -9223372036854775809', 'mov al, 256', 'add rax, 2147483648',
                       'mov rax, [rbx+2147483648]', 'lea rax, [rbx+rsp*2]', 'align 3',
-                      'section .data', '%include "file"', '%endif', 'bits 32', 'default abs',
+                      'section .bss', '%include "file"', '%endif', 'bits 32', 'default abs',
                       'global missing', '1bad: ret', 'section .rodata\ndb 256',
                       'section .rodata\ndw -32769', 'section .rodata\ndd 4294967296',
                       'section .rodata\ndq absent', 'section .rodata\ndq 1,',
@@ -343,6 +343,12 @@ dd 4294967295, -2147483648
                 with self.subTest(mode=mode, body=body):
                     self.assertNotEqual(result[0], 0, (body, result[:6]))
                     self.assertGreater(result[1], 0)
+
+    def test_writable_data_section_is_supported(self):
+        source = PREFIX+'mov edi, 0\n'+EXIT+'section .data\nword: dq 0x1122334455667788\n'
+        for mode in self.executables:
+            result = self.assemble(mode, 'writable-data', source)
+            self.assertEqual(result[-1][-8:], bytes.fromhex('8877665544332211'))
 
     def test_exact_capacities_and_data_boundaries(self):
         source = PREFIX+'xor edi, edi\n'+EXIT+'section .rodata\nx: db 255, -128\ndw 65535, -32768\ndd 4294967295, -2147483648\ndq 18446744073709551615, -9223372036854775808\n'

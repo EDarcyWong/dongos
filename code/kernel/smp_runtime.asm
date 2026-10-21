@@ -6,6 +6,7 @@ default rel
 %define P1_TEST 0
 %endif
 extern dong_smp_begin,dong_smp_report,smp_invalidate_all,parallel_live_begin
+extern dong_smp_large_begin
 extern dong_boot_trace_online
 extern serial_write,serial_hex_line,sched_xstate_save,sched_xstate_restore
 global smp_runtime_begin,smp_invalidate_or_fail,smp_context_main,smp_pause
@@ -225,6 +226,10 @@ smp_runtime_begin:
 .trace_online_done:
     lea rsi,[rel smp_marker_ready]
     call serial_write
+    call dong_smp_large_begin
+    mov rbx,rax
+    test rax,rax
+    jnz .bad
     cmp qword [r12+SmpReport.cpu_count],3
     jae .parallel
     mov eax,1

@@ -1,0 +1,79 @@
+{
+  "assignment_owner": "codex",
+  "auto_dispatch": false,
+  "auto_verify": false,
+  "candidate": null,
+  "checks": [
+    "module:lang.tests.test_bootstrap_static_address",
+    "module:lang.tests.test_bootstrap_semantic_runtime"
+  ],
+  "claim_from_status": "todo",
+  "claim_token": "79d7345bddc94eee906fdda8d91faeec",
+  "claimed_at": "2026-10-21T16:43:38+00:00",
+  "claimed_by": "codex-mcp-6fe7be60df984d37",
+  "completed_at": "2026-10-21T17:03:23+00:00",
+  "complexity": "standard",
+  "created_at": "2026-10-21T16:43:38+00:00",
+  "delivery": "codex-works/deliveries/L3PTR7.md",
+  "depends_on": [],
+  "description": "用户要求继续完成剩余任务并直接修复DeepSeek返修。L3A原任务要求合法全局静态指针初始化，但原写范围未包含semantic_types。独立接续只扩展真实原生前端rt_static：接受以可见GLOBAL/CONST存储为根、结构体字段和折叠常量数组索引的&place；不执行运行期取值，不放宽动态初始化、局部/指针解引用/运行期索引、越界与私有可见性、指针const权限或unsafe转换。真实frontend.Graph语义测试覆盖标量/嵌套字段/数组元素/跨模块pub/readonly正例、动态/越界/只读写入/私有/类型不匹配反例和既有完整语义回归。文件在真实code中实现，仅所声明四文件；另一个在途L3A候选只读，不改其原测试。正式独立定向0skip、输入稳定、实际源码契约审查后验收，已在真实路径时登记实际文件指纹后集成。此项不声称后端/原生ELF指针执行完成，该闭环仍由L3A独立补测。禁止PR/提前推送/VM。",
+  "document": "codex-works/tasks/L3PTR7-board.md",
+  "historical": false,
+  "id": "codex:L3PTR7",
+  "integration_note": "真实三主目录文件lang/bootstrap/semantic_types.dg、lang/tests/test_bootstrap_static_address.py、docs/bootstrap-static-address.md已实际原地实现；不是候选代替main。逐一读取并SHA匹配正式独立job b6f95b1056d04087af90879957cf89e4的全部源/测试/说明，清单reviews/2026-10-22-L3PTR7-main-files.json。该job实际就在这些主目录文件上跑新增3项+既有14项共17tests/0skip，全部源码稳定/进程停止/正常退出；实际源/契约审查后accepted5，现单独登记integrated。原开发失败保留，未改编译器Python/ABI或动态初始化限制；有限前端能力，不把L3A/G5整体标完成。",
+  "legacy_hash": "ae8bdc3bcdc327d56dcdef1d78c958481c84e14a97dec7129291d2f803961b69",
+  "number": "L3PTR7",
+  "owner": "codex",
+  "rev": 6,
+  "review_note": "已实际审查四文件和全部新谓词调用点：rt_static仅对&place进入新判定；真实表达式类型取RuntimeWorkspace.info，GLOBAL/CONST可见存储根、struct字段和纯常量array索引通过，类型/可写/unsafe/边界先由rt_expr完整检查，禁止动态index、指针跟随和动态值读取。rt_expr_general折叠scalar CONST仍保留只读PLACE，无WRITE，不改变值计算或放宽写常量。原unsafe/类型/flow/visibility/容量与输出先验保留。TestCase组合复用native harness但不继承导出其它测试；私有符号由真实binding先拒绝，17组静态正反例/跨模块，两种真实坏Dong谓词两模式成功构建正常返回后由精确status拒绝，原始源/测试/说明及闭包稳定。独立正式job b6f95b1056d04087af90879957cf89e4：新增3tests/0skip/362.985s +完整runtime semantic14tests/0skip/1771.859s，合计17；source_stable/process_stopped/execution_exited均true。已有DECLARE/CONST/数组/NEVER/cleanup/内存副作用等大量实际回归及坏体通过，不仅正例通过。开发失败保留且不纳入验收。仅前端静态取址组件验收；后端和完整ELF由L3A另验，整体L3A/G5不关闭。",
+  "status": "integrated",
+  "title": "[L3A接续] 原生前端全局静态取址初始化契约",
+  "updated_at": "2026-10-21T17:41:18+00:00",
+  "verification": {
+    "checks": [
+      {
+        "cancelled": false,
+        "elapsed_seconds": 362.985,
+        "execution_exited": true,
+        "passed": true,
+        "process_stopped": true,
+        "returncode": 0,
+        "skips": 0,
+        "spec": "module:lang.tests.test_bootstrap_static_address",
+        "tests": 3,
+        "timed_out": false
+      },
+      {
+        "cancelled": false,
+        "elapsed_seconds": 1771.859,
+        "execution_exited": true,
+        "passed": true,
+        "process_stopped": true,
+        "returncode": 0,
+        "skips": 0,
+        "spec": "module:lang.tests.test_bootstrap_semantic_runtime",
+        "tests": 14,
+        "timed_out": false
+      }
+    ],
+    "execution_exited": true,
+    "fingerprint": {
+      "codex-works/deliveries/L3PTR7.md": "713dc2db14d060d8bd30e1f6854ec95bc170ece8239705a30eb8aad43bc17bd1",
+      "docs/bootstrap-static-address.md": "05165366a417b1c6e66a23a6e4e65330774ecdd3fc7fe33316f886185883b625",
+      "lang/bootstrap/semantic_types.dg": "2057c370ef4230ae9a66abae2cb857a2717bfe61c3046c0e6aeb01e3384e9963",
+      "lang/tests/test_bootstrap_static_address.py": "2e27a7311d5cbd0f68968629b629622349f0505fb7e643b0af3fa709d51a2987"
+    },
+    "finished_at": "2026-10-21T17:39:08+00:00",
+    "job": "b6f95b1056d04087af90879957cf89e4",
+    "passed": true,
+    "process_stopped": true,
+    "source_stable": true,
+    "summary": "定向复验通过，等待源码/契约审查"
+  },
+  "write_paths": [
+    "lang/bootstrap/semantic_types.dg",
+    "lang/tests/test_bootstrap_static_address.py",
+    "docs/bootstrap-static-address.md",
+    "codex-works/deliveries/L3PTR7.md"
+  ]
+}

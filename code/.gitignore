@@ -6,3 +6,6 @@ build/
 esp/
 *.log
 .tools/
+# The explicit kernel storage profile is source code.
+!kernel/build/
+!kernel/build/*.dg

@@ -80,7 +80,7 @@ unsafe fn constant(s:*State,id:usize,destination:usize,t:usize)bool{unsafe{
 unsafe fn address(s:*State,id:usize,depth:usize)usize{unsafe{
  if !enter(s,id,depth){return NONE;}let n=*node(s,id);let out=slot(s,3,id);let after=(*s).cursor;
  if n.kind==ast.NAME||(n.kind==ast.FIELD&&(*(*s).g).refs[gid(s,id)].kind==binding.GLOBAL){
-  let r=(*(*s).g).refs[gid(s,id)];if r.kind==binding.GLOBAL&&(*(*s).g).symbols[r.target].kind==names.CONST{emit(s,ir.STATIC_ADDRESS,3,out,0,0,r.target,0,id);(*s).cursor=after;return out;}
+  let r=(*(*s).g).refs[gid(s,id)];if r.kind==binding.GLOBAL&&((*(*s).g).symbols[r.target].kind==names.CONST||(*(*s).g).symbols[r.target].kind==names.GLOBAL){emit(s,ir.STATIC_ADDRESS,3,out,0,0,r.target,0,id);(*s).cursor=after;return out;}
   if r.kind!=binding.LOCAL{return fail(s,UNSUPPORTED,id,40);}
   let g=(*(*s).g).units[r.unit].node_start+r.target;let off=(*(*s).w).node_slots[g];
   if off==NONE{return fail(s,BAD_GRAPH,id,41);}emit(s,ir.ADDRESS,3,out,off,0,0,0,id);
@@ -124,7 +124,7 @@ unsafe fn expression(s:*State,id:usize,depth:usize)usize{unsafe{
   let r=(*(*s).g).refs[gid(s,id)];if r.kind==binding.LOCAL{
    let index=(*(*s).g).units[r.unit].node_start+r.target;let off=(*(*s).w).node_slots[index];
    if off==NONE{return fail(s,BAD_GRAPH,id,50);}emit(s,ir.COPY,t,out,off,0,0,0,id);
-  }else if r.kind==binding.GLOBAL&&(*(*s).g).symbols[r.target].kind==names.CONST{let p=address(s,id,depth+1);emit(s,ir.LOAD,t,out,p,0,0,0,id);}
+  }else if r.kind==binding.GLOBAL&&((*(*s).g).symbols[r.target].kind==names.CONST||(*(*s).g).symbols[r.target].kind==names.GLOBAL){let p=address(s,id,depth+1);emit(s,ir.LOAD,t,out,p,0,0,0,id);}
   else{return fail(s,UNSUPPORTED,id,51);}
  }else if n.kind==ast.FIELD{
   let bt=typ(s,n.a);let base_type=(*(*s).g).types[bt];
@@ -255,7 +255,10 @@ pub unsafe fn lower(g:*const frontend.Graph,w:*const ir.Workspace,mode:u64,r:*ir
   while j<unit.node_count{let a=(*g).nodes[unit.node_start+j];if a.kind==ast.ATTRIBUTE&&a.op==267{fail(&s,UNSUPPORTED,j,82);break;}j+=1;}u+=1;
  }}
  var i:usize=0;while i<(*g).symbols.len&&s.status==0{let sy=(*g).symbols[i];s.unit=sy.unit;
-  if sy.kind==names.GLOBAL||sy.kind==names.METHOD||sy.kind==names.ERROR||sy.kind==names.ENUM{fail(&s,UNSUPPORTED,sy.declaration,sy.kind);}
+  if sy.kind==names.GLOBAL{
+   let t=(*g).node_types[(*g).units[sy.unit].node_start+sy.declaration];
+   if ir.words(g,t)==NONE{fail(&s,UNSUPPORTED,sy.declaration,83);}
+  }else if sy.kind==names.METHOD||sy.kind==names.ERROR||sy.kind==names.ENUM{fail(&s,UNSUPPORTED,sy.declaration,sy.kind);}
   else if sy.kind==names.CONST{
    let t=(*g).node_types[(*g).units[sy.unit].node_start+sy.declaration];
    if ir.words(g,t)!=1&&!ir.aggregate(g,t)&&(*g).types[t].kind!=sem.SLICE{fail(&s,UNSUPPORTED,sy.declaration,80);}

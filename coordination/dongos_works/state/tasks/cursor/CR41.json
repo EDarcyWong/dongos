@@ -26,14 +26,15 @@
   "document": "cursor-works/tasks/CR41-board.md",
   "historical": false,
   "id": "cursor:CR41",
+  "integration_note": "2026-10-20按实际代码补登记主线集成。已独立核对原任务/既有源码契约审查及正式复验：4tests/0skip、source_stable=true；当前四交付仍逐字节匹配验收指纹。生产已真实复制到code/lang/bootstrap/nasm_narrow_arithmetic_function.dg（478b1ed），与验收生产字节一致或仅LF/CRLF；说明及永久测试主线路径适配已审查，保留原语义/别名/原子性/真实坏Dong与完整ABI观察。CR40额外边界增强已核对，未改生产。本机NASM3分组探测维护后，9组件主线对应34项实际已全过0skip；A批20项775.031s且前后SHA稳定，B批本任务已通过，总manifest本轮保存。证据reviews/2026-10-20-mainline-registration-evidence.json与code/build/test/mainline-reconcile-*。本次仅登记既有已验收组件的实际文件集成，不宣称L3/G5/G6完成。",
   "legacy_hash": "8c190310ff4583bd51ceec51a883a6ccddb0063ed0ea9268c5b12941ec16f80b",
   "number": "CR41",
   "owner": "cursor",
-  "rev": 7,
+  "rev": 8,
   "review_note": "用户授权Codex直接实现。审查完整描述符/名字/别名/width/op/NONE前置与分段上界，两个输入先CR14规范后C23运算；checked真实D21先guard再cast，wrapping真实CR14，结果槽与C42 PAIR/两出口均正确。正式隔离bae9fbad760043bbb6a01859442cadab：4项0skip、182.453秒，source_stable=true，20主要向量/模式，debug/release及ELF64/COFF。独立读取原始观察：4次提前cast坏体将{0,1}错误变为截断成功；2次反转SUB结果值错误而status仍0；4次RBX数值精确+8且PAIR和栈均正常。提前发布容量负控正常执行后按完整原子性拒绝。验收；未集成主线。",
-  "status": "accepted",
+  "status": "integrated",
   "title": "[L3] 8/16/32位窄算术的checked与wrapping完整函数",
-  "updated_at": "2026-10-19T15:54:10+00:00",
+  "updated_at": "2026-10-20T13:12:21+00:00",
   "verification": {
     "checks": [
       {

@@ -1,0 +1,194 @@
+{
+  "project": "dongos",
+  "task_id": "codex:P5CTX2",
+  "baseline_head": "28fae186eade64aac9eec17fcc2fb30913b948f6",
+  "current_head": "28fae186eade64aac9eec17fcc2fb30913b948f6",
+  "local_files_present_and_integrated": true,
+  "formal_verified_rev": 4,
+  "formal_verification": {
+    "passed": true,
+    "checks": [
+      {
+        "spec": "module:tests.test_p5_recovery_context_guest",
+        "passed": true,
+        "tests": 12,
+        "skips": 0,
+        "returncode": 0,
+        "cancelled": false,
+        "timed_out": false,
+        "process_stopped": true,
+        "execution_exited": true,
+        "elapsed_seconds": 0.609
+      },
+      {
+        "spec": "module:tests.test_virtio_reset_guest",
+        "passed": true,
+        "tests": 9,
+        "skips": 0,
+        "returncode": 0,
+        "cancelled": false,
+        "timed_out": false,
+        "process_stopped": true,
+        "execution_exited": true,
+        "elapsed_seconds": 0.406
+      }
+    ],
+    "process_stopped": true,
+    "execution_exited": true,
+    "source_stable": true,
+    "fingerprint": {
+      "tests/p5_recovery_context_guest.py": "ff14b043aea5e4f7fd0e72a8ee0fd465a8acb4351b6b189cfbd54dde3a97af75",
+      "tests/test_p5_recovery_context_guest.py": "81bdd8d2550cd7aa1e35fe388cda9a2e343bd99a38e6c82d105591a25958d97a",
+      "tests/run_virtio_reset_qemu.py": "46f6315cad0af1d1d331f21f98b4e596dd32767c5e25cdfe10a1542dd9321d59",
+      "tests/test_virtio_reset_guest.py": "a9916ad252147eb8ca728735bedf17f8a2741a64a58d9e5c35e2c0ae40abf89b",
+      "tests/p5_virtio_reset_fixture.py": "535e6b1fbe18507db4f09dc18a87e3b4b605396395b09bba3f29ad4998c898f1",
+      "docs/p5-recovery-context-guest.md": "e6c585d336cb7b27a4eb6ec26d8be5c34277585a2743e2781b8d7a807e56ff33",
+      "codex-works/deliveries/P5CTX2.md": "af4ebcd8a5282f1a873e7ad7f8897879e57ff3ea2d6ab9f97ca187971320171b"
+    },
+    "summary": "\u5b9a\u5411\u590d\u9a8c\u901a\u8fc7\uff0c\u7b49\u5f85\u6e90\u7801/\u5951\u7ea6\u5ba1\u67e5",
+    "finished_at": "2026-10-21T11:54:57+00:00",
+    "job": "b15f655e12ea439bbe3af0aef39cf8be"
+  },
+  "mapping": [
+    {
+      "path": "D:\\projects\\2026\\dongos\\code\\tests\\p5_recovery_context_guest.py",
+      "sha256": "ff14b043aea5e4f7fd0e72a8ee0fd465a8acb4351b6b189cfbd54dde3a97af75",
+      "formal_sha256": "ff14b043aea5e4f7fd0e72a8ee0fd465a8acb4351b6b189cfbd54dde3a97af75",
+      "formal_identical": true,
+      "actual_guest_source_sha256": {
+        "control": "ff14b043aea5e4f7fd0e72a8ee0fd465a8acb4351b6b189cfbd54dde3a97af75",
+        "fault": "ff14b043aea5e4f7fd0e72a8ee0fd465a8acb4351b6b189cfbd54dde3a97af75"
+      },
+      "actual_guest_identical": true
+    },
+    {
+      "path": "D:\\projects\\2026\\dongos\\code\\tests\\test_p5_recovery_context_guest.py",
+      "sha256": "81bdd8d2550cd7aa1e35fe388cda9a2e343bd99a38e6c82d105591a25958d97a",
+      "formal_sha256": "81bdd8d2550cd7aa1e35fe388cda9a2e343bd99a38e6c82d105591a25958d97a",
+      "formal_identical": true,
+      "actual_guest_source_sha256": {
+        "control": "81bdd8d2550cd7aa1e35fe388cda9a2e343bd99a38e6c82d105591a25958d97a",
+        "fault": "81bdd8d2550cd7aa1e35fe388cda9a2e343bd99a38e6c82d105591a25958d97a"
+      },
+      "actual_guest_identical": true
+    },
+    {
+      "path": "D:\\projects\\2026\\dongos\\code\\tests\\run_virtio_reset_qemu.py",
+      "sha256": "46f6315cad0af1d1d331f21f98b4e596dd32767c5e25cdfe10a1542dd9321d59",
+      "formal_sha256": "46f6315cad0af1d1d331f21f98b4e596dd32767c5e25cdfe10a1542dd9321d59",
+      "formal_identical": true,
+      "actual_guest_source_sha256": {
+        "control": "46f6315cad0af1d1d331f21f98b4e596dd32767c5e25cdfe10a1542dd9321d59",
+        "fault": "46f6315cad0af1d1d331f21f98b4e596dd32767c5e25cdfe10a1542dd9321d59"
+      },
+      "actual_guest_identical": true
+    },
+    {
+      "path": "D:\\projects\\2026\\dongos\\code\\tests\\test_virtio_reset_guest.py",
+      "sha256": "a9916ad252147eb8ca728735bedf17f8a2741a64a58d9e5c35e2c0ae40abf89b",
+      "formal_sha256": "a9916ad252147eb8ca728735bedf17f8a2741a64a58d9e5c35e2c0ae40abf89b",
+      "formal_identical": true,
+      "actual_guest_source_sha256": {
+        "control": "a9916ad252147eb8ca728735bedf17f8a2741a64a58d9e5c35e2c0ae40abf89b",
+        "fault": "a9916ad252147eb8ca728735bedf17f8a2741a64a58d9e5c35e2c0ae40abf89b"
+      },
+      "actual_guest_identical": true
+    },
+    {
+      "path": "D:\\projects\\2026\\dongos\\code\\tests\\p5_virtio_reset_fixture.py",
+      "sha256": "535e6b1fbe18507db4f09dc18a87e3b4b605396395b09bba3f29ad4998c898f1",
+      "formal_sha256": "535e6b1fbe18507db4f09dc18a87e3b4b605396395b09bba3f29ad4998c898f1",
+      "formal_identical": true,
+      "actual_guest_source_sha256": {
+        "control": "535e6b1fbe18507db4f09dc18a87e3b4b605396395b09bba3f29ad4998c898f1",
+        "fault": "535e6b1fbe18507db4f09dc18a87e3b4b605396395b09bba3f29ad4998c898f1"
+      },
+      "actual_guest_identical": true
+    },
+    {
+      "path": "D:\\projects\\2026\\dongos\\code\\docs\\p5-recovery-context-guest.md",
+      "sha256": "e6c585d336cb7b27a4eb6ec26d8be5c34277585a2743e2781b8d7a807e56ff33",
+      "formal_sha256": "e6c585d336cb7b27a4eb6ec26d8be5c34277585a2743e2781b8d7a807e56ff33",
+      "formal_identical": true
+    },
+    {
+      "path": "D:\\projects\\2026\\dongos\\coordination\\dongos_works\\codex-works\\deliveries\\P5CTX2.md",
+      "sha256": "af4ebcd8a5282f1a873e7ad7f8897879e57ff3ea2d6ab9f97ca187971320171b",
+      "formal_sha256": "af4ebcd8a5282f1a873e7ad7f8897879e57ff3ea2d6ab9f97ca187971320171b",
+      "formal_identical": true
+    }
+  ],
+  "p5ctx1_production_unchanged": {
+    "kernel/user/device_host.dg": "823fc27763560ff880dd26b9e4da236a92cf55174d3e4a86bf0b234592ba95ce",
+    "kernel/user/services.dg": "548c6dafa0f2e515bcefeba51ae28c754e68273c979275862c32b60b6a76fa65"
+  },
+  "actual_guest_evidence_root": "D:\\projects\\2026\\dongos\\coordination\\dongos_works\\.local\\p5ctx2-20261021-193555",
+  "offline_replay_passed": true,
+  "no_pr": true,
+  "no_commit": true,
+  "no_push": true,
+  "independent_review": "2026-10-21-P5CTX2-independent-review.md",
+  "scope": "initialized-queue-context-reset-hold-only",
+  "p5_partial": true,
+  "dma_drain_proven": false,
+  "dma_reuse_proven": false,
+  "restart_proven": false,
+  "coordinator_status": "integrated",
+  "coordinator_rev": 6,
+  "accepted_rev": 5,
+  "coordinator_final": {
+    "project": "dongos",
+    "task_id": "codex:P5CTX2",
+    "status": "integrated",
+    "rev": 6,
+    "review_note": "\u72ec\u7acb\u6e90\u7801/\u5951\u7ea6/\u6d4b\u8bd5\u4e0e\u771f\u5b9eguest\u8bc1\u636e\u5ba1\u67e5\u901a\u8fc7\uff0c\u62a5\u544areviews/2026-10-21-P5CTX2-independent-review.md/.json\uff0c\u65e0\u8fd4\u4fee\u3002\u534f\u8c03\u5668job b15f655e12ea439bbe3af0aef39cf8be\uff1a12+9 tests\u3001\u96f6skip\u3001exit0\u3001process_stopped/execution_exited/source_stable=true\uff1b\u4e03\u6388\u6743\u6587\u4ef6SHA\u543b\u5408\u3002\u5b8c\u6574runtime7 control/fault\u6784\u5efa\u4e0e\u771f\u5b9e4CPU TCG\u4e24\u6b21\u7a33\u5b9a\u89c2\u5bdf\u5747\u901a\u8fc7\uff0c1050/1049\u539f\u59cb\u8f6c\u50a8\u30011293/1294\u51bb\u7ed3\u6e90\u53ca\u5168\u90e8\u6784\u5efa\u4ea7\u7269\u72ec\u7acbSHA\u590d\u6838\uff1b\u5b8c\u6574\u672astub\u91cd\u653econtrol/fault\u901a\u8fc7\u3002\u5b9e\u9645424byte\u540453\u5b57\u6bb5\u5171106raw mutants\u5168\u62d2\uff1bdrain\u6539raw\u5e76\u540c\u6b65\u5168\u90e8hash+savedcontext\u540e\u5b8c\u6574Replay\u4ecd\u8bed\u4e49\u62d2\u7edd\uff0c\u539farchive\u672a\u6539\u3002P5CTX1 native debug/release\u53ca\u4e24\u7c7bmutants\u901a\u8fc7\uff1b\u4fdd\u7559\u9996\u6b21NASM/ABI\u5931\u8d25\u4e0e\u4fee\u6b63\u8bc1\u636e\u3002\u4ec5\u9a8c\u6536initialized-queue context/reset/hold\uff0cP5 partial\u3001drain UNKNOWN\uff0c\u65e0post-unmap TLB/drain/free/unpin/reuse/\u65b0token/\u91cd\u542f\u8bc1\u660e\u3002",
+    "verification": {
+      "passed": true,
+      "checks": [
+        {
+          "spec": "module:tests.test_p5_recovery_context_guest",
+          "passed": true,
+          "tests": 12,
+          "skips": 0,
+          "returncode": 0,
+          "cancelled": false,
+          "timed_out": false,
+          "process_stopped": true,
+          "execution_exited": true,
+          "elapsed_seconds": 0.609
+        },
+        {
+          "spec": "module:tests.test_virtio_reset_guest",
+          "passed": true,
+          "tests": 9,
+          "skips": 0,
+          "returncode": 0,
+          "cancelled": false,
+          "timed_out": false,
+          "process_stopped": true,
+          "execution_exited": true,
+          "elapsed_seconds": 0.406
+        }
+      ],
+      "process_stopped": true,
+      "execution_exited": true,
+      "source_stable": true,
+      "fingerprint": {
+        "tests/p5_recovery_context_guest.py": "ff14b043aea5e4f7fd0e72a8ee0fd465a8acb4351b6b189cfbd54dde3a97af75",
+        "tests/test_p5_recovery_context_guest.py": "81bdd8d2550cd7aa1e35fe388cda9a2e343bd99a38e6c82d105591a25958d97a",
+        "tests/run_virtio_reset_qemu.py": "46f6315cad0af1d1d331f21f98b4e596dd32767c5e25cdfe10a1542dd9321d59",
+        "tests/test_virtio_reset_guest.py": "a9916ad252147eb8ca728735bedf17f8a2741a64a58d9e5c35e2c0ae40abf89b",
+        "tests/p5_virtio_reset_fixture.py": "535e6b1fbe18507db4f09dc18a87e3b4b605396395b09bba3f29ad4998c898f1",
+        "docs/p5-recovery-context-guest.md": "e6c585d336cb7b27a4eb6ec26d8be5c34277585a2743e2781b8d7a807e56ff33",
+        "codex-works/deliveries/P5CTX2.md": "af4ebcd8a5282f1a873e7ad7f8897879e57ff3ea2d6ab9f97ca187971320171b"
+      },
+      "summary": "\u5b9a\u5411\u590d\u9a8c\u901a\u8fc7\uff0c\u7b49\u5f85\u6e90\u7801/\u5951\u7ea6\u5ba1\u67e5",
+      "finished_at": "2026-10-21T11:54:57+00:00",
+      "job": "b15f655e12ea439bbe3af0aef39cf8be"
+    }
+  },
+  "independent_review_sha256": {
+    "2026-10-21-P5CTX2-independent-review.md": "c31f429a03699eda77edbd749f367748639eb7b651b1c956cefcc2b64def2b61",
+    "2026-10-21-P5CTX2-independent-review.json": "47ba795bd98c71671a316445452bb788bc511f8a32fd0139ff5d084f784d7c0b"
+  }
+}

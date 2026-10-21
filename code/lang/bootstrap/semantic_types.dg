@@ -594,6 +594,11 @@ unsafe fn rt_expr_general(c:*Runtime,id:usize,expected:usize,read:bool,depth:usi
  if rt_pure(c,id,0){
   var v=Value{kind:0,typ:NONE,negative:false,first:0,used:0};if !fold(s,u,id,expected,0,&v){return NONE;}
   typ=v.typ;let g=gid(s,u,id);(*w).values[g]=v;(*w).value_states[g]=2;flags=KNOWN;
+  // Folded scalar constants still own addressable, immutable storage.
+  // Value folding must not erase PLACE when an enclosing & asks for it.
+  if n.kind==ast.NAME||n.kind==ast.FIELD{let r=(*s).refs[g];
+   if r.kind==binding.GLOBAL&&(*s).symbols[r.target].kind==names.CONST{flags|=PLACE;}
+  }
  }else if n.kind==ast.NULL{typ=NULL_TYPE;}
  else if n.kind==ast.STRING{typ=rt_type(c,SLICE,1,0,0,id);flags=LENGTH;(*info).length=(*s).tokens[(*s).units[u].token_start+n.token].value_length;}
  else if n.kind==ast.NAME||(n.kind==ast.FIELD&&(*s).refs[gid(s,u,id)].kind==binding.GLOBAL){
@@ -1020,9 +1025,29 @@ unsafe fn rt_statement(c:*Runtime,id:usize,depth:usize)bool{unsafe{
  else{rt_fail(c,UNSUPPORTED,id,n.kind);return false;}return (*c).live;
 }}
 
+// A relocation names storage; it never reads a mutable initializer or follows
+// a pointer value. Runtime typing already checked visibility, mutability,
+// field access and constant array bounds before this predicate is called.
+unsafe fn rt_static_place(c:*Runtime,id:usize,depth:usize)bool{unsafe{
+ let s=(*c).s;if depth>=(*s).limit{return false;}let u=(*c).unit;let n=*at(s,u,id);
+ if n.kind==ast.NAME||n.kind==ast.FIELD{let r=(*s).refs[gid(s,u,id)];
+  if r.kind==binding.GLOBAL{let kind=(*s).symbols[r.target].kind;return kind==names.GLOBAL||kind==names.CONST;}
+ }
+ if n.kind==ast.FIELD{
+  let base=(*rt_info(c,n.a)).typ;
+  return base<(*s).type_count&&(*(*s).w).types[base].kind==STRUCT&&rt_static_place(c,n.a,depth+1);
+ }
+ if n.kind==ast.INDEX{
+  let base=(*rt_info(c,n.a)).typ;
+  return base<(*s).type_count&&(*(*s).w).types[base].kind==ARRAY
+   &&rt_pure(c,n.b,0)&&rt_static_place(c,n.a,depth+1);
+ }
+ return false;
+}}
 unsafe fn rt_static(c:*Runtime,id:usize,depth:usize)bool{unsafe{
  let s=(*c).s;if depth>=(*s).limit{return false;}let u=(*c).unit;let n=*at(s,u,id);
  if rt_pure(c,id,0)||n.kind==ast.NULL||n.kind==ast.STRING{return true;}
+ if n.kind==ast.UNARY&&n.op==1062{return rt_static_place(c,n.a,depth+1);}
  if n.kind==ast.ARRAY{var p=n.a;while p!=NONE{if !rt_static(c,p,depth+1){return false;}p=(*at(s,u,p)).next;}return true;}
  if n.kind==ast.REPEAT{return rt_static(c,n.a,depth+1)&&rt_pure(c,n.b,0);}
  if n.kind==ast.STRUCT{var p=n.b;while p!=NONE{let init=*at(s,u,p);if !rt_static(c,init.a,depth+1){return false;}p=init.next;}return true;}

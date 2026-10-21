@@ -1,0 +1,71 @@
+{
+  "assignment_owner": "codex",
+  "auto_dispatch": false,
+  "auto_verify": false,
+  "candidate": null,
+  "checks": [
+    "module:lang.tests.test_l3a_mainline_compatibility"
+  ],
+  "claim_from_status": "todo",
+  "claim_token": "17cce089a1b54d6e9ac40fc42e8cd543",
+  "claimed_at": "2026-10-21T18:18:40+00:00",
+  "claimed_by": "codex-mcp-6fe7be60df984d37",
+  "completed_at": "2026-10-21T18:29:32+00:00",
+  "complexity": "standard",
+  "created_at": "2026-10-21T18:18:39+00:00",
+  "delivery": "codex-works/deliveries/L3REG11.md",
+  "depends_on": [
+    "deepseek:L3A",
+    "codex:L3PTR7"
+  ],
+  "description": "L3A已经独立正式验收rev10并实际主目录集成7文件，原主线test_bootstrap_native_compiler仍把GLOBAL列为unsupported，native assembler仍把section .data列为unknown；需明确更新为正例且保留extern/非法section failclosed。本任务仅更新两个既有测试的过时预期和新增便携定向门禁/说明，不修改已验收bootstrap生产代码或削弱负控。复用L3A已有便携实际Dong frontend/lower/nasm/assembler native桥，实际debug/release数值和字节oracle，原Linux专用完整测试保持Linux适用，不将Windows skip算验收。新测试必须在本机0skip，执行真正旧GLOBAL/.data样例并验证extern status3输出不变/非法section拒绝。保留原ABI/aggregate/trap/semantic mutation测试覆盖，不以删测绕过。源稳定正式复验与源码契约审查后验收/集成。",
+  "document": "codex-works/tasks/L3REG11-board.md",
+  "historical": false,
+  "id": "codex:L3REG11",
+  "integration_note": "真实5文件已在主目录，逐项SHA与accepted正式指纹一致，见reviews/2026-10-22-L3REG11-main-files.json。正式实际3tests/0skip/462.359s通过。保留旧Linux专用测试平台界限及原开发失败。",
+  "legacy_hash": "26a836a151e12e59c630d6b30779f0a74e556cdc26184bcd5acf13faff0c484c",
+  "number": "L3REG11",
+  "owner": "codex",
+  "rev": 6,
+  "review_note": "已实际审查5声明路径及新旧测试差异：GLOBAL由旧拒绝表移为真实返回1正例，extern lower3/输出不变保留；.data由非法section表移为精确字节正例，以.bss保持未知节拒绝；原Linux完整ABI/陷阱/字段偏移坏体未删除。新增本机门禁实际重新引导Dong，两模式原GLOBAL连续两次1/ELF64+COFF+SysV，extern精确lower3/输出保持，实际完整native ELF固定0x400000的数据1更新42返回与原始数据字节，再六类非法section/重定位失败保持。开发C观察器-Wmisleading-indentation原失败保留，加花括号后实际重跑，正式cd42e4f7eebf434dab86b6e871f7e2c7完整3tests/0skip/462.359s，source_stable/process_stopped/execution_exited=true。没有把本机未执行的完整Linux两套或skip算成功，不修改生产编译器或弱化失败标准。",
+  "status": "integrated",
+  "title": "[L3A主线回归] 将GLOBAL与.data旧拒绝项更新为原生正例",
+  "updated_at": "2026-10-21T18:39:41+00:00",
+  "verification": {
+    "checks": [
+      {
+        "cancelled": false,
+        "elapsed_seconds": 462.359,
+        "execution_exited": true,
+        "passed": true,
+        "process_stopped": true,
+        "returncode": 0,
+        "skips": 0,
+        "spec": "module:lang.tests.test_l3a_mainline_compatibility",
+        "tests": 3,
+        "timed_out": false
+      }
+    ],
+    "execution_exited": true,
+    "fingerprint": {
+      "codex-works/deliveries/L3REG11.md": "47d2cc3589742b5c0c7926f8e2c45e023781fd9fde3f531f5d95fb6b8417946b",
+      "docs/l3a-mainline-compatibility.md": "ac43026c432ecf1dcf9de79e14b5b45ecf91fd034911ca6e7634e75aee6ed25d",
+      "lang/tests/test_bootstrap_native_assembler.py": "62bf6d05966e571595abf7a0b47cb51e799e4ab94d09a0f355bdf436589fba84",
+      "lang/tests/test_bootstrap_native_compiler.py": "c3e7f7b44ae36eafbcb14fdc065230d5c26dbec67c3be5e954033fcb5cd5cac4",
+      "lang/tests/test_l3a_mainline_compatibility.py": "ec635d0e23ae5065453fb86a4f2794156b1c97e1a0e1f042c78aa8a8aa90f996"
+    },
+    "finished_at": "2026-10-21T18:38:52+00:00",
+    "job": "cd42e4f7eebf434dab86b6e871f7e2c7",
+    "passed": true,
+    "process_stopped": true,
+    "source_stable": true,
+    "summary": "定向复验通过，等待源码/契约审查"
+  },
+  "write_paths": [
+    "lang/tests/test_bootstrap_native_compiler.py",
+    "lang/tests/test_bootstrap_native_assembler.py",
+    "lang/tests/test_l3a_mainline_compatibility.py",
+    "docs/l3a-mainline-compatibility.md",
+    "codex-works/deliveries/L3REG11.md"
+  ]
+}

@@ -24,10 +24,11 @@
   "document": "claude-works/tasks/C49-board.md",
   "historical": false,
   "id": "claude:C49",
+  "integration_note": "2026-10-20按实际代码补登记主线集成。已独立核对原任务/既有源码契约审查及正式复验：4tests/0skip、source_stable=true；当前四交付仍逐字节匹配验收指纹。生产已真实复制到code/lang/bootstrap/nasm_u64_select_function.dg（478b1ed），与验收生产字节一致或仅LF/CRLF；说明及永久测试主线路径适配已审查，保留原语义/别名/原子性/真实坏Dong与完整ABI观察。CR40额外边界增强已核对，未改生产。本机NASM3分组探测维护后，9组件主线对应34项实际已全过0skip；A批20项775.031s且前后SHA稳定，B批本任务已通过，总manifest本轮保存。证据reviews/2026-10-20-mainline-registration-evidence.json与code/build/test/mainline-reconcile-*。本次仅登记既有已验收组件的实际文件集成，不宣称L3/G5/G6完成。",
   "legacy_hash": "fab168abcae9066f931bae7bf30e5324a85d5b64cfd45ae1888b25e074c635c9",
   "number": "C49",
   "owner": "claude",
-  "rev": 10,
+  "rev": 11,
   "review_note": "C49 R1独立复审通过，关闭旧观察/恢复缺口。已读取完整原任务/返修要求/R1交付、生产和说明；生产SHA9468a3e4…eb65与首轮实际审查一致，1024 scratch/1018段界与698最长输出、比较/真实fallthrough及两出口C42接线仍正确。逐行对比永久测试R1，差异仅独立观察区/宿主栈锚、RBX预设值断言及两个出口真实RBX坏Dong；既有语义/路由/容量/别名/只读保护均保留。新桥RIP静态保存observation/host_anchor/parked_rax，先捕获真实RAX和全部callee-saved/RSP，再从锚恢复宿主ABI，不信任被测RBX/返回RSP。正式独立作业e60916643e6247918773e0f6206d8cd7：4项0skip，进程125.000s，returncode0、未取消未超时、source_stable=true。额外独立脚本解析20向量×两模式40组好坏stdout，每模式10真10假，两出口都真实执行；好坏RAX等于独立比较模型，各自RSP平衡，rbp/r12..r15/canary/对齐正确，正式好体RBX845282253045697467，真实坏Dong两出口ret前add rbx,8返回RBX845282253045697475，均仅由native rbx preserved数值拒绝，无错位/崩溃替代。当前四文件与正式指纹一致，14只读依赖SHA稳定，全部直接依赖MCP查询integrated。证据reviews/2026-10-19-C49-R1-evidence.json、reviews/2026-10-19-C49-C50-R1-audit.py、reviews/2026-10-19-C49-R1-test.diff；综合记录reviews/2026-10-19-C48-integrated-C49-C50-R1.md。仅组件验收，未集成C49；未运行OS/VM/全回归/AI CLI，不宣称完整CFG/IR/自举/L3完成。",
   "state_reconciliation": {
     "at": "2026-10-19T11:42:09+00:00",
@@ -41,9 +42,9 @@
     "snapshot_sha256": "a40cf9aabcbb43779b5c60414d7142cab791f85888022c84625568dbb579ac96",
     "verification_reexecuted": false
   },
-  "status": "accepted",
+  "status": "integrated",
   "title": "[L3] 条件比较与双分支返回的完整SysV函数接线",
-  "updated_at": "2026-10-19T14:04:28+00:00",
+  "updated_at": "2026-10-20T13:12:18+00:00",
   "verification": {
     "checks": [
       {

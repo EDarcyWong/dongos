@@ -1,0 +1,13 @@
+{
+  "physical_main_integration": true,
+  "fingerprint": {
+    "codex-works/l3host/test_l3a_globals.py": "5dc8317f816600e52bed31d2ad48203b82b8c09ad04a773d8b656e1388859b1f",
+    "codex-works/l3host/test_l3a_native_regression.py": "13055eef21bb95230bf8b0fc53a496558ee1515b858fe4238358e48e7adbedde",
+    "codex-works/tests/test_l3_host_portability.py": "4ffe20b41733de7188ad4bda2db512d94182961edfbe023a3979e88555b57d5e",
+    "lang/tests/test_l3a_globals.py": "5dc8317f816600e52bed31d2ad48203b82b8c09ad04a773d8b656e1388859b1f",
+    "lang/tests/test_l3a_native_regression.py": "13055eef21bb95230bf8b0fc53a496558ee1515b858fe4238358e48e7adbedde",
+    "docs/l3-host-portability.md": "b964f21daeadd50376645ac46f8c1ac480c05283171d57d72eb1b865bfdb0526",
+    "codex-works/deliveries/L3HOST13.md": "67124863b60241fa11dd300998c1b26aa39a2355f81ed87afede722142cc6996"
+  },
+  "candidate_byte_identical": true
+}

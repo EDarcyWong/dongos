@@ -1,0 +1,48 @@
+{
+  "task": "claude:P2WC1",
+  "owner": "codex",
+  "reviewer": "Codex root coordinator",
+  "actual_source_contract_review": true,
+  "original_archive": "D:\\projects\\2026\\dongos\\coordination\\dongos_works\\.local\\p2wc-takeover-2f016a2df6",
+  "native_evidence": "D:\\projects\\2026\\dongos\\coordination\\dongos_works\\claude-works\\build\\P2WC1\\run-6492da7fa0d2",
+  "source_stable": true,
+  "actual_cases": [
+    {
+      "mode": "debug",
+      "summary": "WC real transaction raw oracle checks=389963 scenarios=64 passed",
+      "context_bytes": 1736,
+      "full_result_sha256": "a958416eed8156a0ea4ee5200c4d7d0bcac50235e1abd53e7096cbd3962e0758"
+    },
+    {
+      "mode": "release",
+      "summary": "WC real transaction raw oracle checks=389963 scenarios=64 passed",
+      "context_bytes": 1736,
+      "full_result_sha256": "20927239e4bbbcec852fed37ff0d23479d95310c948ca3bf920bc0072a7e498d"
+    }
+  ],
+  "semantic_mutants": [
+    "skip-cache",
+    "keep-old-alias",
+    "early-ready",
+    "noack-continue"
+  ],
+  "mutation_modes": 2,
+  "expected_all_mode_source_cases": 10,
+  "source_fingerprint": {
+    "D:\\projects\\2026\\dongos\\code\\kernel\\mm\\cache_type_plan.dg": "1fb8435e52e272361796df89ac78b3bfff386615d97476be79aca29c4bd9e1d3",
+    "D:\\projects\\2026\\dongos\\code\\kernel\\mm\\errors.dg": "76bace871091759b38ab89a86adc3089b5085dd6fa626f424b6106c3beb08fcc",
+    "D:\\projects\\2026\\dongos\\code\\kernel\\mm\\huge_page_plan.dg": "1cb1b7d09fc657f9a7198ec966c4c969775f56129381c5646321dea293481c70",
+    "D:\\projects\\2026\\dongos\\code\\kernel\\mm\\paging.dg": "21f705eed8adc6de3de33387de19a0b0fb79d202ec8265d34a69d8f5b898b9dd",
+    "D:\\projects\\2026\\dongos\\code\\kernel\\mm\\paging_errors.dg": "915dc279886329e05e58ef393ef280f4cd68a1b61a4e44ab8c45eaa5cccf62b2",
+    "D:\\projects\\2026\\dongos\\code\\kernel\\smp\\context.dg": "6006492299670cbffc2180ed547be1287a0dbb4138c72f58999c4adfb5f1ea74",
+    "D:\\projects\\2026\\dongos\\code\\kernel\\smp\\tlb.dg": "37cce0520a40224434bce0ce9e6b02e0ab68531ee59e79ff6575f292d0ef4a48",
+    "D:\\projects\\2026\\dongos\\coordination\\dongos_works\\claude-works\\src\\mm\\cache_alias_owner.dg": "eafdfa361b296cecd0248f0ad3a06a3c8d2e7064f539228dbc68fa1dea57a39e",
+    "D:\\projects\\2026\\dongos\\coordination\\dongos_works\\claude-works\\src\\mm\\cache_alias_owner.md": "fb87713709a25567c3ea22919467a34bf11fc05987a460b4481558a18d495d58",
+    "D:\\projects\\2026\\dongos\\coordination\\dongos_works\\claude-works\\tests\\cache_alias_owner_probe.c": "e181ac94826f359a7b4dceb052100cef7d8978be11d4222369bd6b02411e1917",
+    "D:\\projects\\2026\\dongos\\coordination\\dongos_works\\claude-works\\tests\\cache_alias_owner_probe.dg": "d77cf770754d59cbe12570c9a8de246f0e16bc9c80c9fe15a7f3ec3952acb9c9",
+    "D:\\projects\\2026\\dongos\\coordination\\dongos_works\\claude-works\\tests\\test_cache_alias_owner.py": "b2a75ce6aa12257d280f40ad761074ebc62c066c8fb92fb1e68988f389173490",
+    "D:\\projects\\2026\\dongos\\coordination\\dongos_works\\claude-works\\deliveries\\P2WC1.md": "c315092d199fba3901865c4a471e376f64e286c445a3711db905c122870c0560"
+  },
+  "scope": "Component native implementation only; normal GOP consumer/hardware callbacks and actual guest positive/negative remain a separate P2 gate. No OS/VM or hardware WC throughput claim. Independent formal isolated process required before accept/integrate.",
+  "known_development_failure": "run1bf85718cd0c unittest exit1 and erroneous passed field explicitly excluded; raw files preserved."
+}

@@ -1,0 +1,68 @@
+{
+  "assignment_owner": "codex",
+  "auto_dispatch": false,
+  "auto_verify": false,
+  "candidate": null,
+  "checks": [
+    "module:lang.tests.test_g5_runner_entry"
+  ],
+  "claim_from_status": "todo",
+  "claim_token": "7a2d5e2dc29f4f5988f7250e1c747654",
+  "claimed_at": "2026-10-21T19:09:57+00:00",
+  "claimed_by": "codex-mcp-6fe7be60df984d37",
+  "completed_at": "2026-10-21T19:12:38+00:00",
+  "complexity": "standard",
+  "created_at": "2026-10-21T18:42:13+00:00",
+  "delivery": "codex-works/deliveries/L3MAIN12.md",
+  "depends_on": [
+    "deepseek:L3"
+  ],
+  "description": "把deepseek:L3经实际源码审查及正式零skip复验验收的有限runner和说明原字节集成code主线tools/g5_differential.py、docs/g5-differential.md，保留候选完整证据/known-gap边界。候选在同一实现中明确支持works与code/tools两种真实根定位，主线副本必须与accepted候选逐字节SHA一致，不重写算法或支持矩阵。本项新增test_g5_runner_entry仅验证实际主线模块/CLI导入、正确源码根和防覆盖边界；完整语言/ABI/语义坏体/真实nativeELF由依赖L3正式全矩阵证明，不能仅凭入口测试替代。必要时实际主线再跑有限全矩阵，源码/闭包SHA记录且0skip。不得扩大为整个G5已完成，不改已验收bootstrap生产源/数据库索引。源审、正式入口测试与真实候选→主目录文件指纹后分别accept/integrate；仍无PR，全部本轮任务闭合后直接提交GitHub main并核对再关机。",
+  "document": "codex-works/tasks/L3MAIN12-board.md",
+  "historical": false,
+  "id": "codex:L3MAIN12",
+  "integration_note": "已完成真实4主目录文件/交付落盘，逐项SHA匹配已验收正式指纹，runner与说明又逐字节匹配accepted L3候选，见reviews/2026-10-22-L3MAIN12-main-files.json。正式入口2tests/0skip通过；全部语义矩阵原L3正式已验，不扩大整个G5或宿主范围。",
+  "legacy_hash": "1dc450aa5bc4b10eb3548228c575dec3a6501cd3601b86aaaccf7b8104016d81",
+  "number": "L3MAIN12",
+  "owner": "codex",
+  "rev": 6,
+  "review_note": "实际审查主线工具/说明与accepted L3候选逐字节同SHA（runner db5b2b5e…，说明ff728057…）；没有重写算法或目标IR/代码。主线真实python -m tools.g5_differential --help、ROOT/默认输出目录、当前bootstrap/本工具完整源清单、已存在输出先拒且sentinel不变均执行。独立正式cc5b26202326434f93b154f6718aabbf为2tests/0skip/0.609s，source_stable/process_stopped/execution_exited全部true。完整有限矩阵由L3独立正式4项0skip/899.078s证明，本项没有用入口代替语义。整个G5仍scope_complete=false；矩阵执行宿主Windows SysV，未将Linux入口或COFF组装冒称完整POSIX/Win64ABI执行验收。源码根对works/主线两种位置明确适配，生产DG未改。",
+  "status": "integrated",
+  "title": "[L3本地集成] 将有限G5差分runner接入主线工具入口",
+  "updated_at": "2026-10-21T19:18:58+00:00",
+  "verification": {
+    "checks": [
+      {
+        "cancelled": false,
+        "elapsed_seconds": 0.609,
+        "execution_exited": true,
+        "passed": true,
+        "process_stopped": true,
+        "returncode": 0,
+        "skips": 0,
+        "spec": "module:lang.tests.test_g5_runner_entry",
+        "tests": 2,
+        "timed_out": false
+      }
+    ],
+    "execution_exited": true,
+    "fingerprint": {
+      "codex-works/deliveries/L3MAIN12.md": "612170834ef96b23bbe4d87a9de4206642487dd7c26a90017aa231b368eeee80",
+      "docs/g5-differential.md": "ff728057fc045dc02b7f8618fcc527bbf477d01c1f27fba1edb76889c88bdd53",
+      "lang/tests/test_g5_runner_entry.py": "75b649ee9eba85c2f53404084cea70dd04ca18eb071aee8b2d70714487bd4a39",
+      "tools/g5_differential.py": "db5b2b5e134ca0bf351f112a73faf91f4135faf9278458307b54fbddde8bb6f7"
+    },
+    "finished_at": "2026-10-21T19:12:51+00:00",
+    "job": "cc5b26202326434f93b154f6718aabbf",
+    "passed": true,
+    "process_stopped": true,
+    "source_stable": true,
+    "summary": "定向复验通过，等待源码/契约审查"
+  },
+  "write_paths": [
+    "tools/g5_differential.py",
+    "lang/tests/test_g5_runner_entry.py",
+    "docs/g5-differential.md",
+    "codex-works/deliveries/L3MAIN12.md"
+  ]
+}

@@ -1,0 +1,651 @@
+{
+  "command": [
+    "C:\\Python312\\python.exe",
+    "D:\\projects\\2026\\dongos\\code\\build\\p2live1_independent_review.py"
+  ],
+  "reviewer_never_started_vm": true,
+  "cases": {
+    "a2": {
+      "result_path": "D:\\projects\\2026\\dongos\\coordination\\dongos_works\\.local\\p2live1-debaba97c9cd\\a2-source\\build\\test\\p2-active-large\\run-2122b0c5a9894ff18ce34cd4b1ce3ec3\\result.json",
+      "result_sha256": "10e4b7dffa3904d4f7b2f4b946ef66872d31667db6235b8a2c916e04eaa78101",
+      "source_files_verified": 1299,
+      "artifact_files_verified": 6,
+      "physical_chunks": 4,
+      "physical_bytes": 560536,
+      "replay_elapsed_seconds": 0.046,
+      "replayed": {
+        "passed": true,
+        "actual_qemu_executed": true,
+        "observed": {
+          "report": {
+            "version": 1,
+            "attempted": 1,
+            "complete": 1,
+            "phase": 10,
+            "steps": 1023,
+            "root": 4194304,
+            "window": 18446647316686307328,
+            "physical": 6291456,
+            "pages": 512,
+            "order": 9,
+            "free_before": 880,
+            "free_held": 368,
+            "free_after": 880,
+            "tables_before": 17,
+            "tables_mapped": 19,
+            "tables_split": 20,
+            "tables_merged": 19,
+            "tables_after": 17,
+            "sample_first": 1234605615003729920,
+            "sample_last": 1234605615003730431,
+            "split_value": 1234605615003729925,
+            "replacement_value": 1234605615003729926,
+            "restored_value": 1234605615003729925,
+            "merge_value": 1234605615003729925,
+            "merge_error": 33751047,
+            "invlpg": 2,
+            "full_flush": 516,
+            "retired_tables": 4,
+            "held": 0,
+            "cr0": 2147549235,
+            "cr3": 4194304,
+            "cr4": 3149416,
+            "efer": 3328,
+            "rflags": 6,
+            "pat": 1974748653749254,
+            "error_code": 0,
+            "large_entry": 9223372036861067491,
+            "split_entry": 4272167,
+            "merged_entry": 9223372036861067491
+          },
+          "actual_buddy_free": 880,
+          "actual_tables": 17,
+          "final_pool_sha256": "f0bda364a5e003b92ed3c5e637fcc306456692cf273d0eb5c236395658a3f1f1",
+          "scope": "BSP WB/NX startup lifecycle; final 4KiB tree restored"
+        }
+      },
+      "guest_command": [
+        "C:\\Python312\\python.exe",
+        "tests/run_p2_active_large_qemu.py",
+        "--reuse-esp",
+        "build/p2live/esp",
+        "--cpus",
+        "4"
+      ],
+      "guest_returncode": 0,
+      "guest_elapsed_seconds": 3.969000000000051,
+      "build_provenance": "P2LIVE1 coordinator full-build wrapper; runtime0 builder has no native manifest",
+      "build_command": [
+        "C:\\Python312\\python.exe",
+        "-c",
+        "from pathlib import Path;from tools.build import build;print(build(stage=\"p1\",runtime_level=0,test=False,output=Path(\"build/p2live\").resolve()))"
+      ]
+    },
+    "b2": {
+      "result_path": "D:\\projects\\2026\\dongos\\coordination\\dongos_works\\.local\\p2live1-debaba97c9cd\\b2-source\\build\\test\\p2-active-large\\run-aefcb4bd99cb4dd29e3cec5b537a37eb\\result.json",
+      "result_sha256": "6b52952b970c0f10596035f17e843a2e199837dcc35794b6e12fbfaf0266cb5b",
+      "source_files_verified": 1299,
+      "artifact_files_verified": 6,
+      "physical_chunks": 4,
+      "physical_bytes": 560536,
+      "replay_elapsed_seconds": 0.047,
+      "replayed": {
+        "passed": true,
+        "actual_qemu_executed": true,
+        "observed": {
+          "report": {
+            "version": 1,
+            "attempted": 1,
+            "complete": 1,
+            "phase": 10,
+            "steps": 1023,
+            "root": 4194304,
+            "window": 18446647316686307328,
+            "physical": 6291456,
+            "pages": 512,
+            "order": 9,
+            "free_before": 880,
+            "free_held": 368,
+            "free_after": 880,
+            "tables_before": 17,
+            "tables_mapped": 19,
+            "tables_split": 20,
+            "tables_merged": 19,
+            "tables_after": 17,
+            "sample_first": 1234605615003729920,
+            "sample_last": 1234605615003730431,
+            "split_value": 1234605615003729925,
+            "replacement_value": 1234605615003729926,
+            "restored_value": 1234605615003729925,
+            "merge_value": 1234605615003729925,
+            "merge_error": 33751047,
+            "invlpg": 2,
+            "full_flush": 516,
+            "retired_tables": 4,
+            "held": 0,
+            "cr0": 2147549235,
+            "cr3": 4194304,
+            "cr4": 3149416,
+            "efer": 3328,
+            "rflags": 6,
+            "pat": 1974748653749254,
+            "error_code": 0,
+            "large_entry": 9223372036861067491,
+            "split_entry": 4272167,
+            "merged_entry": 9223372036861067491
+          },
+          "actual_buddy_free": 880,
+          "actual_tables": 17,
+          "final_pool_sha256": "b369bdd8da8bb4a1b1ed2c9eb5b4ea8bf865d21219fa21de1bae97b500ee3f5e",
+          "scope": "BSP WB/NX startup lifecycle; final 4KiB tree restored"
+        }
+      },
+      "guest_command": [
+        "C:\\Python312\\python.exe",
+        "tests/run_p2_active_large_qemu.py",
+        "--reuse-esp",
+        "build/p2live/esp",
+        "--cpus",
+        "1"
+      ],
+      "guest_returncode": 0,
+      "guest_elapsed_seconds": 4.515999999999622,
+      "build_provenance": "P2LIVE1 coordinator full-build wrapper; runtime0 builder has no native manifest",
+      "build_command": [
+        "C:\\Python312\\python.exe",
+        "-c",
+        "from pathlib import Path;from tools.build import build;print(build(stage=\"p1\",runtime_level=0,test=False,output=Path(\"build/p2live\").resolve()))"
+      ]
+    },
+    "m2": {
+      "result_path": "D:\\projects\\2026\\dongos\\coordination\\dongos_works\\.local\\p2live1-debaba97c9cd\\m2-source\\build\\test\\p2-active-large\\run-3224eb1fa2524cc6ab2237b3c31de744\\result.json",
+      "result_sha256": "6d8c188c7576410d32241a74e099cbebf919f8921fd41f70ae3a8d81d9027f91",
+      "source_files_verified": 1299,
+      "artifact_files_verified": 6,
+      "physical_chunks": 2,
+      "physical_bytes": 472,
+      "replay_elapsed_seconds": 0.032,
+      "replayed": {
+        "passed": false,
+        "correct_target_rejection": true,
+        "decoded_failure_report": {
+          "version": 1,
+          "attempted": 1,
+          "complete": 0,
+          "phase": 2,
+          "steps": 3,
+          "root": 4194304,
+          "window": 18446647316686307328,
+          "physical": 6291456,
+          "pages": 512,
+          "order": 9,
+          "free_before": 880,
+          "free_held": 368,
+          "free_after": 0,
+          "tables_before": 17,
+          "tables_mapped": 19,
+          "tables_split": 20,
+          "tables_merged": 0,
+          "tables_after": 0,
+          "sample_first": 1234605615003729920,
+          "sample_last": 1234605615003730431,
+          "split_value": 0,
+          "replacement_value": 0,
+          "restored_value": 0,
+          "merge_value": 0,
+          "merge_error": 0,
+          "invlpg": 0,
+          "full_flush": 0,
+          "retired_tables": 0,
+          "held": 1,
+          "cr0": 0,
+          "cr3": 0,
+          "cr4": 0,
+          "efer": 0,
+          "rflags": 0,
+          "pat": 0,
+          "error_code": 34537473,
+          "large_entry": 9223372036861067491,
+          "split_entry": 0,
+          "merged_entry": 0
+        }
+      },
+      "guest_command": [
+        "C:\\Python312\\python.exe",
+        "tests/run_p2_active_large_qemu.py",
+        "--reuse-esp",
+        "build/p2live/esp",
+        "--cpus",
+        "4"
+      ],
+      "guest_returncode": 1,
+      "guest_elapsed_seconds": 3.438000000000102,
+      "build_provenance": "P2LIVE1 coordinator full-build wrapper; runtime0 builder has no native manifest",
+      "build_command": [
+        "C:\\Python312\\python.exe",
+        "-c",
+        "from pathlib import Path;from tools.build import build;print(build(stage=\"p1\",runtime_level=0,test=False,output=Path(\"build/p2live\").resolve()))"
+      ]
+    }
+  },
+  "negative_changed_paths": [
+    "kernel/mm/paging.dg"
+  ],
+  "negative_exact_single_statement_removal": true,
+  "normal_source_sets_identical": true,
+  "main_files_match_all_normal_frozen_sources": 1299,
+  "actual_312_byte_field_mutations_rejected": 78,
+  "mutations": [
+    {
+      "case": "a2",
+      "field": "version",
+      "error": "P2 active large: lifecycle incomplete, unsupported, or still held"
+    },
+    {
+      "case": "a2",
+      "field": "attempted",
+      "error": "P2 active large: lifecycle incomplete, unsupported, or still held"
+    },
+    {
+      "case": "a2",
+      "field": "complete",
+      "error": "P2 active large: lifecycle incomplete, unsupported, or still held"
+    },
+    {
+      "case": "a2",
+      "field": "phase",
+      "error": "P2 active large: lifecycle incomplete, unsupported, or still held"
+    },
+    {
+      "case": "a2",
+      "field": "steps",
+      "error": "P2 active large: lifecycle incomplete, unsupported, or still held"
+    },
+    {
+      "case": "a2",
+      "field": "root",
+      "error": "P2 active large: exact active root"
+    },
+    {
+      "case": "a2",
+      "field": "window",
+      "error": "P2 active large: exact owned order9 span"
+    },
+    {
+      "case": "a2",
+      "field": "physical",
+      "error": "P2 active large: exact owned order9 span"
+    },
+    {
+      "case": "a2",
+      "field": "pages",
+      "error": "P2 active large: exact owned order9 span"
+    },
+    {
+      "case": "a2",
+      "field": "order",
+      "error": "P2 active large: exact owned order9 span"
+    },
+    {
+      "case": "a2",
+      "field": "free_before",
+      "error": "P2 active large: buddy ownership balance"
+    },
+    {
+      "case": "a2",
+      "field": "free_held",
+      "error": "P2 active large: buddy ownership balance"
+    },
+    {
+      "case": "a2",
+      "field": "free_after",
+      "error": "P2 active large: buddy ownership balance"
+    },
+    {
+      "case": "a2",
+      "field": "tables_before",
+      "error": "P2 active large: page table lifetime balance"
+    },
+    {
+      "case": "a2",
+      "field": "tables_mapped",
+      "error": "P2 active large: page table lifetime balance"
+    },
+    {
+      "case": "a2",
+      "field": "tables_split",
+      "error": "P2 active large: page table lifetime balance"
+    },
+    {
+      "case": "a2",
+      "field": "tables_merged",
+      "error": "P2 active large: page table lifetime balance"
+    },
+    {
+      "case": "a2",
+      "field": "tables_after",
+      "error": "P2 active large: page table lifetime balance"
+    },
+    {
+      "case": "a2",
+      "field": "sample_first",
+      "error": "P2 active large: hardware translation/readback values"
+    },
+    {
+      "case": "a2",
+      "field": "sample_last",
+      "error": "P2 active large: hardware translation/readback values"
+    },
+    {
+      "case": "a2",
+      "field": "split_value",
+      "error": "P2 active large: hardware translation/readback values"
+    },
+    {
+      "case": "a2",
+      "field": "replacement_value",
+      "error": "P2 active large: hardware translation/readback values"
+    },
+    {
+      "case": "a2",
+      "field": "restored_value",
+      "error": "P2 active large: hardware translation/readback values"
+    },
+    {
+      "case": "a2",
+      "field": "merge_value",
+      "error": "P2 active large: hardware translation/readback values"
+    },
+    {
+      "case": "a2",
+      "field": "merge_error",
+      "error": "P2 active large: rejected merge or complete invalidation/reclamation sequence"
+    },
+    {
+      "case": "a2",
+      "field": "invlpg",
+      "error": "P2 active large: rejected merge or complete invalidation/reclamation sequence"
+    },
+    {
+      "case": "a2",
+      "field": "full_flush",
+      "error": "P2 active large: rejected merge or complete invalidation/reclamation sequence"
+    },
+    {
+      "case": "a2",
+      "field": "retired_tables",
+      "error": "P2 active large: rejected merge or complete invalidation/reclamation sequence"
+    },
+    {
+      "case": "a2",
+      "field": "held",
+      "error": "P2 active large: lifecycle incomplete, unsupported, or still held"
+    },
+    {
+      "case": "a2",
+      "field": "cr0",
+      "error": "P2 active large: actual hardened BSP controls"
+    },
+    {
+      "case": "a2",
+      "field": "cr3",
+      "error": "P2 active large: exact active root"
+    },
+    {
+      "case": "a2",
+      "field": "cr4",
+      "error": "P2 active large: actual hardened BSP controls"
+    },
+    {
+      "case": "a2",
+      "field": "efer",
+      "error": "P2 active large: actual hardened BSP controls"
+    },
+    {
+      "case": "a2",
+      "field": "rflags",
+      "error": "P2 active large: actual hardened BSP controls"
+    },
+    {
+      "case": "a2",
+      "field": "pat",
+      "error": "P2 active large: unchanged WB/UC PAT policy"
+    },
+    {
+      "case": "a2",
+      "field": "error_code",
+      "error": "P2 active large: lifecycle incomplete, unsupported, or still held"
+    },
+    {
+      "case": "a2",
+      "field": "large_entry",
+      "error": "P2 active large: actual 2MiB WB/RW/NX leaf encoding"
+    },
+    {
+      "case": "a2",
+      "field": "split_entry",
+      "error": "P2 active large: actual split child in retained table pool"
+    },
+    {
+      "case": "a2",
+      "field": "merged_entry",
+      "error": "P2 active large: actual 2MiB WB/RW/NX leaf encoding"
+    },
+    {
+      "case": "b2",
+      "field": "version",
+      "error": "P2 active large: lifecycle incomplete, unsupported, or still held"
+    },
+    {
+      "case": "b2",
+      "field": "attempted",
+      "error": "P2 active large: lifecycle incomplete, unsupported, or still held"
+    },
+    {
+      "case": "b2",
+      "field": "complete",
+      "error": "P2 active large: lifecycle incomplete, unsupported, or still held"
+    },
+    {
+      "case": "b2",
+      "field": "phase",
+      "error": "P2 active large: lifecycle incomplete, unsupported, or still held"
+    },
+    {
+      "case": "b2",
+      "field": "steps",
+      "error": "P2 active large: lifecycle incomplete, unsupported, or still held"
+    },
+    {
+      "case": "b2",
+      "field": "root",
+      "error": "P2 active large: exact active root"
+    },
+    {
+      "case": "b2",
+      "field": "window",
+      "error": "P2 active large: exact owned order9 span"
+    },
+    {
+      "case": "b2",
+      "field": "physical",
+      "error": "P2 active large: exact owned order9 span"
+    },
+    {
+      "case": "b2",
+      "field": "pages",
+      "error": "P2 active large: exact owned order9 span"
+    },
+    {
+      "case": "b2",
+      "field": "order",
+      "error": "P2 active large: exact owned order9 span"
+    },
+    {
+      "case": "b2",
+      "field": "free_before",
+      "error": "P2 active large: buddy ownership balance"
+    },
+    {
+      "case": "b2",
+      "field": "free_held",
+      "error": "P2 active large: buddy ownership balance"
+    },
+    {
+      "case": "b2",
+      "field": "free_after",
+      "error": "P2 active large: buddy ownership balance"
+    },
+    {
+      "case": "b2",
+      "field": "tables_before",
+      "error": "P2 active large: page table lifetime balance"
+    },
+    {
+      "case": "b2",
+      "field": "tables_mapped",
+      "error": "P2 active large: page table lifetime balance"
+    },
+    {
+      "case": "b2",
+      "field": "tables_split",
+      "error": "P2 active large: page table lifetime balance"
+    },
+    {
+      "case": "b2",
+      "field": "tables_merged",
+      "error": "P2 active large: page table lifetime balance"
+    },
+    {
+      "case": "b2",
+      "field": "tables_after",
+      "error": "P2 active large: page table lifetime balance"
+    },
+    {
+      "case": "b2",
+      "field": "sample_first",
+      "error": "P2 active large: hardware translation/readback values"
+    },
+    {
+      "case": "b2",
+      "field": "sample_last",
+      "error": "P2 active large: hardware translation/readback values"
+    },
+    {
+      "case": "b2",
+      "field": "split_value",
+      "error": "P2 active large: hardware translation/readback values"
+    },
+    {
+      "case": "b2",
+      "field": "replacement_value",
+      "error": "P2 active large: hardware translation/readback values"
+    },
+    {
+      "case": "b2",
+      "field": "restored_value",
+      "error": "P2 active large: hardware translation/readback values"
+    },
+    {
+      "case": "b2",
+      "field": "merge_value",
+      "error": "P2 active large: hardware translation/readback values"
+    },
+    {
+      "case": "b2",
+      "field": "merge_error",
+      "error": "P2 active large: rejected merge or complete invalidation/reclamation sequence"
+    },
+    {
+      "case": "b2",
+      "field": "invlpg",
+      "error": "P2 active large: rejected merge or complete invalidation/reclamation sequence"
+    },
+    {
+      "case": "b2",
+      "field": "full_flush",
+      "error": "P2 active large: rejected merge or complete invalidation/reclamation sequence"
+    },
+    {
+      "case": "b2",
+      "field": "retired_tables",
+      "error": "P2 active large: rejected merge or complete invalidation/reclamation sequence"
+    },
+    {
+      "case": "b2",
+      "field": "held",
+      "error": "P2 active large: lifecycle incomplete, unsupported, or still held"
+    },
+    {
+      "case": "b2",
+      "field": "cr0",
+      "error": "P2 active large: actual hardened BSP controls"
+    },
+    {
+      "case": "b2",
+      "field": "cr3",
+      "error": "P2 active large: exact active root"
+    },
+    {
+      "case": "b2",
+      "field": "cr4",
+      "error": "P2 active large: actual hardened BSP controls"
+    },
+    {
+      "case": "b2",
+      "field": "efer",
+      "error": "P2 active large: actual hardened BSP controls"
+    },
+    {
+      "case": "b2",
+      "field": "rflags",
+      "error": "P2 active large: actual hardened BSP controls"
+    },
+    {
+      "case": "b2",
+      "field": "pat",
+      "error": "P2 active large: unchanged WB/UC PAT policy"
+    },
+    {
+      "case": "b2",
+      "field": "error_code",
+      "error": "P2 active large: lifecycle incomplete, unsupported, or still held"
+    },
+    {
+      "case": "b2",
+      "field": "large_entry",
+      "error": "P2 active large: actual 2MiB WB/RW/NX leaf encoding"
+    },
+    {
+      "case": "b2",
+      "field": "split_entry",
+      "error": "P2 active large: actual split child in retained table pool"
+    },
+    {
+      "case": "b2",
+      "field": "merged_entry",
+      "error": "P2 active large: actual 2MiB WB/RW/NX leaf encoding"
+    }
+  ],
+  "full_unstubbed_rehashed_semantic_clones": [
+    {
+      "target": "raw-pool-user",
+      "path": "D:\\projects\\2026\\dongos\\code\\build\\test\\p2live1-independent-review\\run-a1b44b7c2728\\raw-pool-user\\result.json",
+      "mutated_file": "physical-0003.bin",
+      "byte_offset": 49152,
+      "unmodified_portable_clone_replayed": true,
+      "hashes_and_saved_pool_digest_refreshed": true,
+      "error": "P2 active large: final leaf outside exact physical/permission/cache allowlist"
+    },
+    {
+      "target": "raw-buddy-invalid-state",
+      "path": "D:\\projects\\2026\\dongos\\code\\build\\test\\p2live1-independent-review\\run-a1b44b7c2728\\raw-buddy-invalid-state\\result.json",
+      "mutated_file": "physical-0002.bin",
+      "byte_offset": 8344,
+      "unmodified_portable_clone_replayed": true,
+      "hashes_and_saved_pool_digest_refreshed": true,
+      "error": "P2 active large: invalid buddy metadata state"
+    }
+  ],
+  "original_archives_unchanged": true
+}

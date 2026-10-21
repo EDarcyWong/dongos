@@ -1,0 +1,12 @@
+{
+  "task": "codex:P2SIZE10",
+  "physical_integration": true,
+  "fingerprint": {
+    "kernel/build/storage_profile.dg": "c93003a549f5a6daa138f31b6672c5fc637b910d8bd83149c83844605d1b94d9",
+    "tools/kernel_storage_profile.py": "acca8eb73abc15e161549122eae7854d47205842bdf76bb724b39e9d12b2217a",
+    "tests/test_kernel_storage_profile.py": "dbe7555a048fad6e33444b6b1f6177e570341493a0efd904f5759e8124fc2bcd",
+    "docs/p2-kernel-storage-profile.md": "98e1c8f10ca19f3536759b4f031e1dee595fca0f9c1486380610e4b19f49c586",
+    "codex-works/deliveries/P2SIZE10.md": "d690a72161c9ffd992a7ddf228cd66babea49acc6406f3d3662277b55e4cc4aa"
+  },
+  "verification": "exact byte hashes match accepted formal inputs"
+}

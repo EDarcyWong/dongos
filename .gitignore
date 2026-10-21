@@ -13,3 +13,8 @@ coordination/.local/
 coordination/index.*.tmp
 coordination/*_works/.local/
 coordination/*_works/index.*.tmp
+# Local coordination test/runtime databases can also live in nested workspaces.
+coordination/**/.local/
+# This build directory is a checked source module, not generated output.
+!code/kernel/build/
+!code/kernel/build/*.dg

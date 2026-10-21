@@ -13,6 +13,11 @@ SOURCE=ROOT/'kernel/user/services.dg'
 def retirement_boundaries():
  # Only observation is modeled. The real catalog termination remains intact.
  return {
+  # These USB query fixtures have no DMA context. Its observation is tested by P5.
+  'usb_departed_dma': '''module usb_departed_dma;
+pub fn generation(id:usize)u64{return 1;}
+pub unsafe fn dma_stop(slot:usize,configuration:u64,owner:u64,incarnation:u64,root:u64,generation:u64,smp:u64,code:u64)void{return;}
+''',
   'usb_departed_smp': 'module usb_departed_smp;pub error Unmodeled=0x09000002;pub unsafe fn retire(id:usize)!void{return error.Unmodeled;}',
   'usb_departed_trace': '''module usb_departed_trace;import boot.trace as trace;
 pub var COUNT:u64=0;pub var SUBJECT:u64=0;pub var GENERATION:u64=0;pub var BAD:bool=false;
@@ -44,8 +49,8 @@ pub unsafe fn owner_gone(key:u64)!void{unsafe{if ud_window_boundary(3,key,0,0)!=
    'no-managed':('!managed(4)||','false||'),
    'early-clear':('if !GRAPHICS||CATALOG==null','USB_DEPARTED=0;if !GRAPHICS||CATALOG==null'),
    'no-coalesce':('incarnation>USB_DEPARTED','incarnation>0'),
-   'premature-record':('try procs.terminate(CATALOG,id,state,status);',
-     'if id==13&&cfg==13&&incarnation>USB_DEPARTED{USB_DEPARTED=incarnation;}\n    try procs.terminate(CATALOG,id,state,status);'),
+   'premature-record':('let terminated=procs.terminate(CATALOG,id,state,status);',
+     'if id==13&&cfg==13&&incarnation>USB_DEPARTED{USB_DEPARTED=incarnation;}\n    let terminated=procs.terminate(CATALOG,id,state,status);'),
   }
   out=ROOT/'build/test/p8-usb-departed'/('run-'+uuid.uuid4().hex[:12]);out.mkdir(parents=True);evidence=[]
   nasm,cc=tool('nasm','NASM'),tool('gcc','CC');self.assertTrue(nasm and cc)

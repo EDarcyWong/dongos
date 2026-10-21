@@ -69,6 +69,10 @@ def validate(value):
                 raise ValueError('整体任务图环节状态无效')
             for field in ('done', 'remaining', 'evidence'):
                 _texts(stage.get(field), 'stage.' + field)
+            if 'scope_notes' in stage:
+                _texts(stage['scope_notes'], 'stage.scope_notes')
+            if stage['status'] == 'complete' and stage['remaining']:
+                raise ValueError('已通过验收的节点不能包含本项待办；范围说明与后续阶段工作请放入scope_notes')
     return value
 
 

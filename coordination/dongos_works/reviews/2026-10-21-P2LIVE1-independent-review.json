@@ -1,0 +1,230 @@
+{
+  "task": "codex:P2LIVE1",
+  "date": "2026-10-21",
+  "verdict": "pass",
+  "recommendation": "accept and register local integration",
+  "blocking_findings": [],
+  "reviewer_started_vm": false,
+  "reviewer_changed_implementation_or_coordination_state": false,
+  "reviewed_declared_paths_sha256": {
+    "kernel/mm/active_paging.dg": "e64f134abaae22c02c6a0251a1f4a39e22569dccb09492eccac463011b111774",
+    "kernel/boot/large_memory.dg": "a6ad77b53f10bdb3b9593e5896f9d57862d41b3554be1b643d24759b1e5dbb55",
+    "kernel/memory_probe.dg": "8faec8f6b54dcb11e307544d6d7420aaceac04175949ca3c28c869e7e9e2e098",
+    "kernel/memory_mutation.asm": "e5a89555e736c55a1b7965a218ce1c94707977d7f4e57828cfc2291d9178964d",
+    "tests/active_large_probe.dg": "481ce1738c5604f7bb892413583d3c8ef82496b62aa838c52c591edd8c4bd1ed",
+    "tests/active_large_probe.c": "9e1adb17dec5e375d6be768742d874e77c2437ccfb495330c7034d68868a5dd7",
+    "tests/test_active_large.py": "000ad9f21245742407145c673d3aab97f29e989242637beb7e83b806606d2633",
+    "tests/active_paging_probe.c": "3d1058048b7b6c142382d7f876699068595e330ccbca0a8cae61d2c1e02f4948",
+    "tests/run_p2_active_large_qemu.py": "eb6159fe23e2dcb4ab3aed92daae92a90e77002cde3c6cf8f7950dca2dd554a1",
+    "tests/test_p2_active_large_qemu.py": "71f666d514717751749eebb0dff01d28dea0273f22b7d54f688446db3f26e17a",
+    "docs/p2-active-large.md": "83b0c7e159363c3ff0a98bcdc0031b79544369ace58f296757ee2ed55f553750",
+    "docs/p2-extensions.md": "4039ed140141234999e2bda24c49ad63d14e195918e5a03f1b27847281f24fb8",
+    "PLAN.md": "ade39007f26fd92f2beb18e63525a06e07da1bdd69baba9992f3d7375d57b1ea",
+    "codex-works/deliveries/P2LIVE1.md": "f1b7f083882a822baffb949a1ed0d06c4f3bdc92dd71fed1c3139271f237a9e1"
+  },
+  "formal_job": "a8778fe9dfae4df6842a1ce3cb5efe1e",
+  "formal_status_seen": "submitted",
+  "formal_rev_seen": 4,
+  "formal_checks": [
+    {
+      "spec": "module:tests.test_active_large",
+      "passed": true,
+      "tests": 1,
+      "skips": 0,
+      "returncode": 0,
+      "cancelled": false,
+      "timed_out": false,
+      "process_stopped": true,
+      "execution_exited": true,
+      "elapsed_seconds": 12.235
+    },
+    {
+      "spec": "module:tests.test_active_paging",
+      "passed": true,
+      "tests": 2,
+      "skips": 0,
+      "returncode": 0,
+      "cancelled": false,
+      "timed_out": false,
+      "process_stopped": true,
+      "execution_exited": true,
+      "elapsed_seconds": 16.063
+    },
+    {
+      "spec": "module:tests.test_p2_active_large_qemu",
+      "passed": true,
+      "tests": 9,
+      "skips": 0,
+      "returncode": 0,
+      "cancelled": false,
+      "timed_out": false,
+      "process_stopped": true,
+      "execution_exited": true,
+      "elapsed_seconds": 0.406
+    }
+  ],
+  "formal_source_stable": true,
+  "independent_host_tests": 12,
+  "independent_host_skips": 0,
+  "independent_host_elapsed_seconds": 26.532,
+  "native_execute_cases": [
+    {
+      "path": "D:\\projects\\2026\\dongos\\code\\build\\test\\active-large\\run-5a7e7d8d16ea\\lost-full-root-flush\\debug\\execute.json",
+      "returncode": 1,
+      "stdout": "",
+      "stderr": "active large check failed scenario=1 phase=full-root lifecycle line=113: callbacks==before+1"
+    },
+    {
+      "path": "D:\\projects\\2026\\dongos\\code\\build\\test\\active-large\\run-5a7e7d8d16ea\\lost-full-root-flush\\release\\execute.json",
+      "returncode": 1,
+      "stdout": "",
+      "stderr": "active large check failed scenario=1 phase=full-root lifecycle line=113: callbacks==before+1"
+    },
+    {
+      "path": "D:\\projects\\2026\\dongos\\code\\build\\test\\active-large\\run-5a7e7d8d16ea\\merge-early-reclaim\\debug\\execute.json",
+      "returncode": 1,
+      "stdout": "",
+      "stderr": "active large check failed scenario=1 phase=full-root lifecycle line=90: al_used(f->space.data)==expected.tables"
+    },
+    {
+      "path": "D:\\projects\\2026\\dongos\\code\\build\\test\\active-large\\run-5a7e7d8d16ea\\merge-early-reclaim\\release\\execute.json",
+      "returncode": 1,
+      "stdout": "",
+      "stderr": "active large check failed scenario=1 phase=full-root lifecycle line=90: al_used(f->space.data)==expected.tables"
+    },
+    {
+      "path": "D:\\projects\\2026\\dongos\\code\\build\\test\\active-large\\run-5a7e7d8d16ea\\production\\debug\\execute.json",
+      "returncode": 0,
+      "stdout": "active large native checks passed 2587089 scenarios=23 callbacks=26",
+      "stderr": ""
+    },
+    {
+      "path": "D:\\projects\\2026\\dongos\\code\\build\\test\\active-large\\run-5a7e7d8d16ea\\production\\release\\execute.json",
+      "returncode": 0,
+      "stdout": "active large native checks passed 2587089 scenarios=23 callbacks=26",
+      "stderr": ""
+    },
+    {
+      "path": "D:\\projects\\2026\\dongos\\code\\build\\test\\active-large\\run-5a7e7d8d16ea\\range-first-page-only\\debug\\execute.json",
+      "returncode": 1,
+      "stdout": "",
+      "stderr": "active large check failed scenario=2 phase=whole 512-page owned bounds line=90: !forbid_callback"
+    },
+    {
+      "path": "D:\\projects\\2026\\dongos\\code\\build\\test\\active-large\\run-5a7e7d8d16ea\\range-first-page-only\\release\\execute.json",
+      "returncode": 1,
+      "stdout": "",
+      "stderr": "active large check failed scenario=2 phase=whole 512-page owned bounds line=90: !forbid_callback"
+    }
+  ],
+  "evidence": {
+    "2026-10-21-P2LIVE1-independent-host-final.json": {
+      "path": "D:\\projects\\2026\\dongos\\coordination\\dongos_works\\reviews\\2026-10-21-P2LIVE1-independent-host-final.json",
+      "sha256": "4e99fd6fc705fcbdbb84a8b9f26ce2aedd020a97759364e1b44e9fb29aa9c672"
+    },
+    "2026-10-21-P2LIVE1-independent-guest.json": {
+      "path": "D:\\projects\\2026\\dongos\\coordination\\dongos_works\\reviews\\2026-10-21-P2LIVE1-independent-guest.json",
+      "sha256": "f9eb9c07cd22406a48c5698e540c7ecefab713f115ae55b62285ca1d99b88fc1"
+    },
+    "2026-10-21-P2LIVE1-independent-runtime7.json": {
+      "path": "D:\\projects\\2026\\dongos\\coordination\\dongos_works\\reviews\\2026-10-21-P2LIVE1-independent-runtime7.json",
+      "sha256": "08bf824e1bc2c8330b8c513ae0800127fcf9bfbcce6039ce83e0a0f4ebcde73e"
+    },
+    "2026-10-21-P2LIVE1-formal.json": {
+      "path": "D:\\projects\\2026\\dongos\\coordination\\dongos_works\\reviews\\2026-10-21-P2LIVE1-formal.json",
+      "sha256": "112e1d66caf75b78576e9909617aeba70431732b0ac894e3c9f5edfb26aca9bc"
+    },
+    "2026-10-21-P2LIVE1-independent-guest-original.json": {
+      "path": "D:\\projects\\2026\\dongos\\coordination\\dongos_works\\reviews\\2026-10-21-P2LIVE1-independent-guest-original.json",
+      "sha256": "d1120a2645d6500e4a6b153815ebf8b5bfff39aa7345cdfbcc50310a18092412"
+    }
+  },
+  "offline_replay_script": {
+    "path": "D:\\projects\\2026\\dongos\\code\\build\\p2live1_independent_review.py",
+    "sha256": "6a6e2cdff9706433262b6e43612feb2a34860ea7e14f71eaea75a6d006d60a75"
+  },
+  "source_files_current_match_normal_guests": 1299,
+  "actual_guest_cases": {
+    "a2": {
+      "result_path": "D:\\projects\\2026\\dongos\\coordination\\dongos_works\\.local\\p2live1-debaba97c9cd\\a2-source\\build\\test\\p2-active-large\\run-2122b0c5a9894ff18ce34cd4b1ce3ec3\\result.json",
+      "result_sha256": "10e4b7dffa3904d4f7b2f4b946ef66872d31667db6235b8a2c916e04eaa78101",
+      "passed": true,
+      "target_rejected": false
+    },
+    "b2": {
+      "result_path": "D:\\projects\\2026\\dongos\\coordination\\dongos_works\\.local\\p2live1-debaba97c9cd\\b2-source\\build\\test\\p2-active-large\\run-aefcb4bd99cb4dd29e3cec5b537a37eb\\result.json",
+      "result_sha256": "6b52952b970c0f10596035f17e843a2e199837dcc35794b6e12fbfaf0266cb5b",
+      "passed": true,
+      "target_rejected": false
+    },
+    "m2": {
+      "result_path": "D:\\projects\\2026\\dongos\\coordination\\dongos_works\\.local\\p2live1-debaba97c9cd\\m2-source\\build\\test\\p2-active-large\\run-3224eb1fa2524cc6ab2237b3c31de744\\result.json",
+      "result_sha256": "6d8c188c7576410d32241a74e099cbebf919f8921fd41f70ae3a8d81d9027f91",
+      "passed": false,
+      "target_rejected": true
+    }
+  },
+  "actual_raw_field_mutations_rejected": 78,
+  "rehashed_semantic_archive_mutations": [
+    {
+      "target": "raw-pool-user",
+      "path": "D:\\projects\\2026\\dongos\\code\\build\\test\\p2live1-independent-review\\run-a1b44b7c2728\\raw-pool-user\\result.json",
+      "mutated_file": "physical-0003.bin",
+      "byte_offset": 49152,
+      "unmodified_portable_clone_replayed": true,
+      "hashes_and_saved_pool_digest_refreshed": true,
+      "error": "P2 active large: final leaf outside exact physical/permission/cache allowlist"
+    },
+    {
+      "target": "raw-buddy-invalid-state",
+      "path": "D:\\projects\\2026\\dongos\\code\\build\\test\\p2live1-independent-review\\run-a1b44b7c2728\\raw-buddy-invalid-state\\result.json",
+      "mutated_file": "physical-0002.bin",
+      "byte_offset": 8344,
+      "unmodified_portable_clone_replayed": true,
+      "hashes_and_saved_pool_digest_refreshed": true,
+      "error": "P2 active large: invalid buddy metadata state"
+    }
+  ],
+  "runtime7_result_sha256": "a46a30005bff1d7b96d57a0bde9c5fe616a7757d39b40696c0af85a538d7fbdd",
+  "runtime7_full_build_seconds": 276.3900000000003,
+  "runtime7_kernel_image_bytes": 2096720,
+  "runtime7_kernel_image_headroom_bytes": 432,
+  "runtime7_actual_guest_seconds": 22.686999999999898,
+  "runtime7_p5_control_replay": true,
+  "p5_preserved_sha256": {
+    "tests/p5_recovery_context_guest.py": "ff14b043aea5e4f7fd0e72a8ee0fd465a8acb4351b6b189cfbd54dde3a97af75",
+    "tests/test_p5_recovery_context_guest.py": "81bdd8d2550cd7aa1e35fe388cda9a2e343bd99a38e6c82d105591a25958d97a",
+    "tests/run_virtio_reset_qemu.py": "46f6315cad0af1d1d331f21f98b4e596dd32767c5e25cdfe10a1542dd9321d59",
+    "tests/test_virtio_reset_guest.py": "a9916ad252147eb8ca728735bedf17f8a2741a64a58d9e5c35e2c0ae40abf89b",
+    "tests/p5_virtio_reset_fixture.py": "535e6b1fbe18507db4f09dc18a87e3b4b605396395b09bba3f29ad4998c898f1",
+    "docs/p5-recovery-context-guest.md": "e6c585d336cb7b27a4eb6ec26d8be5c34277585a2743e2781b8d7a807e56ff33",
+    "kernel/user/device_host.dg": "823fc27763560ff880dd26b9e4da236a92cf55174d3e4a86bf0b234592ba95ce",
+    "kernel/user/services.dg": "548c6dafa0f2e515bcefeba51ae28c754e68273c979275862c32b60b6a76fa65"
+  },
+  "head": "28fae186eade64aac9eec17fcc2fb30913b948f6",
+  "docs_and_delivery_reviewed_after_submit": true,
+  "coordinator_planner_paging_regression": {
+    "tests": 6,
+    "skips": 0,
+    "elapsed_seconds": 13.185,
+    "log": "D:\\projects\\2026\\dongos\\code\\build\\p2live-existing-regression.log",
+    "sha256": "0e429efc530d843e32fddc4ab2212cbeb6bde32ec69358ac6f19c41197229ece",
+    "reviewer_inspected_log": true
+  },
+  "closed_review_findings": [
+    "OOM fallback rereads actual allocator/table counts and catches only initial alloc(9).",
+    "Replay checks exact actual execution/CPU/cleanup facts and canonical build layout identity.",
+    "Raw final audit checks all leaves, zeroed free table slots, actual buddy free lists and retained pool/stack.",
+    "Runtime7 2MiB image overflow repaired and verified by full release build plus actual desktop/P5 control guest.",
+    "Raw assembly accepts legal end==4GiB and checks pool base before addition."
+  ],
+  "limitations": [
+    "BSP before AP startup, WB/NX transient lifecycle, final ordinary 4KiB tree restored.",
+    "No persistent or AP-online SMP large pages, dynamic EXEC/WC consumer, PCID or real-hardware performance claim.",
+    "Fragmented-firmware order9 OOM guest not executed; unsupported report rejected by host gate.",
+    "Buddy audit is free-list/lease/retained-resource proof, not a general allocated/reserved partition validator.",
+    "Release image has 432 bytes remaining in unchanged 2MiB load window.",
+    "Runtime7 P5 check was normal control only; fault/drain/DMA reuse were not reaccepted."
+  ],
+  "review_markdown_sha256": "ca2bede2e24cb4a63ce13616e14744e181e0a93e665de12c5122abdfe4e9f0b1"
+}

@@ -61,8 +61,12 @@ def main():
                 page=browser.new_page(viewport={'width':1440,'height':1080},device_scale_factor=1)
                 errors=[];page.on('pageerror',lambda error:errors.append(str(error)))
                 page.goto('http://127.0.0.1:'+str(server.server_port))
-                page.wait_for_selector('#task-rows tr')
+                page.wait_for_selector('#attention-list .attention-item')
                 assert page.locator('#task-rows tr').count()==12
+                assert page.locator('#member-cards .member-card').count()>=5
+                page.screenshot(path=str(output/'console-overview.png'),full_page=True)
+                page.locator('[data-page-link=tasks]').click()
+                assert page.evaluate("location.hash")=='#tasks'
                 assert not page.locator('#progress-board').is_visible()
                 assert page.locator('#owner-filter').is_visible()
                 page.screenshot(path=str(output/'console-desktop.png'),full_page=True)
@@ -125,9 +129,13 @@ def main():
                 page.screenshot(path=str(output/'console-mobile-detail.png'),full_page=True)
                 page.keyboard.press('Escape')
                 assert not page.locator('#detail-dialog').is_visible()
+                for name in ('overview','roadmap','runtime','activity'):
+                    page.evaluate("name=>{location.hash=name}",name)
+                    page.wait_for_function("name=>document.body.dataset.page===name",arg=name)
+                    assert page.evaluate('document.documentElement.scrollWidth<=innerWidth'), name
                 assert not errors, errors
                 browser.close()
-                print('PASS: create, public claim/release/reclaim, filters, empty state, view switching, project switching, desktop/mobile layout, dialog dismissal; no JS errors.')
+                print('PASS: overview, page routing, create, public claim/release/reclaim, filters, empty state, view switching, project switching, desktop/mobile layout, drawer dismissal; no JS errors.')
                 print('Screenshots:', output)
         finally:
             server.shutdown();server.server_close();thread.join(timeout=5)

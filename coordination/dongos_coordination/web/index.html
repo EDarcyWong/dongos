@@ -1,39 +1,104 @@
 <!doctype html>
 <html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>DongOS · 协作工作台</title><link rel="stylesheet" href="/style.css"><script src="/app.js" defer></script></head>
-<body data-view="list">
-<aside class="nav"><a class="brand" href="/">◈<span>DongOS</span></a><div class="nav-label">开发工作区</div><button class="nav-item selected" data-owner="">▦　任务总览</button><button class="nav-item" data-owner="unassigned">○　公共任务池</button><div class="nav-label">协作成员</div><button class="nav-item" data-owner="codex">◈　Codex</button><button class="nav-item" data-owner="cursor">↗　Cursor</button><button class="nav-item" data-owner="claude">✳　Claude</button><button class="nav-item" data-owner="deepseek">◇　DeepSeek</button><button class="nav-item" data-owner="lmstudio">◎　LM Studio</button><div class="nav-bottom"><span class="live-dot"></span> 本地工作区<br><small>仅 127.0.0.1 · 每 2 秒更新</small></div></aside>
+<body data-view="list" data-page="overview">
+<aside class="nav">
+<a class="brand" href="#overview">◈<span>DongOS</span></a>
+<div class="nav-project"><select id="project-select" aria-label="当前项目"></select><button id="new-project" class="nav-add" type="button" aria-label="新增项目" title="新增项目">＋</button><small id="project-location"></small></div>
+<nav class="nav-pages" aria-label="功能模块">
+<a class="nav-item" data-page-link="overview" href="#overview"><i aria-hidden="true">◫</i>概览<span class="nav-count" id="nav-count-overview" title="待处理任务"></span></a>
+<a class="nav-item" data-page-link="tasks" href="#tasks"><i aria-hidden="true">▦</i>任务<span class="nav-count" id="nav-count-tasks" title="未完成任务"></span></a>
+<a class="nav-item" data-page-link="roadmap" href="#roadmap"><i aria-hidden="true">⌁</i>整体任务图</a>
+<a class="nav-item" data-page-link="runtime" href="#runtime"><i aria-hidden="true">▷</i>执行与环境<span class="nav-count" id="nav-count-runtime" title="排队或运行中的作业"></span></a>
+<a class="nav-item" data-page-link="activity" href="#activity"><i aria-hidden="true">≡</i>动态</a>
+</nav>
+<div class="nav-label">协作成员</div>
+<div class="nav-members">
+<button class="nav-item member-item" type="button" data-owner="unassigned"><i aria-hidden="true">○</i>公共任务池<span class="nav-count" data-owner-count="unassigned"></span></button>
+<button class="nav-item member-item" type="button" data-owner="codex"><i aria-hidden="true">◈</i>Codex<span class="nav-count" data-owner-count="codex"></span></button>
+<button class="nav-item member-item" type="button" data-owner="cursor"><i aria-hidden="true">↗</i>Cursor<span class="nav-count" data-owner-count="cursor"></span></button>
+<button class="nav-item member-item" type="button" data-owner="claude"><i aria-hidden="true">✳</i>Claude<span class="nav-count" data-owner-count="claude"></span></button>
+<button class="nav-item member-item" type="button" data-owner="deepseek"><i aria-hidden="true">◇</i>DeepSeek<span class="nav-count" data-owner-count="deepseek"></span></button>
+<button class="nav-item member-item" type="button" data-owner="lmstudio"><i aria-hidden="true">◎</i>LM Studio<span class="nav-count" data-owner-count="lmstudio"></span></button>
+</div>
+<div class="nav-bottom"><span class="live-dot"></span>本地工作区<br><small>仅 127.0.0.1 · 每 2 秒更新 · 按 / 搜索</small></div>
+</aside>
 <main>
-<header><div class="header-main"><div class="eyebrow">WORKSPACE / COORDINATION</div><h1>协作工作台</h1><section class="project-bar"><label>当前项目 <select id="project-select" aria-label="当前项目"></select></label><span id="project-location" class="muted"></span><button id="new-project" class="button">＋ 新增项目</button></section></div><div class="header-actions"><span id="connection" role="status">正在连接…</span><button id="sync" class="button">同步任务书</button><button id="new-task" class="button primary">＋ 发布任务</button></div></header>
+<header class="page-header"><div><div class="eyebrow" id="page-eyebrow">WORKSPACE / COORDINATION</div><h1 id="page-title">概览</h1><p id="page-subtitle">任务进展、待处理事项和成员负载一览。</p></div><div class="header-actions"><span id="connection" role="status">正在连接…</span><button id="sync" class="button" type="button">同步任务书</button><button id="new-task" class="button primary" type="button">＋ 发布任务</button></div></header>
 <div id="notice" role="alert" hidden></div>
-<section class="stats" aria-label="任务概况（点击按状态筛选）"><button type="button" class="stat" data-quick="" aria-pressed="true"><span>全部任务</span><strong id="total">—</strong><small>已验收 <b id="accepted">—</b> · 已集成 <b id="integrated-count">—</b> · 暂停 <b id="paused-count">—</b></small></button><button type="button" class="stat todo" data-quick="todo" aria-pressed="false"><span>待领取</span><strong id="todo-count">—</strong><small>依赖满足即可领取</small></button><button type="button" class="stat in_progress" data-quick="in_progress" aria-pressed="false"><span>进行中</span><strong id="working">—</strong><small>包含手动领取</small></button><button type="button" class="stat submitted" data-quick="submitted" aria-pressed="false"><span>待复验</span><strong id="submitted">—</strong><small>等待独立检查</small></button><button type="button" class="stat rework" data-quick="rework" aria-pressed="false"><span>待返修</span><strong id="rework-count">—</strong><small>退回原负责人</small></button></section>
-<section id="task-progress" class="progress-panel" aria-label="任务进度图" aria-busy="true">
-<div class="section-head"><div><h2>任务工作区 <span class="tag">LIVE</span></h2><p id="progress-scope">正在加载任务…</p></div><div class="view-switch" role="group" aria-label="任务视图"><button id="view-list" type="button" aria-pressed="true">清单</button><button id="view-board" type="button" aria-pressed="false">看板</button></div></div>
-<div class="filters"><label class="search"><span>⌕</span><input id="search" placeholder="搜索任务名称或编号…" aria-label="搜索任务"></label><select id="owner-filter" aria-label="筛选负责人"><option value="">全部成员</option><option value="unassigned">未指定 · 公共任务</option><option value="codex">Codex</option><option value="cursor">Cursor</option><option value="claude">Claude</option><option value="deepseek">DeepSeek</option><option value="lmstudio">LM Studio</option></select><select id="status-filter" aria-label="筛选任务状态"><option value="">全部状态</option><option value="todo">待领取</option><option value="in_progress">进行中</option><option value="submitted">待复验</option><option value="rework">返修</option><option value="accepted">已验收</option><option value="integrated">已集成</option><option value="paused">暂停</option></select><button id="progress-reset" class="link">重置筛选</button></div>
-<div class="progress-overview"><strong id="progress-summary"></strong><span class="hint">按真实状态分组；数量占比不代表代码完成百分比。点击任务查看详情，依赖验收后可继续。</span></div>
+<section id="issues" class="issues" hidden><h2>索引校验 <span class="muted">状态、依赖或文件归属存在问题</span></h2><ul></ul></section>
+
+<section id="page-overview" class="page" aria-label="概览">
+<section class="stats" aria-label="任务概况">
+<button class="stat" type="button" data-jump=""><span>任务总数</span><strong id="total">—</strong><small id="total-note">统一索引</small></button>
+<button class="stat in_progress" type="button" data-jump="in_progress"><span>进行中</span><strong id="working">—</strong><small>包含手动领取的任务</small></button>
+<button class="stat submitted" type="button" data-jump="submitted"><span>待复验</span><strong id="submitted">—</strong><small>交付完成，等待独立检查</small></button>
+<button class="stat rework" type="button" data-jump="rework"><span>返修</span><strong id="rework">—</strong><small>审查后退回的任务</small></button>
+<button class="stat accepted" type="button" data-jump="accepted"><span>已验收（含集成）</span><strong id="accepted">—</strong><small id="accepted-note">独立验收与集成分别记录</small></button>
+</section>
+<div class="overall"><div id="overview-distribution" class="progress-distribution" role="img" aria-label="任务状态分布"></div><div id="overview-legend" class="distribution-legend"></div></div>
+<div class="overview-grid">
+<section class="card attention-card" aria-labelledby="attention-title"><div class="card-head"><h2 id="attention-title">待处理</h2><span class="muted">按需要的下一步操作分组</span></div><div id="attention-list" class="attention-list"></div></section>
+<div class="overview-side">
+<section class="card" aria-labelledby="members-title"><div class="card-head"><h2 id="members-title">成员负载</h2><span class="muted">点击查看该成员的未完成任务</span></div><div id="member-cards" class="member-cards"></div></section>
+<section class="card" aria-labelledby="overview-jobs-title"><div class="card-head"><h2 id="overview-jobs-title">执行作业</h2><a class="link" href="#runtime">全部作业 ›</a></div><div id="overview-jobs" class="mini-jobs"></div></section>
+<section class="card" aria-labelledby="overview-events-title"><div class="card-head"><h2 id="overview-events-title">最近动态</h2><a class="link" href="#activity">全部动态 ›</a></div><div id="overview-events" class="mini-events"></div></section>
+</div>
+<section class="card wide" aria-labelledby="overview-roadmap-title"><div class="card-head"><h2 id="overview-roadmap-title">阶段进度</h2><a class="link" href="#roadmap">整体任务图 ›</a></div><div id="overview-roadmap" class="mini-roadmap"></div></section>
+</div>
+</section>
+
+<section id="page-tasks" class="page" aria-label="任务">
+<section id="task-progress" class="progress-panel" aria-label="任务筛选与进度" aria-busy="true">
+<div class="toolbar"><label class="search"><span aria-hidden="true">⌕</span><input id="search" placeholder="搜索任务名称、编号或领取标识…  ( / )" aria-label="搜索任务"></label><select id="owner-filter" aria-label="筛选负责人"><option value="">全部成员</option><option value="unassigned">未指定 · 公共任务</option><option value="codex">Codex</option><option value="cursor">Cursor</option><option value="claude">Claude</option><option value="deepseek">DeepSeek</option><option value="lmstudio">LM Studio</option></select><select id="sort-order" aria-label="排序方式"><option value="status">按状态优先</option><option value="id">按编号</option><option value="updated">最近更新</option><option value="elapsed">本轮经过最长</option></select><div class="view-switch" role="group" aria-label="任务视图"><button id="view-list" type="button" aria-pressed="true">清单</button><button id="view-board" type="button" aria-pressed="false">看板</button></div></div>
+<div class="status-chips" role="group" aria-label="按状态筛选">
+<button type="button" data-quick="" aria-pressed="true" aria-label="全部任务">全部<span class="chip-count" data-count=""></span></button>
+<button type="button" data-quick="active" aria-pressed="false" aria-label="未完成">未完成<span class="chip-count" data-count="active"></span></button>
+<span class="chip-divider" aria-hidden="true"></span>
+<button type="button" class="todo" data-quick="todo" aria-pressed="false" aria-label="待领取">待领取<span class="chip-count" data-count="todo"></span></button>
+<button type="button" class="in_progress" data-quick="in_progress" aria-pressed="false" aria-label="进行中">进行中<span class="chip-count" data-count="in_progress"></span></button>
+<button type="button" class="submitted" data-quick="submitted" aria-pressed="false" aria-label="待复验">待复验<span class="chip-count" data-count="submitted"></span></button>
+<button type="button" class="rework" data-quick="rework" aria-pressed="false" aria-label="返修">返修<span class="chip-count" data-count="rework"></span></button>
+<button type="button" class="paused" data-quick="paused" aria-pressed="false" aria-label="暂停">暂停<span class="chip-count" data-count="paused"></span></button>
+<button type="button" class="accepted" data-quick="accepted" aria-pressed="false" aria-label="已验收">已验收<span class="chip-count" data-count="accepted"></span></button>
+<button type="button" class="integrated" data-quick="integrated" aria-pressed="false" aria-label="已集成">已集成<span class="chip-count" data-count="integrated"></span></button>
+<button id="progress-reset" type="button" class="link">重置筛选</button>
+</div>
+<div class="progress-overview"><span id="progress-scope">正在加载任务…</span><strong id="progress-summary"></strong></div>
 <div id="progress-distribution" class="progress-distribution" role="img" aria-label="等待任务状态"></div>
-<div id="progress-legend" class="progress-legend" aria-label="按进度筛选"></div>
 <div id="progress-board" class="progress-board" aria-label="任务状态看板"></div>
 </section>
-<section class="workspace"><div class="task-area"><div class="section-head"><h2>任务清单 <span id="task-count" class="muted"></span></h2></div><div class="table-wrap"><table><thead><tr><th>任务</th><th>状态</th><th>领取成员</th><th>本轮经过</th><th><span class="sr-only">查看详情</span></th></tr></thead><tbody id="task-rows"></tbody></table></div><div id="empty" hidden>没有符合条件的任务。试试清除筛选，或发布新任务。</div><div class="list-pagination"><span id="list-range"></span><div><button id="page-prev" class="button" aria-label="上一页">上一页</button><button id="page-next" class="button" aria-label="下一页">下一页</button></div></div></div>
+<section class="workspace"><div class="task-area"><div class="table-wrap"><table><thead><tr><th>任务</th><th>状态</th><th>负责人</th><th>本轮经过</th><th>最近更新</th><th><span class="sr-only">查看详情</span></th></tr></thead><tbody id="task-rows"></tbody></table></div><div id="empty" hidden>没有符合条件的任务。试试清除筛选，或发布新任务。</div><div class="list-pagination"><span id="list-range"></span><div><label class="page-size">每页<select id="page-size" aria-label="每页任务数"><option value="20">20</option><option value="50">50</option><option value="100">100</option></select></label><button id="page-prev" class="button" type="button" aria-label="上一页">上一页</button><button id="page-next" class="button" type="button" aria-label="下一页">下一页</button></div></div></div></section>
 </section>
-<details class="workspace-tools"><summary>整体任务图 <span>查看项目阶段、验收依据与剩余工作</span></summary><section id="project-roadmap" class="roadmap-panel" aria-label="整体任务图" aria-busy="true">
-<div class="section-head"><div><div class="eyebrow">PROJECT ROADMAP</div><h2 id="roadmap-title">整体任务图</h2><p id="roadmap-meta">正在加载当前项目…</p></div><button id="roadmap-download" class="button" disabled>下载任务图</button></div>
+
+<section id="page-roadmap" class="page" aria-label="整体任务图">
+<section id="project-roadmap" class="roadmap-panel" aria-label="整体任务图" aria-busy="true">
+<div class="section-head"><div><div class="eyebrow">PROJECT ROADMAP</div><h2 id="roadmap-title">整体任务图</h2><p id="roadmap-meta">正在加载当前项目…</p></div><button id="roadmap-download" class="button" type="button" disabled>下载任务图</button></div>
 <p id="roadmap-summary" class="roadmap-summary"></p><p id="roadmap-focus" class="roadmap-focus"></p>
 <div class="roadmap-legend" aria-label="阶段状态说明"><span class="roadmap-status complete">✓ 已通过验收</span><span class="roadmap-status partial">◐ 部分完成</span><span class="roadmap-status pending">○ 尚未完成</span><span class="hint">阶段结论按记录日期核对；点击阶段查看完成项与剩余项。</span></div>
 <div id="roadmap-tracks" class="roadmap-tracks"></div>
 <section id="roadmap-detail" class="roadmap-detail" aria-label="阶段详情" aria-live="polite" hidden></section>
 <details id="roadmap-notes" class="roadmap-notes"></details>
-<div class="roadmap-live"><strong id="roadmap-task-summary"></strong><span class="hint">当前项目全部负责人 · 任务状态实时更新，与下方筛选无关；任务数量不代表系统完成百分比。</span></div>
+<div class="roadmap-live"><strong id="roadmap-task-summary"></strong><span class="hint">当前项目全部负责人 · 任务状态实时更新，与任务筛选无关；任务数量不代表系统完成百分比。</span></div>
 </section>
-</details>
-<details class="workspace-tools"><summary>执行环境与自动化 <span>CLI 接入、接口文档和自动派单设置</span></summary><div class="tools-links"><a class="link" href="/api/export" target="_blank" rel="noopener">导出索引 ↗</a><a class="link" href="/api/mcp/guide" target="_blank" rel="noopener">MCP 客户端 ↗</a><a class="link" href="/api/ai/guide" target="_blank" rel="noopener">AI 接口文档 ↗</a></div><section class="section-head"><h2>执行环境</h2><button class="link" id="doctor">重新检测 CLI ↻</button></section><section id="providers" class="providers"></section>
-<section class="automation"><div><strong>自动派单与复验</strong><p>只处理单项任务中明确开启的自动操作；不会自动验收、集成或重复启动已关闭任务。</p></div><label class="switch"><input type="checkbox" id="automation"><span></span><b id="automation-label">已关闭</b></label></section>
-</details>
-<details class="workspace-tools jobs-tools"><summary>执行队列 <i id="jobs-active" class="jobs-active" hidden></i><span id="jobs-summary">日志持续更新 · 运行成功后仍需验收</span></summary><section id="jobs" class="jobs"></section></details><details class="workspace-tools"><summary>最近动态 <span>保留所有任务操作记录</span></summary><div id="events" class="event-list"></div></details>
-<section id="issues" class="issues" hidden><h2>索引校验</h2><ul></ul></section>
+</section>
+
+<section id="page-runtime" class="page" aria-label="执行与环境">
+<div class="runtime-grid">
+<section class="card"><div class="card-head"><h2>执行环境</h2><button class="link" id="doctor" type="button">重新检测 CLI ↻</button></div><div id="providers" class="providers"></div></section>
+<section class="card"><div class="card-head"><h2>自动化与接口</h2></div>
+<div class="automation"><div><strong>自动派单与复验</strong><p>只处理单项任务中明确开启的自动操作；不会自动验收、集成或重复启动已关闭任务。</p></div><label class="switch"><input type="checkbox" id="automation"><span></span><b id="automation-label">已关闭</b></label></div>
+<div class="tools-links"><a class="link" id="export-link" href="/api/export" target="_blank" rel="noopener">导出索引 ↓</a><a class="link" href="/api/mcp/guide" target="_blank" rel="noopener">MCP 客户端 ↗</a><a class="link" href="/api/ai/guide" target="_blank" rel="noopener">AI 接口文档 ↗</a></div></section>
+</div>
+<section class="card"><div class="card-head"><h2>执行队列 <i id="jobs-active" class="jobs-active" aria-hidden="true" hidden></i><span id="job-count" class="muted"></span></h2><div class="segmented" role="group" aria-label="筛选作业"><button type="button" data-job-filter="" aria-pressed="true">全部</button><button type="button" data-job-filter="active" aria-pressed="false">排队/运行</button><button type="button" data-job-filter="failed" aria-pressed="false">失败/中断</button></div></div><p id="jobs-summary" class="hint" role="status">正在加载执行队列…</p><p class="hint">日志持续更新 · 运行成功后仍需验收。</p><div id="jobs" class="jobs"></div></section>
+</section>
+
+<section id="page-activity" class="page" aria-label="动态">
+<section class="card"><div class="card-head"><h2>操作记录 <span id="event-count" class="muted"></span></h2><label class="search compact"><span aria-hidden="true">⌕</span><input id="event-search" placeholder="按任务编号或操作筛选…" aria-label="筛选动态"></label></div><div id="events" class="event-list"></div></section>
+</section>
+
 <footer>统一状态存储于本机 SQLite；任务书、交付和审查历史保留。每个项目的任务、测试、交付、状态库与日志集中于各自的项目任务目录。执行副本不会自动覆盖源码。</footer>
 </main>
 <dialog id="create-dialog"><form id="create-form"><div class="dialog-head"><div><div class="eyebrow">NEW TASK</div><h2>发布任务</h2></div><button type="button" class="icon-button" id="close-create" aria-label="关闭">×</button></div><div class="form-grid"><label>负责人（可选）<select name="owner"><option value="">不指定 · 所有成员可领取</option><option value="cursor">Cursor</option><option value="claude">Claude</option><option value="codex">Codex</option><option value="deepseek">DeepSeek（手动领取）</option><option value="lmstudio">LM Studio（仅简单任务）</option></select></label><label>任务编号<input name="id" required pattern="[A-Z][A-Z0-9_-]{0,39}" maxlength="40"></label></div><label>任务标题<input name="title" required maxlength="180" placeholder="一个独立、可验证的工作目标"></label><label>执行指令<textarea name="description" required rows="5" placeholder="写明目标、接口、限制和完成条件。助手会连同任务书收到这些指令。"></textarea></label><label>允许修改的路径<span class="hint">每行一项，路径映射到项目任务目录。公共任务使用 pool-works/；定向任务使用对应成员 works/。领取后路径保持不变。LM Studio 含交付最多3个明确文件，只做单函数、文档或小fixture；测试由Codex编写。</span><textarea name="write_paths" required rows="3" placeholder="cursor-works/src/bootstrap/example.dg&#10;cursor-works/tests/test_example.py"></textarea></label><label>定向测试<span class="hint">每行一项：module:lang.tests.test_example 或 discover:cursor-works/tests:test_example.py</span><textarea name="checks" rows="2"></textarea></label><label>依赖任务<span class="hint">填写完整编号，以逗号分隔，例如 claude:C6；没有依赖可留空。</span><input name="depends_on"></label><p id="assignment-hint" class="hint">不指定负责人时进入公共任务池；成员领取后才会显示负责人。</p><label class="check-label"><input type="checkbox" name="dispatch">发布后立即排队执行（需要可用的执行接口）</label><div class="dialog-actions"><span id="create-error" role="alert"></span><button class="button primary" type="submit">发布任务</button></div></form></dialog>
-<dialog id="detail-dialog" class="detail-dialog"><div class="dialog-head"><div><div id="detail-id" class="eyebrow"></div><h2 id="detail-title"></h2></div><button class="icon-button" id="close-detail" aria-label="关闭">×</button></div><div id="detail-body"></div></dialog>
-<dialog id="text-dialog" class="text-dialog"><div class="dialog-head"><h2 id="text-title"></h2><button class="icon-button" id="close-text" aria-label="关闭">×</button></div><pre id="text-content"></pre></dialog>
+<dialog id="detail-dialog" class="drawer" aria-labelledby="detail-title"><div class="drawer-head"><div class="drawer-heading"><div id="detail-id" class="eyebrow"></div><h2 id="detail-title"></h2></div><div class="drawer-nav"><button class="icon-button" id="detail-prev" type="button" aria-label="上一个任务" title="上一个任务">‹</button><button class="icon-button" id="detail-next" type="button" aria-label="下一个任务" title="下一个任务">›</button><button class="icon-button" id="close-detail" type="button" aria-label="关闭">×</button></div></div><div id="detail-body" class="drawer-body"></div></dialog>
+<dialog id="text-dialog" class="text-dialog"><div class="dialog-head"><h2 id="text-title"></h2><button class="icon-button" id="close-text" type="button" aria-label="关闭">×</button></div><pre id="text-content"></pre></dialog>
 <dialog id="project-dialog"><form id="project-form"><div class="dialog-head"><h2>新增项目</h2><button type="button" id="close-project" class="icon-button" aria-label="关闭">×</button></div><label>项目名称<input name="name" required maxlength="80" placeholder="例如 My App"></label><label>项目编号<input name="id" required pattern="[a-z][a-z0-9_-]{0,39}" maxlength="40" placeholder="例如 my-app"></label><label>源码目录<input name="source_root" required placeholder="现有项目目录的绝对路径"></label><p class="hint">任务书、任务测试、交付、审查和运行记录会集中保存于 coordination/项目编号_works/。不会搬动或覆盖新增项目的源码。</p><div class="dialog-actions"><span id="project-error" role="alert"></span><button type="submit" class="button primary">添加项目</button></div></form></dialog></body></html>

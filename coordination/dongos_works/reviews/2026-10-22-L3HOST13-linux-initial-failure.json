@@ -1,0 +1,9 @@
+{
+  "accepted": false,
+  "method": "isolated WSL ext4 userspace, no production mutation",
+  "failure": "all initial Dong driver invocations SIGSEGV in musl loader do_relocs before main; not semantic negative controls",
+  "diagnosis": "GCC Alpine default PIE with absolute read-only relocations from the non-PIC Dong seed object; fixed-address native mapper remains separate",
+  "debug": "same real Dong object and source, relinked driver with -no-pie returns0 and emits checked program JSON; no target source or instruction patch",
+  "scope": "host bridge candidate only; add -no-pie to POSIX wrapper/observer link, Windows flags unchanged",
+  "full_linux_pass": false
+}

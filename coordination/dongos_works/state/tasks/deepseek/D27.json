@@ -26,14 +26,15 @@
   "document": "deepseek-works/tasks/D27-board.md",
   "historical": false,
   "id": "deepseek:D27",
+  "integration_note": "2026-10-20按实际代码补登记主线集成。已独立核对原任务/既有源码契约审查及正式复验：3tests/0skip、source_stable=true；当前四交付仍逐字节匹配验收指纹。生产已真实复制到code/lang/bootstrap/nasm_indexed_memory_function.dg（478b1ed），与验收生产字节一致或仅LF/CRLF；说明及永久测试主线路径适配已审查，保留原语义/别名/原子性/真实坏Dong与完整ABI观察。CR40额外边界增强已核对，未改生产。本机NASM3分组探测维护后，9组件主线对应34项实际已全过0skip；A批20项775.031s且前后SHA稳定，B批本任务已通过，总manifest本轮保存。证据reviews/2026-10-20-mainline-registration-evidence.json与code/build/test/mainline-reconcile-*。本次仅登记既有已验收组件的实际文件集成，不宣称L3/G5/G6完成。",
   "legacy_hash": "9f888f9445b63501c20840eb8d57b8c503cf5beb7e0ff1e75907dde476477956",
   "number": "D27",
   "owner": "deepseek",
-  "rev": 5,
+  "rev": 6,
   "review_note": "已实际审查D27完整任务书、四交付、源码/说明/永久测试，未发现阻塞问题。written/名字/out完整描述符、端点、全尾部别名与名长/枚举组合/NONE均先验；真实CR20 unsigned门禁严格先于base槽读取/C30地址/目标访问。7合法LOAD与4STORE、STORE低位规范化不重读、C42 kind11 RAX/RDX Pair及OOB{0,1}符合契约。逐段1297上界<1536 scratch成立，依赖和容量判断全部完成后最终发布。正式独立作业5830ef22792f4e57ab60d920f30bb0ec：3 tests/0 skip/returncode0/160.703秒/source_stable=true；debug/release、ELF64/COFF、Windows显式SysV原生调用通过。21主要向量、86文本/容量/非法/只读case与31独立预检有效，NULL base/len0好体正常返回，坏门禁只施加于非NULL物理安全缓冲。额外只读审查核对20输入/依赖、407产物SHA及60组原生Pair/完整320字节内存/全部callee-saved/RSP/canary/对齐；错误scale的LOAD Pair确实错误，STORE Pair正确但精确内存错位，错误门禁LOAD/STORE访问预留隐藏元素后正常返回且状态被检出，提前发布由失败原子性拒绝，各模式同输入好侧先执行。当前四交付仍匹配正式指纹，全部10直接依赖integrated。证据reviews/2026-10-19-D27-evidence.json；审查reviews/2026-10-19-D27-reviewed.md。登记受限组件验收，本轮未集成主线，不代表通用数组/切片IR或L3完成。",
-  "status": "accepted",
+  "status": "integrated",
   "title": "[L3] 接续CR37：有界索引装入与存储的完整SysV函数接线",
-  "updated_at": "2026-10-19T15:39:23+00:00",
+  "updated_at": "2026-10-20T13:12:23+00:00",
   "verification": {
     "checks": [
       {

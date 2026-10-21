@@ -1,0 +1,311 @@
+{
+  "project": "dongos",
+  "task": {
+    "id": "codex:P2OOM4",
+    "number": "P2OOM4",
+    "owner": "codex",
+    "title": "[P2] 真实碎片化order9 OOM拒绝、无发布证明与文档校准",
+    "description": "接续P2SMP3 integrated rev6，用户继续推进P2且不建PR。Claude P2EXEC1在途、P2WC1待领取，均不抢占。只修改声明7文件；生产kernel/既有P2SMP3指纹保持。新fixture只在协调者生成独立副本中向kernel/smp/large_memory.dg注入真实buddy操作：先占第二个order9块，持有第一半所有剩余368个order0页，归还order9，取其中一个order0页作为hole，再归还此前368页。形成实际free879>512但无order9的碎片状态，之后原生产buddy.alloc9必须真实返回OutOfMemory，未绑定/映射/失效/回收，也不改动原共享owner。不是mock返回OOM，不写 guest memory/register，不修改原目录kernel。fixture源码与生产树差异严格唯一目标文件、明确源码身份。正常baseline不变及2MiB加载ABI保持。宿主用相同Dong片段及真正buddy执行验证对照独立C原始metadata/free-list oracle，正确连贯基线分配成功，hole好体碎片OOM且分配失败前后完整账本不变；真实坏体归还hole或错误归还块由精确分配/状态断言拒绝，均正常构建执行。actual release runtime7 1/4CPU故障客体精确serial OOM和phase0/held0/complete0，实际allocator metadata/free heads、Space/table_meta/完整rootpool、Domain/owner为空/无window leaf及寄存器终止点通过只读QMP归档与离线复算；原有AP前proof报告/316构建身份绑定明确，不能以编译失败/超时/通用panic算预期OOM。正常最终P2SMP3主线/已有原始客体证据仍独立复算，不重建已验收planner或AP事务。实际碎片由独立fixture构造，不宣称覆盖全部真实固件碎片拓扑，TCG不能证明WC硬件性能。文档修正已完成共享根/封存持有与新90544B余量，旧结果按历史保留；P2 EXEC/WC与任意调度后多CR3仍待原负责人和正常消费者验收。交付后独立raw/C oracle审查+正式隔离定向复验0skip/source_stable，再accept与实际本地integrate分开登记。无提交/推送/PR、不启动AI CLI；只有根协调者执行明确授权的可丢弃QEMU验证。",
+    "assignment_owner": "codex",
+    "status": "submitted",
+    "rev": 7,
+    "write_paths": [
+      "tests/p2_fragmented_fixture.py",
+      "tests/run_p2_fragmented_qemu.py",
+      "tests/test_p2_fragmented_fixture.py",
+      "docs/p2-fragmented-large.md",
+      "docs/p2-extensions.md",
+      "docs/remaining-plan.md",
+      "codex-works/deliveries/P2OOM4.md"
+    ],
+    "depends_on": [
+      "codex:P2SMP3"
+    ],
+    "checks": [
+      "module:tests.test_p2_fragmented_fixture"
+    ],
+    "auto_dispatch": false,
+    "auto_verify": false,
+    "complexity": "standard",
+    "created_at": "2026-10-21T14:40:21+00:00",
+    "updated_at": "2026-10-21T15:05:22+00:00",
+    "historical": false,
+    "document": "codex-works/tasks/P2OOM4-board.md",
+    "delivery": "codex-works/deliveries/P2OOM4.md",
+    "claimed_at": "2026-10-21T15:04:42+00:00",
+    "completed_at": "2026-10-21T15:04:54+00:00",
+    "claimed_by": "codex-mcp-6fe7be60df984d37",
+    "candidate": null,
+    "verification": {
+      "passed": true,
+      "checks": [
+        {
+          "spec": "module:tests.test_p2_fragmented_fixture",
+          "passed": true,
+          "tests": 3,
+          "skips": 0,
+          "returncode": 0,
+          "cancelled": false,
+          "timed_out": false,
+          "process_stopped": true,
+          "execution_exited": true,
+          "elapsed_seconds": 6.812
+        }
+      ],
+      "process_stopped": true,
+      "execution_exited": true,
+      "source_stable": true,
+      "fingerprint": {
+        "tests/p2_fragmented_fixture.py": "76449adae26e3badab5e8e82f02b873c89d881dee96352cef01ef81a206aff07",
+        "tests/run_p2_fragmented_qemu.py": "ba20248f8997b6b0477d636d1e4f9d14bc4524f9b870a399aa281cb2495be294",
+        "tests/test_p2_fragmented_fixture.py": "420249bb2879f9b703a8636c1c1e4f759b8e3165ba3c46668cfb66107f17b59d",
+        "docs/p2-fragmented-large.md": "9511e81b8435d1845106634e7065f630989ea468be74b26d3f9eeb9b1ab7a24d",
+        "docs/p2-extensions.md": "2d44b2d474fab6945411cbeebdb56687877134e5bac2dd8d1320c2d2c32b66bc",
+        "docs/remaining-plan.md": "b23e07a41c0a5bac0c809b8f9fd53c5a184353f11998bdf1b8ed7e658f0977f5",
+        "codex-works/deliveries/P2OOM4.md": "368e53a88c9d896b16a922fca98803a40ab9765c5ebbfabc1a7e583581d94be5"
+      },
+      "summary": "定向复验通过，等待源码/契约审查",
+      "finished_at": "2026-10-21T15:05:22+00:00",
+      "job": "6220f8d4b029422b853165edbb78e929"
+    },
+    "review_note": "",
+    "legacy_hash": "4b611f9d9f9c741fdd6f63f1247543dfbc6200a500c19dde931fb47774d66610",
+    "claim_from_status": "rework",
+    "claim_token": "cad4100ab82c4f78ad3a731ce862b8d3",
+    "timing": {
+      "as_of": "2026-10-21T15:05:40+00:00",
+      "published_at": "2026-10-21T14:40:21+00:00",
+      "first_claimed_at": "2026-10-21T14:40:25+00:00",
+      "last_submitted_at": "2026-10-21T15:04:54+00:00",
+      "last_verified_at": "2026-10-21T15:05:22+00:00",
+      "last_modified_at": null,
+      "rounds": [
+        {
+          "number": 1,
+          "kind": "initial",
+          "owner": "codex",
+          "claimed_by": "codex-mcp-6fe7be60df984d37",
+          "requested_at": null,
+          "claimed_at": "2026-10-21T14:40:25+00:00",
+          "submitted_at": "2026-10-21T15:03:45+00:00",
+          "ended_at": "2026-10-21T15:03:45+00:00",
+          "end_reason": "submit",
+          "paused_seconds": 0,
+          "waiting_seconds": 4,
+          "elapsed_seconds": 1400,
+          "active_seconds": 1400,
+          "ongoing": false
+        },
+        {
+          "number": 2,
+          "kind": "rework",
+          "owner": "codex",
+          "claimed_by": "codex-mcp-6fe7be60df984d37",
+          "requested_at": "2026-10-21T15:04:10+00:00",
+          "claimed_at": "2026-10-21T15:04:42+00:00",
+          "submitted_at": "2026-10-21T15:04:54+00:00",
+          "ended_at": "2026-10-21T15:04:54+00:00",
+          "end_reason": "submit",
+          "paused_seconds": 0,
+          "waiting_seconds": 32,
+          "elapsed_seconds": 12,
+          "active_seconds": 12,
+          "ongoing": false
+        }
+      ],
+      "timeline": [
+        {
+          "seq": 1195,
+          "at": "2026-10-21T14:40:21+00:00",
+          "task_id": "codex:P2OOM4",
+          "kind": "created",
+          "data": {
+            "rev": 1,
+            "status": "todo"
+          }
+        },
+        {
+          "seq": 1196,
+          "at": "2026-10-21T14:40:25+00:00",
+          "task_id": "codex:P2OOM4",
+          "kind": "claim",
+          "data": {
+            "rev": 2,
+            "status": "in_progress",
+            "owner": "codex",
+            "claimed_by": "codex-mcp-6fe7be60df984d37",
+            "claimed_at": "2026-10-21T14:40:25+00:00",
+            "completed_at": null,
+            "resume_status": null
+          }
+        },
+        {
+          "seq": 1206,
+          "at": "2026-10-21T15:03:45+00:00",
+          "task_id": "codex:P2OOM4",
+          "kind": "submit",
+          "data": {
+            "rev": 3,
+            "status": "submitted",
+            "owner": "codex",
+            "claimed_by": "codex-mcp-6fe7be60df984d37",
+            "claimed_at": "2026-10-21T14:40:25+00:00",
+            "completed_at": "2026-10-21T15:03:45+00:00",
+            "resume_status": null
+          }
+        },
+        {
+          "seq": 1207,
+          "at": "2026-10-21T15:04:00+00:00",
+          "task_id": "codex:P2OOM4",
+          "kind": "queued",
+          "data": {
+            "job": "88526259e78f4423826828c282d07722",
+            "kind": "verify",
+            "provider": "python"
+          }
+        },
+        {
+          "seq": 1208,
+          "at": "2026-10-21T15:04:00+00:00",
+          "task_id": "codex:P2OOM4",
+          "kind": "verification_started",
+          "data": {
+            "job": "88526259e78f4423826828c282d07722"
+          }
+        },
+        {
+          "seq": 1209,
+          "at": "2026-10-21T15:04:10+00:00",
+          "task_id": "codex:P2OOM4",
+          "kind": "verified",
+          "data": {
+            "rev": 4,
+            "status": "rework"
+          }
+        },
+        {
+          "seq": 1210,
+          "at": "2026-10-21T15:04:10+00:00",
+          "task_id": "codex:P2OOM4",
+          "kind": "job_finished",
+          "data": {
+            "job": "88526259e78f4423826828c282d07722",
+            "status": "failed"
+          }
+        },
+        {
+          "seq": 1211,
+          "at": "2026-10-21T15:04:42+00:00",
+          "task_id": "codex:P2OOM4",
+          "kind": "claim",
+          "data": {
+            "rev": 5,
+            "status": "in_progress",
+            "owner": "codex",
+            "claimed_by": "codex-mcp-6fe7be60df984d37",
+            "claimed_at": "2026-10-21T15:04:42+00:00",
+            "completed_at": null,
+            "resume_status": null
+          }
+        },
+        {
+          "seq": 1212,
+          "at": "2026-10-21T15:04:54+00:00",
+          "task_id": "codex:P2OOM4",
+          "kind": "submit",
+          "data": {
+            "rev": 6,
+            "status": "submitted",
+            "owner": "codex",
+            "claimed_by": "codex-mcp-6fe7be60df984d37",
+            "claimed_at": "2026-10-21T15:04:42+00:00",
+            "completed_at": "2026-10-21T15:04:54+00:00",
+            "resume_status": null
+          }
+        },
+        {
+          "seq": 1214,
+          "at": "2026-10-21T15:05:01+00:00",
+          "task_id": "codex:P2OOM4",
+          "kind": "queued",
+          "data": {
+            "job": "6220f8d4b029422b853165edbb78e929",
+            "kind": "verify",
+            "provider": "python"
+          }
+        },
+        {
+          "seq": 1215,
+          "at": "2026-10-21T15:05:04+00:00",
+          "task_id": "codex:P2OOM4",
+          "kind": "verification_started",
+          "data": {
+            "job": "6220f8d4b029422b853165edbb78e929"
+          }
+        },
+        {
+          "seq": 1216,
+          "at": "2026-10-21T15:05:22+00:00",
+          "task_id": "codex:P2OOM4",
+          "kind": "verified",
+          "data": {
+            "rev": 7,
+            "status": "submitted"
+          }
+        },
+        {
+          "seq": 1217,
+          "at": "2026-10-21T15:05:22+00:00",
+          "task_id": "codex:P2OOM4",
+          "kind": "job_finished",
+          "data": {
+            "job": "6220f8d4b029422b853165edbb78e929",
+            "status": "completed"
+          }
+        }
+      ],
+      "last_rework_requested_at": "2026-10-21T15:04:10+00:00",
+      "duration_basis": "经过时长为领取至执行完成（提交）的自然时间；办理时长另扣除明确暂停，不代表实际编辑净耗时",
+      "total_active_seconds": 1412,
+      "rework_active_seconds": 12,
+      "latest_round": {
+        "number": 2,
+        "kind": "rework",
+        "owner": "codex",
+        "claimed_by": "codex-mcp-6fe7be60df984d37",
+        "requested_at": "2026-10-21T15:04:10+00:00",
+        "claimed_at": "2026-10-21T15:04:42+00:00",
+        "submitted_at": "2026-10-21T15:04:54+00:00",
+        "ended_at": "2026-10-21T15:04:54+00:00",
+        "end_reason": "submit",
+        "paused_seconds": 0,
+        "waiting_seconds": 32,
+        "elapsed_seconds": 12,
+        "active_seconds": 12,
+        "ongoing": false
+      },
+      "history_incomplete": false,
+      "verifications": [
+        {
+          "id": "88526259e78f4423826828c282d07722",
+          "status": "failed",
+          "queued_at": "2026-10-21T15:04:00+00:00",
+          "started_at": "2026-10-21T15:04:00+00:00",
+          "finished_at": "2026-10-21T15:04:10+00:00",
+          "elapsed_seconds": 10,
+          "check_seconds": null
+        },
+        {
+          "id": "6220f8d4b029422b853165edbb78e929",
+          "status": "completed",
+          "queued_at": "2026-10-21T15:05:01+00:00",
+          "started_at": "2026-10-21T15:05:04+00:00",
+          "finished_at": "2026-10-21T15:05:22+00:00",
+          "elapsed_seconds": 18,
+          "check_seconds": 6.812
+        }
+      ]
+    }
+  }
+}

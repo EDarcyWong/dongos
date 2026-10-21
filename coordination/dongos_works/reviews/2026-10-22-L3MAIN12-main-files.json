@@ -1,0 +1,10 @@
+{
+  "physical_main_integration": true,
+  "fingerprint": {
+    "tools/g5_differential.py": "db5b2b5e134ca0bf351f112a73faf91f4135faf9278458307b54fbddde8bb6f7",
+    "lang/tests/test_g5_runner_entry.py": "75b649ee9eba85c2f53404084cea70dd04ca18eb071aee8b2d70714487bd4a39",
+    "docs/g5-differential.md": "ff728057fc045dc02b7f8618fcc527bbf477d01c1f27fba1edb76889c88bdd53",
+    "codex-works/deliveries/L3MAIN12.md": "612170834ef96b23bbe4d87a9de4206642487dd7c26a90017aa231b368eeee80"
+  },
+  "accepted_candidate_byte_identical": true
+}

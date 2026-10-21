@@ -16,11 +16,11 @@
   ],
   "historical": true,
   "id": "deepseek:D9",
-  "legacy_hash": "3a5fdefd7d1496bd8ec00bbc6f8a72e83073ddc2b5cfc645ab7cdc6a6b4dde15",
+  "legacy_hash": "137aae8d2ec988de4ddd58e8accafcff3ce8b0b153196edc144faffe028d43ba",
   "legacy_schema": 2,
   "number": "D9",
   "owner": "deepseek",
-  "rev": 7,
+  "rev": 6,
   "review_note": "",
   "state_reconciliation": {
     "at": "2026-10-19T11:42:09+00:00",
@@ -43,7 +43,7 @@
   },
   "status": "accepted",
   "title": "内存区间归一化",
-  "updated_at": "2026-10-20T01:32:43+00:00",
+  "updated_at": "2026-10-19T11:42:10+00:00",
   "verification": null,
   "write_paths": [
     "kernel/mm/memory_map.dg",

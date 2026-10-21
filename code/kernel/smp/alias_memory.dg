@@ -1,0 +1,152 @@
+// Normal pre-scheduler fixed-root EXEC and GOP WC owners. No frame reuse.
+module smp.alias_memory;
+import boot.memory_startup as startup;
+import boot.service_memory as resources;
+import mm.phys_buddy as buddy;
+import mm.paging as pg;
+import mm.exec_alias_owner as ex;
+import mm.alias_policy as policy;
+import mm.cache_alias_owner as wc;
+import mm.cache_type_plan as cache;
+import smp.context as cpu;
+import smp.tlb as tlb;
+import user.memory as memory;
+pub error InvalidIntegration=0x0612_0003;
+const A:u64=0xffff_a900_0000_0000;const B:u64=A+4096;
+const HHDM:u64=0xffff_8000_0000_0000;
+const CODE42:u64=0x0000_c300_0000_2ab8;const CODE43:u64=0x0000_c300_0000_2bb8;const CODE99:u64=0x0000_c300_0000_63b8;
+const NONE:u64=0xffff_ffff_ffff_ffff;
+pub struct Box{pub sequence:u64,pub ack:u64,pub command:u64,pub virtual:u64,pub value:u64,pub result:u64,pub fault:u64,
+ pub root:u64,pub epoch:u64,pub cr0:u64,pub cr4:u64,pub efer:u64,pub pat:u64,pub cap:u64,pub default_type:u64,pub bits:u64,
+ pub variable:[32]u64,pub old_gate:[2]u64,pub idt:u64,pub cpu:*cpu.Context}
+pub struct Report{pub version:u64,pub attempted:u64,pub complete:u64,pub phase:u64,pub error_code:u64,pub domain:u64,pub count:u64,pub root:u64,pub frame:u64,pub held:u64,pub free_before:u64,pub free_held:u64,pub window_a:u64,pub window_b:u64,pub exec_owner:u64,pub wc_owner:u64,pub boxes:u64,pub readers:u64,pub ranges:u64,pub receipts:u64,pub receipt_pages:u64,pub framebuffer:u64,pub framebuffer_pages:u64,pub exec42_mask:u64,pub exec43_mask:u64,pub write_denied_mask:u64,pub warm_write_mask:u64,pub exec_sealed:u64,pub wc_sealed:u64,pub wc_complete:u64,pub exec_phase:u64,pub wc_phase:u64,pub broadcasts_before:u64,pub broadcasts_after:u64,pub acks_before:u64,pub acks_after:u64,pub pat_before:u64,pub pat_after:u64,pub mtrr_checks:u64,pub commands:u64,}
+pub var REPORT:Report=Report{version:1,attempted:0,complete:0,phase:0,error_code:0,domain:0,count:0,root:0,frame:0,held:0,free_before:0,free_held:0,window_a:0,window_b:0,exec_owner:0,wc_owner:0,boxes:0,readers:0,ranges:0,receipts:0,receipt_pages:0,framebuffer:0,framebuffer_pages:0,exec42_mask:0,exec43_mask:0,write_denied_mask:0,warm_write_mask:0,exec_sealed:0,wc_sealed:0,wc_complete:0,exec_phase:0,wc_phase:0,broadcasts_before:0,broadcasts_after:0,acks_before:0,acks_after:0,pat_before:0,pat_after:0,mtrr_checks:0,commands:0};
+var DOMAIN:*tlb.Domain=null;var BOXES:*Box=null;var EXEC:*ex.Context=null;var CACHE:*wc.Context=null;
+var READERS:*wc.ReaderConfig=null;var RANGES:*cache.Range=null;var RECEIPTS:*pg.Retired=null;
+var EX_ALIASES:[2]ex.Alias=[ex.Alias{frame:0,space:0,virt:A,perms:3,cache:0},ex.Alias{frame:0,space:0,virt:B,perms:1,cache:0}];
+var WC_ALIASES:[1]wc.AliasDescriptor=[wc.AliasDescriptor{virtual_base:0,current_cache_type:0};1];
+unsafe extern "sysv64" fn alias_local(box:*Box,context:*cpu.Context)u64;
+unsafe extern "sysv64" fn alias_boxes_table()*u64;
+unsafe fn checked(status:u64)!void{unsafe{if status!=0{REPORT.error_code=status;return error.InvalidIntegration;}}return;}
+unsafe fn allocate(bytes:usize)!u64{unsafe{
+ var block=resources.Block{physical:0,virtual:0,pages:0};try resources.allocate((bytes+4095)/4096,1,&block);
+ if block.virtual==0{return error.InvalidIntegration;}return block.virtual;
+}}
+// Acquire the held frame before the existing large-page proof records its
+// buddy baseline. Service arena allocations do not alter this startup buddy.
+pub unsafe fn prepare()!void{unsafe{
+ if REPORT.attempted!=0{return error.InvalidIntegration;}REPORT.attempted=1;REPORT.window_a=A;REPORT.window_b=B;
+ let allocator=startup.allocator_pointer();if allocator==null{return error.InvalidIntegration;}
+ REPORT.free_before=(try buddy.free_pages(allocator)) as u64;REPORT.frame=try buddy.alloc(allocator,0);REPORT.held=1;
+ REPORT.free_held=(try buddy.free_pages(allocator)) as u64;
+ if REPORT.frame==0||REPORT.free_held+1!=REPORT.free_before{return error.InvalidIntegration;}
+}return;}
+unsafe fn command(index:usize,kind:u64,virtual:u64,value:u64)!void{unsafe{
+ if index>=(*DOMAIN).count{return error.InvalidIntegration;}let box=BOXES+index;let c=(*DOMAIN).cpus+index;
+ if (*box).sequence!=(*box).ack||(*box).sequence==NONE{return error.InvalidIntegration;}
+ let next=(*box).sequence+1;(*box).command=kind;(*box).virtual=virtual;(*box).value=value;(*box).result=0;(*box).fault=0;
+ *((alias_boxes_table())+index)=box as u64;compiler_fence();atomic_store(&(*box).sequence,next);
+ let ops=*(*DOMAIN).ops;
+ if index==0{try checked(alias_local(box,c));compiler_fence();atomic_store(&(*box).ack,next);}
+ else{
+  try checked(ops.send(ops.context,(*c).apic_id,0xf1));let start=ops.clock(ops.context);
+  while atomic_load(&(*box).ack)!=next{let now=ops.clock(ops.context);if now<start||now-start>ops.timeout_ticks{return error.InvalidIntegration;}ops.pause(ops.context);}
+ }
+ if (*box).root!=REPORT.root||(*box).epoch!=(*c).online_epoch||(*box).cpu!=c||(*box).cr4!=(*c).cr4||(*box).cr0!=(*c).cr0
+  ||(*box).efer!=(*c).efer||(*box).idt!=(*c).idt||(*box).fault>1{return error.InvalidIntegration;}
+ if kind!=4&&(*box).fault!=0{return error.InvalidIntegration;}REPORT.commands+=1;
+}return;}
+unsafe fn all(kind:u64,virtual:u64,value:u64)!void{unsafe{var i:usize=0;while i<(*DOMAIN).count{try command(i,kind,virtual,value);i+=1;}}return;}
+unsafe fn expect_all(kind:u64,virtual:u64,value:u64,expected:u64,mask:*u64)!void{unsafe{
+ *mask=0;var i:usize=0;while i<(*DOMAIN).count{try command(i,kind,virtual,value);if (*(BOXES+i)).result==expected{*mask|=(1 as u64)<<(i as u64);}i+=1;}
+ if *mask!=((1 as u64)<<((*DOMAIN).count as u64))-1{return error.InvalidIntegration;}
+}return;}
+unsafe fn exec_callback(cookie:u64,phase:u64,root:u64,virtual:u64,replies:*ex.Reply,count:usize)u64{unsafe{
+ REPORT.exec_phase=phase;if root!=REPORT.root||count!=(*DOMAIN).count{return ex.INVALID;}
+ if phase==ex.FLUSH_LOCAL{match command(0,5,0,0){ok=>{},err(e)=>{return e;},}}
+ else if phase==ex.PUBLISH{match command(0,8,virtual,0){ok=>{},err(e)=>{return e;},}}
+ else if phase!=ex.SHOOTDOWN{return 0;}
+ var i:usize=0;while i<count{
+  if phase!=ex.FLUSH_LOCAL||i==0{match command(i,1,0,0){ok=>{},err(e)=>{return e;},}
+   let b=*(BOXES+i);*(replies+i)=ex.Reply{ack:1,epoch:b.epoch,root:b.root};
+  }i+=1;
+ }return 0;
+}}
+unsafe fn exec_run()!void{unsafe{
+ let space=startup.space_pointer();try pg.map_live(space,A,REPORT.frame,pg.WRITE);try pg.map_live(space,B,REPORT.frame,0);
+ try all(5,0,0);volatile_store(A as *u64,CODE42);
+ try expect_all(4,A,CODE42,0,&REPORT.warm_write_mask);try all(2,B,0);
+ EX_ALIASES[0].frame=REPORT.frame;EX_ALIASES[0].space=REPORT.root;EX_ALIASES[1].frame=REPORT.frame;EX_ALIASES[1].space=REPORT.root;
+ let config=ex.Config{space:space,domain:DOMAIN,frame:REPORT.frame,aliases:EX_ALIASES[..],callback:exec_callback,cookie:0};
+ try checked(ex.bind(&config,EXEC));REPORT.phase=2;try checked(ex.transition(EXEC,policy.TO_EXECUTABLE,1));
+ REPORT.phase=3;try expect_all(4,A,CODE99,1,&REPORT.write_denied_mask);
+ if volatile_load(A as *const u64)!=CODE42{return error.InvalidIntegration;}
+ REPORT.phase=4;try expect_all(3,B,0,42,&REPORT.exec42_mask);
+ REPORT.phase=5;try checked(ex.transition(EXEC,policy.TO_WRITABLE,0));volatile_store(A as *u64,CODE43);
+ try all(2,A,0);try checked(ex.transition(EXEC,policy.TO_EXECUTABLE,1));
+ REPORT.phase=6;try expect_all(3,B,0,43,&REPORT.exec43_mask);try checked(ex.seal(EXEC));REPORT.exec_sealed=1;
+ if ex.transition(EXEC,policy.TO_WRITABLE,0)!=ex.SEALED||ex.audit(EXEC,4)!=1{return error.InvalidIntegration;}
+}return;}
+// Only variable ranges can affect the managed GOP aperture (>1MiB). Fixed
+// MTRRs remain captured/validated by the existing SMP startup and disjoint.
+unsafe fn decoded(box:*const Box,out:*cache.Range,length:*usize,default_type:*u64)!u64{unsafe{
+ let b=*box;if b.bits<32||b.bits>52||(b.cap&255)>16{return error.InvalidIntegration;}
+ let mask=(((1 as u64)<<b.bits)-1)&~(4095 as u64);var count:usize=0;var d:u64=0;
+ if (b.default_type&0x800)!=0{
+  d=b.default_type&255;var i:usize=0;while i<(b.cap&255) as usize{
+   let raw=b.variable[i*2];let bits=b.variable[i*2+1];
+   if (bits&0x800)!=0{let base=raw&mask;let size=((~bits)&mask)+4096;
+    if size==0||(size&(size-1))!=0||(base&(size-1))!=0||base>NONE-size{return error.InvalidIntegration;}
+    *(out+count)=cache.Range{base:base,size:size,kind:raw&255};count+=1;
+   }i+=1;
+  }
+ }
+ var check:u64=0;if cache.mtrr_type(slice_from_raw_parts(out,count),d,REPORT.framebuffer,&check)!=0{return error.InvalidIntegration;}
+ var h:u64=14695981039346656037;h=wrapping_mul(h^d,1099511628211 as u64);h=wrapping_mul(h^(count as u64),1099511628211 as u64);
+ var i:usize=0;while i<count{let r=*(out+i);h=wrapping_mul(h^r.base,1099511628211 as u64);h=wrapping_mul(h^r.size,1099511628211 as u64);h=wrapping_mul(h^r.kind,1099511628211 as u64);i+=1;}
+ *length=count;*default_type=d;return h;
+}}
+unsafe fn cache_callback(cookie:u64,phase:u64,root:u64,value:u64,replies:*wc.Reply,count:usize)u64{unsafe{
+ REPORT.wc_phase=phase;if root!=REPORT.root||count!=(*DOMAIN).count{return wc.INVALID;}
+ var kind:u64=0;if phase==wc.FIRST_BARRIER||phase==wc.SECOND_BARRIER{kind=5;}
+ else if phase==wc.CACHE_MAINT{kind=6;}else if phase==wc.PAT_UPDATE{kind=7;}else{return 0;}
+ match all(kind,0,value){ok=>{},err(e)=>{return e;},}
+ var temp:[16]cache.Range=[cache.Range{base:0,size:0,kind:0};16];var i:usize=0;
+ while i<count{let b=*(BOXES+i);var n:usize=0;var d:u64=0;var hash:u64=0;
+  match decoded(BOXES+i,&temp[0],&n,&d){ok(h)=>{hash=h;},err(e)=>{return e;},}
+  // Publish the actual post-WRMSR readback to the fixed CPU descriptor.
+  // A failed/missing write still publishes its real old value and is refused
+  // by the owner's per-reader expected-PAT check; no ACK fabricates a value.
+  if phase==wc.PAT_UPDATE{(*((*DOMAIN).cpus+i)).pat=b.pat;}
+  *(replies+i)=wc.Reply{ack:1,epoch:b.epoch,root:b.root,cr0:b.cr0,pat:b.pat,mtrr_hash:hash};REPORT.mtrr_checks+=1;i+=1;
+ }return 0;
+}}
+unsafe fn cache_run()!void{unsafe{
+ let display=(*startup.runtime_pointer()).display;let physical=display.framebuffer_base-HHDM;let first=physical&~(4095 as u64);
+ if physical<0x10_0000||display.framebuffer_size==0||display.framebuffer_size>0x100_0000||physical>NONE-display.framebuffer_size-4095{return error.InvalidIntegration;}
+ let pages=((physical-first)+display.framebuffer_size+4095)/4096;if pages==0||pages>4096{return error.InvalidIntegration;}
+ REPORT.framebuffer=first;REPORT.framebuffer_pages=pages;WC_ALIASES[0].virtual_base=HHDM+first;
+ let receipt_bytes=(pages as usize)*sizeof(pg.Retired);RECEIPTS=(try allocate(receipt_bytes)) as *pg.Retired;
+ REPORT.receipts=RECEIPTS as u64;REPORT.receipt_pages=((receipt_bytes+4095)/4096) as u64;
+ READERS=(try allocate(16*sizeof(wc.ReaderConfig))) as *wc.ReaderConfig;RANGES=(try allocate(16*16*sizeof(cache.Range))) as *cache.Range;
+ REPORT.readers=READERS as u64;REPORT.ranges=RANGES as u64;try all(1,0,0);REPORT.pat_before=(*BOXES).pat;
+ var i:usize=0;while i<(*DOMAIN).count{var n:usize=0;var d:u64=0;let hash=try decoded(BOXES+i,RANGES+i*16,&n,&d);let b=*(BOXES+i);
+  *(READERS+i)=wc.ReaderConfig{pat:b.pat,cr0:b.cr0,default_type:d,ranges:slice_from_raw_parts((RANGES+i*16) as *const cache.Range,n)};i+=1;
+ }
+ let config=wc.Config{space:startup.space_pointer(),domain:DOMAIN,physical:first,pages:pages as usize,aliases:WC_ALIASES[..],
+  readers:slice_from_raw_parts(READERS as *const wc.ReaderConfig,(*DOMAIN).count),receipts:slice_from_raw_parts(RECEIPTS,pages as usize),callback:cache_callback,cookie:0};
+ REPORT.phase=7;try checked(wc.bind(&config,CACHE));REPORT.phase=8;try checked(wc.execute_migration(CACHE));
+ REPORT.wc_complete=wc.audit(CACHE,5);if REPORT.wc_complete!=1||wc.audit(CACHE,4)!=1{return error.InvalidIntegration;}
+ try checked(wc.seal(CACHE));REPORT.wc_sealed=1;REPORT.pat_after=(*BOXES).pat;REPORT.phase=9;
+}return;}
+pub unsafe fn run(domain:*tlb.Domain)!void{unsafe{
+ if REPORT.attempted!=1||REPORT.frame==0||domain==null||(*domain).count==0||(*domain).count>16{return error.InvalidIntegration;}
+ DOMAIN=domain;REPORT.domain=domain as u64;REPORT.count=(*domain).count as u64;REPORT.root=try pg.root_physical(startup.space_pointer());
+ REPORT.broadcasts_before=(*domain).broadcasts;REPORT.acks_before=(*domain).acknowledgements;
+ BOXES=(try allocate(16*sizeof(Box))) as *Box;EXEC=(try allocate(sizeof(ex.Context))) as *ex.Context;CACHE=(try allocate(sizeof(wc.Context))) as *wc.Context;
+ REPORT.boxes=BOXES as u64;REPORT.exec_owner=EXEC as u64;REPORT.wc_owner=CACHE as u64;REPORT.phase=1;
+ match exec_run(){ok=>{},err(e)=>{if REPORT.error_code==0{REPORT.error_code=e;}return error.InvalidIntegration;},}
+ match cache_run(){ok=>{},err(e)=>{if REPORT.error_code==0{REPORT.error_code=e;}return error.InvalidIntegration;},}
+ try memory.publish_framebuffer(REPORT.framebuffer,REPORT.framebuffer_pages*4096);
+ REPORT.broadcasts_after=(*domain).broadcasts;REPORT.acks_after=(*domain).acknowledgements;REPORT.complete=1;
+}return;}

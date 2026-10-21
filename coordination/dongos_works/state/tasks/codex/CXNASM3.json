@@ -1,0 +1,67 @@
+{
+  "assignment_owner": "codex",
+  "auto_dispatch": false,
+  "auto_verify": false,
+  "candidate": null,
+  "checks": [
+    "module:lang.tests.test_nasm_compatibility"
+  ],
+  "claim_from_status": "todo",
+  "claim_token": "a8f2c05cdfee4368b1f9e3f0af1856c6",
+  "claimed_at": "2026-10-20T13:04:29+00:00",
+  "claimed_by": "codex-mcp-6d5798b7b4b74b61",
+  "completed_at": "2026-10-20T13:04:30+00:00",
+  "complexity": "standard",
+  "created_at": "2026-10-20T13:04:29+00:00",
+  "delivery": "codex-works/deliveries/CXNASM3.md",
+  "depends_on": [
+    "codex:CX1",
+    "codex:CX3"
+  ],
+  "description": "所属阶段P0工具链维护，关联L3主线复验。本机NASM3.02的-h帮助将warning放在-h -w；只读-h漏掉reloc-rel-dword及reloc-abs-qword，使主线C52初始化0tests失败。此维护曾临时占用CX6；发现另一电脑原CX6是已完成的源码读取接线后，临时记录已通过协调器暂停归档并备份，现用全refs未占用的CXNASM3保留独立身份，不覆盖原CX6。\n仅授权3文件：共享helper保留旧-h能力探测，只在帮助明示-h -opt分组语法时再用-h -w；完整警告名匹配、check=True保留真实失败，不按版本硬猜、不无条件关闭未知warning，保留-Wall/-Werror及其它警告。永久兼容测试包含旧平铺/新分组、拒绝额外参数的旧版、假前缀、两warning独立、分组探测失败传播、本机真实ELF64/COFF两类合法重定位的失败/成功对照和number-overflow仍拒绝。实现已完成、局部及root独立10项全过0skip；原正式协调结算Windowsprocess_stopped=None缺口未关闭，不能据本地测试自授验收。本项只维护测试工具，不重做或声称完成P2/P5/P6/L3开发。未运行OS/VM/AI CLI。",
+  "document": "codex-works/tasks/CXNASM3-board.md",
+  "historical": false,
+  "id": "codex:CXNASM3",
+  "integration_note": "声明的lang/tests/test_dongc.py、test_nasm_compatibility.py已实际位于本地主线并随PR8/main244b18c集成；交付保留CXNASM3独立身份。三文件与新正式验收指纹完全一致，主线14项桥/NASM/启动联合回归已通过，正常记录集成，不导入或替换异机CX6任务。",
+  "legacy_hash": "f519302164caa90b53bb51a7ed5571fc64f19fd65b656da9c3fa2f163dcd6252",
+  "number": "CXNASM3",
+  "owner": "codex",
+  "rev": 6,
+  "review_note": "独立源码/契约及真实负控审查通过。正式隔离job4628b48597ad4fa4a0edb758628cc8a5：10tests/0skip、2.859s，source_stable/process_stopped/execution_exited均true，三文件指纹匹配。旧平铺/新分组仅在帮助明示分组选项时追加-h -w，两探测check=True错误传播、完整warning名独立匹配；实际NASM3.02 ELF64/COFF均验证两合法重定位的原warning失败→能力探测成功，同时number-overflow仍严格失败。未据mock声称安装过旧NASM，身份与异机CX6分开。",
+  "status": "integrated",
+  "title": "[P0/L3] NASM分组帮助能力探测维护（异机编号隔离）",
+  "updated_at": "2026-10-20T15:26:02+00:00",
+  "verification": {
+    "checks": [
+      {
+        "cancelled": false,
+        "elapsed_seconds": 2.859,
+        "execution_exited": true,
+        "passed": true,
+        "process_stopped": true,
+        "returncode": 0,
+        "skips": 0,
+        "spec": "module:lang.tests.test_nasm_compatibility",
+        "tests": 10,
+        "timed_out": false
+      }
+    ],
+    "execution_exited": true,
+    "fingerprint": {
+      "codex-works/deliveries/CXNASM3.md": "55982b984d17c2bad4f69d00bee10d2c4347eeb9ed74ddf0280b268ba8ff1de5",
+      "lang/tests/test_dongc.py": "8a38a0b223e7b5eb4035b00558ddfe4d70cb9963cb51877fbe33b876eae75bb1",
+      "lang/tests/test_nasm_compatibility.py": "e51d2e3f1e5d825ab64b68b035ec31e23416b71e994b17c4a4727c8295f85e4d"
+    },
+    "finished_at": "2026-10-20T15:23:03+00:00",
+    "job": "4628b48597ad4fa4a0edb758628cc8a5",
+    "passed": true,
+    "process_stopped": true,
+    "source_stable": true,
+    "summary": "定向复验通过，等待源码/契约审查"
+  },
+  "write_paths": [
+    "lang/tests/test_dongc.py",
+    "lang/tests/test_nasm_compatibility.py",
+    "codex-works/deliveries/CXNASM3.md"
+  ]
+}

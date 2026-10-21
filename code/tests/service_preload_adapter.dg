@@ -1,15 +1,16 @@
 // Host-only model of root mappings; production retirement/catalog/caps execute.
 module service_preload_adapter;import user.shared_objects as shared;
 import user.abi as abi;
-pub struct Process{pub ready:u64,pub frame:abi.Frame}
+pub struct Process{pub ready:u64,pub root:u64,pub frame:abi.Frame}
 pub struct Contents{pub pointer:*const u8,pub length:usize}
 pub error Invalid=0x051b_0001;
-var ROOTS:[16]Process=[Process{ready:0,frame:abi.EMPTY};16];
+var ROOTS:[16]Process=[Process{ready:0,root:0,frame:abi.EMPTY};16];
 var PIN:[16]bool=[false;16];var DESTROYED:[16]u64=[0;16];var QUARANTINED:[16]u64=[0;16];
 pub var EPOCHS:[16]u64=[1;16];pub var PROVIDER:u64=1;var NEXT:u64=1;
 var IMAGE:[1]u8=[0x7f];var STAGE:u64=16;pub var STAGE_FAILED:bool=false;
 pub fn processes()*Process{unsafe{return &ROOTS[0];}}
-pub fn reset()void{unsafe{shared.reset();EPOCH=0;FAILED=false;UNSHARE_FAILED=false;RESOURCE_FAILED=false;var i:usize=0;while i<16{ROOTS[i]=Process{ready:0,frame:abi.EMPTY};
+pub fn generation(id:usize)u64{unsafe{return EPOCHS[id];}}
+pub fn reset()void{unsafe{shared.reset();EPOCH=0;FAILED=false;UNSHARE_FAILED=false;RESOURCE_FAILED=false;var i:usize=0;while i<16{ROOTS[i]=Process{ready:0,root:0,frame:abi.EMPTY};
     PIN[i]=false;DESTROYED[i]=0;QUARANTINED[i]=0;EPOCHS[i]=1;i+=1;}PROVIDER=1;NEXT=1;STAGE=16;STAGE_FAILED=false;}return;}
 pub fn dma_pinned(id:usize)bool{unsafe{return PIN[id];}}
 pub fn pin(id:usize)void{unsafe{PIN[id]=true;}return;}
@@ -17,6 +18,8 @@ pub unsafe fn destroy(id:usize)!void{unsafe{if ROOTS[id].ready!=1||PIN[id]||STAG
     ROOTS[id].ready=0;DESTROYED[id]+=1;
 }return;}
 pub unsafe fn revoke_owner(owner:u64)!void{return;}
+// This lifecycle model has no P5 context; native P5 tests exercise the observer.
+pub unsafe fn dma_stop(slot:usize,configuration:u64,owner:u64,incarnation:u64,root:u64,generation:u64,smp:u64,code:u64)void{return;}
 pub unsafe fn quarantine(id:usize)!void{unsafe{QUARANTINED[id]+=1;}return;}
 pub unsafe fn stage_random(id:usize,image:[]const u8)!void{unsafe{
     if ROOTS[id].ready!=0||STAGE!=16{return error.Invalid;}STAGE=id as u64;ROOTS[id].ready=1;

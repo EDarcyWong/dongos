@@ -1,0 +1,45 @@
+{
+  "command": [
+    "C:\\Python312\\python.exe",
+    "-m",
+    "unittest",
+    "tests.test_active_large",
+    "tests.test_active_paging",
+    "tests.test_p2_active_large_qemu",
+    "-v"
+  ],
+  "cwd": "D:\\projects\\2026\\dongos\\code",
+  "returncode": 0,
+  "elapsed_seconds": 26.532,
+  "stdout": "Active large native evidence: D:\\projects\\2026\\dongos\\code\\build\\test\\active-large\\run-5a7e7d8d16ea\n",
+  "stderr": "test_real_transactions_and_wrong_sources_both_modes (tests.test_active_large.ActiveLargeTests.test_real_transactions_and_wrong_sources_both_modes) ... ok\ntest_live_layout_atomic_publication_and_both_formats (tests.test_active_paging.ActivePagingTests.test_live_layout_atomic_publication_and_both_formats) ... ok\ntest_native_raw_ordering_quarantine_reuse_ad_and_failures (tests.test_active_paging.ActivePagingTests.test_native_raw_ordering_quarantine_reuse_ad_and_failures) ... ok\ntest_buddy_actual_raw_layout_and_mathematical_free_coverage (tests.test_p2_active_large_qemu.ActiveLargeGuestControls.test_buddy_actual_raw_layout_and_mathematical_free_coverage) ... ok\ntest_buddy_rejects_raw_cycle_overlap_state_tails_lease_and_false_total (tests.test_p2_active_large_qemu.ActiveLargeGuestControls.test_buddy_rejects_raw_cycle_overlap_state_tails_lease_and_false_total) ... ok\ntest_exact_raw_report_and_real_compiler_manifest (tests.test_p2_active_large_qemu.ActiveLargeGuestControls.test_exact_raw_report_and_real_compiler_manifest) ... ok\ntest_oom_skip_partial_retirement_controls_and_cache_aliases_rejected (tests.test_p2_active_large_qemu.ActiveLargeGuestControls.test_oom_skip_partial_retirement_controls_and_cache_aliases_rejected) ... ok\ntest_pool_actual_raw_tree_and_exact_allowlist (tests.test_p2_active_large_qemu.ActiveLargeGuestControls.test_pool_actual_raw_tree_and_exact_allowlist) ... ok\ntest_pool_rejects_raw_pa_permissions_cache_extra_garbage_and_ledger_errors (tests.test_p2_active_large_qemu.ActiveLargeGuestControls.test_pool_rejects_raw_pa_permissions_cache_extra_garbage_and_ledger_errors) ... ok\ntest_replay_refuses_missing_or_false_actual_guest_facts_before_any_elf_read (tests.test_p2_active_large_qemu.ActiveLargeGuestControls.test_replay_refuses_missing_or_false_actual_guest_facts_before_any_elf_read) ... ok\ntest_short_long_bytes_and_every_field_mutation (tests.test_p2_active_large_qemu.ActiveLargeGuestControls.test_short_long_bytes_and_every_field_mutation) ... ok\ntest_wrong_schema_fields_types_offsets_and_integer_types (tests.test_p2_active_large_qemu.ActiveLargeGuestControls.test_wrong_schema_fields_types_offsets_and_integer_types) ... ok\n\n----------------------------------------------------------------------\nRan 12 tests in 26.360s\n\nOK\n",
+  "source_before": {
+    "kernel/mm/active_paging.dg": "e64f134abaae22c02c6a0251a1f4a39e22569dccb09492eccac463011b111774",
+    "kernel/boot/large_memory.dg": "a6ad77b53f10bdb3b9593e5896f9d57862d41b3554be1b643d24759b1e5dbb55",
+    "kernel/memory_probe.dg": "8faec8f6b54dcb11e307544d6d7420aaceac04175949ca3c28c869e7e9e2e098",
+    "kernel/memory_mutation.asm": "e5a89555e736c55a1b7965a218ce1c94707977d7f4e57828cfc2291d9178964d",
+    "tests/active_large_probe.dg": "481ce1738c5604f7bb892413583d3c8ef82496b62aa838c52c591edd8c4bd1ed",
+    "tests/active_large_probe.c": "9e1adb17dec5e375d6be768742d874e77c2437ccfb495330c7034d68868a5dd7",
+    "tests/test_active_large.py": "000ad9f21245742407145c673d3aab97f29e989242637beb7e83b806606d2633",
+    "tests/active_paging_probe.c": "3d1058048b7b6c142382d7f876699068595e330ccbca0a8cae61d2c1e02f4948",
+    "tests/active_paging_probe.dg": "5979a5c0ce470c6bb94f9f8b81c79db29c4b994660dce1869349930f84ba987e",
+    "tests/test_active_paging.py": "4a2b04f1ae8c56c2cf2385410712586f14a65a0ffe40d852d6060e0fc64cdc34",
+    "tests/run_p2_active_large_qemu.py": "eb6159fe23e2dcb4ab3aed92daae92a90e77002cde3c6cf8f7950dca2dd554a1",
+    "tests/test_p2_active_large_qemu.py": "71f666d514717751749eebb0dff01d28dea0273f22b7d54f688446db3f26e17a"
+  },
+  "source_after": {
+    "kernel/mm/active_paging.dg": "e64f134abaae22c02c6a0251a1f4a39e22569dccb09492eccac463011b111774",
+    "kernel/boot/large_memory.dg": "a6ad77b53f10bdb3b9593e5896f9d57862d41b3554be1b643d24759b1e5dbb55",
+    "kernel/memory_probe.dg": "8faec8f6b54dcb11e307544d6d7420aaceac04175949ca3c28c869e7e9e2e098",
+    "kernel/memory_mutation.asm": "e5a89555e736c55a1b7965a218ce1c94707977d7f4e57828cfc2291d9178964d",
+    "tests/active_large_probe.dg": "481ce1738c5604f7bb892413583d3c8ef82496b62aa838c52c591edd8c4bd1ed",
+    "tests/active_large_probe.c": "9e1adb17dec5e375d6be768742d874e77c2437ccfb495330c7034d68868a5dd7",
+    "tests/test_active_large.py": "000ad9f21245742407145c673d3aab97f29e989242637beb7e83b806606d2633",
+    "tests/active_paging_probe.c": "3d1058048b7b6c142382d7f876699068595e330ccbca0a8cae61d2c1e02f4948",
+    "tests/active_paging_probe.dg": "5979a5c0ce470c6bb94f9f8b81c79db29c4b994660dce1869349930f84ba987e",
+    "tests/test_active_paging.py": "4a2b04f1ae8c56c2cf2385410712586f14a65a0ffe40d852d6060e0fc64cdc34",
+    "tests/run_p2_active_large_qemu.py": "eb6159fe23e2dcb4ab3aed92daae92a90e77002cde3c6cf8f7950dca2dd554a1",
+    "tests/test_p2_active_large_qemu.py": "71f666d514717751749eebb0dff01d28dea0273f22b7d54f688446db3f26e17a"
+  },
+  "source_unchanged": true
+}

@@ -1,0 +1,10 @@
+{
+  "task": "codex:P2SIZE9",
+  "physical_integration": true,
+  "fingerprint": {
+    "tools/kernel_budget.py": "01678e8e32c6061778fbd379c81ce2f20a580678d37e4f6f070ad219e202f321",
+    "docs/p2-kernel-budget-o1.md": "8d4468d9b830ba8e5e6687c6e36bb9e18f6dd901af4f0fbf981288cdd3fa3918",
+    "codex-works/deliveries/P2SIZE9.md": "ec27b4413ebd08551e690ea4ac21a135814ccdccb3917a7142c580a4f5bac494"
+  },
+  "verification": "exact byte hashes match accepted formal inputs"
+}

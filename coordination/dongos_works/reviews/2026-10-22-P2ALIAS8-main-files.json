@@ -1,0 +1,18 @@
+{
+  "physical_main_integration": true,
+  "fingerprint": {
+    "kernel/smp/alias_memory.dg": "54adbd5d1cb8a3a80a52740d99755cab79e007bc2d00e4cb85f6cd0cef955db9",
+    "kernel/smp/alias_memory.asm": "e99b64237257322455fa5d653ba46bfc55ffa1bac2054579516efc65565729e0",
+    "kernel/smp/runtime.dg": "00ae1e53c742a5e87d52df003d7d2955022b1aeab4f48ac97e8b98277aab050a",
+    "kernel/smp/bootstrap.asm": "f6e010d5b5b713c81171d724074313e08e60ecfe1ef93ac36e8deece7e4a2041",
+    "tools/build.py": "c5b67b1807a7932fac0a3b47d6d61329f9487c6c8fba8b696e3703d90df7c99f",
+    "kernel/user/memory.dg": "863e43a33a5abc95b29770a3dbe4dd141a537deddb2113f9c1b7e42c8a32aa61",
+    "kernel/user/desktop.dg": "67fbf048a5b34653ac6269f52fdb1b19de6c4cd7c2c558db5ea1f07e788fdfaf",
+    "tests/run_p2_alias_qemu.py": "0287920af094c68dade9994122d708d1b84538091d37b793ebe115357bd0cf50",
+    "tests/test_p2_alias_guest.py": "14cbaf7e7e1a06b1066aa195add1927c17799b3016467fbcd73f070ac2457d92",
+    "docs/p2-alias-consumers.md": "4678d5da0f6a06cdfc578656ceda2df847ede787eecc779db44d5d2d1cd8e57c",
+    "codex-works/deliveries/P2ALIAS8.md": "c674889479d8aa5c194fe3a3a318e6354945172615f0244855750acd115b5449"
+  },
+  "all_actual_normal_build_inputs_match": true,
+  "build_inputs": "D:\\projects\\2026\\dongos\\coordination\\dongos_works\\.local\\p2alias8-probe-order-bfe36645d4\\normal\\source\\build\\alias-proof\\build-inputs.json"
+}

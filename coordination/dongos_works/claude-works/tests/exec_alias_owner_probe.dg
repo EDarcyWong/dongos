@@ -1,0 +1,16 @@
+module exec_alias_owner_probe;
+import mm.exec_alias_owner as ex;
+import mm.paging as pg;
+import smp.tlb as tlb;
+import smp.context as cpu;
+export("ex_shapes") fn shapes(kind:u64)usize{if kind==0{return sizeof(ex.Context);}if kind==1{return sizeof(ex.Config);}if kind==2{return sizeof(ex.Alias);}if kind==3{return sizeof(ex.Reply);}if kind==4{return sizeof(tlb.Domain);}if kind==5{return sizeof(cpu.Context);}return sizeof(pg.Space);}
+export("ex_bind") fn bind(config:*const ex.Config,out:*ex.Context)u64{unsafe{return ex.bind(config,out);}}
+export("ex_transition") fn transition(context:*ex.Context,target:u64,grantee:usize)u64{unsafe{return ex.transition(context,target,grantee);}}
+export("ex_audit") fn audit(context:*const ex.Context,index:u64)u64{unsafe{return ex.audit(context,index);}}
+export("ex_seal") fn seal(context:*ex.Context)u64{unsafe{return ex.seal(context);}}
+export("ex_space_init") fn init(space:*pg.Space,pool:*pg.Table,count:usize,metadata:*u8)u64{unsafe{*space=pg.EMPTY_SPACE;match pg.init(space,slice_from_raw_parts(pool,count),0x400000,slice_from_raw_parts(metadata,count),48,true){ok=>{return 0;},err(e)=>{return e;},}}}
+export("ex_domain_init") fn domain_init(domain:*tlb.Domain,cpus:*cpu.Context,count:usize,boxes:*tlb.Mailbox,ops:*const tlb.Ops)u64{unsafe{*domain=tlb.EMPTY_DOMAIN;match tlb.initialize(domain,cpus,count,boxes,ops){ok=>{return 0;},err(e)=>{return e;},}}}
+export("ex_page_map") fn map(space:*pg.Space,va:u64,pa:u64,flags:u64)u64{unsafe{match pg.map(space,va,pa,flags){ok=>{return 0;},err(e)=>{return e;},}}}
+export("ex_large_map") fn large(space:*pg.Space,va:u64,pa:u64)u64{unsafe{match pg.map_large(space,va,pa,pg.WRITE){ok=>{return 0;},err(e)=>{return e;},}}}
+export("ex_tables") fn tables(space:*const pg.Space)u64{unsafe{match pg.used_tables(space){ok(n)=>{return n as u64;},err(e)=>{return 0xffffffffffffffff;},}}}
+export("ex_query") fn query(context:*const ex.Context,index:usize,out:*u64)u64{unsafe{return ex.query(context,index,out);}}

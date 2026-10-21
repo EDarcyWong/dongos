@@ -1,0 +1,11 @@
+{
+  "task": "codex:P2VIEW6",
+  "accepted_rev": 5,
+  "actual_main_matches": true,
+  "fingerprint": {
+    "kernel/mm/paging.dg": "21f705eed8adc6de3de33387de19a0b0fb79d202ec8265d34a69d8f5b898b9dd",
+    "tests/test_paging_view.py": "cca705edbc82aacff92dad0309b41d181de1e1656503d48a0643dc75aef75bff",
+    "docs/paging-pool-view.md": "3f2c902cf1dccbad0ddfe7039ed21380d61279b94737ec6d59e09034a9bcc092",
+    "codex-works/deliveries/P2VIEW6.md": "1f783f4d4a9f8b5f19cd85383240d54c0d35f973d03d8349a06ef4037aec8991"
+  }
+}

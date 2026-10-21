@@ -1,0 +1,36 @@
+{
+  "command": [
+    "C:\\Python312\\python.exe",
+    "-m",
+    "unittest",
+    "tests.test_active_large",
+    "tests.test_active_paging",
+    "-v"
+  ],
+  "cwd": "D:\\projects\\2026\\dongos\\code",
+  "returncode": 0,
+  "elapsed_seconds": 28.64,
+  "stdout": "Active large native evidence: D:\\projects\\2026\\dongos\\code\\build\\test\\active-large\\run-707bb89c41c1\n",
+  "stderr": "test_real_transactions_and_wrong_sources_both_modes (tests.test_active_large.ActiveLargeTests.test_real_transactions_and_wrong_sources_both_modes) ... ok\ntest_live_layout_atomic_publication_and_both_formats (tests.test_active_paging.ActivePagingTests.test_live_layout_atomic_publication_and_both_formats) ... ok\ntest_native_raw_ordering_quarantine_reuse_ad_and_failures (tests.test_active_paging.ActivePagingTests.test_native_raw_ordering_quarantine_reuse_ad_and_failures) ... ok\n\n----------------------------------------------------------------------\nRan 3 tests in 28.527s\n\nOK\n",
+  "source_before": {
+    "kernel/mm/active_paging.dg": "e64f134abaae22c02c6a0251a1f4a39e22569dccb09492eccac463011b111774",
+    "kernel/boot/large_memory.dg": "03f97e7473a44628967eb886e443187bcb63bd78668107e7a4338cbf0aa45f3a",
+    "tests/active_large_probe.dg": "481ce1738c5604f7bb892413583d3c8ef82496b62aa838c52c591edd8c4bd1ed",
+    "tests/active_large_probe.c": "9e1adb17dec5e375d6be768742d874e77c2437ccfb495330c7034d68868a5dd7",
+    "tests/test_active_large.py": "000ad9f21245742407145c673d3aab97f29e989242637beb7e83b806606d2633",
+    "tests/active_paging_probe.c": "3d1058048b7b6c142382d7f876699068595e330ccbca0a8cae61d2c1e02f4948",
+    "tests/active_paging_probe.dg": "5979a5c0ce470c6bb94f9f8b81c79db29c4b994660dce1869349930f84ba987e",
+    "tests/test_active_paging.py": "4a2b04f1ae8c56c2cf2385410712586f14a65a0ffe40d852d6060e0fc64cdc34"
+  },
+  "source_after": {
+    "kernel/mm/active_paging.dg": "e64f134abaae22c02c6a0251a1f4a39e22569dccb09492eccac463011b111774",
+    "kernel/boot/large_memory.dg": "03f97e7473a44628967eb886e443187bcb63bd78668107e7a4338cbf0aa45f3a",
+    "tests/active_large_probe.dg": "481ce1738c5604f7bb892413583d3c8ef82496b62aa838c52c591edd8c4bd1ed",
+    "tests/active_large_probe.c": "9e1adb17dec5e375d6be768742d874e77c2437ccfb495330c7034d68868a5dd7",
+    "tests/test_active_large.py": "000ad9f21245742407145c673d3aab97f29e989242637beb7e83b806606d2633",
+    "tests/active_paging_probe.c": "3d1058048b7b6c142382d7f876699068595e330ccbca0a8cae61d2c1e02f4948",
+    "tests/active_paging_probe.dg": "5979a5c0ce470c6bb94f9f8b81c79db29c4b994660dce1869349930f84ba987e",
+    "tests/test_active_paging.py": "4a2b04f1ae8c56c2cf2385410712586f14a65a0ffe40d852d6060e0fc64cdc34"
+  },
+  "source_unchanged": true
+}

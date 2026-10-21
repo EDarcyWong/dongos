@@ -1,0 +1,15 @@
+{
+  "job": "7b0221aee94b4c6d988ebafd102912cb",
+  "accepted": false,
+  "reason": "Coordinator source review found generated target sources missing from final source inventory; managed pause before mutation",
+  "managed_pause_completed_task_rev": 6,
+  "child_processes_remaining": 0,
+  "official_job_status": "failed",
+  "resumed_rev": 7,
+  "rework_rev": 8,
+  "claim_rev": 9,
+  "repair": "register each target SHA at creation, assert before seed/native and finish; independent actual one-byte mutation rejects both paths",
+  "targeted_guard_tests": 1,
+  "targeted_guard_skips": 0,
+  "targeted_guard_seconds": 0.136
+}

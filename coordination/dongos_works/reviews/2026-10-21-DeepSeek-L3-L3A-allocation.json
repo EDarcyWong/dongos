@@ -1,0 +1,150 @@
+{
+  "project": "dongos",
+  "date": "2026-10-21",
+  "authorization": "让deepseek做L3和L3A任务",
+  "no_pr": true,
+  "auto_started": false,
+  "p2": "codex:P2SMP3 remains in_progress; no path overlap",
+  "tasks": [
+    {
+      "id": "deepseek:L3A",
+      "number": "L3A",
+      "owner": "deepseek",
+      "title": "[L3A/G5] 原生整程序可变全局量及真实产物闭环",
+      "description": "所属阶段：L3A（完整后端与命令行），接续尚未完成的G5完整语言覆盖。用户于2026-10-21明确要求让DeepSeek做L3和L3A；本项是首个可独立验收的实现里程碑：原生整程序可变全局量。完整阶段仍包含方法、枚举、错误/try/orelse/defer、外部ABI与诊断等差集，本项不得把整个L3A标为完成。输入输出、64KiB栈、56MiB arena、49模块固定点及现有客体双启已完成，不重新实现、不恢复异机归档编号。\n\n先worker MCP读最新rev/完整任务书，claim成功才开始。当前无DeepSeek在途任务，不接管Codex P2SMP3。所有候选只放本人声明的works文件，禁止编辑主线lang/dongc、tools/build.py、内核或协调器；不建PR、不提交/推送、不运行OS/VM、不启动任何AI CLI。由DeepSeek本人客户端手动执行；交付后Codex独立复验、验收和实际本地集成。\n\n实现：以主线lang/bootstrap/lower_program.dg、program_ir.dg、nasm_program.dg、native_assembler.dg及原生测试为只读基线，复制需修改的同名文件到deepseek-works/l3a/src/bootstrap/，保留原module名。测试显式以候选目录优先，并只补只读传递闭包；记录每一实际解析模块路径/SHA，不能因导入回主线而绕过候选。候选映射至主线同名文件，所有改动逐项列出。\n\n补齐checked frontend.Graph中的names.GLOBAL读写、取址及跨函数持有：支持现有语义允许的零初始化及标量、结构体、数组常量初始化；8/16/32/64有符号与无符号、bool、指针及聚合布局按语义图，不能重解析字面量。真实全局存储单实例、自然对齐、精确宽度读写、复合赋值地址只算一次，跨函数/跨模块名称编码不碰撞。常量仍按现有只读节， mutable放可写data或bss，不能把普通常量全部改RW。原STATIC_ADDRESS验证及静态指针/重定位同时更新；不默许未支持初始化或动态初始化。明确导出规则与重名/私有符号边界。\n\n原生汇编器必须消费此次真实Dong后端产物，识别实际所用data/bss表示、正确地址与对齐；已有elf64_image.emit的数据段本来RW，可复用其布局且保留代码RX/W^X，不借宿主NASM替代原生ELF链。若需扩展既有容器API/新生产文件等声明外路径，先通过MCP说明具体阻塞，请协调者补独立接续任务，不能越权编辑，也不能在仅NASM路径通过时声称原生闭环完成。\n\n测试：新test_l3a_globals.py从源码bytes运行真正Dong frontend→lower→nasm，种子Python只构建编译器；两模式、NASM ELF64/COFF均组装，真实SysV call观察返回值、完整内存及callee-saved/RSP，COFF组装不当Win64ABI证明。另需原生assembler→完整ELF真实执行，同源seed结果和独立Python/C字节期望交叉比较。固定有限边界覆盖零/非零、窄高位、多个全局相邻canary、聚合padding、数组边界、地址稳定、函数往返后值保持、两个模块同名与pub/private、常量地址及合法全局指针初始化。不以手写C/汇编静态全局替代生产分配。\n保留invalid优先capacity、exact/short1/0/full-tail alias、out/written/Result发布原子性、完整source/Graph/IR不变和guards。真实坏Dong至少：全局地址偏移或每调用重置导致正常返回但精确值/内存失败；错误窄store导致邻接canary改变；容量失败提前发布。坏体同输入好体先成功，坏体成功编译链接执行且由指定断言拒绝，不把崩溃/构建失败/文本差异当语义负控。\n既有主线test_bootstrap_native_compiler里global不支持案例随新支持在本人候选测试中改为正例，并保留其它真正不支持构造的精确拒绝和输出不变。测试只导出TestCase一次，不用继承导入造成重复计数。缺工具须明确阻塞，不skip冒充通过。\n\n交付L3A.md列命令/exit/tests/skips、生产及全部只读输入前后SHA、对象格式、实际执行平台/ABI、native ELF证据、每个负控实际拒绝依据和残余范围。定向0skip且source_stable才进入独立审查；submitted不等于accepted或integrated。临时产物在deepseek-works/build/L3A/<唯一目录>。",
+      "assignment_owner": "deepseek",
+      "status": "todo",
+      "rev": 1,
+      "write_paths": [
+        "deepseek-works/l3a/src/bootstrap/lower_program.dg",
+        "deepseek-works/l3a/src/bootstrap/program_ir.dg",
+        "deepseek-works/l3a/src/bootstrap/nasm_program.dg",
+        "deepseek-works/l3a/src/bootstrap/native_assembler.dg",
+        "deepseek-works/l3a/lower_program.md",
+        "deepseek-works/l3a/nasm_program.md",
+        "deepseek-works/tests/test_l3a_globals.py",
+        "deepseek-works/tests/test_l3a_native_regression.py",
+        "deepseek-works/deliveries/L3A.md"
+      ],
+      "depends_on": [
+        "claude:C52",
+        "deepseek:D25",
+        "deepseek:D27",
+        "cursor:CR41",
+        "cursor:CR42"
+      ],
+      "checks": [
+        "discover:deepseek-works/tests:test_l3a_globals.py",
+        "discover:deepseek-works/tests:test_l3a_native_regression.py"
+      ],
+      "auto_dispatch": false,
+      "auto_verify": false,
+      "complexity": "standard",
+      "created_at": "2026-10-21T13:58:52+00:00",
+      "updated_at": "2026-10-21T13:58:52+00:00",
+      "historical": false,
+      "document": "deepseek-works/tasks/L3A-board.md",
+      "delivery": "deepseek-works/deliveries/L3A.md",
+      "claimed_at": null,
+      "completed_at": null,
+      "claimed_by": null,
+      "candidate": null,
+      "verification": null,
+      "review_note": "",
+      "legacy_hash": "dafd75b1f7fa1e23990726ff1f85d2a5a56f27a712e517cfb11eedb2ddd44b18",
+      "timing": {
+        "as_of": "2026-10-21T14:00:12+00:00",
+        "published_at": "2026-10-21T13:58:52+00:00",
+        "first_claimed_at": null,
+        "last_submitted_at": null,
+        "last_verified_at": null,
+        "last_modified_at": null,
+        "rounds": [],
+        "timeline": [
+          {
+            "seq": 1182,
+            "at": "2026-10-21T13:58:52+00:00",
+            "task_id": "deepseek:L3A",
+            "kind": "created",
+            "data": {
+              "rev": 1,
+              "status": "todo"
+            }
+          }
+        ],
+        "last_rework_requested_at": null,
+        "duration_basis": "经过时长为领取至执行完成（提交）的自然时间；办理时长另扣除明确暂停，不代表实际编辑净耗时",
+        "total_active_seconds": null,
+        "rework_active_seconds": 0,
+        "latest_round": null,
+        "history_incomplete": false,
+        "verifications": []
+      }
+    },
+    {
+      "id": "deepseek:L3",
+      "number": "L3",
+      "owner": "deepseek",
+      "title": "[L3/G5] 原生整程序语言与ABI差分执行、真实缺口回归",
+      "description": "所属阶段：L3（Dong编译器自举）/G5差分覆盖。用户要求DeepSeek接续L3、L3A；本项在deepseek:L3A通过独立验收后领取，使用届时最新已验收/集成候选，不抢其生产文件。目标是实际整程序差分执行与可复现缺口回归，不重写已完成的49模块固定点/读取/栈/持久化，不以组件数或语法树检查宣称完整自举完成。\n\n当前主线lower_program明确拒绝GLOBAL/METHOD/ERROR/ENUM以及若干语句，L3A本批实现全局量，其余差集必须真实复测并逐项记录。第一阶段补一套有限、可扩展的源码级G5差分runner：同一明确源码目录与入口，种子Python编译器和真正Dong frontend→lower→nasm两条独立路径；宿主只做种子引导、进程编排与独立观察，不能宿主构建目标IR/NASM或失败时seed fallback。生产runner位于本人works文件，之后由Codex本地集成；禁止编辑L3A或任何主线源码。\n\n至少覆盖两模式的整数窄宽、checked/wrapping、短路副作用、循环break/continue、嵌套调用与大于6整数参数、slice双字整体ABI、单次求值lvalue、结构体/数组精确字节与padding、静态常量与新可变全局量、两个模块导入/同名符号/pub-private。固定有界样本与可复现种子生成，成功对比完整返回寄存器、可观察内存/轨迹，失败对比阶段/诊断类别/源码定位；错误文本格式可分开，不以两条路径共享算法互相证明。使用独立C/Python语义oracle或固定已人工核定数值。实际SysV桥验证所有callee-saved和RSP后恢复；COFF组装不能冒充Win64ABI执行。NASM ELF64及COFF均组装，另至少一组真实native_assembler生成完整ELF并实际执行。\n\n为方法、enum、error/try/orelse/defer、extern SysV/Win64等尚未实现的完整语言构造准备可由seed实际执行/诊断的最小真实源码。每例记录原生路径的精确失败阶段/状态和输出保持；coverage.json将它们标记为已证实缺口，不能标supported、xfail-pass或skip，也不能把“按预期不支持”计入G5成功覆盖。用独立TestCase断言scope_complete=false、remaining逐项非空，最终交付分别列supported-pass、known-gap、failure、skip，不能让全套测试退出0变成整体G5完成。本项的验收只覆盖runner及有限受支持矩阵；其余语言实现需后续独立任务，若用户另有授权也必须先补可写范围。\n\n真实负控至少两类：候选Dong lowering/发射代码小范围语义变异（例如全局错址、slice第二字或短路求值），成功构建/链接/正常执行后被返回值/完整内存/调用轨迹准确拒绝；runner漏掉一项原生失败并尝试seed fallback的坏体应被路径证据/结果状态拒绝。构建失败、崩溃、超时、仅汇编文本不同不算语义负控；每个相同输入先证明好体通过。\n\n单次运行保留源码目录/编译器/只读闭包SHA256、确切工具版本/命令/env allowlist（无密钥）、模式/对象格式、进程退出/timeout、每个case的输入/期望/实际/原生产物SHA与首次差异。快照发生变化即失败，失败现场不可覆盖，缺工具明确阻塞不skip。只运行本项定向检查，不启动OS/VM/AI CLI、无PR/commit/push，不改协调器数据库/index或任务图状态。临时目录deepseek-works/build/L3/<唯一目录>。\n\n本人客户端worker MCP读最新rev与完整task/依赖，claim后只修改四个声明文件。交付L3.md列真实tests/skips/支持覆盖/已证实缺口、负控具体拒绝依据及未运行限制。交付后Codex实际审查、独立复验零skip且source_stable、再验收并本地集成。不得自行accept/integrate，不把本有限里程碑等同整个L3/L3A/G5完成。",
+      "assignment_owner": "deepseek",
+      "status": "todo",
+      "rev": 1,
+      "write_paths": [
+        "deepseek-works/l3/g5_differential.py",
+        "deepseek-works/l3/g5_differential.md",
+        "deepseek-works/tests/test_l3_g5_differential.py",
+        "deepseek-works/deliveries/L3.md"
+      ],
+      "depends_on": [
+        "deepseek:L3A"
+      ],
+      "checks": [
+        "discover:deepseek-works/tests:test_l3_g5_differential.py"
+      ],
+      "auto_dispatch": false,
+      "auto_verify": false,
+      "complexity": "standard",
+      "created_at": "2026-10-21T13:59:45+00:00",
+      "updated_at": "2026-10-21T13:59:45+00:00",
+      "historical": false,
+      "document": "deepseek-works/tasks/L3-board.md",
+      "delivery": "deepseek-works/deliveries/L3.md",
+      "claimed_at": null,
+      "completed_at": null,
+      "claimed_by": null,
+      "candidate": null,
+      "verification": null,
+      "review_note": "",
+      "legacy_hash": "0332aa9b95758281307a6b47ab8a5ffb69bb8e628565874cdc3250bc32d6550a",
+      "timing": {
+        "as_of": "2026-10-21T14:00:12+00:00",
+        "published_at": "2026-10-21T13:59:45+00:00",
+        "first_claimed_at": null,
+        "last_submitted_at": null,
+        "last_verified_at": null,
+        "last_modified_at": null,
+        "rounds": [],
+        "timeline": [
+          {
+            "seq": 1183,
+            "at": "2026-10-21T13:59:45+00:00",
+            "task_id": "deepseek:L3",
+            "kind": "created",
+            "data": {
+              "rev": 1,
+              "status": "todo"
+            }
+          }
+        ],
+        "last_rework_requested_at": null,
+        "duration_basis": "经过时长为领取至执行完成（提交）的自然时间；办理时长另扣除明确暂停，不代表实际编辑净耗时",
+        "total_active_seconds": null,
+        "rework_active_seconds": 0,
+        "latest_round": null,
+        "history_incomplete": false,
+        "verifications": []
+      }
+    }
+  ]
+}

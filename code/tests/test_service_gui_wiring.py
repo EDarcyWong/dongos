@@ -54,6 +54,7 @@ pub error Invalid=0x0f430001;''',
           'user.device_host':'''module user.device_host;pub var XHCI_OWNER:u64=0;pub error Denied=0x0f440001;
 unsafe extern "sysv64" fn gui_event(kind:u64,a:u64,b:u64,c:u64,d:u64)u64;
 pub unsafe fn revoke_owner(owner:u64)!void{unsafe{let event=gui_event(42,owner,0,0,0);}return;}
+pub unsafe fn dma_stop(slot:usize,configuration:u64,owner:u64,incarnation:u64,root:u64,generation:u64,smp:u64,code:u64)void{return;}
 pub unsafe fn xhci_attach(id:usize,owner:u64,generation:u64)!void{unsafe{if XHCI_OWNER!=0{return error.Denied;}
 if gui_event(40,id as u64,owner,generation,0)!=0{return error.Denied;}XHCI_OWNER=owner;}return;}''',
           'user.desktop':'''module user.desktop;import lib.window_broker_abi as window;

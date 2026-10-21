@@ -1,0 +1,466 @@
+{
+  "records": [
+    {
+      "id": "claude:C49",
+      "rev": 10,
+      "status": "accepted",
+      "formal_job": "e60916643e6247918773e0f6206d8cd7",
+      "formal_checks": [
+        {
+          "spec": "discover:claude-works/tests:test_nasm_u64_select_function.py",
+          "passed": true,
+          "tests": 4,
+          "skips": 0,
+          "returncode": 0,
+          "cancelled": false,
+          "timed_out": false,
+          "elapsed_seconds": 125.0
+        }
+      ],
+      "fingerprint_checks": [
+        {
+          "path": "claude-works/src/bootstrap/nasm_u64_select_function.dg",
+          "expected": "9468a3e4ff93fe91a62a2e0e882e33336e33b1a3705ce4ce78aa36e06146eb65",
+          "actual": "9468a3e4ff93fe91a62a2e0e882e33336e33b1a3705ce4ce78aa36e06146eb65",
+          "matches": true
+        },
+        {
+          "path": "claude-works/src/bootstrap/nasm_u64_select_function.md",
+          "expected": "c8522fbeed8b3b90c46d358005675dae66eaa3b02ea5cc943d70f8561a8ec81e",
+          "actual": "c8522fbeed8b3b90c46d358005675dae66eaa3b02ea5cc943d70f8561a8ec81e",
+          "matches": true
+        },
+        {
+          "path": "claude-works/tests/test_nasm_u64_select_function.py",
+          "expected": "5254dccc6576953709b9d1ca68d252b03e23bbce97b6e4f3baa90b4539fb6396",
+          "actual": "5254dccc6576953709b9d1ca68d252b03e23bbce97b6e4f3baa90b4539fb6396",
+          "matches": true
+        },
+        {
+          "path": "claude-works/deliveries/C49.md",
+          "expected": "21c10d3a84f6f55d0a19d2b709da99c9f918cc6af69514be2924dc3eecb3536f",
+          "actual": "21c10d3a84f6f55d0a19d2b709da99c9f918cc6af69514be2924dc3eecb3536f",
+          "matches": true
+        }
+      ],
+      "main_source": "code/lang/bootstrap/nasm_u64_select_function.dg",
+      "production_equal_after_only_line_end_normalization": true,
+      "registered_status": "integrated",
+      "registered_rev": 11,
+      "integration_note": "2026-10-20按实际代码补登记主线集成。已独立核对原任务/既有源码契约审查及正式复验：4tests/0skip、source_stable=true；当前四交付仍逐字节匹配验收指纹。生产已真实复制到code/lang/bootstrap/nasm_u64_select_function.dg（478b1ed），与验收生产字节一致或仅LF/CRLF；说明及永久测试主线路径适配已审查，保留原语义/别名/原子性/真实坏Dong与完整ABI观察。CR40额外边界增强已核对，未改生产。本机NASM3分组探测维护后，9组件主线对应34项实际已全过0skip；A批20项775.031s且前后SHA稳定，B批本任务已通过，总manifest本轮保存。证据reviews/2026-10-20-mainline-registration-evidence.json与code/build/test/mainline-reconcile-*。本次仅登记既有已验收组件的实际文件集成，不宣称L3/G5/G6完成。"
+    },
+    {
+      "id": "claude:C50",
+      "rev": 10,
+      "status": "accepted",
+      "formal_job": "563c3a6bab364e49b5d794a4511832d6",
+      "formal_checks": [
+        {
+          "spec": "discover:claude-works/tests:test_nasm_u64_forward_function.py",
+          "passed": true,
+          "tests": 4,
+          "skips": 0,
+          "returncode": 0,
+          "cancelled": false,
+          "timed_out": false,
+          "elapsed_seconds": 146.438
+        }
+      ],
+      "fingerprint_checks": [
+        {
+          "path": "claude-works/src/bootstrap/nasm_u64_forward_function.dg",
+          "expected": "579df059d1737f64c1c8ffded8c4cab00b161118d92e015eda619e3875982857",
+          "actual": "579df059d1737f64c1c8ffded8c4cab00b161118d92e015eda619e3875982857",
+          "matches": true
+        },
+        {
+          "path": "claude-works/src/bootstrap/nasm_u64_forward_function.md",
+          "expected": "73f125a3cc96a360843ffa7027b5a4aecb9d1bac6040c1b3aac44844ff63c4b6",
+          "actual": "73f125a3cc96a360843ffa7027b5a4aecb9d1bac6040c1b3aac44844ff63c4b6",
+          "matches": true
+        },
+        {
+          "path": "claude-works/tests/test_nasm_u64_forward_function.py",
+          "expected": "f50f71e43671d509c95fc4f18da0cb50262cf36726a7b828cee9c61d41b0b2fa",
+          "actual": "f50f71e43671d509c95fc4f18da0cb50262cf36726a7b828cee9c61d41b0b2fa",
+          "matches": true
+        },
+        {
+          "path": "claude-works/deliveries/C50.md",
+          "expected": "51fa125d27be78161fee09f0a82e7ea7d63357ae86927becbb5f29696272853c",
+          "actual": "51fa125d27be78161fee09f0a82e7ea7d63357ae86927becbb5f29696272853c",
+          "matches": true
+        }
+      ],
+      "main_source": "code/lang/bootstrap/nasm_u64_forward_function.dg",
+      "production_equal_after_only_line_end_normalization": true,
+      "registered_status": "integrated",
+      "registered_rev": 11,
+      "integration_note": "2026-10-20按实际代码补登记主线集成。已独立核对原任务/既有源码契约审查及正式复验：4tests/0skip、source_stable=true；当前四交付仍逐字节匹配验收指纹。生产已真实复制到code/lang/bootstrap/nasm_u64_forward_function.dg（478b1ed），与验收生产字节一致或仅LF/CRLF；说明及永久测试主线路径适配已审查，保留原语义/别名/原子性/真实坏Dong与完整ABI观察。CR40额外边界增强已核对，未改生产。本机NASM3分组探测维护后，9组件主线对应34项实际已全过0skip；A批20项775.031s且前后SHA稳定，B批本任务已通过，总manifest本轮保存。证据reviews/2026-10-20-mainline-registration-evidence.json与code/build/test/mainline-reconcile-*。本次仅登记既有已验收组件的实际文件集成，不宣称L3/G5/G6完成。"
+    },
+    {
+      "id": "cursor:CR38",
+      "rev": 9,
+      "status": "accepted",
+      "formal_job": "db3dca103e964000bc18efde6e723b67",
+      "formal_checks": [
+        {
+          "spec": "discover:cursor-works/tests:test_nasm_checked_u64_function.py",
+          "passed": true,
+          "tests": 4,
+          "skips": 0,
+          "returncode": 0,
+          "cancelled": false,
+          "timed_out": false,
+          "elapsed_seconds": 155.687
+        }
+      ],
+      "fingerprint_checks": [
+        {
+          "path": "cursor-works/src/bootstrap/nasm_checked_u64_function.dg",
+          "expected": "353a5e59cdcbd55335f83f633791c4f7954c98f7d3e6326c2540166266d24f0a",
+          "actual": "353a5e59cdcbd55335f83f633791c4f7954c98f7d3e6326c2540166266d24f0a",
+          "matches": true
+        },
+        {
+          "path": "cursor-works/src/bootstrap/nasm_checked_u64_function.md",
+          "expected": "4ad7dba32f574850bba47966ba210a7742f2ff833324ca0e3ea0b2577b8708ca",
+          "actual": "4ad7dba32f574850bba47966ba210a7742f2ff833324ca0e3ea0b2577b8708ca",
+          "matches": true
+        },
+        {
+          "path": "cursor-works/tests/test_nasm_checked_u64_function.py",
+          "expected": "6d3b5c34a0f6a124767d19a0f0ea93111ec769fb9d6897403b48d3ee80b5ae3d",
+          "actual": "6d3b5c34a0f6a124767d19a0f0ea93111ec769fb9d6897403b48d3ee80b5ae3d",
+          "matches": true
+        },
+        {
+          "path": "cursor-works/deliveries/CR38.md",
+          "expected": "b366e5ee9f3400641065812db8e4ced437f12ade81e470998498518e443632bb",
+          "actual": "b366e5ee9f3400641065812db8e4ced437f12ade81e470998498518e443632bb",
+          "matches": true
+        }
+      ],
+      "main_source": "code/lang/bootstrap/nasm_checked_u64_function.dg",
+      "production_equal_after_only_line_end_normalization": true,
+      "registered_status": "integrated",
+      "registered_rev": 10,
+      "integration_note": "2026-10-20按实际代码补登记主线集成。已独立核对原任务/既有源码契约审查及正式复验：4tests/0skip、source_stable=true；当前四交付仍逐字节匹配验收指纹。生产已真实复制到code/lang/bootstrap/nasm_checked_u64_function.dg（478b1ed），与验收生产字节一致或仅LF/CRLF；说明及永久测试主线路径适配已审查，保留原语义/别名/原子性/真实坏Dong与完整ABI观察。CR40额外边界增强已核对，未改生产。本机NASM3分组探测维护后，9组件主线对应34项实际已全过0skip；A批20项775.031s且前后SHA稳定，B批本任务已通过，总manifest本轮保存。证据reviews/2026-10-20-mainline-registration-evidence.json与code/build/test/mainline-reconcile-*。本次仅登记既有已验收组件的实际文件集成，不宣称L3/G5/G6完成。"
+    },
+    {
+      "id": "cursor:CR39",
+      "rev": 7,
+      "status": "accepted",
+      "formal_job": "fb380dd0e1f043e5990c072e71ff1582",
+      "formal_checks": [
+        {
+          "spec": "discover:cursor-works/tests:test_nasm_short_circuit_function.py",
+          "passed": true,
+          "tests": 4,
+          "skips": 0,
+          "returncode": 0,
+          "cancelled": false,
+          "timed_out": false,
+          "elapsed_seconds": 188.828
+        }
+      ],
+      "fingerprint_checks": [
+        {
+          "path": "cursor-works/src/bootstrap/nasm_short_circuit_function.dg",
+          "expected": "6aa0f6f5cdb3815b5d8d5701dc736e4e2ae89cbb4f1bdfdee0702b98e6dd1fe1",
+          "actual": "6aa0f6f5cdb3815b5d8d5701dc736e4e2ae89cbb4f1bdfdee0702b98e6dd1fe1",
+          "matches": true
+        },
+        {
+          "path": "cursor-works/src/bootstrap/nasm_short_circuit_function.md",
+          "expected": "1a3bcdfd53c5e4b0f5fa1b74c8d33bd1ca66049bc0da2f4bf43c57b55b234a84",
+          "actual": "1a3bcdfd53c5e4b0f5fa1b74c8d33bd1ca66049bc0da2f4bf43c57b55b234a84",
+          "matches": true
+        },
+        {
+          "path": "cursor-works/tests/test_nasm_short_circuit_function.py",
+          "expected": "b9eb25ba9a1a14f9b0a250d7c4be66a63fa4d9394db21b180d2390426004c8a8",
+          "actual": "b9eb25ba9a1a14f9b0a250d7c4be66a63fa4d9394db21b180d2390426004c8a8",
+          "matches": true
+        },
+        {
+          "path": "cursor-works/deliveries/CR39.md",
+          "expected": "3912de3da005cf567f7f1490038512be0c2b6e367ad423f3b75872ff753eac90",
+          "actual": "3912de3da005cf567f7f1490038512be0c2b6e367ad423f3b75872ff753eac90",
+          "matches": true
+        }
+      ],
+      "main_source": "code/lang/bootstrap/nasm_short_circuit_function.dg",
+      "production_equal_after_only_line_end_normalization": true,
+      "registered_status": "integrated",
+      "registered_rev": 8,
+      "integration_note": "2026-10-20按实际代码补登记主线集成。已独立核对原任务/既有源码契约审查及正式复验：4tests/0skip、source_stable=true；当前四交付仍逐字节匹配验收指纹。生产已真实复制到code/lang/bootstrap/nasm_short_circuit_function.dg（478b1ed），与验收生产字节一致或仅LF/CRLF；说明及永久测试主线路径适配已审查，保留原语义/别名/原子性/真实坏Dong与完整ABI观察。CR40额外边界增强已核对，未改生产。本机NASM3分组探测维护后，9组件主线对应34项实际已全过0skip；A批20项775.031s且前后SHA稳定，B批本任务已通过，总manifest本轮保存。证据reviews/2026-10-20-mainline-registration-evidence.json与code/build/test/mainline-reconcile-*。本次仅登记既有已验收组件的实际文件集成，不宣称L3/G5/G6完成。"
+    },
+    {
+      "id": "cursor:CR40",
+      "rev": 13,
+      "status": "accepted",
+      "formal_job": "a848152c07fc46b687edd4b6971c65fa",
+      "formal_checks": [
+        {
+          "spec": "discover:cursor-works/tests:test_nasm_pair_cleanup_function.py",
+          "passed": true,
+          "tests": 4,
+          "skips": 0,
+          "returncode": 0,
+          "cancelled": false,
+          "timed_out": false,
+          "elapsed_seconds": 124.406
+        }
+      ],
+      "fingerprint_checks": [
+        {
+          "path": "cursor-works/src/bootstrap/nasm_pair_cleanup_function.dg",
+          "expected": "22522c485b9650f59d05a6ae3a7237f706a06e3ac6199e55782e1d67b24f6e8e",
+          "actual": "22522c485b9650f59d05a6ae3a7237f706a06e3ac6199e55782e1d67b24f6e8e",
+          "matches": true
+        },
+        {
+          "path": "cursor-works/src/bootstrap/nasm_pair_cleanup_function.md",
+          "expected": "65d09a2ca8c5970277b1a4ae3e9d10df77d73e900d84e09d55eb606468ce56e4",
+          "actual": "65d09a2ca8c5970277b1a4ae3e9d10df77d73e900d84e09d55eb606468ce56e4",
+          "matches": true
+        },
+        {
+          "path": "cursor-works/tests/test_nasm_pair_cleanup_function.py",
+          "expected": "2145159da40db85d4348c5b437bb8f2fbcac1a887c25e8ef7895f5a71255175e",
+          "actual": "2145159da40db85d4348c5b437bb8f2fbcac1a887c25e8ef7895f5a71255175e",
+          "matches": true
+        },
+        {
+          "path": "cursor-works/deliveries/CR40.md",
+          "expected": "e7562486a13f6fec505e0ed68a3bc2266dc383cc58e88fdff39f1e3533a1bf5c",
+          "actual": "e7562486a13f6fec505e0ed68a3bc2266dc383cc58e88fdff39f1e3533a1bf5c",
+          "matches": true
+        }
+      ],
+      "main_source": "code/lang/bootstrap/nasm_pair_cleanup_function.dg",
+      "production_equal_after_only_line_end_normalization": true,
+      "registered_status": "integrated",
+      "registered_rev": 14,
+      "integration_note": "2026-10-20按实际代码补登记主线集成。已独立核对原任务/既有源码契约审查及正式复验：4tests/0skip、source_stable=true；当前四交付仍逐字节匹配验收指纹。生产已真实复制到code/lang/bootstrap/nasm_pair_cleanup_function.dg（478b1ed），与验收生产字节一致或仅LF/CRLF；说明及永久测试主线路径适配已审查，保留原语义/别名/原子性/真实坏Dong与完整ABI观察。CR40额外边界增强已核对，未改生产。本机NASM3分组探测维护后，9组件主线对应34项实际已全过0skip；A批20项775.031s且前后SHA稳定，B批本任务已通过，总manifest本轮保存。证据reviews/2026-10-20-mainline-registration-evidence.json与code/build/test/mainline-reconcile-*。本次仅登记既有已验收组件的实际文件集成，不宣称L3/G5/G6完成。"
+    },
+    {
+      "id": "cursor:CR41",
+      "rev": 7,
+      "status": "accepted",
+      "formal_job": "bae9fbad760043bbb6a01859442cadab",
+      "formal_checks": [
+        {
+          "spec": "discover:cursor-works/tests:test_nasm_narrow_arithmetic_function.py",
+          "passed": true,
+          "tests": 4,
+          "skips": 0,
+          "returncode": 0,
+          "cancelled": false,
+          "timed_out": false,
+          "elapsed_seconds": 182.453
+        }
+      ],
+      "fingerprint_checks": [
+        {
+          "path": "cursor-works/src/bootstrap/nasm_narrow_arithmetic_function.dg",
+          "expected": "32e6df437cfbe805e4955b2a53e3e83c2eaa3618743d97bd4dab874b04ff1fb2",
+          "actual": "32e6df437cfbe805e4955b2a53e3e83c2eaa3618743d97bd4dab874b04ff1fb2",
+          "matches": true
+        },
+        {
+          "path": "cursor-works/src/bootstrap/nasm_narrow_arithmetic_function.md",
+          "expected": "445d3bd2f620c51d9868a6a98363c9c2a851e373f194aae6a85bcb0e50c6d3ec",
+          "actual": "445d3bd2f620c51d9868a6a98363c9c2a851e373f194aae6a85bcb0e50c6d3ec",
+          "matches": true
+        },
+        {
+          "path": "cursor-works/tests/test_nasm_narrow_arithmetic_function.py",
+          "expected": "20f99bd42d08dd300a3be72324c60faf99f837e9aa28ebc85af5ad2e78fb61a9",
+          "actual": "20f99bd42d08dd300a3be72324c60faf99f837e9aa28ebc85af5ad2e78fb61a9",
+          "matches": true
+        },
+        {
+          "path": "cursor-works/deliveries/CR41.md",
+          "expected": "782828fcd9e22c41b75677f28590a8ab4123a96511a0c943dbb6cc4c4d9f66df",
+          "actual": "782828fcd9e22c41b75677f28590a8ab4123a96511a0c943dbb6cc4c4d9f66df",
+          "matches": true
+        }
+      ],
+      "main_source": "code/lang/bootstrap/nasm_narrow_arithmetic_function.dg",
+      "production_equal_after_only_line_end_normalization": true,
+      "registered_status": "integrated",
+      "registered_rev": 8,
+      "integration_note": "2026-10-20按实际代码补登记主线集成。已独立核对原任务/既有源码契约审查及正式复验：4tests/0skip、source_stable=true；当前四交付仍逐字节匹配验收指纹。生产已真实复制到code/lang/bootstrap/nasm_narrow_arithmetic_function.dg（478b1ed），与验收生产字节一致或仅LF/CRLF；说明及永久测试主线路径适配已审查，保留原语义/别名/原子性/真实坏Dong与完整ABI观察。CR40额外边界增强已核对，未改生产。本机NASM3分组探测维护后，9组件主线对应34项实际已全过0skip；A批20项775.031s且前后SHA稳定，B批本任务已通过，总manifest本轮保存。证据reviews/2026-10-20-mainline-registration-evidence.json与code/build/test/mainline-reconcile-*。本次仅登记既有已验收组件的实际文件集成，不宣称L3/G5/G6完成。"
+    },
+    {
+      "id": "cursor:CR42",
+      "rev": 7,
+      "status": "accepted",
+      "formal_job": "3d115eec048d4b97bb0d207f8c670b2d",
+      "formal_checks": [
+        {
+          "spec": "discover:cursor-works/tests:test_nasm_slice_view_function.py",
+          "passed": true,
+          "tests": 4,
+          "skips": 0,
+          "returncode": 0,
+          "cancelled": false,
+          "timed_out": false,
+          "elapsed_seconds": 202.969
+        }
+      ],
+      "fingerprint_checks": [
+        {
+          "path": "cursor-works/src/bootstrap/nasm_slice_view_function.dg",
+          "expected": "b7aedf372d00abdc6f9425547a00a06e6b7c87a786c7992b26b37c486a63999b",
+          "actual": "b7aedf372d00abdc6f9425547a00a06e6b7c87a786c7992b26b37c486a63999b",
+          "matches": true
+        },
+        {
+          "path": "cursor-works/src/bootstrap/nasm_slice_view_function.md",
+          "expected": "2b4667e618f835ab410e92e3856aa23b8d0e8216ccc051e6afcc1e99835e279e",
+          "actual": "2b4667e618f835ab410e92e3856aa23b8d0e8216ccc051e6afcc1e99835e279e",
+          "matches": true
+        },
+        {
+          "path": "cursor-works/tests/test_nasm_slice_view_function.py",
+          "expected": "075351008e3cc8c05752e01650594f42bccd31ce46a1a9e135250fe07d4e5505",
+          "actual": "075351008e3cc8c05752e01650594f42bccd31ce46a1a9e135250fe07d4e5505",
+          "matches": true
+        },
+        {
+          "path": "cursor-works/deliveries/CR42.md",
+          "expected": "097503883d8510077d5a7153f10b21408327b2e9c096559685cfdf322861801a",
+          "actual": "097503883d8510077d5a7153f10b21408327b2e9c096559685cfdf322861801a",
+          "matches": true
+        }
+      ],
+      "main_source": "code/lang/bootstrap/nasm_slice_view_function.dg",
+      "production_equal_after_only_line_end_normalization": true,
+      "registered_status": "integrated",
+      "registered_rev": 8,
+      "integration_note": "2026-10-20按实际代码补登记主线集成。已独立核对原任务/既有源码契约审查及正式复验：4tests/0skip、source_stable=true；当前四交付仍逐字节匹配验收指纹。生产已真实复制到code/lang/bootstrap/nasm_slice_view_function.dg（478b1ed），与验收生产字节一致或仅LF/CRLF；说明及永久测试主线路径适配已审查，保留原语义/别名/原子性/真实坏Dong与完整ABI观察。CR40额外边界增强已核对，未改生产。本机NASM3分组探测维护后，9组件主线对应34项实际已全过0skip；A批20项775.031s且前后SHA稳定，B批本任务已通过，总manifest本轮保存。证据reviews/2026-10-20-mainline-registration-evidence.json与code/build/test/mainline-reconcile-*。本次仅登记既有已验收组件的实际文件集成，不宣称L3/G5/G6完成。"
+    },
+    {
+      "id": "deepseek:D25",
+      "rev": 5,
+      "status": "accepted",
+      "formal_job": "a54f3e5a53d845f897bf9d2a4cdae27c",
+      "formal_checks": [
+        {
+          "spec": "discover:deepseek-works/tests:test_nasm_i64_switch_function.py",
+          "passed": true,
+          "tests": 3,
+          "skips": 0,
+          "returncode": 0,
+          "cancelled": false,
+          "timed_out": false,
+          "elapsed_seconds": 150.891
+        }
+      ],
+      "fingerprint_checks": [
+        {
+          "path": "deepseek-works/src/bootstrap/nasm_i64_switch_function.dg",
+          "expected": "71bbe445d7a36d4e72ccd539c8ccecba447a0155d9c00d6a879e08cc998cf0c4",
+          "actual": "71bbe445d7a36d4e72ccd539c8ccecba447a0155d9c00d6a879e08cc998cf0c4",
+          "matches": true
+        },
+        {
+          "path": "deepseek-works/src/bootstrap/nasm_i64_switch_function.md",
+          "expected": "81d42024d08bfabdf7082a6805a0cb7a94b799307dd45c6e185eabb9cfb695f5",
+          "actual": "81d42024d08bfabdf7082a6805a0cb7a94b799307dd45c6e185eabb9cfb695f5",
+          "matches": true
+        },
+        {
+          "path": "deepseek-works/tests/test_nasm_i64_switch_function.py",
+          "expected": "582dfbbedda46302df1cce7b8aa821718c83d13ac544f0ee1da543872a9fefd2",
+          "actual": "582dfbbedda46302df1cce7b8aa821718c83d13ac544f0ee1da543872a9fefd2",
+          "matches": true
+        },
+        {
+          "path": "deepseek-works/deliveries/D25.md",
+          "expected": "8e7b74ee64a9a9b7a727af0270f69c2618be141d23d50afca9f9d857a3cc1b58",
+          "actual": "8e7b74ee64a9a9b7a727af0270f69c2618be141d23d50afca9f9d857a3cc1b58",
+          "matches": true
+        }
+      ],
+      "main_source": "code/lang/bootstrap/nasm_i64_switch_function.dg",
+      "production_equal_after_only_line_end_normalization": true,
+      "registered_status": "integrated",
+      "registered_rev": 6,
+      "integration_note": "2026-10-20按实际代码补登记主线集成。已独立核对原任务/既有源码契约审查及正式复验：3tests/0skip、source_stable=true；当前四交付仍逐字节匹配验收指纹。生产已真实复制到code/lang/bootstrap/nasm_i64_switch_function.dg（478b1ed），与验收生产字节一致或仅LF/CRLF；说明及永久测试主线路径适配已审查，保留原语义/别名/原子性/真实坏Dong与完整ABI观察。CR40额外边界增强已核对，未改生产。本机NASM3分组探测维护后，9组件主线对应34项实际已全过0skip；A批20项775.031s且前后SHA稳定，B批本任务已通过，总manifest本轮保存。证据reviews/2026-10-20-mainline-registration-evidence.json与code/build/test/mainline-reconcile-*。本次仅登记既有已验收组件的实际文件集成，不宣称L3/G5/G6完成。"
+    },
+    {
+      "id": "deepseek:D27",
+      "rev": 5,
+      "status": "accepted",
+      "formal_job": "5830ef22792f4e57ab60d920f30bb0ec",
+      "formal_checks": [
+        {
+          "spec": "discover:deepseek-works/tests:test_nasm_indexed_memory_function.py",
+          "passed": true,
+          "tests": 3,
+          "skips": 0,
+          "returncode": 0,
+          "cancelled": false,
+          "timed_out": false,
+          "elapsed_seconds": 160.703
+        }
+      ],
+      "fingerprint_checks": [
+        {
+          "path": "deepseek-works/src/bootstrap/nasm_indexed_memory_function.dg",
+          "expected": "2d040bfe6e59b522fdafcfee8155af791fa44937698233b1e6acee5d3b3a6194",
+          "actual": "2d040bfe6e59b522fdafcfee8155af791fa44937698233b1e6acee5d3b3a6194",
+          "matches": true
+        },
+        {
+          "path": "deepseek-works/src/bootstrap/nasm_indexed_memory_function.md",
+          "expected": "59630b8a197f7c169eeb1cf325e32ee688e1df16152ef07a96bb7f584fd6a6b3",
+          "actual": "59630b8a197f7c169eeb1cf325e32ee688e1df16152ef07a96bb7f584fd6a6b3",
+          "matches": true
+        },
+        {
+          "path": "deepseek-works/tests/test_nasm_indexed_memory_function.py",
+          "expected": "a32ca13a4a643beb9d93a1cf01a9e6894f8b16b6a6f63c0cf5f557493df1b07f",
+          "actual": "a32ca13a4a643beb9d93a1cf01a9e6894f8b16b6a6f63c0cf5f557493df1b07f",
+          "matches": true
+        },
+        {
+          "path": "deepseek-works/deliveries/D27.md",
+          "expected": "aaedfaed97333d28a227daf9b11289207dab18725002a9ccdca09f6dce8663da",
+          "actual": "aaedfaed97333d28a227daf9b11289207dab18725002a9ccdca09f6dce8663da",
+          "matches": true
+        }
+      ],
+      "main_source": "code/lang/bootstrap/nasm_indexed_memory_function.dg",
+      "production_equal_after_only_line_end_normalization": true,
+      "registered_status": "integrated",
+      "registered_rev": 6,
+      "integration_note": "2026-10-20按实际代码补登记主线集成。已独立核对原任务/既有源码契约审查及正式复验：3tests/0skip、source_stable=true；当前四交付仍逐字节匹配验收指纹。生产已真实复制到code/lang/bootstrap/nasm_indexed_memory_function.dg（478b1ed），与验收生产字节一致或仅LF/CRLF；说明及永久测试主线路径适配已审查，保留原语义/别名/原子性/真实坏Dong与完整ABI观察。CR40额外边界增强已核对，未改生产。本机NASM3分组探测维护后，9组件主线对应34项实际已全过0skip；A批20项775.031s且前后SHA稳定，B批本任务已通过，总manifest本轮保存。证据reviews/2026-10-20-mainline-registration-evidence.json与code/build/test/mainline-reconcile-*。本次仅登记既有已验收组件的实际文件集成，不宣称L3/G5/G6完成。"
+    }
+  ],
+  "note": "仅登记已验收交付的实际文件集成。当前主线定向9模块34项已运行通过；终态总manifest见本轮主线回执。",
+  "mainline_test_receipts": [
+    {
+      "path": "code/build/test/mainline-reconcile-A-685abf9a29c1/result.json",
+      "batch": "A",
+      "returncode": 0,
+      "tests": 20,
+      "skips": 0,
+      "stable": true,
+      "elapsed_seconds": 775.031
+    },
+    {
+      "path": "code/build/test/mainline-reconcile-B-c059672f0b7a/result.json",
+      "batch": "B",
+      "returncode": 0,
+      "tests": 20,
+      "skips": 0,
+      "stable": true,
+      "elapsed_seconds": 979.781
+    }
+  ]
+}

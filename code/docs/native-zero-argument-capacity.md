@@ -1,0 +1,14 @@
+# 旧原生测试器的零参数容量边界
+
+新GLOBAL无参正例实际触发旧DRIVER的exact_args-1：0减1为UINT64_MAX，生产lower正确INVALID1，测试器误要求CAPACITY2。Linux同原Driver/同Dong对象已实测return96/contract line52，不给正例额外塞参数掩盖。
+
+仅在exact_args==0时明确把args描述符长度设MAX并检查INVALID1、Result和完整workspace逐字节保持；没有合法更小容量，非零args的capacity-1/CAPACITY2仍原样。其它functions/code/node_slots容量、alias/输入 guards、真实Dong坏体、只读输入指纹均保持。各if明确花括号保留严格-Werror。
+
+新增test_native_zero_args从当前真实Dong wrapper冷引导，原旧DRIVER只显式标SysV宿主C ABI，Windows printf用既有MinGW标准模式，保持严格-Wall/-Wextra/-Werror；目标debug/release均原无参数GLOBAL源码，真实ELF64/COFF，检查1函数/0参数并原生返回1。独立Linux原NativeCompilerTests新增global正例方法也冷执行，不把编译/崩溃当成功。
+
+开发首轮Windows观察C未开标准printf宏、Linux新if布局被-Wmisleading-indentation拒绝；均保留失败并明确修正，未算验收。当前主目录文件仅在读取其旧版本的冻结桥复验退出后复制候选。本轮实际最终结果由正式门禁/独立审查登记，尚不提前宣告通过。
+
+
+首正式774c4ac6完整冷1项/0skip/198.938s真实又指出同类零资源假设：无参数也无调用参数时，ABI kinds/locations容量0本来合法，旧循环却一律要求CAPACITY。补成真正成功正例：0容量完整发射必须与基线每字节相同，恢复已写前缀后完整输出尾部hash仍等于原a9填充；非零参数仍跑原短容量失败负控。没有凭空要求未使用的资源非零，也未增加无关参数。
+
+修复后使用已核对当前生产源码的原Dong对象作为开发缓存，实际旧Driver在两目标模式分别完成全部容量/原子性/只读/guards检查，输出1函数0参数，发射原GLOBAL源码并实际SysV返回1。该缓存不计正式；新正式仍完整冷引导，Linux实际原方法第三轮从独立唯一目录冷执行。旧96/printf/if布局/未使用scratch错误各轮记录保留。

@@ -1,70 +1,44 @@
 {
+  "archive_note": "本轮NASM3兼容维护错用了异机既有CX6编号；原CX6为PR8有界源码读取接线integrated rev6。本地临时实现/报告/10项实际测试完整保留，另以唯一编号CXNASM3登记，禁止将两项任务混成同一历史。归档前API备份reviews/2026-10-20-local-number-collision-backup.json。",
+  "archived": true,
+  "archived_at": "2026-10-20T13:03:15+00:00",
   "assignment_owner": "codex",
   "auto_dispatch": false,
   "auto_verify": false,
   "candidate": null,
   "checks": [
-    "module:lang.tests.test_guest_files_reader"
+    "module:lang.tests.test_nasm_compatibility"
   ],
   "claim_from_status": "todo",
-  "claim_token": "787b20d07fc94cf3a9abcad276a0a398",
-  "claimed_at": "2026-10-20T07:04:06+00:00",
-  "claimed_by": "codex-mcp-d76b66689d824a70",
-  "completed_at": "2026-10-20T07:08:31+00:00",
+  "claim_token": "a4e3438c6fe1415e86b87ebec3927211",
+  "claimed_at": "2026-10-20T12:51:58+00:00",
+  "claimed_by": "codex-mcp-6d5798b7b4b74b61",
+  "completed_at": "2026-10-20T12:56:13+00:00",
   "complexity": "standard",
-  "created_at": "2026-10-20T07:03:54+00:00",
+  "created_at": "2026-10-20T12:51:58+00:00",
   "delivery": "codex-works/deliveries/CX6.md",
   "depends_on": [
-    "pool:GUEST2"
+    "codex:CX1",
+    "codex:CX3"
   ],
-  "description": "按用户完成L3授权，新增lib.compiler_source：仅消费已初始化的lib.files.Session和调用者已授权文件token，通过现有H_READ IPC接入bootstrap.guest_source_reader，分块<=61440，检查返回字节数后拷贝，零长度EOF与错误保持；不申请权限、不打开路径、不改内核配置。校验Session/channel与scratch/out/result完整区间不别名，失败预检无IPC与无写入。真实debug/release原生C传输桩检查消息、偏移、短读、EOF、超容量、错误、坏返回及原子性。仅声明文件，不抢GUEST4/5。",
+  "description": "所属阶段：P0工具链维护，关联L3整函数主线复验。源码核对发现lang/tests/test_dongc.py:nasm_flags只读取nasm -h；本机NASM3.02把reloc-rel-dword及reloc-abs-qword放在-h -w分组帮助中，主线C52测试在setUpClass组装时因合法RIP相对重定位被-Werror拒绝，0tests（build/test/bootstrap-nasm-u64-module/run-d0a567604d4b）。这是CX1能力探测在新帮助格式下的后继兼容修复，不重做已验收组件。仅改声明文件：按实际帮助格式探测两个完整警告名，兼容旧NASM不支持-h -w或未知参数的情况，保留-Wall/-Werror及其它警告；不得按版本硬猜、不无条件关闭未知警告、不吞真实探测失败。测试覆盖旧平铺帮助、新分组帮助、名字前缀误匹配、两个警告独立、真实失败传播，以及本机NASM合法RIP/绝对64位重定位实际组装与其它警告仍为错误。只跑定向兼容测试，不跑OS/VM。交付后须独立复验。",
   "document": "codex-works/tasks/CX6-board.md",
   "historical": false,
   "id": "codex:CX6",
-  "integration_note": "实现已真实落于主线code/services/lib/compiler_source.dg/.md和lang/tests/test_guest_files_reader.py，文件身份与独立验收/正式隔离指纹一致。正式隔离及独立2200边界/模式通过，主线此前完整1test0skip34.794秒通过，冻结后未修改。独立审查报告reviews/2026-10-20-independent-io-review.md。登记真实集成，未扩大权限/内存/栈。",
-  "legacy_hash": "d3124a96642a0379b0f498ef14f12ebf97b36e4d80b306f81b2bf5324e744504",
+  "legacy_hash": "3cfcef59e2acc66d2986951b38e548bbcfa78c49f977abdbb9b46ae7594ca6e4",
   "number": "CX6",
   "owner": "codex",
-  "rev": 6,
-  "review_note": "独立审查子代理review_io实际完整审核源码/契约/测试，独立SHA核对原对象并追加debug/release各2200条短读/精确容量/超容边界及9预检，全部原生exit0。正式隔离425a27aeef594fce946c7d6944844eb8 1test/0skip/38.717秒/source_stable/退出并停止。当前四文件指纹一致。报告reviews/2026-10-20-independent-io-review.md，证据code/build/test/independent-io/reader/evidence.json。准予文件读取适配组件验收，非完整L3完成。",
-  "status": "integrated",
-  "title": "[L3] 将有界源码读取器接入已有DongOS文件句柄",
-  "updated_at": "2026-10-20T08:00:31+00:00",
-  "verification": {
-    "checks": [
-      {
-        "cancelled": false,
-        "elapsed_seconds": 38.717,
-        "execution_exited": true,
-        "passed": true,
-        "process_stopped": true,
-        "returncode": 0,
-        "skips": 0,
-        "spec": "module:lang.tests.test_guest_files_reader",
-        "tests": 1,
-        "timed_out": false
-      }
-    ],
-    "execution_exited": true,
-    "fingerprint": {
-      "codex-works/deliveries/CX6.md": "0b5c33da08f42dbed9e6d50ec77112aea8ab634977548f1a0eceb45f84a51199",
-      "docs/l3-guest-source-integration.md": "fcc01504cd55128f5470e2062cf33ff89e8842df4283371a73566a6db57e4e23",
-      "lang/tests/test_guest_files_reader.py": "26ce537dded8a5f2d4867f5c1000dfe248d7198a3a64a896362b2b068c12e5f0",
-      "services/lib/compiler_source.dg": "7f60d9c0e1357ea74ca54eaf2da6244a7830123f4a1f27a732fb4d692ccdc522",
-      "services/lib/compiler_source.md": "13c1a60f51c2c26eb4e78fec42d759c0ba291dca585ba889c8c902e509828a0c"
-    },
-    "finished_at": "2026-10-20T07:10:26+00:00",
-    "job": "425a27aeef594fce946c7d6944844eb8",
-    "passed": true,
-    "process_stopped": true,
-    "source_stable": true,
-    "summary": "定向复验通过，等待源码/契约审查"
-  },
+  "pause_control": "confirmed",
+  "resume_status": "submitted",
+  "rev": 5,
+  "review_note": "",
+  "status": "paused",
+  "title": "[P0/L3] 修复NASM 3分组帮助的警告能力探测并复核集成入口",
+  "updated_at": "2026-10-20T13:03:15+00:00",
+  "verification": null,
   "write_paths": [
-    "services/lib/compiler_source.dg",
-    "services/lib/compiler_source.md",
-    "lang/tests/test_guest_files_reader.py",
-    "docs/l3-guest-source-integration.md",
+    "lang/tests/test_dongc.py",
+    "lang/tests/test_nasm_compatibility.py",
     "codex-works/deliveries/CX6.md"
   ]
 }

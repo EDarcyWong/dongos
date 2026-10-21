@@ -1,0 +1,17 @@
+{
+  "problem": "Legitimate kernel/build/storage_profile.dg omitted by the generic build output exclusion",
+  "change": "Only exact source-root kernel/build is preserved in isolated snapshots and before/after stability inventories; normal generated build dirs remain excluded",
+  "tests": 29,
+  "skips": 0,
+  "exit": 0,
+  "seconds": 7.294,
+  "old_job": "1cae82cd6046409885fd39c02b4116e6",
+  "old_job_preserved": true,
+  "old_failed_job_was_not_accepted": true,
+  "no_running_coordinator_jobs_before_reload": true,
+  "reloaded_service_pid": 28296,
+  "source_sha256": {
+    "D:\\projects\\2026\\dongos\\coordination\\dongos_coordination\\runner.py": "966f4dbc1605024ec9a764896e31070a3cbf550a4745dc591cc4bc6661e9cbbd",
+    "D:\\projects\\2026\\dongos\\coordination\\tests\\test_source_snapshot.py": "8d5ee8465b5cecd5b25f5d72ab3d50806218964212a053fba6914198a85068e6"
+  }
+}

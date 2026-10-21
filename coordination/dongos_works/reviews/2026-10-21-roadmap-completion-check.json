@@ -1,0 +1,206 @@
+{
+  "replays": {
+    "p5-control": {
+      "command": [
+        "C:\\Python312\\python.exe",
+        "-X",
+        "utf8",
+        "D:\\projects\\2026\\dongos\\code\\tests\\run_virtio_reset_qemu.py",
+        "--replay",
+        "D:\\projects\\2026\\dongos\\coordination\\dongos_works\\.local\\p5ctx2-20261021-193555\\offline-control\\result.json"
+      ],
+      "returncode": 0,
+      "elapsed_seconds": 6.219,
+      "archive": "D:\\projects\\2026\\dongos\\coordination\\dongos_works\\.local\\p5ctx2-20261021-193555\\offline-control\\result.json",
+      "archive_sha256": "2128dee3708c029535182009bdf7c38a8532d2ab235ea3a62043774719f8f6d8",
+      "stdout_sha256": "cfe9f4d58535ca97b1be92f55b3536096cedd9cbb9279ac09357493751ba1518",
+      "actual_context_states": [
+        {
+          "held": 1,
+          "drain": 0
+        },
+        {
+          "held": 1,
+          "drain": 0
+        }
+      ]
+    },
+    "p5-fault": {
+      "command": [
+        "C:\\Python312\\python.exe",
+        "-X",
+        "utf8",
+        "D:\\projects\\2026\\dongos\\code\\tests\\run_virtio_reset_qemu.py",
+        "--replay",
+        "D:\\projects\\2026\\dongos\\coordination\\dongos_works\\.local\\p5ctx2-20261021-193555\\offline-fault\\result.json"
+      ],
+      "returncode": 0,
+      "elapsed_seconds": 5.531,
+      "archive": "D:\\projects\\2026\\dongos\\coordination\\dongos_works\\.local\\p5ctx2-20261021-193555\\offline-fault\\result.json",
+      "archive_sha256": "f120c1891430f2184cf10046f9e8c1f8e3083ecc93b3d8cc63983051e6838cbd",
+      "stdout_sha256": "ea3ea7eba34c17db2626e82e64090a55d17a0dd58a44ac32adf7056b6fc1e770",
+      "actual_context_states": [
+        {
+          "held": 1,
+          "drain": 0
+        },
+        {
+          "held": 1,
+          "drain": 0
+        }
+      ]
+    },
+    "p2-four-cpu": {
+      "command": [
+        "C:\\Python312\\python.exe",
+        "-X",
+        "utf8",
+        "D:\\projects\\2026\\dongos\\code\\tests\\run_p2_active_large_qemu.py",
+        "--replay",
+        "D:\\projects\\2026\\dongos\\coordination\\dongos_works\\.local\\p2live1-debaba97c9cd\\portable-a2\\result.json"
+      ],
+      "returncode": 0,
+      "elapsed_seconds": 0.203,
+      "archive": "D:\\projects\\2026\\dongos\\coordination\\dongos_works\\.local\\p2live1-debaba97c9cd\\portable-a2\\result.json",
+      "archive_sha256": "10e4b7dffa3904d4f7b2f4b946ef66872d31667db6235b8a2c916e04eaa78101",
+      "stdout_sha256": "09ca3b0c0b206f47a5dcf096a8b4ca5dea863dcf8fb089399dd47877caa777ad",
+      "actual_report": {
+        "complete": 1,
+        "phase": 10,
+        "steps": 1023,
+        "held": 0,
+        "full_flush": 516,
+        "retired_tables": 4
+      }
+    },
+    "p2-one-cpu": {
+      "command": [
+        "C:\\Python312\\python.exe",
+        "-X",
+        "utf8",
+        "D:\\projects\\2026\\dongos\\code\\tests\\run_p2_active_large_qemu.py",
+        "--replay",
+        "D:\\projects\\2026\\dongos\\coordination\\dongos_works\\.local\\p2live1-debaba97c9cd\\portable-b2\\result.json"
+      ],
+      "returncode": 0,
+      "elapsed_seconds": 0.188,
+      "archive": "D:\\projects\\2026\\dongos\\coordination\\dongos_works\\.local\\p2live1-debaba97c9cd\\portable-b2\\result.json",
+      "archive_sha256": "6b52952b970c0f10596035f17e843a2e199837dcc35794b6e12fbfaf0266cb5b",
+      "stdout_sha256": "5a07744533578ad6afb205e45b043d38dc5688af032fb3bed1a9faa2458e2017",
+      "actual_report": {
+        "complete": 1,
+        "phase": 10,
+        "steps": 1023,
+        "held": 0,
+        "full_flush": 516,
+        "retired_tables": 4
+      }
+    }
+  },
+  "formal_files_preserved": {
+    "P5CTX2": {
+      "formal_files": 7,
+      "all_main_files_match": true
+    },
+    "P2LIVE1": {
+      "formal_files": 14,
+      "all_main_files_match": true
+    }
+  },
+  "merged_commits_in_current_head": {
+    "M7": {
+      "command": [
+        "git",
+        "merge-base",
+        "--is-ancestor",
+        "1dfebe1",
+        "HEAD"
+      ],
+      "returncode": 0,
+      "commit": "1dfebe18a96f48c9b864ab0407c5a32b141c4bd4"
+    },
+    "M10": {
+      "command": [
+        "git",
+        "merge-base",
+        "--is-ancestor",
+        "d7468a1",
+        "HEAD"
+      ],
+      "returncode": 0,
+      "commit": "d7468a17481a6c55c9add7035aff5e67c577de51"
+    }
+  },
+  "source_sha256": {
+    "kernel/user/device_host.dg": "823fc27763560ff880dd26b9e4da236a92cf55174d3e4a86bf0b234592ba95ce",
+    "kernel/user/services.dg": "548c6dafa0f2e515bcefeba51ae28c754e68273c979275862c32b60b6a76fa65",
+    "kernel/user/virtio_quiesce.dg": "ff486cba2f5e4ea3e52eec7aab0c08791bdcae547478eb7c07fc74d568751c2c",
+    "kernel/mm/active_paging.dg": "e64f134abaae22c02c6a0251a1f4a39e22569dccb09492eccac463011b111774",
+    "kernel/boot/large_memory.dg": "a6ad77b53f10bdb3b9593e5896f9d57862d41b3554be1b643d24759b1e5dbb55",
+    "kernel/memory_mutation.asm": "e5a89555e736c55a1b7965a218ce1c94707977d7f4e57828cfc2291d9178964d",
+    "lang/bootstrap/lower_program.dg": "20a902f89ddf6163bece9521b81dbc2db8220ad7e43f9c4e4562b14eb4a211b6"
+  },
+  "actual_new_vm_runs": 0,
+  "method": "Fresh full offline replay of archived actual guest bytes plus current source, original task contracts and formal fingerprints",
+  "findings": [
+    {
+      "item": "P5CTX1精确持有上下文与P5CTX2客体核验",
+      "status": "completed_in_declared_scope",
+      "evidence": "formal fingerprints, live MCP integrated rev7/rev6, source hooks, p5-control/p5-fault fresh full replay"
+    },
+    {
+      "item": "可信DMA排空、撤映射后全核退休、unpin/free/reuse、重发token与驱动重启",
+      "status": "not_completed",
+      "owner_stage": "P5",
+      "evidence": "both actual control/fault observations remain held=1/drain=0; services quarantines pinned DMA, ACK precedes mapping withdrawal; P5CTX1/P5CTX2 task contracts explicitly exclude reclaim"
+    },
+    {
+      "item": "正常私有根BSP启动前大页生命周期",
+      "status": "completed_in_declared_scope",
+      "evidence": "P2LIVE1 formal fingerprints and fresh p2-one/four-cpu raw replay phase10/steps1023/held0/516 full flushes"
+    },
+    {
+      "item": "持久大页、AP在线后多核大页、通用动态EXEC/WC消费者",
+      "status": "not_completed_in_current_active_path",
+      "owner_stage": "P2",
+      "evidence": "active_paging explicitly BSP-only and only flags0/WRITE; boot large hook runs before AP and restores ordinary tree; bottom-level planner/UEFI mechanisms do not establish these consumers"
+    },
+    {
+      "item": "L3B宿主有界固定点及L3C限定profile客体固定点",
+      "status": "completed_with_existing_acceptance_evidence",
+      "evidence": "2026-10-21-g6-ci-execution.md/json and original fixed-point reports; no fresh G6 VM in this audit"
+    },
+    {
+      "item": "G5完整语言差分/ABI覆盖",
+      "status": "not_completed",
+      "owner_stage": "L3/G5",
+      "evidence": "current lower_program.dg line258 rejects GLOBAL/METHOD/ERROR/ENUM with UNSUPPORTED; G5 gate document remains incomplete"
+    },
+    {
+      "item": "M7与M10代码合并及本地包含",
+      "status": "completed",
+      "evidence": "fresh git merge-base --is-ancestor success for both actual merge commits; DMA recovery remains a separate P5 stage gap"
+    },
+    {
+      "item": "未提交/推送及异机任务档案保留",
+      "status": "intentional_boundary_not_development_backlog",
+      "evidence": "user explicitly requested no PR/commit/push; archive identity is preserved rather than imported or recreated"
+    }
+  ],
+  "g6_existing_artifacts_rechecked": {
+    "archive_present": true,
+    "archive_sha_valid": true,
+    "audits": [
+      {
+        "kind": "git-fat-fixedpoint-offline-replay",
+        "present": true,
+        "sha_valid": true
+      },
+      {
+        "kind": "independent-raw-physical",
+        "present": true,
+        "sha_valid": true
+      }
+    ]
+  }
+}

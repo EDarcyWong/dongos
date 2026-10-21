@@ -1,0 +1,81 @@
+{
+  "assignment_history": [
+    {
+      "at": "2026-10-20T15:42:33+00:00",
+      "from_owner": "cursor",
+      "note": "用户明确要求接收处理P5CTX1，Codex接手实现及后续独立复验/集成。当前todo、从未领取、无candidate/交付/作业，不存在需要停止的原领取轮次；保持原任务编号和声明文件路径。",
+      "previous_claimed_by": null,
+      "to_owner": "codex"
+    }
+  ],
+  "assignment_owner": "codex",
+  "auto_dispatch": false,
+  "auto_verify": false,
+  "candidate": null,
+  "checks": [
+    "discover:cursor-works/tests:test_p5_recovery_context.py"
+  ],
+  "claim_from_status": "todo",
+  "claim_token": "016942666fd84400b4c98a671b083460",
+  "claimed_at": "2026-10-20T15:42:39+00:00",
+  "claimed_by": "codex-mcp-398fa2ecee7645ff",
+  "completed_at": "2026-10-20T15:53:22+00:00",
+  "complexity": "standard",
+  "created_at": "2026-10-20T15:26:25+00:00",
+  "delivery": "cursor-works/deliveries/P5CTX1.md",
+  "depends_on": [],
+  "description": "所属阶段：P5设备故障恢复。接续main 244b18c的reset-hold、整块DMA租约和别名拒绝；只完成真实运行时的精确持有上下文，不实现回收或声称P5完成。旧cursor:CR43/codex:CX6存在异机同号异义且已归档，不恢复，不作为依赖。本任务按最新版分工给Cursor，在本人客户端手动worker MCP读取、领取和执行，不启动AI CLI。\n\n真实缺口：services.dg的syscall 0x63当前try devices.dma_acquire失败后直接返回；memory.DmaLease已经保留分配前HELD、完整舍入块和partial attempted/mapped，但与Catalog owner/incarnation、设备token/generation尚未绑定。device_host真实revoke_owner有可信隔离/reset-hold，services.retire_one已有smp_bridge.retire，不重写已有账本、停止、分配或复位算法。\n\n实施范围：\n1. 在真实0x63调用devices.dma_acquire之前，从可信内核Catalog owner、当前slot、device_host原角色绑定及memory.process/root/generation建立有界内核私有上下文，用户不传物理地址、token或所谓“已排空”布尔证明。至少固定slot/configuration、owner与incarnation、旧device token和设备generation、可信ECAM/硬件identity、memory root及独立memory generation。三种generation不能互相替代，blk.Lease的常量token=1不能作为恢复唯一身份。\n2. 在真实申请成功和err两分支均保存实际memory.dma_snapshot，不因try提前返回而丢失失败回执。覆盖COMPLETE、部分own/map的HELD、HELD且physical=0；无快照/尚未进入申请单独表示，不能用全零捏造租约。保存完整pages（含未映射舍入尾部）、physical/virtual/root/generation/attempted/mapped/state。\n3. 首次记录身份与原租约不可被重复请求、错误请求、新incarnation、不同root或slot重用覆盖。可单调追加同一笔申请/退休的状态，但不得把后次申请/新根接管为旧记录。无有效上下文的新控制器/未申请路径保持原行为；上下文错误不得短路现有隔离或使错误路径跳过quarantine。\n4. 接入真实services retire/revoke与device_host路径，将已有永久停止、撤权前后设备generation、隔离和reset结果附到同一上下文。已有SMP退休ACK的范围和时序必须如实说明，不将其冒充撤映射后的全核TLB退休。现代VirtIO reset成功仅记RESET_CONFIRMED，DMA drain始终UNKNOWN；其他控制器不借用VirtIO结论。失败sticky held，不自动重试或重新发布。\n5. 不修改memory.dg/devices.dg/device_manager.dg/Process/Frame布局，不增加公共syscall，不调用ledger.recover/reclaim、不清PINNED、不释放或零化DMA、不撤销/重发新token、不重启驱动。新上下文是后续可信回收的前置记录，不是回收授权。\n\n验证：checks首先编译并实际执行debug/release的真实services 0x63生产分支及host退休hook；允许抽取原分支/函数并在fixture中明确stub硬件/内存边界，必须绑定源码SHA，不能只测新helper或文本存在。独立C oracle核对成功/部分失败/physical=0/无快照/copy_out失败、身份每字段错配、重入/重复请求、旧owner/新incarnation、token/root/各generation变化，以及reset失败与成功仍drain未知且无回收。至少两类实际坏源：删除申请err后的snapshot；允许后次覆盖旧owner/root。坏体须正常构建运行后按指定数值/轨迹断言拒绝，不以构建失败、崩溃或超时充数。有限边界不跑笛卡尔积。保存命令、退出码、输入前后SHA、stdout/stderr和真实坏体拒绝证据；零skip。\n集成前由Codex独立复验：既有test_dma_lease/test_dma_alias/test_device_manager/test_virtio_quiesce/test_dma_release及完整services/device_host/memory依赖图编译；如修改退休时序，再定向核对test_user_domain/test_user_smp_services。worker仅跑声明checks，不运行OS/VM、不提交/推送、不改DB/index/任务书/他人文件，不自授验收/集成。docs/p5-recovery-context.md必须区分真实内核接线、宿主stub边界与未取得的guest/DMA drain证明。\n\n交付位置与主线映射（以本段为准）：遵守新组件先放本人works的规则。只读main244b18c的kernel/user/device_host.dg和kernel/user/services.dg，各复制一份到cursor-works/src/p5/user/同名文件后修改；保持原module user.device_host/user.services及完整生产控制流，不剪掉原行为。主目录kernel/user文件不在worker可写范围。编译/测试把cursor-works/src/p5置于import roots首位，其余生产依赖只读来自主线完整闭包；记录两基线SHA和修改diff，不能复制整个lang掩盖替换。docs交付在cursor-works/src/p5/recovery-context.md，三个测试在cursor-works/tests/p5_recovery_context_fixture.dg、p5_recovery_context_probe.c、test_p5_recovery_context.py。验收后Codex将两个完整源码、文档和路径适配测试实际集成到主线，再登记integrated；不把works副本存在当生产已接线。checks仅运行discover:cursor-works/tests:test_p5_recovery_context.py，既有主线P5相关回归由Codex在集成时定向复验。",
+  "document": "cursor-works/tasks/P5CTX1-board.md",
+  "historical": false,
+  "id": "cursor:P5CTX1",
+  "integration_note": "已完成真实本地主线文件集成：验收的两个完整模块复制到code/kernel/user/{device_host,services}.dg，三个P5测试复制到code/tests/，五文件与已验收副本逐字节一致；文档复制到code/docs/p5-recovery-context.md并仅补主线位置说明。正式隔离复验job5ed94c53b4b84458a0a53b052c63b8c9通过1test/0skip及全部稳定/退出标志，7文件指纹未改。集成后完整86模块依赖图debug/release编译通过；13模块21个不同测试方法均已通过（首轮19项通过，旧DMA/VirtIO两native因Windows printf格式构建失败，仅加ANSI stdio宏后定向2项/0skip通过，首失败与重跑证据分别保留）。SMP/故障/GUI/preload/USB旧fixture兼容及负控锚点已独立审查，无弱化原oracle；新P5 native实际绑定主线源码。memory/devices/device_manager及生产Process/Frame未改，不回收DMA，drain未知，P5整体未完成。具体映射/SHA和真实证据见coordination/dongos_works/reviews/2026-10-21-P5CTX1-integration.md及同名JSON；未运行OS/VM、提交或推送。",
+  "legacy_hash": "b3c2ca8fff6b01a363d9f62ddd192f467ac75d3c313d92cbf9eee75c55efd712",
+  "number": "P5CTX1",
+  "owner": "codex",
+  "rev": 7,
+  "review_note": "独立源码/契约审查通过：真实0x63前校验Catalog双向slot/process/incarnation、原host角色/硬件identity与独立memory root/generation；ok/err均在copy_out前保存完整真实DmaLease（含physical0 HELD/partial/无快照区别），首身份/租约不可后次接管。真实retire_one、owner/manager revoke非抛错观察保留原隔离控制流；合法原代际/撤权后+1，隔离后续失败sticky。SMP ACK保持撤映射前stop/detach原范围，reset confirmed仍drain UNKNOWN，无回收。两完整生产候选86模块debug/release闭包编译通过；独立代理native复验1test/0skip、每mode1081断言73场景，两个真实坏源正常构建运行后指定断言exit1。正式隔离job5ed94c53b4b84458a0a53b052c63b8c9：1test/0skip、8.281s，source_stable/process_stopped/execution_exited均true，7文件SHA一致。验收为候选组件，尚待主线真实复制及相关回归后登记集成。",
+  "status": "integrated",
+  "title": "[P5] 接入真实DMA申请与退休路径的精确持有上下文",
+  "updated_at": "2026-10-20T16:08:39+00:00",
+  "verification": {
+    "checks": [
+      {
+        "cancelled": false,
+        "elapsed_seconds": 8.281,
+        "execution_exited": true,
+        "passed": true,
+        "process_stopped": true,
+        "returncode": 0,
+        "skips": 0,
+        "spec": "discover:cursor-works/tests:test_p5_recovery_context.py",
+        "tests": 1,
+        "timed_out": false
+      }
+    ],
+    "execution_exited": true,
+    "fingerprint": {
+      "cursor-works/deliveries/P5CTX1.md": "631592e65792338d5b323196818ac61cb443f82b5af777e0d91dddce821f7de8",
+      "cursor-works/src/p5/recovery-context.md": "c664037393f5b40b4e8c3b93b7186b1eedf0c49af96315272903b2bf5944e4bb",
+      "cursor-works/src/p5/user/device_host.dg": "823fc27763560ff880dd26b9e4da236a92cf55174d3e4a86bf0b234592ba95ce",
+      "cursor-works/src/p5/user/services.dg": "548c6dafa0f2e515bcefeba51ae28c754e68273c979275862c32b60b6a76fa65",
+      "cursor-works/tests/p5_recovery_context_fixture.dg": "caf529fef8b79aca3487baf23c0e6e20859cc6f60ec1c354b775bc53723f23eb",
+      "cursor-works/tests/p5_recovery_context_probe.c": "99f99218f7764ae98e5d5f8a3eaa94ae5bcbe03bfca6774bd25154e4b55487fe",
+      "cursor-works/tests/test_p5_recovery_context.py": "832e27b61707a27673cc1aa1b239e212cc32a6e328a5be5e5a35b0ed5cd0ba45"
+    },
+    "finished_at": "2026-10-20T15:53:56+00:00",
+    "job": "5ed94c53b4b84458a0a53b052c63b8c9",
+    "passed": true,
+    "process_stopped": true,
+    "source_stable": true,
+    "summary": "定向复验通过，等待源码/契约审查"
+  },
+  "write_paths": [
+    "cursor-works/src/p5/user/device_host.dg",
+    "cursor-works/src/p5/user/services.dg",
+    "cursor-works/src/p5/recovery-context.md",
+    "cursor-works/tests/p5_recovery_context_fixture.dg",
+    "cursor-works/tests/p5_recovery_context_probe.c",
+    "cursor-works/tests/test_p5_recovery_context.py",
+    "cursor-works/deliveries/P5CTX1.md"
+  ]
+}

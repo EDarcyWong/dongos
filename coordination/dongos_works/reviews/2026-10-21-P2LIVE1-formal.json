@@ -1,0 +1,85 @@
+{
+  "id": "codex:P2LIVE1",
+  "status": "submitted",
+  "rev": 4,
+  "verification": {
+    "passed": true,
+    "checks": [
+      {
+        "spec": "module:tests.test_active_large",
+        "passed": true,
+        "tests": 1,
+        "skips": 0,
+        "returncode": 0,
+        "cancelled": false,
+        "timed_out": false,
+        "process_stopped": true,
+        "execution_exited": true,
+        "elapsed_seconds": 12.235
+      },
+      {
+        "spec": "module:tests.test_active_paging",
+        "passed": true,
+        "tests": 2,
+        "skips": 0,
+        "returncode": 0,
+        "cancelled": false,
+        "timed_out": false,
+        "process_stopped": true,
+        "execution_exited": true,
+        "elapsed_seconds": 16.063
+      },
+      {
+        "spec": "module:tests.test_p2_active_large_qemu",
+        "passed": true,
+        "tests": 9,
+        "skips": 0,
+        "returncode": 0,
+        "cancelled": false,
+        "timed_out": false,
+        "process_stopped": true,
+        "execution_exited": true,
+        "elapsed_seconds": 0.406
+      }
+    ],
+    "process_stopped": true,
+    "execution_exited": true,
+    "source_stable": true,
+    "fingerprint": {
+      "kernel/mm/active_paging.dg": "e64f134abaae22c02c6a0251a1f4a39e22569dccb09492eccac463011b111774",
+      "kernel/boot/large_memory.dg": "a6ad77b53f10bdb3b9593e5896f9d57862d41b3554be1b643d24759b1e5dbb55",
+      "kernel/memory_probe.dg": "8faec8f6b54dcb11e307544d6d7420aaceac04175949ca3c28c869e7e9e2e098",
+      "kernel/memory_mutation.asm": "e5a89555e736c55a1b7965a218ce1c94707977d7f4e57828cfc2291d9178964d",
+      "tests/active_large_probe.dg": "481ce1738c5604f7bb892413583d3c8ef82496b62aa838c52c591edd8c4bd1ed",
+      "tests/active_large_probe.c": "9e1adb17dec5e375d6be768742d874e77c2437ccfb495330c7034d68868a5dd7",
+      "tests/test_active_large.py": "000ad9f21245742407145c673d3aab97f29e989242637beb7e83b806606d2633",
+      "tests/active_paging_probe.c": "3d1058048b7b6c142382d7f876699068595e330ccbca0a8cae61d2c1e02f4948",
+      "tests/run_p2_active_large_qemu.py": "eb6159fe23e2dcb4ab3aed92daae92a90e77002cde3c6cf8f7950dca2dd554a1",
+      "tests/test_p2_active_large_qemu.py": "71f666d514717751749eebb0dff01d28dea0273f22b7d54f688446db3f26e17a",
+      "docs/p2-active-large.md": "83b0c7e159363c3ff0a98bcdc0031b79544369ace58f296757ee2ed55f553750",
+      "docs/p2-extensions.md": "4039ed140141234999e2bda24c49ad63d14e195918e5a03f1b27847281f24fb8",
+      "PLAN.md": "ade39007f26fd92f2beb18e63525a06e07da1bdd69baba9992f3d7375d57b1ea",
+      "codex-works/deliveries/P2LIVE1.md": "f1b7f083882a822baffb949a1ed0d06c4f3bdc92dd71fed1c3139271f237a9e1"
+    },
+    "summary": "定向复验通过，等待源码/契约审查",
+    "finished_at": "2026-10-21T13:00:06+00:00",
+    "job": "a8778fe9dfae4df6842a1ce3cb5efe1e"
+  },
+  "write_paths": [
+    "kernel/mm/active_paging.dg",
+    "kernel/boot/large_memory.dg",
+    "kernel/memory_probe.dg",
+    "kernel/memory_mutation.asm",
+    "tests/active_large_probe.dg",
+    "tests/active_large_probe.c",
+    "tests/test_active_large.py",
+    "tests/active_paging_probe.c",
+    "tests/run_p2_active_large_qemu.py",
+    "tests/test_p2_active_large_qemu.py",
+    "docs/p2-active-large.md",
+    "docs/p2-extensions.md",
+    "PLAN.md",
+    "codex-works/deliveries/P2LIVE1.md"
+  ],
+  "candidate": null
+}

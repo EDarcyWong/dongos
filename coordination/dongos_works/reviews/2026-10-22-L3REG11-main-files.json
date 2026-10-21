@@ -1,0 +1,10 @@
+{
+  "physical_main_integration": true,
+  "fingerprint": {
+    "lang/tests/test_bootstrap_native_compiler.py": "c3e7f7b44ae36eafbcb14fdc065230d5c26dbec67c3be5e954033fcb5cd5cac4",
+    "lang/tests/test_bootstrap_native_assembler.py": "62bf6d05966e571595abf7a0b47cb51e799e4ab94d09a0f355bdf436589fba84",
+    "lang/tests/test_l3a_mainline_compatibility.py": "ec635d0e23ae5065453fb86a4f2794156b1c97e1a0e1f042c78aa8a8aa90f996",
+    "docs/l3a-mainline-compatibility.md": "ac43026c432ecf1dcf9de79e14b5b45ecf91fd034911ca6e7634e75aee6ed25d",
+    "codex-works/deliveries/L3REG11.md": "47d2cc3589742b5c0c7926f8e2c45e023781fd9fde3f531f5d95fb6b8417946b"
+  }
+}

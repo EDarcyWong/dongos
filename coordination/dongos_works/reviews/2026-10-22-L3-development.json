@@ -1,0 +1,17 @@
+{
+  "development_cached_current_source_Dong_object": true,
+  "formal_acceptance": false,
+  "run": "coordination\\dongos_works\\deepseek-works\\build\\L3\\run-222b7fae3df8",
+  "scope_complete": false,
+  "supported": 6,
+  "runtime_checks": 22,
+  "known_gaps": 16,
+  "diagnostic_pass": 2,
+  "negative_controls": 5,
+  "native_container": {
+    "passed": true,
+    "path": "D:\\projects\\2026\\dongos\\coordination\\dongos_works\\deepseek-works\\build\\L3\\run-222b7fae3df8\\container\\native-6c3c05f6726f",
+    "execution": "real native_assembler ELF at original 0x400000, static pointers unchanged"
+  },
+  "source_stable": true
+}

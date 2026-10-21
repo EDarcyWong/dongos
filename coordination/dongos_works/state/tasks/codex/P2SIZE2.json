@@ -1,0 +1,89 @@
+{
+  "assignment_owner": "codex",
+  "auto_dispatch": false,
+  "auto_verify": false,
+  "candidate": null,
+  "checks": [
+    "module:lang.tests.test_function_sections",
+    "module:tests.test_kernel_link_gc"
+  ],
+  "claim_from_status": "todo",
+  "claim_token": "4862dff7389f4a61b4792f9a5be0b8b0",
+  "claimed_at": "2026-10-21T13:31:49+00:00",
+  "claimed_by": "codex-mcp-6fe7be60df984d37",
+  "completed_at": "2026-10-21T13:44:26+00:00",
+  "complexity": "standard",
+  "created_at": "2026-10-21T13:31:48+00:00",
+  "delivery": "codex-works/deliveries/P2SIZE2.md",
+  "depends_on": [
+    "codex:P2LIVE1"
+  ],
+  "description": "用户授权继续P2剩余开发、测试、独立验收和真实本地集成；不建PR、不提交/推送。P2LIVE1已集成且完整runtime7仅余432B，新增多核大页/执行/WC消费者前必须解决原2MiB预算；本项仅是必要构建前置，不把它当P2剩余功能完成。保留现有编译默认与所有P5/P2源码和dirty。新增显式function_sections选项：按完整函数分独立ELF代码section，函数体/ABI/控制流/布局清单不变，Win64桥与函数体同节，静态函数指针重定位与外部调用必须保活。默认不启用；仅正常kernel runtime>=5 release编译开启并用linker --gc-sections，用户服务/原runtime0与语言默认输出保持原行为，不扩大2MiB装载ABI，不引入后处理删汇编/手改ELF。CLI/API参数类型与清单如实记录。使用真实NASM/LLVM链接以独立ELF遍历证明未引用代码可回收、直接调用/跨节调用/静态函数指针/Win64桥保活并实际原生执行（必要坏链接负控明确拒绝）；相关既有编译接口回归。冻结完整runtime7源码，执行原完整构建和真实四核桌面/P5CTX2正常控制/P2Report回归，核对ELF/materialize及来源与清理；NASM2工具保持原警告严格，原NASM3探测问题另列不混入。通过声明的受限独立复验及源码/契约/原始客体审查后accepted，主文件真实SHA核对后integrated。验收报告明确DCE不改变算法语义及下游P2消费者仍待实现。",
+  "document": "codex-works/tasks/P2SIZE2-board.md",
+  "historical": false,
+  "id": "codex:P2SIZE2",
+  "integration_note": "真实主文件已落盘并逐SHA核对八声明路径与正式rev4一致，实际313内核消费源码与运行冻结副本相同，主机测试按最终正式来源核验。默认编译/服务路径与原2MiB ABI保持，原P2/P5源码和其它dirty保留。已先accepted rev5，再登记本地integrated；实际构建/客体/原始字节与受限复验通过，receipt reviews/2026-10-21-P2SIZE2-integration.json。无PR/commit/push；继续P2功能开发，不把预算前置当阶段完成。",
+  "legacy_hash": "f7ac9f4344c15edc30e6052d14216d5a4a37502704943f93c01acfacd4ecfa52",
+  "number": "P2SIZE2",
+  "owner": "codex",
+  "rev": 6,
+  "review_note": "源码/API/CLI/默认函数体、真实重定位和GC保活契约审查通过，见reviews/2026-10-21-P2SIZE2-review.md与integration.json。独立C ABI和ELF load-segment oracle及正式job6926b60f41224582ae9ee2c05bc743aa共3项0skip/source_stable；24项既有ABI/GDB回归通过。完整原构建器runtime7正常重建0/99.078s，313实际消费输入同主目录，ELF materialize等于1990224B/余106928B，原2MiB ABI不变。真实四核桌面/P5CTX2 control两快照/P2Report 23.859s通过，完整raw回放与350chunks逐SHA、BootInfo+ELF物理绑定复算通过，source/disk/clean exit0。八个声明文件正式指纹匹配，首次测试观察器错误及冻结后host-only差异如实记录；不冒称另一个AI审查或P2消费者完成。",
+  "status": "integrated",
+  "title": "[P2前置] 内核函数分节与真实链接回收释放装载余量",
+  "updated_at": "2026-10-21T13:48:28+00:00",
+  "verification": {
+    "checks": [
+      {
+        "cancelled": false,
+        "elapsed_seconds": 3.453,
+        "execution_exited": true,
+        "passed": true,
+        "process_stopped": true,
+        "returncode": 0,
+        "skips": 0,
+        "spec": "module:lang.tests.test_function_sections",
+        "tests": 2,
+        "timed_out": false
+      },
+      {
+        "cancelled": false,
+        "elapsed_seconds": 2.016,
+        "execution_exited": true,
+        "passed": true,
+        "process_stopped": true,
+        "returncode": 0,
+        "skips": 0,
+        "spec": "module:tests.test_kernel_link_gc",
+        "tests": 1,
+        "timed_out": false
+      }
+    ],
+    "execution_exited": true,
+    "fingerprint": {
+      "codex-works/deliveries/P2SIZE2.md": "434d2fc5f127ae85597166080ef0ef0484c5a9eb7e47a304f54f648b3cde13d6",
+      "docs/p2-kernel-budget.md": "1e44489d23e1dec855aaa7955e26372e25176bd6c27ea4b1dbaa1b26972c77a5",
+      "lang/dongc/__main__.py": "c190096a3f8416898b03f1c8ee5a6815a1da361e0417e965cb117d2c266329ec",
+      "lang/dongc/compiler.py": "2449dfe2e1fbdc5742ab08118685ec90ba04519bc67d9cd37877f29986b6f95d",
+      "lang/dongc/emitter.py": "2a927cca376613d240bc6df87bc164e7cbbb73fda5a29e079a417cba06ff956e",
+      "lang/tests/test_function_sections.py": "6b25c7805eba18ee7b24bde501025895d8bcd8816770a4d2cb78a6ef75340c4e",
+      "tests/test_kernel_link_gc.py": "0f4ee1d6444c64b4ff6dd3938b4d74ae98d0c487c129511192a487cf434ada4e",
+      "tools/build.py": "8b08d2e79e89c264e96fbeb34ada3dda1fed59ca708dcc62973b7cc4cdf2983a"
+    },
+    "finished_at": "2026-10-21T13:44:40+00:00",
+    "job": "6926b60f41224582ae9ee2c05bc743aa",
+    "passed": true,
+    "process_stopped": true,
+    "source_stable": true,
+    "summary": "定向复验通过，等待源码/契约审查"
+  },
+  "write_paths": [
+    "lang/dongc/compiler.py",
+    "lang/dongc/emitter.py",
+    "lang/dongc/__main__.py",
+    "tools/build.py",
+    "lang/tests/test_function_sections.py",
+    "tests/test_kernel_link_gc.py",
+    "docs/p2-kernel-budget.md",
+    "codex-works/deliveries/P2SIZE2.md"
+  ]
+}

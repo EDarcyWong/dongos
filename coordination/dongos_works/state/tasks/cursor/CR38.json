@@ -26,14 +26,15 @@
   "document": "cursor-works/tasks/CR38-board.md",
   "historical": false,
   "id": "cursor:CR38",
+  "integration_note": "2026-10-20按实际代码补登记主线集成。已独立核对原任务/既有源码契约审查及正式复验：4tests/0skip、source_stable=true；当前四交付仍逐字节匹配验收指纹。生产已真实复制到code/lang/bootstrap/nasm_checked_u64_function.dg（478b1ed），与验收生产字节一致或仅LF/CRLF；说明及永久测试主线路径适配已审查，保留原语义/别名/原子性/真实坏Dong与完整ABI观察。CR40额外边界增强已核对，未改生产。本机NASM3分组探测维护后，9组件主线对应34项实际已全过0skip；A批20项775.031s且前后SHA稳定，B批本任务已通过，总manifest本轮保存。证据reviews/2026-10-20-mainline-registration-evidence.json与code/build/test/mainline-reconcile-*。本次仅登记既有已验收组件的实际文件集成，不宣称L3/G5/G6完成。",
   "legacy_hash": "dd5634ad53fb4b866977a8c639f7cd49c1f0ee765020e6917aa29cc573f0a28d",
   "number": "CR38",
   "owner": "cursor",
-  "rev": 9,
+  "rev": 10,
   "review_note": "用户授权Codex直接完成。实际审查原生产源码、3276总界/1536分段预演重放、全部描述符及完整别名预检，保留正确实现并补两个出口真实RBX负控；独立任意精度oracle核对22向量/模式的checked算术PAIR，真实unsigned MUL、PAIR交换、提前写头坏体均正常执行后被指定断言拒绝。另直接审计4次坏RBX原始观察：精确+8且PAIR/其它saved/RSP/canary正常。正式隔离作业db3dca103e964000bc18efde6e723b67：4项0skip，155.687秒，source_stable=true。验收；未进行主线文件集成。",
-  "status": "accepted",
+  "status": "integrated",
   "title": "[L3] 接续D26：受检64位算术与错误返回的完整SysV函数接线",
-  "updated_at": "2026-10-19T15:46:42+00:00",
+  "updated_at": "2026-10-20T13:12:19+00:00",
   "verification": {
     "checks": [
       {

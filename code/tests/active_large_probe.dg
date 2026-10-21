@@ -1,0 +1,45 @@
+module active_large_probe;
+import mm.active_paging as ap;
+import mm.paging as pg;
+import boot.preflight as preflight;
+export("al_context_size") fn context_size()usize{return sizeof(ap.Context);}
+export("al_context_align") fn context_align()usize{return alignof(ap.Context);}
+export("al_space_size") fn space_size()usize{return sizeof(pg.Space);}
+export("al_space_align") fn space_align()usize{return alignof(pg.Space);}
+export("al_reset") fn reset(context:*ap.Context,space:*pg.Space)void{unsafe{*context=ap.EMPTY_CONTEXT;*space=pg.EMPTY_SPACE;}return;}
+export("al_init") fn init(space:*pg.Space,pool:*pg.Table,count:usize,physical:u64,metadata:*u8)u64{unsafe{
+ match pg.init(space,slice_from_raw_parts(pool,count),physical,slice_from_raw_parts(metadata,count),52,true){ok=>{return 0;},err(e)=>{return e;},}
+}}
+export("al_bind") fn bind(context:*ap.Context,space:*pg.Space,state:*const preflight.State,virtual:u64,pages:u64,physical:u64,frames:u64,flush:ap.Flush)u64{unsafe{
+ match ap.bind(context,space,state,virtual,pages,physical,frames,flush){ok=>{return 0;},err(e)=>{return e;},}
+}}
+export("al_map_large") fn map_large(context:*ap.Context,state:*const preflight.State,virtual:u64,physical:u64,flags:u64)u64{unsafe{
+ match ap.map_large(context,state,virtual,physical,flags){ok=>{return 0;},err(e)=>{return e;},}
+}}
+export("al_split_large") fn split_large(context:*ap.Context,state:*const preflight.State,virtual:u64)u64{unsafe{
+ match ap.split_large(context,state,virtual){ok=>{return 0;},err(e)=>{return e;},}
+}}
+export("al_merge_large") fn merge_large(context:*ap.Context,state:*const preflight.State,virtual:u64)u64{unsafe{
+ match ap.merge_large(context,state,virtual){ok=>{return 0;},err(e)=>{return e;},}
+}}
+export("al_map") fn map(context:*ap.Context,state:*const preflight.State,virtual:u64,physical:u64,flags:u64)u64{unsafe{
+ match ap.map(context,state,virtual,physical,flags){ok=>{return 0;},err(e)=>{return e;},}
+}}
+export("al_replace") fn replace(context:*ap.Context,state:*const preflight.State,virtual:u64,physical:u64,flags:u64)u64{unsafe{
+ match ap.replace(context,state,virtual,physical,flags){ok=>{return 0;},err(e)=>{return e;},}
+}}
+export("al_protect") fn protect(context:*ap.Context,state:*const preflight.State,virtual:u64,flags:u64)u64{unsafe{
+ match ap.protect(context,state,virtual,flags){ok=>{return 0;},err(e)=>{return e;},}
+}}
+export("al_unmap") fn unmap(context:*ap.Context,state:*const preflight.State,virtual:u64)u64{unsafe{
+ match ap.unmap(context,state,virtual){ok=>{return 0;},err(e)=>{return e;},}
+}}
+export("al_query") fn query(context:*const ap.Context,virtual:u64,out:*pg.Mapping)u64{unsafe{
+ match ap.query(context,virtual,out){ok=>{return 0;},err(e)=>{return e;},}
+}}
+export("al_used") fn used(space:*const pg.Space)u64{unsafe{
+ match pg.used_tables(space){ok(n)=>{return n as u64;},err(e)=>{return e;},}
+}}
+export("al_stats") fn stats(context:*const ap.Context,out:*ap.Stats)u64{unsafe{
+ match ap.stats(context,out){ok=>{return 0;},err(e)=>{return e;},}
+}}

@@ -1,0 +1,122 @@
+{
+  "task": {
+    "id": "codex:P2BUILD5",
+    "number": "P2BUILD5",
+    "owner": "codex",
+    "title": "[P2/P0] 正式构建NASM分组警告探测接线与完整内核验收",
+    "description": "用户继续推进P2且不建PR。Claude EXEC/WC及DeepSeek在途不抢占。本机正式tools.build.assemble仍只读nasm -h，NASM3.02将reloc-rel-dword/reloc-abs-qword放到-h -w，真实合法ELF64跨节snippet已于build/reviews/P2BUILD5/run-f564db6386/baseline.json复现exit1。CXNASM3 integrated只修测试helper lang/tests/test_dongc.py及其兼容测试，本项补正式构建消费者，不重复该组件、不改其已验收文件。只修改3声明文件：tools/build.py在帮助明确-h -opt语法时读取-h -w，check=True错误传播、完整警告名匹配、仅两类合法重定位关闭，保持-Wall/-Werror/其它diagnostics/defines/include/object/listing路径。tests/test_build_assembler.py补旧平铺/拒绝多余参数旧版/新分组/假前缀/两个警告独立/两种帮助失败及实际ELF64与COFF合法snippet原始失败→正式assemble通过，number-overflow仍真实失败，缺工具fail/0skip；受测源前后稳定。完成独立隔离定向复验并重跑原CXNASM3 tests。协调者在独立冻结源码副本使用本机NASM3.02真正构建release runtime7（不复制NASM2规避），校验build inputs/源稳定/2MiB loader ABI/ELF materialize/kernel，与旧NASM2输出比较但不预设一致；真实4CPU正常P2SMP3完整raw oracle、桌面/P5两观察回归及独立portable replay通过后才验收和真实本地集成分开登记。仅根协调者运行明确授权可丢弃QEMU，其它worker不运行OS/VM。不提交/推送/PR，不启动AI CLI。P2 EXEC/WC和任意调度后用户多CR3、WC性能仍待独立验收，不因构建通过而关闭。",
+    "assignment_owner": "codex",
+    "status": "integrated",
+    "rev": 6,
+    "write_paths": [
+      "tools/build.py",
+      "tests/test_build_assembler.py",
+      "codex-works/deliveries/P2BUILD5.md"
+    ],
+    "depends_on": [
+      "codex:CXNASM3",
+      "codex:P2OOM4"
+    ],
+    "checks": [
+      "module:tests.test_build_assembler",
+      "module:lang.tests.test_nasm_compatibility"
+    ],
+    "auto_dispatch": false,
+    "auto_verify": false,
+    "complexity": "standard",
+    "created_at": "2026-10-21T15:12:49+00:00",
+    "updated_at": "2026-10-21T15:24:30+00:00",
+    "historical": false,
+    "document": "codex-works/tasks/P2BUILD5-board.md",
+    "delivery": "codex-works/deliveries/P2BUILD5.md",
+    "claimed_at": "2026-10-21T15:13:47+00:00",
+    "completed_at": "2026-10-21T15:22:53+00:00",
+    "claimed_by": "codex-mcp-6fe7be60df984d37",
+    "candidate": null,
+    "verification": {
+      "passed": true,
+      "checks": [
+        {
+          "spec": "module:tests.test_build_assembler",
+          "passed": true,
+          "tests": 6,
+          "skips": 0,
+          "returncode": 0,
+          "cancelled": false,
+          "timed_out": false,
+          "process_stopped": true,
+          "execution_exited": true,
+          "elapsed_seconds": 1.203
+        },
+        {
+          "spec": "module:lang.tests.test_nasm_compatibility",
+          "passed": true,
+          "tests": 10,
+          "skips": 0,
+          "returncode": 0,
+          "cancelled": false,
+          "timed_out": false,
+          "process_stopped": true,
+          "execution_exited": true,
+          "elapsed_seconds": 1.656
+        }
+      ],
+      "process_stopped": true,
+      "execution_exited": true,
+      "source_stable": true,
+      "fingerprint": {
+        "tools/build.py": "b7701e10a61ba316dff4b8057624d935dfde5249cca4585e9f209b9f32cb595f",
+        "tests/test_build_assembler.py": "049160c091a4a0557f20a371c5fdaa49ef83809ca24a83e83dbb60c7b8609dd3",
+        "codex-works/deliveries/P2BUILD5.md": "addd55692b3a5e6d5fc2cb2a932e056f2b8bfcae8b20229463ac4d9983490fb0"
+      },
+      "summary": "定向复验通过，等待源码/契约审查",
+      "finished_at": "2026-10-21T15:23:26+00:00",
+      "job": "288e9bde49ac497c8f2ecb6363afa2a0"
+    },
+    "review_note": "实际源码/契约审查通过，4行正式assemble能力探测接线，不改原CXNASM3 helper，不按版本猜测；保留Wall/Werror/只两类合法warning/full-name/失败传播及全部build参数。独立正式job288e9bde49ac497c8f2ecb6363afa2a0两checks共16tests/0skip/exit0，source_stable/process_stopped/execution_exited均true；根另实际NASM2同16项通过。独立冻结源NASM3完整release runtime7 exit0/172.156s，316inputs精确match main，唯一consumed-source改tools/build.py；2,006,608B/余90,544B，ELF materialize一致。新镜像实际1/4CPU共享根full raw、四核desktop/P5两稳定观察、独立raw replay通过，源/disk不变且QEMU停止。旧NASM2/3非bit-identical，全部19ASM输入相同，kernel/5service text raw反汇编差异审查及明确规范化等价，完整旧新归档保留，不将它当全程序证明。见reviews/2026-10-21-P2BUILD5-independent-review.json及.local/p2build5-3de5a87604。scope仅构建消费者，不提前关闭EXEC/WC。验收后再核对真实本地文件。",
+    "legacy_hash": "507ed96da06ad56a1d8cd7e73575c98e30cf4e0378489ea9574d52f7f4ce250b",
+    "claim_from_status": "todo",
+    "claim_token": "42c8044c14274a82b8be005e6840a38d",
+    "integration_note": "已实际完成本地文件集成核对：主code/tools/build.py、tests/test_build_assembler.py和映射works交付共3文件逐项SHA与accepted正式fingerprint完全一致，记录reviews/2026-10-21-P2BUILD5-local-files.json；冻结构建316inputs亦与主目录一致。新NASM3完整release2,006,608B/余90,544B、实际1/4CPU full raw及四核P5/桌面、独立重放通过；正式16tests/0skip/source_stable/全进程停止，NASM2兼容同16项通过。tools/build.py承接P2SIZE2并只增4行warning帮助探测，旧验收receipt保留历史，不改旧任务指纹。先验收rev5，现分开登记integrated；无commit/push/PR。EXEC/WC及DeepSeek任务按原负责人继续。"
+  },
+  "verification": {
+    "passed": true,
+    "checks": [
+      {
+        "spec": "module:tests.test_build_assembler",
+        "passed": true,
+        "tests": 6,
+        "skips": 0,
+        "returncode": 0,
+        "cancelled": false,
+        "timed_out": false,
+        "process_stopped": true,
+        "execution_exited": true,
+        "elapsed_seconds": 1.203
+      },
+      {
+        "spec": "module:lang.tests.test_nasm_compatibility",
+        "passed": true,
+        "tests": 10,
+        "skips": 0,
+        "returncode": 0,
+        "cancelled": false,
+        "timed_out": false,
+        "process_stopped": true,
+        "execution_exited": true,
+        "elapsed_seconds": 1.656
+      }
+    ],
+    "process_stopped": true,
+    "execution_exited": true,
+    "source_stable": true,
+    "fingerprint": {
+      "tools/build.py": "b7701e10a61ba316dff4b8057624d935dfde5249cca4585e9f209b9f32cb595f",
+      "tests/test_build_assembler.py": "049160c091a4a0557f20a371c5fdaa49ef83809ca24a83e83dbb60c7b8609dd3",
+      "codex-works/deliveries/P2BUILD5.md": "addd55692b3a5e6d5fc2cb2a932e056f2b8bfcae8b20229463ac4d9983490fb0"
+    },
+    "summary": "定向复验通过，等待源码/契约审查",
+    "finished_at": "2026-10-21T15:23:26+00:00",
+    "job": "288e9bde49ac497c8f2ecb6363afa2a0"
+  }
+}

@@ -1,0 +1,76 @@
+/* Independent physical-model oracle. No privileged host instruction is used. */
+#include <stdint.h>
+#include <stddef.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#define DG __attribute__((sysv_abi))
+typedef uint64_t U;
+#define NX (UINT64_C(1)<<63)
+#define ADDRESS UINT64_C(0x000ffffffffff000)
+#define PAGE UINT64_C(4096)
+#define ROOT_PA UINT64_C(0x400000)
+#define FRAME UINT64_C(0x10000000)
+#define VA UINT64_C(0xffff900000000000)
+#define PAT0 UINT64_C(0x0007040600070406)
+#define ERR UINT64_C(0xbeef0317)
+struct Alias{U va,kind;};struct Range{U base,size,kind;};
+struct Slice{void*ptr;size_t len;};
+struct Reader{U pat,cr0,def;struct Slice ranges;};
+struct Reply{U ack,epoch,root,cr0,pat,hash;};
+struct Cpu{U v[32];};struct Box{U v[8];};
+typedef U DG Hook(U,U,U,U,struct Reply*,size_t);
+typedef U DG Send(U,U,U);typedef U DG Clock(U);typedef void DG Pause(U);
+struct Ops{U cookie;Send*send;Clock*clock;Pause*pause;U timeout;};
+struct Domain{U ready,pending;struct Cpu*cpus;size_t count;struct Box*boxes;struct Ops*ops;U epoch,broadcasts,sent,acks,invalid,full,probes,failures;};
+struct Receipt{unsigned char pending,pad[7];void*owner;U root,indices[3],count;unsigned char zero,pad2[7];};
+struct Config{void*space;struct Domain*domain;U physical;size_t pages;struct Slice aliases,readers,receipts;Hook*hook;U cookie;};
+struct Capture{U result,regs[6],before,after;};
+extern DG U wc_shapes(U),wc_bind(const struct Config*,void*),wc_execute(void*),wc_audit(const void*,U),wc_seal(void*),wc_space_init(void*,void*,U,void*),wc_page_map(void*,U,U,U),wc_large_map(void*,U,U),wc_tables(const void*),wc_domain_init(struct Domain*,struct Cpu*,U,struct Box*,struct Ops*);
+extern DG void wc_checked_execute(void*,struct Capture*);
+static unsigned checks,scenario;
+#define CK(x) do{checks++;if(!(x)){fprintf(stderr,"wc fixture failed scenario=%u line=%d: %s\n",scenario,__LINE__,#x);exit(1);}}while(0)
+DG void __attribute__((noreturn)) __dong_panic(uint32_t a,uint32_t b,const void*c,U d){(void)c;(void)d;fprintf(stderr,"unexpected Dong panic %u/%u\n",a,b);exit(2);}
+struct Guard{unsigned char*allocation,*p;size_t n,g;};
+static struct Guard alloc_guard(size_t n,size_t alignment){struct Guard a={0};a.n=n;a.g=alignment<16?16:alignment;a.allocation=malloc(n+alignment+2*a.g);CK(a.allocation);a.p=(void*)(((uintptr_t)(a.allocation+a.g)+alignment-1)&~(uintptr_t)(alignment-1));memset(a.p-a.g,0xa5,a.g);memset(a.p,0,n);memset(a.p+n,0x5a,a.g);return a;}
+static void guarded(struct Guard*a){for(size_t i=0;i<a->g;i++)CK(a->p[-(ptrdiff_t)a->g+(ptrdiff_t)i]==0xa5&&a->p[a->n+i]==0x5a);}
+struct Fixture{struct Guard ctx,space,pool,meta,cfg,aliases,readers,receipts,cpus,boxes,domain,ops,ranges[16];size_t tables,pages,alias_n,cpu_n;U old;unsigned fail_phase,fail_at,event_phase[9],bad_ack,ack_phase,wrong_reply,oom,drop_next;int bad;const char*reason;};
+static void obs(struct Fixture*f,int ok,const char*tag){checks++;if(!ok&&!f->bad){f->bad=1;f->reason=tag;}}
+static U stat(struct Fixture*f,U i){return wc_audit(f->ctx.p,i);}
+static U hash_reader(const struct Reader*r){U h=UINT64_C(14695981039346656037);h=(h^r->def)*UINT64_C(1099511628211);h=(h^r->ranges.len)*UINT64_C(1099511628211);const struct Range*rr=r->ranges.ptr;for(size_t i=0;i<r->ranges.len;i++){h=(h^rr[i].base)*UINT64_C(1099511628211);h=(h^rr[i].size)*UINT64_C(1099511628211);h=(h^rr[i].kind)*UINT64_C(1099511628211);}return h;}
+static U* entry(struct Fixture*f,U va,unsigned*leaf){size_t t=0;U*pool=(void*)f->pool.p;for(unsigned l=0;l<4;l++){CK(t<f->tables&&f->meta.p[t]==1);U*p=pool+t*512+((va>>(39-l*9))&511);if(!(*p&1)){CK(*p==0);*leaf=l;return p;}if(l==3||(l==2&&(*p&128))){*leaf=l;return p;}CK((*p&ADDRESS)>=ROOT_PA);t=(size_t)(((*p&ADDRESS)-ROOT_PA)/PAGE);}return NULL;}
+static U mapping(struct Fixture*f,U va){unsigned l=0;U*p=entry(f,va,&l);if(!(*p&1))return 0;CK(l==3);return *p;}
+static size_t walk_tree(struct Fixture*f,size_t t,unsigned level,unsigned char*seen){CK(t<f->tables&&!seen[t]&&f->meta.p[t]==1);seen[t]=1;size_t n=1;U*p=(void*)f->pool.p;for(size_t i=0;i<512;i++){U e=p[t*512+i];if(!e)continue;CK(e&1);if(level<3&&!(level==2&&(e&128))){CK((e&~(ADDRESS|UINT64_C(32)))==7&&(e&ADDRESS)>=ROOT_PA);n+=walk_tree(f,(size_t)(((e&ADDRESS)-ROOT_PA)/PAGE),level+1,seen);}}return n;}
+static void raw_accounting(struct Fixture*f){unsigned char seen[256]={0},retired[256]={0};size_t reachable=walk_tree(f,0,0,seen),used=0,q=0;for(size_t i=0;i<f->tables;i++){CK(f->meta.p[i]<=2);used+=f->meta.p[i]!=0;q+=f->meta.p[i]==2;CK((f->meta.p[i]==1)==!!seen[i]);}CK(wc_tables(f->space.p)==used);CK(reachable+q==used);struct Receipt*r=(void*)f->receipts.p;size_t found=0;for(size_t i=0;i<stat(f,9);i++){if(i<stat(f,10)){CK(r[i].pending==0);continue;}CK(r[i].pending==1&&r[i].owner==f->space.p&&r[i].root==ROOT_PA&&r[i].count<=3);for(size_t j=0;j<r[i].count;j++){size_t k=(size_t)r[i].indices[j];CK(k>0&&k<f->tables&&!retired[k]&&f->meta.p[k]==2);retired[k]=1;found++;}}CK(found==q);for(size_t i=stat(f,9);i<((struct Config*)f->cfg.p)->receipts.len;i++){struct Receipt zero={0};CK(!memcmp(&r[i],&zero,sizeof zero));}}
+static DG U send_stub(U a,U b,U c){(void)a;(void)b;(void)c;return 0;}static DG U clock_stub(U a){return a;}static DG void pause_stub(U a){(void)a;}
+static DG U callback(U cookie,U phase,U root,U value,struct Reply*replies,size_t count){struct Fixture*f=(void*)(uintptr_t)cookie;struct Config*c=(void*)f->cfg.p;struct Reader*rr=(void*)f->readers.p;struct Cpu*cpus=(void*)f->cpus.p;CK(phase>=1&&phase<=8);f->event_phase[phase]++;obs(f,root==ROOT_PA&&count==f->cpu_n,"callback-root-count");obs(f,wc_execute(f->ctx.p)==8&&wc_seal(f->ctx.p)==8,"reentrant-busy");obs(f,stat(f,4)==1,"lease-not-held");raw_accounting(f);
+ size_t present=0,wc=0;for(size_t a=0;a<f->alias_n;a++){struct Alias*aa=(void*)f->aliases.p;for(size_t page=0;page<f->pages;page++){U e=mapping(f,aa[a].va+page*PAGE);if(!e)continue;present++;obs(f,(e&ADDRESS)==FRAME+page*PAGE,"exact-physical");obs(f,(e&NX)!=0&&(e&2)!=0&&(e&4)==0,"rw-nx-supervisor");if((e&UINT64_C(0x98))==128)wc++;else obs(f,(e&UINT64_C(0x98))==(f->old==0?24:0),"unexpected-old-selector");}}
+ if(phase==1){obs(f,wc==0&&present+stat(f,8)==f->alias_n*f->pages,"revoke-count");}
+ if(phase==2){obs(f,present==0,"old-view-at-first-barrier");obs(f,stat(f,10)==0,"early-reclaim");}
+ if(phase==8){obs(f,stat(f,13)==((UINT64_C(1)<<count)-1),"reclaim-without-first-ACK");obs(f,present==0,"mapping-at-reclaim");}
+ if(phase==3){obs(f,present==0&&stat(f,13)!=0&&stat(f,10)==stat(f,9),"cache-order");}
+ if(phase==4){obs(f,f->event_phase[3]!=0&&stat(f,14)!=0,"cache-before-PAT");obs(f,present==0,"mapping-before-PAT");obs(f,value==((PAT0&~UINT64_C(0xff00000000))|(UINT64_C(1)<<32)),"PAT4-only");}
+ if(phase==5){obs(f,f->event_phase[3]!=0&&stat(f,14)!=0&&stat(f,15)!=0,"remap-without-cache-PAT");obs(f,present==wc&&wc==stat(f,11),"old-alias-survived-remap");}
+ if(phase==6){obs(f,present==wc&&wc==f->alias_n*f->pages,"incomplete-WC-view");obs(f,stat(f,5)==0,"ready-before-second");}
+ if(phase!=7)obs(f,stat(f,5)==0,"ready-before-second");
+ if(f->drop_next&&phase==1&&f->event_phase[1]==1){struct Alias*aa=(void*)f->aliases.p;unsigned l=0;U*p=entry(f,aa[0].va+PAGE,&l);CK(l==3);*p=0;f->drop_next=0;}
+ if(f->oom&&phase==5&&f->event_phase[5]==1){CK(wc_page_map(f->space.p,UINT64_C(0xffffa00000000000),UINT64_C(0x30000000),1)==0);f->oom=0;}
+ if(f->fail_phase==phase&&f->event_phase[phase]==f->fail_at)return ERR;
+ if(phase==2||phase==6)((struct Domain*)f->domain.p)->epoch++;
+ if(phase==2||phase==3||phase==4||phase==6){for(size_t i=0;i<count;i++){U pat=rr[i].pat;if(phase==4||phase==6)pat=(PAT0&~UINT64_C(0xff00000000))|(UINT64_C(1)<<32);if(phase==4)cpus[i].v[9]=pat;replies[i]=(struct Reply){1,cpus[i].v[25],ROOT_PA,rr[i].cr0,pat,hash_reader(&rr[i])};if(f->bad_ack==i+1&&f->ack_phase==phase)replies[i].ack=0;if(f->wrong_reply&&phase==f->ack_phase&&i+1==count)replies[i].hash^=1;}}
+ (void)c;return 0;}
+static struct Fixture* fixture(size_t pages,size_t aliases,size_t cpus,U old,size_t tables){scenario++;struct Fixture*f=calloc(1,sizeof*f);CK(f);f->pages=pages;f->alias_n=aliases;f->cpu_n=cpus;f->old=old;f->tables=tables;f->ctx=alloc_guard((size_t)wc_shapes(0),8);f->space=alloc_guard(64,8);f->pool=alloc_guard(tables*4096,4096);f->meta=alloc_guard(tables+16,8);memset(f->meta.p+tables,0x6b,16);f->cfg=alloc_guard(sizeof(struct Config),8);f->aliases=alloc_guard(aliases*sizeof(struct Alias),8);f->readers=alloc_guard(cpus*sizeof(struct Reader),8);size_t n=pages*aliases;f->receipts=alloc_guard((n+2<=16384?n+2:n)*sizeof(struct Receipt),8);f->cpus=alloc_guard(cpus*sizeof(struct Cpu),8);f->boxes=alloc_guard(cpus*sizeof(struct Box),8);f->domain=alloc_guard(sizeof(struct Domain),8);f->ops=alloc_guard(sizeof(struct Ops),8);struct Ops*o=(void*)f->ops.p;*o=(struct Ops){0,send_stub,clock_stub,pause_stub,100};struct Cpu*cc=(void*)f->cpus.p;struct Reader*rr=(void*)f->readers.p;for(size_t i=0;i<cpus;i++){cc[i].v[0]=(U)(uintptr_t)&cc[i];cc[i].v[1]=i;cc[i].v[2]=i;cc[i].v[3]=4;cc[i].v[4]=i+1;cc[i].v[5]=ROOT_PA;cc[i].v[6]=UINT64_C(0x80010033);cc[i].v[7]=32;cc[i].v[8]=0xd00;cc[i].v[9]=PAT0;cc[i].v[25]=i+1;rr[i]=(struct Reader){PAT0,cc[i].v[6],6,{NULL,0}};f->ranges[i]=alloc_guard(2*sizeof(struct Range),8);}
+ CK(wc_domain_init((void*)f->domain.p,cc,cpus,(void*)f->boxes.p,o)==0);CK(wc_space_init(f->space.p,f->pool.p,tables,f->meta.p)==0);struct Alias*aa=(void*)f->aliases.p;for(size_t a=0;a<aliases;a++){aa[a]=(struct Alias){VA+a*UINT64_C(0x8000000000),old};for(size_t page=0;page<pages;page++)CK(wc_page_map(f->space.p,aa[a].va+page*PAGE,FRAME+page*PAGE,1+(old==0?8:0))==0);}
+ struct Config*c=(void*)f->cfg.p;*c=(struct Config){f->space.p,(void*)f->domain.p,FRAME,pages,{aa,aliases},{rr,cpus},{f->receipts.p,f->receipts.n/sizeof(struct Receipt)},callback,(U)(uintptr_t)f};return f;}
+static void destroy(struct Fixture*f){struct Guard*g[]={&f->ctx,&f->space,&f->pool,&f->meta,&f->cfg,&f->aliases,&f->readers,&f->receipts,&f->cpus,&f->boxes,&f->domain,&f->ops};for(size_t i=0;i<sizeof g/sizeof*g;i++){guarded(g[i]);free(g[i]->allocation);}for(size_t i=0;i<f->cpu_n;i++){guarded(&f->ranges[i]);free(f->ranges[i].allocation);}free(f);}
+static U run(struct Fixture*f){struct Capture c={0};wc_checked_execute(f->ctx.p,&c);CK(c.before==c.after);for(U i=0;i<6;i++)CK(c.regs[i]==UINT64_C(0x1122334400000000)+i);if(f->bad){fprintf(stderr,"wc oracle: %s; Dong returned 0x%llx normally\n",f->reason,(unsigned long long)c.result);destroy(f);exit(1);}return c.result;}
+static void bound(struct Fixture*f){CK(wc_bind((void*)f->cfg.p,f->ctx.p)==0);CK(stat(f,0)==1&&stat(f,4)==1&&stat(f,5)==0);raw_accounting(f);}
+static void normal(void){size_t counts[]={1,4,16};for(size_t ci=0;ci<3;ci++)for(U old=0;old<=6;old+=6){struct Fixture*f=fixture(3,2,counts[ci],old,24);size_t cpus=counts[ci];bound(f);CK(run(f)==0);CK(stat(f,5)==1&&stat(f,6)==7&&stat(f,9)==6&&stat(f,10)==6&&stat(f,11)==6&&stat(f,16)==((UINT64_C(1)<<cpus)-1));U events=stat(f,12);CK(run(f)==0&&stat(f,12)==events);CK(wc_seal(f->ctx.p)==0&&wc_execute(f->ctx.p)==9);raw_accounting(f);destroy(f);}}
+static void failures(void){unsigned phases[]={1,2,3,4,5,6,8};for(size_t i=0;i<sizeof phases/sizeof*phases;i++){unsigned total=(phases[i]==1||phases[i]==5||phases[i]==8)?6:1;for(unsigned at=1;at<=total;at++){struct Fixture*f=fixture(3,2,4,6,24);bound(f);f->fail_phase=phases[i];f->fail_at=at;CK(run(f)==ERR);CK(stat(f,1)==1&&stat(f,4)==1&&stat(f,5)==0&&stat(f,6)==phases[i]&&stat(f,7)==ERR);U events=stat(f,12);CK(wc_execute(f->ctx.p)==5&&stat(f,12)==events);raw_accounting(f);destroy(f);}}}
+static void noack(unsigned phase,unsigned wrong){struct Fixture*f=fixture(3,2,4,6,24);bound(f);f->bad_ack=wrong?0:4;f->wrong_reply=wrong;f->ack_phase=phase;CK(run(f)==7);CK(stat(f,1)==1&&stat(f,4)==1&&stat(f,5)==0&&stat(f,6)==phase&&stat(f,7)==7);if(phase==2)CK(stat(f,10)==0&&stat(f,11)==0&&stat(f,13)==0);raw_accounting(f);destroy(f);}
+static void invalid_unchanged(struct Fixture*f){struct Guard*g[]={&f->ctx,&f->space,&f->pool,&f->meta,&f->receipts,&f->domain,&f->cpus,&f->boxes,&f->cfg,&f->aliases,&f->readers,&f->ops};size_t n=sizeof g/sizeof*g;unsigned char*copy[12];for(size_t i=0;i<n;i++){copy[i]=malloc(g[i]->n);CK(copy[i]);memcpy(copy[i],g[i]->p,g[i]->n);}CK(wc_bind((void*)f->cfg.p,f->ctx.p)!=0);for(size_t i=0;i<n;i++){CK(!memcmp(copy[i],g[i]->p,g[i]->n));free(copy[i]);}destroy(f);}
+static void invalids(void){for(unsigned k=0;k<25;k++){struct Fixture*f=fixture(2,2,4,6,24);struct Config*c=(void*)f->cfg.p;struct Alias*a=(void*)f->aliases.p;struct Reader*r=(void*)f->readers.p;struct Cpu*cpu=(void*)f->cpus.p;switch(k){case 0:c->pages=0;break;case 1:c->pages=4097;break;case 2:c->physical=UINT64_MAX-4095;break;case 3:a[1].va=a[0].va;break;case 4:a[0].va=UINT64_C(0x800000000000);break;case 5:a[0].kind=7;break;case 6:c->receipts.ptr=f->pool.p+f->pool.n-8;break;case 7:c->aliases.ptr=f->ctx.p+f->ctx.n-8;break;case 8:cpu[3].v[7]|=128;break;case 9:cpu[3].v[5]+=4096;break;case 10:r[3].pat^=UINT64_C(1)<<40;break;case 11:r[0].def=3;break;case 12:CK(wc_page_map(f->space.p,UINT64_C(0xffff800000001000),FRAME,1)==0);break;case 13:CK(wc_large_map(f->space.p,UINT64_C(0xffffa00000000000),FRAME)==0);break;case 14:CK(wc_page_map(f->space.p,UINT64_C(0xffffa00000000000),UINT64_C(0x30000000),17)==0);break;case 15:r[0].ranges.ptr=f->ranges[0].p;r[0].ranges.len=1;((struct Range*)r[0].ranges.ptr)[0]=(struct Range){FRAME+4096,4096,4};break;case 16:{unsigned l;U*p=entry(f,a[0].va,&l);*p|=4;break;}case 17:{unsigned l;U*p=entry(f,a[0].va,&l);*p&=~NX;break;}case 18:((U*)f->pool.p)[(VA>>39)&511]=ROOT_PA|7;break;case 19:((U*)f->pool.p)[(VA>>39)&511]=(ROOT_PA+f->tables*PAGE)|7;break;case 20:f->meta.p[f->tables-1]=1;break;case 21:f->meta.p[0]=0;break;case 22:c->readers.ptr=f->receipts.p+f->receipts.n-8;break;case 23:r[0].ranges.ptr=f->ranges[0].p;r[0].ranges.len=2;((struct Range*)r[0].ranges.ptr)[0]=(struct Range){FRAME,0x200000,1};((struct Range*)r[0].ranges.ptr)[1]=(struct Range){FRAME,0x200000,6};break;case 24:r[3].def=0;break;}invalid_unchanged(f);}}
+static void maximum_binding(void){struct Fixture*f=fixture(4096,4,1,6,128);bound(f);CK(stat(f,0)==1&&stat(f,5)==0);destroy(f);}
+static void topology_change(void){struct Fixture*f=fixture(2,2,4,6,24);bound(f);struct Cpu*c=(void*)f->cpus.p;c[3].v[25]++;unsigned char*before=malloc(f->ctx.n);CK(before);memcpy(before,f->ctx.p,f->ctx.n);CK(wc_execute(f->ctx.p)==6&&!memcmp(before,f->ctx.p,f->ctx.n));free(before);destroy(f);}
+static void oom(void){struct Fixture*f=fixture(2,2,4,6,8);bound(f);f->oom=1;CK(run(f)==UINT64_C(0x02000007));CK(stat(f,1)==1&&stat(f,4)==1&&stat(f,5)==0&&stat(f,6)==5&&stat(f,11)==2&&stat(f,9)==stat(f,10));raw_accounting(f);destroy(f);}
+int main(int argc,char**argv){CK(argc==2);CK(wc_shapes(1)==sizeof(struct Config)&&wc_shapes(2)==sizeof(struct Reader)&&wc_shapes(3)==sizeof(struct Reply)&&wc_shapes(4)==sizeof(struct Receipt)&&wc_shapes(5)==sizeof(struct Domain)&&wc_shapes(6)==sizeof(struct Cpu)&&wc_shapes(7)==64);if(!strcmp(argv[1],"normal"))normal();else if(!strcmp(argv[1],"noack"))noack(2,0);else{normal();invalids();maximum_binding();failures();for(unsigned p=2;p<=6;p++){if(p==5)continue;noack(p,0);noack(p,1);}topology_change();oom();}printf("WC real transaction raw oracle checks=%u scenarios=%u passed\n",checks,scenario);return 0;}

@@ -7,5 +7,3 @@
 {"at":"2026-10-18T11:10:47+00:00","data":{"rev":5,"status":"accepted"},"kind":"accept","task_id":"deepseek:D14"}
 {"at":"2026-10-18T11:38:10+00:00","data":{"rev":6,"status":"integrated"},"kind":"integrate","task_id":"deepseek:D14"}
 {"at":"2026-10-19T11:42:09+00:00","data":{"rev":8,"status":"integrated"},"kind":"state_reconciled","task_id":"deepseek:D14"}
-{"at":"2026-10-19T04:21:48+00:00","data":{"rev":1,"status":"todo"},"kind":"imported","task_id":"deepseek:D14"}
-{"at":"2026-10-19T04:43:01+00:00","data":{"rev":7,"status":"integrated"},"kind":"state_restored","task_id":"deepseek:D14"}

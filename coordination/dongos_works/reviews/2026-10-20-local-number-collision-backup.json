@@ -1,0 +1,209 @@
+{
+  "reason": "异机原始任务存在同编号不同契约；本轮临时记录归档前保留完整API结果，不覆盖历史",
+  "tasks": [
+    {
+      "id": "codex:CX6",
+      "number": "CX6",
+      "owner": "codex",
+      "title": "[P0/L3] 修复NASM 3分组帮助的警告能力探测并复核集成入口",
+      "description": "所属阶段：P0工具链维护，关联L3整函数主线复验。源码核对发现lang/tests/test_dongc.py:nasm_flags只读取nasm -h；本机NASM3.02把reloc-rel-dword及reloc-abs-qword放在-h -w分组帮助中，主线C52测试在setUpClass组装时因合法RIP相对重定位被-Werror拒绝，0tests（build/test/bootstrap-nasm-u64-module/run-d0a567604d4b）。这是CX1能力探测在新帮助格式下的后继兼容修复，不重做已验收组件。仅改声明文件：按实际帮助格式探测两个完整警告名，兼容旧NASM不支持-h -w或未知参数的情况，保留-Wall/-Werror及其它警告；不得按版本硬猜、不无条件关闭未知警告、不吞真实探测失败。测试覆盖旧平铺帮助、新分组帮助、名字前缀误匹配、两个警告独立、真实失败传播，以及本机NASM合法RIP/绝对64位重定位实际组装与其它警告仍为错误。只跑定向兼容测试，不跑OS/VM。交付后须独立复验。",
+      "assignment_owner": "codex",
+      "status": "submitted",
+      "rev": 3,
+      "write_paths": [
+        "lang/tests/test_dongc.py",
+        "lang/tests/test_nasm_compatibility.py",
+        "codex-works/deliveries/CX6.md"
+      ],
+      "depends_on": [
+        "codex:CX1",
+        "codex:CX3"
+      ],
+      "checks": [
+        "module:lang.tests.test_nasm_compatibility"
+      ],
+      "auto_dispatch": false,
+      "auto_verify": false,
+      "complexity": "standard",
+      "created_at": "2026-10-20T12:51:58+00:00",
+      "updated_at": "2026-10-20T12:56:13+00:00",
+      "historical": false,
+      "document": "codex-works/tasks/CX6-board.md",
+      "delivery": "codex-works/deliveries/CX6.md",
+      "claimed_at": "2026-10-20T12:51:58+00:00",
+      "completed_at": "2026-10-20T12:56:13+00:00",
+      "claimed_by": "codex-mcp-6d5798b7b4b74b61",
+      "candidate": null,
+      "verification": null,
+      "review_note": "",
+      "legacy_hash": "3cfcef59e2acc66d2986951b38e548bbcfa78c49f977abdbb9b46ae7594ca6e4",
+      "claim_from_status": "todo",
+      "claim_token": "a4e3438c6fe1415e86b87ebec3927211",
+      "timing": {
+        "as_of": "2026-10-20T13:03:14+00:00",
+        "published_at": "2026-10-20T12:51:58+00:00",
+        "first_claimed_at": "2026-10-20T12:51:58+00:00",
+        "last_submitted_at": "2026-10-20T12:56:13+00:00",
+        "last_verified_at": null,
+        "last_modified_at": null,
+        "rounds": [
+          {
+            "number": 1,
+            "kind": "initial",
+            "owner": "codex",
+            "claimed_by": "codex-mcp-6d5798b7b4b74b61",
+            "requested_at": null,
+            "claimed_at": "2026-10-20T12:51:58+00:00",
+            "submitted_at": "2026-10-20T12:56:13+00:00",
+            "ended_at": "2026-10-20T12:56:13+00:00",
+            "end_reason": "submit",
+            "paused_seconds": 0,
+            "waiting_seconds": 0,
+            "elapsed_seconds": 255.0,
+            "active_seconds": 255.0,
+            "ongoing": false
+          }
+        ],
+        "timeline": [
+          {
+            "seq": 1106,
+            "at": "2026-10-20T12:51:58+00:00",
+            "task_id": "codex:CX6",
+            "kind": "created",
+            "data": {
+              "rev": 1,
+              "status": "todo"
+            }
+          },
+          {
+            "seq": 1107,
+            "at": "2026-10-20T12:51:58+00:00",
+            "task_id": "codex:CX6",
+            "kind": "claim",
+            "data": {
+              "rev": 2,
+              "status": "in_progress",
+              "owner": "codex",
+              "claimed_by": "codex-mcp-6d5798b7b4b74b61",
+              "claimed_at": "2026-10-20T12:51:58+00:00",
+              "completed_at": null,
+              "resume_status": null
+            }
+          },
+          {
+            "seq": 1112,
+            "at": "2026-10-20T12:56:13+00:00",
+            "task_id": "codex:CX6",
+            "kind": "submit",
+            "data": {
+              "rev": 3,
+              "status": "submitted",
+              "owner": "codex",
+              "claimed_by": "codex-mcp-6d5798b7b4b74b61",
+              "claimed_at": "2026-10-20T12:51:58+00:00",
+              "completed_at": "2026-10-20T12:56:13+00:00",
+              "resume_status": null
+            }
+          }
+        ],
+        "last_rework_requested_at": null,
+        "duration_basis": "经过时长为领取至执行完成（提交）的自然时间；办理时长另扣除明确暂停，不代表实际编辑净耗时",
+        "total_active_seconds": 255.0,
+        "rework_active_seconds": 0,
+        "latest_round": {
+          "number": 1,
+          "kind": "initial",
+          "owner": "codex",
+          "claimed_by": "codex-mcp-6d5798b7b4b74b61",
+          "requested_at": null,
+          "claimed_at": "2026-10-20T12:51:58+00:00",
+          "submitted_at": "2026-10-20T12:56:13+00:00",
+          "ended_at": "2026-10-20T12:56:13+00:00",
+          "end_reason": "submit",
+          "paused_seconds": 0,
+          "waiting_seconds": 0,
+          "elapsed_seconds": 255.0,
+          "active_seconds": 255.0,
+          "ongoing": false
+        },
+        "history_incomplete": false,
+        "verifications": []
+      }
+    },
+    {
+      "id": "cursor:CR43",
+      "number": "CR43",
+      "owner": "cursor",
+      "title": "[P5] 按工程交接制定可信恢复接线方案和逐步实现契约",
+      "description": "所属阶段：P5基础服务 → 同次启动设备恢复与安全DMA回收的实现前置设计。先完整读取code/docs/p5-p6-engineering-handoff.md、device-manager.md、kernel/user/{device_manager,memory,services,device_host,devices}.dg、smp目录user_bridge及AHCI/NVMe实际驱动；按最新源码校正交接中仍称PR#4/#5未合并、缺stop的历史快照。当前main 208029b已包含恢复账本和DMA整块记录，但device_host未调用recover；memory DMA_PINNED仍永久持有。不得重复实现已有账本或造布尔模型冒充硬件证明。\n\n只交付一份可据以直接派实现的设计文档及真实交付报告，先不改内核/驱动/权限。明确选择首个受支持控制器并说明源码依据；列清旧device token+撤权generation+Catalog owner/incarnation+内存root/generation+精确整块DMA租约如何由内核可信上下文绑定；不得接收用户函数指针或复位成功标志。把stop→quiesce→retire→reclaim→read→发布未绑定新代际拆成可独立审查步骤，stop必须跨全部CPU排除旧owner继续运行/返回用户态并持续到事务结束，复用既有retire_begin/barrier_wait/retire_finish能力而非重复写退休算法。quiesce必须有可信MMIO读回/排空、有限超时和失败保持HELD，关闭BME/MSI不足作证明；CPL3驱动私有stop_port/wait_ready不能直接当可信回调。\n\n明确现有DmaLease缺owner/incarnation关联，PINNED/rounded pages/recycled/根与代际的精确所有权核对、回收顺序、各步副作用与不可重试边界、无效/替换设备/旧句柄/旧DMA/旧IRQ负控。列出每个后继实现的精确write_paths（依据源码真实位置）、只读依赖、ABI和布局约束、能验证该步骤的主机真实Dong测试/坏源控制、最后同boot客体故障注入/持久化及回归门禁，区分H/V/E；不能把主机模型当真实DMA停止或整个P5验收。说明为何选择的步骤不会与既有实现重复，哪些共享文件要求顺序执行。P6 DAG/GUI/USB/KVM和L3继续保留各自门禁，不在本项扩大范围。\n\n先通过worker MCP读取最新rev、完整任务后领取，Cursor客户端手动执行；临时产物仅本人works/build/CR43唯一目录。checks为当前主线P5基线定向测试，目的确认设计所依赖的实现可复验，不代替设计本身的独立源码/契约审查；依赖CX6修复公共NASM探测后运行。仅可写两文件，不修改其它任务/主线、不运行OS/VM/全回归/模型CLI、不自行验收或集成。测试未跑须如实写未运行。设计审核通过后另发真实接线实现任务，不能本项关闭P5。",
+      "assignment_owner": "cursor",
+      "status": "todo",
+      "rev": 2,
+      "write_paths": [
+        "cursor-works/docs/p5-recovery-implementation-plan.md",
+        "cursor-works/deliveries/CR43.md"
+      ],
+      "depends_on": [
+        "codex:CX6"
+      ],
+      "checks": [
+        "module:tests.test_device_manager",
+        "module:tests.test_dma_lease"
+      ],
+      "auto_dispatch": false,
+      "auto_verify": false,
+      "complexity": "standard",
+      "created_at": "2026-10-20T12:53:44+00:00",
+      "updated_at": "2026-10-20T12:58:21+00:00",
+      "historical": false,
+      "document": "cursor-works/tasks/CR43-board.md",
+      "delivery": "cursor-works/deliveries/CR43.md",
+      "claimed_at": null,
+      "completed_at": null,
+      "claimed_by": null,
+      "candidate": null,
+      "verification": null,
+      "review_note": "",
+      "legacy_hash": "766b41e4d73928e21ac1af1362dbd1366791a798b2436e9ec455426dac43aeb1",
+      "document_status": "todo",
+      "timing": {
+        "as_of": "2026-10-20T13:03:15+00:00",
+        "published_at": "2026-10-20T12:53:44+00:00",
+        "first_claimed_at": null,
+        "last_submitted_at": null,
+        "last_verified_at": null,
+        "last_modified_at": "2026-10-20T12:58:21+00:00",
+        "rounds": [],
+        "timeline": [
+          {
+            "seq": 1108,
+            "at": "2026-10-20T12:53:44+00:00",
+            "task_id": "cursor:CR43",
+            "kind": "created",
+            "data": {
+              "rev": 1,
+              "status": "todo"
+            }
+          },
+          {
+            "seq": 1113,
+            "at": "2026-10-20T12:58:21+00:00",
+            "task_id": "cursor:CR43",
+            "kind": "document_changed",
+            "data": {
+              "rev": 2,
+              "status": "todo"
+            }
+          }
+        ],
+        "last_rework_requested_at": null,
+        "duration_basis": "经过时长为领取至执行完成（提交）的自然时间；办理时长另扣除明确暂停，不代表实际编辑净耗时",
+        "total_active_seconds": null,
+        "rework_active_seconds": 0,
+        "latest_round": null,
+        "history_incomplete": false,
+        "verifications": []
+      }
+    }
+  ]
+}

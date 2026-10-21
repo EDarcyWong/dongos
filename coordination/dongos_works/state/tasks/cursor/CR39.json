@@ -26,14 +26,15 @@
   "document": "cursor-works/tasks/CR39-board.md",
   "historical": false,
   "id": "cursor:CR39",
+  "integration_note": "2026-10-20按实际代码补登记主线集成。已独立核对原任务/既有源码契约审查及正式复验：4tests/0skip、source_stable=true；当前四交付仍逐字节匹配验收指纹。生产已真实复制到code/lang/bootstrap/nasm_short_circuit_function.dg（478b1ed），与验收生产字节一致或仅LF/CRLF；说明及永久测试主线路径适配已审查，保留原语义/别名/原子性/真实坏Dong与完整ABI观察。CR40额外边界增强已核对，未改生产。本机NASM3分组探测维护后，9组件主线对应34项实际已全过0skip；A批20项775.031s且前后SHA稳定，B批本任务已通过，总manifest本轮保存。证据reviews/2026-10-20-mainline-registration-evidence.json与code/build/test/mainline-reconcile-*。本次仅登记既有已验收组件的实际文件集成，不宣称L3/G5/G6完成。",
   "legacy_hash": "7a021d95cacc47e23392e615e010edb67b6ff10f9dd5902126c02882313a07b2",
   "number": "CR39",
   "owner": "cursor",
-  "rev": 7,
+  "rev": 8,
   "review_note": "用户授权Codex直接实现。审查六名字/完整尾部别名、自递归拒绝、不同公开块号、1536分段确定重放及容量发布；真实复用CR11/C41/C22/CR10/C42，完整u64先归一化再BOOL返回。正式隔离fb380dd0e1f043e5990c072e71ff1582为4项0skip，source_stable=true；14主要向量/模式，ELF64/COFF、debug/release。独立读取隔离原始观察：交换分支的8次观测确按调用轨迹/次数不同拒绝，删右侧归一化4次实际RAX不同且调用顺序正常；4次RBX坏体精确+8且真值/栈正确，两个出口均覆盖。验收；主线未集成。",
-  "status": "accepted",
+  "status": "integrated",
   "title": "[L3] 具有真实调用副作用的AND/OR短路完整SysV函数",
-  "updated_at": "2026-10-19T15:50:46+00:00",
+  "updated_at": "2026-10-20T13:12:20+00:00",
   "verification": {
     "checks": [
       {

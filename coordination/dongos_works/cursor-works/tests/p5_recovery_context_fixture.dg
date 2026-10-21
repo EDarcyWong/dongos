@@ -1,0 +1,156 @@
+// Native boundary fixture. The runner splits FILE sections, then inserts exact
+// candidate production fragments. All hardware/memory effects remain stubs.
+// FILE p5_adapter.dg
+module p5_adapter;
+import lib.device_abi as abi;
+pub error Failed=0x052b_0001;
+pub error InvalidState=0x0406_0001;
+pub const LIMIT:usize=16;pub const DMA_OBJECT:u64=20;pub const ADMITTED_XHCI:usize=13;
+pub const DMA:u64=5;pub const MAP:u64=4;pub const WRITE:u64=2;
+pub const DMA_HELD:u64=1;pub const DMA_COMPLETE:u64=2;
+pub const SERVICE_STOP:u64=1;pub const KILLED:u64=5;pub const STARTING:u64=1;pub const READY:u64=2;
+pub const SLOTS:usize=16;pub const CONFIGS:usize=18;
+pub error Stale=0x05100004;
+pub struct Lease{pub token:u64,pub physical:u64,pub pointer:*u8,pub length:usize}
+pub struct DmaLease{pub physical:u64,pub virtual:u64,pub pages:usize,pub root:u64,pub generation:u64,pub attempted:usize,pub mapped:usize,pub state:u64}
+pub const EMPTY_DMA:DmaLease=DmaLease{physical:0,virtual:0,pages:0,root:0,generation:0,attempted:0,mapped:0,state:0};
+pub struct Process{pub ready:u64,pub root:u64}
+pub var PROCESSES:[16]Process=[Process{ready:1,root:0x9000};16];pub var GENERATION:u64=11;
+pub var SNAPSHOT:DmaLease=EMPTY_DMA;pub var SNAPSHOT_ERROR:u64=0;
+var PUBLIC_LEASE:Lease=Lease{token:1,physical:0x200000,pointer:null,length:131072};
+pub struct IrqState{pub view:abi.Irq,pub owner:u64,pub device_token:u64,pub live:u64,pub serial:u64}
+pub const EMPTY_IRQ_STATE:IrqState=IrqState{view:abi.EMPTY_IRQ,owner:0,device_token:0,live:0,serial:0};
+pub struct Table{pub initialized:u64,pub count:usize,pub devices:[32]abi.Device,pub bindings:[4]abi.Binding,pub interrupts:[2]IrqState}
+pub const EMPTY_TABLE:Table=Table{initialized:1,count:2,devices:[abi.EMPTY_DEVICE;32],bindings:[abi.EMPTY_BINDING;4],interrupts:[EMPTY_IRQ_STATE;2]};
+pub struct State{pub owner:u64,pub stage:u64}
+pub const EMPTY:State=State{owner:0,stage:0};
+pub struct Ops{pub unused:u64}
+pub const EMPTY_OPS:Ops=Ops{unused:0};
+pub struct SnapshotState{pub generation:u64,pub configuration:u64,pub process:u64,pub state:u64}
+pub struct Catalog{pub ready:u64,pub count:usize,pub incarnation:[16]u64,pub configuration:[16]u64,pub slot:[32]u64,pub states:[32]SnapshotState}
+pub const EMPTY_CATALOG:Catalog=Catalog{ready:1,count:18,incarnation:[5;16],configuration:[2;16],slot:[0;32],states:[SnapshotState{generation:5,configuration:2,process:0x503,state:2};32]};
+pub var EPOCH:u64=0;
+unsafe extern "sysv64" fn p5_event(stage:u64,a:u64,b:u64,c:u64)u64;
+pub unsafe fn event(stage:u64,a:u64,b:u64,c:u64)u64{unsafe{return p5_event(stage,a,b,c);}}
+pub unsafe fn get(id:usize)*Process{unsafe{return &PROCESSES[id];}}
+pub unsafe fn processes()*Process{unsafe{return &PROCESSES[0];}}
+pub fn generation(id:usize)u64{unsafe{return GENERATION;}}
+pub unsafe fn dma_snapshot(id:usize,out:*DmaLease)!void{unsafe{
+ let e=p5_event(3,id as u64,0,0);if e!=0{return error.Failed;}if SNAPSHOT_ERROR!=0{return error.InvalidState;}*out=SNAPSHOT;
+}return;}
+pub unsafe fn check_range(id:usize,address:u64,length:usize,write:bool)!void{unsafe{let e=p5_event(1,id as u64,address,length as u64);if e!=0{return error.Failed;}}return;}
+pub unsafe fn copy_out(id:usize,address:u64,input:[]const u8)!void{unsafe{let e=p5_event(4,id as u64,address,input.len as u64);if e!=0{return error.Failed;}}return;}
+pub unsafe fn dma_acquire(id:usize,bytes:u64,alignment:u64)!void{unsafe{let e=p5_event(2,id as u64,bytes,alignment);if e==0x05120002{return error.abi.Denied;}if e!=0{return error.Failed;}}return;}
+pub unsafe fn dma_lease(id:usize)*const Lease{unsafe{return &PUBLIC_LEASE;}}
+pub unsafe fn configuration_read(address:u64)!u32{unsafe{return p5_event(10,address,0,0) as u32;}}
+pub fn region_base()u64{return 0x80000000;}
+pub unsafe fn same_identity(a:*const abi.Device,b:*const abi.Device)bool{unsafe{
+ return (*a).version==(*b).version&&(*a).kind==(*b).kind&&(*a).ecam==(*b).ecam&&(*a).segment==(*b).segment&&(*a).bus==(*b).bus
+ &&(*a).device==(*b).device&&(*a).function==(*b).function&&(*a).vendor==(*b).vendor&&(*a).device_id==(*b).device_id
+ &&(*a).class_code==(*b).class_code&&(*a).header==(*b).header;
+}}
+pub unsafe fn binding(t:*Table,role:u64,out:*abi.Binding)!void{unsafe{*out=(*t).bindings[(role-1) as usize];if (*out).device_token==0{return error.abi.Denied;}}return;}
+pub unsafe fn revoke(t:*Table,token:u64,generation:u64)!void{unsafe{
+ let e=p5_event(8,token,generation,0);if e!=0{return error.Failed;}
+ let i=((token&255)-1) as usize;(*t).devices[i].generation+=1;(*t).devices[i].flags|=abi.REVOKED;
+ var n:usize=0;while n<4{if (*t).bindings[n].device_token==token{(*t).bindings[n].flags|=abi.REVOKED;}n+=1;}
+}return;}
+pub unsafe fn retire(state:*State,ops:*Ops,owner:u64)!void{unsafe{let e=p5_event(5,owner,0,0);if e!=0{return error.Failed;}}return;}
+pub unsafe fn quarantine(slot:usize)!void{unsafe{let e=p5_event(6,slot as u64,0,0);if e!=0{return error.Failed;}}return;}
+pub unsafe fn quiesce_stopped_block()!bool{unsafe{let e=p5_event(7,2,0,0);if e==0{return false;}if e==1{return true;}return error.Failed;}}
+pub unsafe fn mask_isa(irq:u64,masked:bool)!void{unsafe{let e=p5_event(9,irq,0,0);if e!=0{return error.Failed;}}return;}
+pub unsafe fn irq_revoke_owner(t:*Table,owner:u64)!void{unsafe{let e=p5_event(11,owner,0,0);if e!=0{return error.Failed;}}return;}
+pub unsafe fn current(c:*Catalog,id:usize)u64{unsafe{return (*c).configuration[id];}}
+pub unsafe fn terminate(c:*Catalog,id:usize,state:u64,status:u64)!void{unsafe{let e=p5_event(13,id as u64,state,status);if e!=0{return error.Failed;}}return;}
+pub unsafe fn compositor_gone(epoch:u64)!void{return;}
+pub unsafe fn owner_gone(owner:u64)!void{return;}
+// FILE p5_smp.dg
+module p5_smp;
+import p5_adapter as adapter;
+pub unsafe fn retire(id:usize)!void{unsafe{let e=adapter.event(12,id as u64,0,0);if e!=0{return error.adapter.Failed;}}return;}
+// FILE p5_trace.dg
+module p5_trace;
+pub fn event(stage:u64,a:u64,b:u64,c:u64)void{return;}
+// FILE user/device_host.dg
+module user.device_host;
+import lib.device_abi as abi;import p5_adapter as memory;import p5_adapter as devices;
+import p5_adapter as ledger;import p5_adapter as msi;import p5_adapter as platform;
+pub var TABLE:*ledger.Table=null;var FIXTURE_TABLE:ledger.Table=ledger.EMPTY_TABLE;
+var RAW:abi.Device=abi.EMPTY_DEVICE;var XHCI_OWNER:u64=0;
+var PCI_OWNERS:[2]u64=[0;2];var PCI_TOKENS:[2]u64=[0;2];
+pub var BLOCK_RESET_OWNER:u64=0;pub var BLOCK_RESET_TOKEN:u64=0;pub var PCI_FAILED:bool=false;
+pub var MSI:msi.State=msi.EMPTY;var MSI_OPS:msi.Ops=msi.EMPTY_OPS;
+// PRODUCTION_HARDWARE
+// PRODUCTION_CONTEXT
+// PRODUCTION_HOST_REVOKE
+// PRODUCTION_HOST_MANAGER
+export("p5_host_reset") fn fixture_reset(slot:usize)void{unsafe{
+ var i:usize=0;while i<16{DMA_CONTEXTS[i]=EMPTY_DMA_CONTEXT;i+=1;}
+ FIXTURE_TABLE=ledger.EMPTY_TABLE;TABLE=&FIXTURE_TABLE;MSI=msi.EMPTY;PCI_FAILED=false;
+ BLOCK_RESET_OWNER=0;BLOCK_RESET_TOKEN=0;PCI_OWNERS=[0;2];PCI_TOKENS=[0;2];XHCI_OWNER=0;
+ var d=abi.EMPTY_DEVICE;d.kind=abi.PCI;d.token=0x702;d.generation=7;d.flags=abi.BOUND;
+ d.ecam=0x80008000;d.device=1;d.vendor=0x1af4;d.device_id=0x1042;d.class_code=0x10000;
+ FIXTURE_TABLE.devices[1]=d;var role:u64=abi.BLOCK;var b:usize=0;
+ if slot==4{role=abi.TABLET;b=1;}else if slot==13{role=abi.XHCI;b=3;}
+ FIXTURE_TABLE.bindings[b]=abi.Binding{version:1,device_token:0x702,role:role,configuration_id:slot as u64,generation:7,irq_mask:0,flags:abi.BOUND,reserved:0};
+ let owner=((slot as u64+1)<<32)|5;
+ if slot==13{XHCI_OWNER=owner;}else{var p:usize=0;if slot==4{p=1;}PCI_OWNERS[p]=owner;PCI_TOKENS[p]=0x702;}
+}return;}
+export("p5_query") fn fixture_query(slot:usize,out:*DmaContext)u64{unsafe{match dma_context(slot,out){ok=>{return 0;},err(e)=>{return e;},}}}
+export("p5_host_change") fn fixture_change(which:usize,value:u64)void{unsafe{
+ if which<16{*((&FIXTURE_TABLE.devices[1] as *u64)+which)=value;}
+ else if which<24{*((&FIXTURE_TABLE.bindings[0] as *u64)+(which-16))=value;}
+ else if which==24{PCI_OWNERS[0]=value;}else if which==25{PCI_TOKENS[0]=value;}
+ else if which==26{TABLE=null;}else if which==27{FIXTURE_TABLE.count=value as usize;}
+}return;}
+export("p5_finish") fn fixture_finish(slot:usize,owner:u64,root:u64,generation:u64,code:u64)void{unsafe{dma_finish(slot,owner,root,generation,code);}return;}
+export("p5_begin") fn fixture_begin(slot:usize,configuration:u64,owner:u64,incarnation:u64,root:u64,generation:u64)u64{unsafe{
+ match dma_begin(slot,configuration,owner,incarnation,root,generation,131072,4096){ok(held)=>{if held{return 0;}return 1;},err(e)=>{return e;},}
+}}
+export("p5_stop") fn fixture_stop(slot:usize,configuration:u64,owner:u64,incarnation:u64,root:u64,generation:u64,smp:u64,code:u64)void{unsafe{dma_stop(slot,configuration,owner,incarnation,root,generation,smp,code);}return;}
+export("p5_revoke") fn fixture_revoke(owner:u64)u64{unsafe{match revoke_owner(owner){ok=>{return 0;},err(e)=>{return e;},}}}
+export("p5_manager_revoke") fn fixture_manager_revoke()u64{unsafe{match revoke(0x702,7){ok(config)=>{return config;},err(e)=>{return e;},}}}
+// FILE p5_recovery_context_fixture.dg
+module p5_recovery_context_fixture;
+import user.abi as abi;import p5_adapter as memory;import p5_adapter as devices;
+import p5_adapter as handles;import p5_adapter as blk;import p5_adapter as procs;
+import p5_adapter as proc;import p5_adapter as windows;import p5_adapter as trace;
+import p5_trace as boot_trace;
+import p5_smp as smp_bridge;import user.device_host as device_host;
+pub error Protocol=0x050b_0002;
+const ACTIVE:usize=16;var CURRENT:usize=2;var GRAPHICS:bool=true;
+var CATALOG_STORAGE:procs.Catalog=procs.EMPTY_CATALOG;var CATALOG:*procs.Catalog=null;
+var SMP_ENABLED:bool=true;var SMP_TEST_SLOTS:u64=65535;var GUI_DEPARTED:[16]u64=[0;16];var USB_DEPARTED:u64=0;
+unsafe fn process(id:usize)*memory.Process{unsafe{return memory.get(id);}}
+unsafe fn managed(id:usize)bool{return id<16;}
+unsafe fn authority(token:u64,kind:u64,rights:u64)!u64{unsafe{let e=memory.event(0,token,kind,rights);if e!=0{return error.memory.Failed;}}return devices.DMA_OBJECT;}
+unsafe fn owner_key(id:usize)u64{unsafe{if CATALOG==null{return 0;}return ((id as u64+1)<<32)|(*CATALOG).incarnation[id];}}
+unsafe fn revoke_loaded(id:usize,incarnation:u64)!void{unsafe{try device_host.revoke_owner(((id as u64+1)<<32)|incarnation);}return;}
+unsafe fn perform(frame:*abi.Frame)!usize{unsafe{let code:u64=0x63;
+ // PRODUCTION_SYSCALL
+}return error.Protocol;}
+// PRODUCTION_RETIRE
+export("p5_reset") fn fixture_initialize(slot:usize)void{unsafe{
+ CURRENT=slot;CATALOG_STORAGE=procs.EMPTY_CATALOG;CATALOG=&CATALOG_STORAGE;
+ CATALOG_STORAGE.configuration[slot]=slot as u64;memory.GENERATION=11;
+ CATALOG_STORAGE.slot[slot]=slot as u64;CATALOG_STORAGE.states[slot].configuration=slot as u64;
+ CATALOG_STORAGE.states[slot].process=(5<<8)|(slot as u64+1);
+ var i:usize=0;while i<16{memory.PROCESSES[i]=memory.Process{ready:1,root:0x9000};i+=1;}
+ memory.SNAPSHOT=memory.EMPTY_DMA;memory.SNAPSHOT_ERROR=0x04060001;SMP_ENABLED=true;
+}return;}
+export("p5_set") fn fixture_set(which:u64,value:u64)void{unsafe{
+ if which==0{CATALOG_STORAGE.incarnation[CURRENT]=value;}else if which==1{CATALOG_STORAGE.configuration[CURRENT]=value;}
+ else if which==2{memory.PROCESSES[CURRENT].root=value;}else if which==3{memory.GENERATION=value;}
+ else if which==4{memory.PROCESSES[CURRENT].ready=value;}else if which==5{CATALOG=null;}
+ else if which==6{SMP_ENABLED=value!=0;}else if which==7{CURRENT=value as usize;}
+ else if which==30{CATALOG_STORAGE.incarnation[CURRENT]=value;CATALOG_STORAGE.states[CURRENT].process=(value<<8)|(CURRENT as u64+1);}
+ else if which==31{CATALOG_STORAGE.ready=value;}else if which==32{CATALOG_STORAGE.count=value as usize;}
+ else if which==33{CATALOG_STORAGE.slot[CURRENT]=value;}else if which==34{CATALOG_STORAGE.states[CURRENT].configuration=value;}
+ else if which==35{CATALOG_STORAGE.states[CURRENT].process=value;}else if which==36{CATALOG_STORAGE.states[CURRENT].state=value;}
+}return;}
+export("p5_lease") fn fixture_lease(lease:*const memory.DmaLease,code:u64)void{unsafe{memory.SNAPSHOT=*lease;memory.SNAPSHOT_ERROR=code;}return;}
+export("p5_call") fn fixture_call(bytes:u64,alignment:u64)u64{unsafe{
+ var f=abi.EMPTY;f.rdi=77;f.rsi=bytes;f.rdx=alignment;f.r10=0x10000;
+ match perform(&f){ok(next)=>{return f.rax;},err(e)=>{return e;},}
+}}
+export("p5_retire") fn fixture_retire()u64{unsafe{match retire_one(CURRENT,proc.KILLED,99){ok=>{return 0;},err(e)=>{return e;},}}}

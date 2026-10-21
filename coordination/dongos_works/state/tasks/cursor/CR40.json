@@ -5,11 +5,8 @@
   "checks": [
     "discover:cursor-works/tests:test_nasm_pair_cleanup_function.py"
   ],
-  "claim_from_status": "rework",
-  "claim_token": null,
-  "claimed_at": "2026-10-20T04:51:40+00:00",
-  "claimed_by": null,
-  "completed_at": "2026-10-20T06:03:16+00:00",
+  "claimed_at": "2026-10-19T15:51:53+00:00",
+  "claimed_by": "codex-direct-cursor",
   "complexity": "standard",
   "created_at": "2026-10-19T15:04:33+00:00",
   "delivery": "cursor-works/deliveries/CR40.md",
@@ -26,24 +23,21 @@
   "document": "cursor-works/tasks/CR40-board.md",
   "historical": false,
   "id": "cursor:CR40",
-  "integration_note": "已集成：主线 nasm_pair_cleanup_function.dg 与已验收交付逐字节相同，.md仅标题/说明调整；同轮主线测试11项零skip通过。未运行OS/VM，不宣称完整L3。",
+  "integration_note": "2026-10-20按实际代码补登记主线集成。已独立核对原任务/既有源码契约审查及正式复验：4tests/0skip、source_stable=true；当前四交付仍逐字节匹配验收指纹。生产已真实复制到code/lang/bootstrap/nasm_pair_cleanup_function.dg（478b1ed），与验收生产字节一致或仅LF/CRLF；说明及永久测试主线路径适配已审查，保留原语义/别名/原子性/真实坏Dong与完整ABI观察。CR40额外边界增强已核对，未改生产。本机NASM3分组探测维护后，9组件主线对应34项实际已全过0skip；A批20项775.031s且前后SHA稳定，B批本任务已通过，总manifest本轮保存。证据reviews/2026-10-20-mainline-registration-evidence.json与code/build/test/mainline-reconcile-*。本次仅登记既有已验收组件的实际文件集成，不宣称L3/G5/G6完成。",
   "legacy_hash": "bc440567c7d40d66d3078e612bd62067615dde47d896fcbbfd2884dd084f1fd3",
   "number": "CR40",
   "owner": "cursor",
-  "pause_note": "执行器无法确认全部进程已停止；请在原机器停止并明确确认",
-  "rev": 24,
-  "review_note": "实际审查PAIR清理函数源码、完整契约和永久测试：复用C44/C36/C42及CR12/13，预检重放后才发布输出，清理后保持真实RAX/RDX，不重装输入掩盖错误。总count超限夹具各区间合法、独立验证C36传播。正式隔离作业0919979e89d041859d477e9a36491e01通过4tests/0skip/returncode0，process_stopped=true/source_stable=true；当前四交付与正式指纹一致。真实debug/release、ELF64/COFF组装及显式SysV桥原生执行；独立pair/清理ID轨迹模型、完整保存寄存器/RSP/canary和安全RBX/RDX/顺序/容量坏董负控均通过。前次等待停止确认已清除，无活动作业。登记组件验收，未实际集成主线。",
+  "rev": 14,
+  "review_note": "用户授权Codex直接实现。审查名字/scopes/IDs完整描述符、自然对齐/溢出/尾部别名及C36全图校验传播，1536分段确定性预演/重放和失败原子性。CR12先加载RAX/RDX、C36真实调用后CR13存返回槽、C42 PAIR退出，未从原输入重载掩盖保持。总count超限夹具已补强为两个合法区间count=1/16及16合法ID，只有总和17超限，0/富余容量均INVALID。正式隔离a848152c07fc46b687edd4b6971c65fa：4项0skip，124.406秒、source_stable=true，8主要向量/模式，debug/release及ELF64/COFF。独立原始审计：2次坏RDX精确变17且RAX正确，2次注册顺序交换只破坏轨迹而PAIR正确；2次RBX精确+8且返回PAIR/栈正常。容量提前写头完整原子性拒绝。验收；未集成主线。",
   "status": "integrated",
   "title": "[L3] 作用域清理后保持双字返回值的完整SysV函数",
-  "updated_at": "2026-10-20T07:34:42+00:00",
+  "updated_at": "2026-10-20T13:12:21+00:00",
   "verification": {
     "checks": [
       {
         "cancelled": false,
-        "elapsed_seconds": 221.623,
-        "execution_exited": true,
+        "elapsed_seconds": 124.406,
         "passed": true,
-        "process_stopped": true,
         "returncode": 0,
         "skips": 0,
         "spec": "discover:cursor-works/tests:test_nasm_pair_cleanup_function.py",
@@ -51,17 +45,15 @@
         "timed_out": false
       }
     ],
-    "execution_exited": true,
     "fingerprint": {
-      "cursor-works/deliveries/CR40.md": "bd84f24327466b7e2cd2043801b32e9e00078ea7340207c1ccac636043eaa47d",
+      "cursor-works/deliveries/CR40.md": "e7562486a13f6fec505e0ed68a3bc2266dc383cc58e88fdff39f1e3533a1bf5c",
       "cursor-works/src/bootstrap/nasm_pair_cleanup_function.dg": "22522c485b9650f59d05a6ae3a7237f706a06e3ac6199e55782e1d67b24f6e8e",
       "cursor-works/src/bootstrap/nasm_pair_cleanup_function.md": "65d09a2ca8c5970277b1a4ae3e9d10df77d73e900d84e09d55eb606468ce56e4",
       "cursor-works/tests/test_nasm_pair_cleanup_function.py": "2145159da40db85d4348c5b437bb8f2fbcac1a887c25e8ef7895f5a71255175e"
     },
-    "finished_at": "2026-10-20T06:11:19+00:00",
-    "job": "0919979e89d041859d477e9a36491e01",
+    "finished_at": "2026-10-19T15:58:29+00:00",
+    "job": "a848152c07fc46b687edd4b6971c65fa",
     "passed": true,
-    "process_stopped": true,
     "source_stable": true,
     "summary": "定向复验通过，等待源码/契约审查"
   },

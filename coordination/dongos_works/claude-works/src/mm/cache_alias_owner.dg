@@ -1,0 +1,309 @@
+// Fixed-root framebuffer cache migration. Exclusive BSP writer, IF=0.
+// No frame is freed here; the caller holds a trusted framebuffer lease.
+module mm.cache_alias_owner;
+import mm.paging as pg;
+import mm.cache_type_plan as plan;
+import smp.tlb as tlb;
+import smp.context as cpu;
+pub const OK:u64=0;pub const INVALID:u64=1;pub const CONFLICT:u64=2;
+pub const HIDDEN_ALIAS:u64=3;pub const LARGE_PAGE:u64=4;pub const POISONED:u64=5;
+pub const EPOCH_CHANGED:u64=6;pub const CALLBACK_FAILED:u64=7;pub const BUSY:u64=8;pub const SEALED:u64=9;
+pub const REVOKE:u64=1;pub const FIRST_BARRIER:u64=2;pub const CACHE_MAINT:u64=3;
+pub const PAT_UPDATE:u64=4;pub const REMAP:u64=5;pub const SECOND_BARRIER:u64=6;
+pub const COMPLETE:u64=7;pub const RECLAIM:u64=8;
+pub const MAX_ALIASES:usize=4;pub const MAX_PAGES:usize=4096;pub const MAX_TABLES:usize=256;
+pub struct AliasDescriptor{pub virtual_base:u64,pub current_cache_type:u64}
+pub struct ReaderConfig{pub pat:u64,pub cr0:u64,pub default_type:u64,pub ranges:[]const plan.Range}
+pub struct Reply{pub ack:u64,pub epoch:u64,pub root:u64,pub cr0:u64,pub pat:u64,pub mtrr_hash:u64}
+pub const EMPTY_REPLY:Reply=Reply{ack:0,epoch:0,root:0,cr0:0,pat:0,mtrr_hash:0};
+// REVOKE/REMAP/RECLAIM are synchronous audit notifications. FIRST/CACHE/PAT/
+// SECOND must perform the actual action and fill one hardware readback per CPU.
+pub type Callback=unsafe fn(cookie:u64,phase:u64,root:u64,value:u64,replies:*Reply,count:usize)u64;
+unsafe fn inactive(cookie:u64,phase:u64,root:u64,value:u64,replies:*Reply,count:usize)u64{return INVALID;}
+pub struct Config{
+ pub space:*pg.Space,pub domain:*tlb.Domain,pub physical:u64,pub pages:usize,
+ pub aliases:[]const AliasDescriptor,pub readers:[]const ReaderConfig,
+ pub receipts:[]pg.Retired,pub callback:Callback,pub cookie:u64,
+}
+struct Region{ptr:u64,bytes:u64}
+const EMPTY_REGION:Region=Region{ptr:0,bytes:0};
+pub struct Context{
+ config:Config,bound:u64,poisoned:u64,busy:u64,sealed:u64,held:u64,complete:u64,
+ root:u64,table_pointer:*const pg.Table,metadata:*const u8,table_count:usize,address_mask:u64,binding_hash:u64,count:usize,cpus:*cpu.Context,mailboxes:*tlb.Mailbox,ops:*const tlb.Ops,
+ phase:u64,last_error:u64,revoked:usize,retired:usize,reclaimed:usize,remapped:usize,
+ callbacks:u64,first:u64,cache:u64,pat:u64,second:u64,new_pat:u64,old_kind:u64,
+ epochs:[16]u64,apics:[16]u64,hashes:[16]u64,range_ptrs:[16]*const plan.Range,range_lens:[16]usize,replies:[16]Reply,
+}
+const MAX:u64=0xffff_ffff_ffff_ffff;const NX:u64=0x8000_0000_0000_0000;
+fn span(p:u64,n:u64)bool{return n==0||(p!=0&&n<=MAX-p);}
+fn overlap(a:u64,n:u64,b:u64,m:u64)bool{return n!=0&&m!=0&&a<b+m&&b<a+n;}
+fn object(p:u64,n:u64,alignment:u64)bool{return p!=0&&(p&(alignment-1))==0&&span(p,n);}
+unsafe fn region(out:*Region,p:u64,n:u64)void{unsafe{*out=Region{ptr:p,bytes:n};}return;}
+unsafe fn storage(config:*const Config,out:*Context,view:*const pg.PoolView)bool{unsafe{
+ let c=*config;let d=c.domain;
+ var r:[12]Region=[EMPTY_REGION;12];
+ region(&r[0],out as u64,sizeof(Context) as u64);region(&r[1],config as u64,sizeof(Config) as u64);
+ region(&r[2],c.space as u64,sizeof(pg.Space) as u64);
+ region(&r[3],(*view).tables as u64,((*view).count as u64)*4096);
+ region(&r[4],(*view).metadata as u64,(*view).count as u64);
+ region(&r[5],c.aliases.ptr as u64,(c.aliases.len as u64)*(sizeof(AliasDescriptor) as u64));
+ region(&r[6],c.readers.ptr as u64,(c.readers.len as u64)*(sizeof(ReaderConfig) as u64));
+ region(&r[7],c.receipts.ptr as u64,(c.receipts.len as u64)*(sizeof(pg.Retired) as u64));
+ region(&r[8],d as u64,sizeof(tlb.Domain) as u64);
+ region(&r[9],(*d).cpus as u64,((*d).count as u64)*(sizeof(cpu.Context) as u64));
+ region(&r[10],(*d).mailboxes as u64,((*d).count as u64)*(sizeof(tlb.Mailbox) as u64));
+ region(&r[11],(*d).ops as u64,sizeof(tlb.Ops) as u64);
+ var i:usize=0;while i<12{
+  if !span(r[i].ptr,r[i].bytes){return false;}
+  var j:usize=0;while j<i{if overlap(r[i].ptr,r[i].bytes,r[j].ptr,r[j].bytes){return false;}j+=1;}
+  i+=1;
+ }
+ var a:usize=0;while a<c.aliases.len{let va=c.aliases[a].virtual_base;let bytes=(c.pages as u64)*4096;if !span(va,bytes){return false;}i=0;while i<12{if overlap(va,bytes,r[i].ptr,r[i].bytes){return false;}i+=1;}a+=1;}
+ i=0;while i<c.readers.len{
+  let ranges=c.readers[i].ranges;
+  if ranges.len>plan.MAX_RANGES{return false;}
+  let p=ranges.ptr as u64;let n=(ranges.len as u64)*(sizeof(plan.Range) as u64);
+  if !span(p,n)||(n!=0&&(p&7)!=0){return false;}
+  var a:usize=0;while a<c.aliases.len{if overlap(c.aliases[a].virtual_base,(c.pages as u64)*4096,p,n){return false;}a+=1;}
+  var j:usize=0;while j<12{if overlap(p,n,r[j].ptr,r[j].bytes){return false;}j+=1;}
+  j=0;while j<i{let previous=c.readers[j].ranges;if overlap(p,n,previous.ptr as u64,(previous.len as u64)*(sizeof(plan.Range) as u64)){return false;}j+=1;}
+  i+=1;
+ }
+ return true;
+}}
+unsafe fn mtrr_hash(input:*const ReaderConfig)u64{unsafe{let reader=*input;
+ var h:u64=14695981039346656037;h=wrapping_mul(h^reader.default_type,1099511628211 as u64);
+ h=wrapping_mul(h^(reader.ranges.len as u64),1099511628211 as u64);
+ var i:usize=0;while i<reader.ranges.len{let r=reader.ranges[i];
+  h=wrapping_mul(h^r.base,1099511628211 as u64);h=wrapping_mul(h^r.size,1099511628211 as u64);h=wrapping_mul(h^r.kind,1099511628211 as u64);i+=1;
+ }return h;
+}}
+unsafe fn topology(config:*const Config,root:u64)bool{unsafe{
+ let c=*config;let d=c.domain;
+ if (*d).ready!=1||(*d).pending!=0||(*d).failures!=0||(*d).count==0||(*d).count>16||(*d).count!=c.readers.len{return false;}
+ if !object((*d).cpus as u64,((*d).count as u64)*(sizeof(cpu.Context) as u64),8)
+  ||!object((*d).mailboxes as u64,((*d).count as u64)*(sizeof(tlb.Mailbox) as u64),8)
+  ||!object((*d).ops as u64,sizeof(tlb.Ops) as u64,8){return false;}
+ var i:usize=0;while i<(*d).count{
+  let p=(*d).cpus+i;let v=*p;
+  if v.self!=p as u64||v.logical_id!=i as u64||v.state!=cpu.ONLINE||v.epoch==0||v.online_epoch!=v.epoch
+   ||v.cr3!=root||(v.cr4&0x20080)!=0||(v.cr4&32)==0||(v.efer&0xd00)!=0xd00
+   ||(v.cr0&0x8001_0001)!=0x8001_0001||v.cr0!=c.readers[i].cr0||(v.cr0&0x6000_0000)!=0{return false;}
+  var j:usize=0;while j<i{if (*((*d).cpus+j)).apic_id==v.apic_id{return false;}j+=1;}
+  i+=1;
+ }return true;
+}}
+// Bounded full tree walk: parent ownership/cycles, all metadata and every leaf.
+// A matching leaf must be exactly one of the declared ranges, with exact PA,
+// supervisor RW/NX and the declared WB/UC selector. Other PAT4 consumers forbid
+// repurposing PAT4. Large mappings overlapping the lease are always refused.
+unsafe fn scan(config:*const Config,view:*const pg.PoolView,change_pat:bool)u64{unsafe{
+ let c=*config;let v=*view;if v.count==0||v.count>MAX_TABLES{return INVALID;}
+ var seen:[MAX_TABLES]u8=[0;MAX_TABLES];var tables:[4]usize=[0;4];var slots:[4]usize=[0;4];var prefixes:[4]u64=[0;4];
+ var level:usize=0;var used:usize=1;var matches:usize=0;seen[0]=1;
+ while true{
+  let index=tables[level];if *((v.metadata)+index)!=1{return INVALID;}
+  if slots[level]==512{if level==0{break;}level-=1;continue;}
+  let slot=slots[level];slots[level]+=1;let e=(*(v.tables+index)).entries[slot];if e==0{continue;}
+  if (e&1)==0{return INVALID;}
+  var va=prefixes[level]|((slot as u64)<<(39-(level as u64)*9));
+  if level==0&&slot>=256{va=va|0xffff_0000_0000_0000;}
+  if level<3&&(e&128)==0{
+   if (e&~(v.address_mask|32))!=7{return INVALID;}
+   let pa=e&v.address_mask;if pa<v.physical||(pa-v.physical)/4096>=v.count as u64{return INVALID;}
+   let child=((pa-v.physical)/4096) as usize;if seen[child]!=0{return INVALID;}
+   seen[child]=1;used+=1;level+=1;tables[level]=child;slots[level]=0;prefixes[level]=va;continue;
+  }
+  if level<3{
+   if level!=2||(e&0x001f_e000)!=0||(e&~(v.address_mask|NX|0x10ff))!=0{return INVALID;}
+   let cache=e&0x1018;if cache!=0&&cache!=24&&cache!=0x1000{return INVALID;}
+   if (e&NX)==0&&(e&2)!=0{return INVALID;}if (va>>63)!=0&&(e&4)!=0{return INVALID;}
+   if change_pat&&(e&0x1000)!=0{return CONFLICT;}
+   let pa=e&v.address_mask&~(0x1f_ffff as u64);
+   if overlap(pa,0x200000,c.physical,(c.pages as u64)*4096){return LARGE_PAGE;}
+   continue;
+  }
+  if (e&~(v.address_mask|NX|255))!=0{return INVALID;}
+  let cache=e&152;if cache!=0&&cache!=24&&cache!=128{return INVALID;}
+  if (e&NX)==0&&(e&2)!=0{return INVALID;}if (va>>63)!=0&&(e&4)!=0{return INVALID;}
+  if change_pat&&(e&128)!=0{return CONFLICT;}
+  let pa=e&v.address_mask;
+  if pa>=c.physical&&(pa-c.physical)/4096<c.pages as u64{
+   var declared:bool=false;var a:usize=0;
+   while a<c.aliases.len{let alias=c.aliases[a];let bytes=(c.pages as u64)*4096;
+    if va>=alias.virtual_base&&va-alias.virtual_base<bytes{
+     if pa-c.physical!=va-alias.virtual_base{return INVALID;}
+     var bits:u64=0;if alias.current_cache_type==plan.UC{bits=24;}
+     if (e&~(v.address_mask|96))!=(NX|3|bits){return INVALID;}
+     declared=true;matches+=1;
+    }a+=1;
+   }
+   if !declared{return HIDDEN_ALIAS;}
+  }
+ }
+ var i:usize=0;while i<v.count{let m=*(v.metadata+i);if m>1||((m==1)!=(seen[i]==1)){return INVALID;}i+=1;}
+ if used!=v.used||matches!=c.pages*c.aliases.len{return INVALID;}
+ return OK;
+}}
+pub unsafe fn bind(config:*const Config,out:*Context)u64{unsafe{
+ if !object(config as u64,sizeof(Config) as u64,8)||!object(out as u64,sizeof(Context) as u64,8){return INVALID;}
+ if overlap(config as u64,sizeof(Config) as u64,out as u64,sizeof(Context) as u64){return INVALID;}
+ let c=*config;
+ if c.pages==0||c.pages>MAX_PAGES||c.aliases.len==0||c.aliases.len>MAX_ALIASES||c.readers.len==0||c.readers.len>16
+  ||c.receipts.len<c.pages*c.aliases.len||c.receipts.len>MAX_PAGES*MAX_ALIASES{return INVALID;}
+ if !object(c.space as u64,sizeof(pg.Space) as u64,8)||!object(c.domain as u64,sizeof(tlb.Domain) as u64,8)
+  ||!object(c.aliases.ptr as u64,(c.aliases.len as u64)*(sizeof(AliasDescriptor) as u64),8)
+  ||!object(c.readers.ptr as u64,(c.readers.len as u64)*(sizeof(ReaderConfig) as u64),8)
+  ||!object(c.receipts.ptr as u64,(c.receipts.len as u64)*(sizeof(pg.Retired) as u64),8)
+  ||read_unaligned((&c.callback) as *const u64)==0{return INVALID;}
+ var view:pg.PoolView=pg.PoolView{tables:null,metadata:null,count:0,physical:0,address_mask:0,used:0,nx:false};
+ match pg.inspect(c.space,&view){ok=>{},err(e)=>{return e;},}
+ if !view.nx||view.physical==0||view.count>MAX_TABLES||(*c.domain).count!=c.readers.len||!storage(config,out,&view)||!topology(config,view.physical){return INVALID;}
+ if (*out).bound!=0{return BUSY;}
+ let bytes=(c.pages as u64)*4096;
+ if (c.physical&4095)!=0||c.physical==0||!span(c.physical,bytes)||(c.physical&~view.address_mask)!=0
+  ||((c.physical+bytes-4096)&~view.address_mask)!=0||overlap(c.physical,bytes,view.physical,(view.count as u64)*4096){return INVALID;}
+ let original_pat=c.readers[0].pat;
+ if !plan.pat_valid(original_pat)||(original_pat&255)!=plan.WB||((original_pat>>24)&255)!=plan.UC{return INVALID;}
+ let new_pat=(original_pat&~(0xff_0000_0000 as u64))|((plan.WC as u64)<<32);
+ var kinds:[4]u64=[0;4];var i:usize=0;
+ while i<c.aliases.len{
+  let a=c.aliases[i];let last=a.virtual_base+bytes-1;
+  if (a.virtual_base&4095)!=0||!span(a.virtual_base,bytes)||(a.virtual_base>>47)!=0x1ffff||(last>>47)!=0x1ffff
+   ||(a.current_cache_type!=plan.WB&&a.current_cache_type!=plan.UC){return INVALID;}
+  var j:usize=0;while j<i{if overlap(a.virtual_base,bytes,c.aliases[j].virtual_base,bytes){return INVALID;}j+=1;}
+  if overlap(a.virtual_base,bytes,out as u64,sizeof(Context) as u64)||overlap(a.virtual_base,bytes,view.tables as u64,(view.count as u64)*4096){return INVALID;}
+  kinds[i]=a.current_cache_type;i+=1;
+ }
+ var different:usize=0;if plan.check_aliases(kinds[..c.aliases.len],&different)!=plan.OK{return CONFLICT;}
+ var old_kind:u64=MAX;i=0;
+ while i<c.readers.len{
+  let reader=c.readers[i];let actual=*((*c.domain).cpus+i);
+  if reader.pat!=original_pat||actual.pat!=reader.pat{return CONFLICT;}
+  var page:usize=0;while page<c.pages{
+   var m:u64=0;let result=plan.mtrr_type(reader.ranges,reader.default_type,c.physical+(page as u64)*4096,&m);if result!=plan.OK{return CONFLICT;}
+   var old:u64=0;var target:u64=0;
+   if plan.effective_type(m,kinds[0],&old)!=plan.OK||plan.effective_type(m,plan.WC,&target)!=plan.OK||target!=plan.WC{return CONFLICT;}
+   if old!=plan.WB&&old!=plan.UC{return CONFLICT;}
+   if old_kind==MAX{old_kind=old;}else if old_kind!=old{return CONFLICT;}
+   page+=1;
+  }i+=1;
+ }
+ let found=scan(config,&view,new_pat!=original_pat);if found!=OK{return found;}
+ // Commit only after complete validation; receipts are caller-owned workspace.
+ var clear:usize=0;while clear<sizeof(Context){*((out as *u8)+clear)=0;clear+=1;}(*out).config=c;(*out).bound=1;(*out).held=1;(*out).root=view.physical;(*out).table_pointer=view.tables;(*out).metadata=view.metadata;(*out).table_count=view.count;(*out).address_mask=view.address_mask;(*out).binding_hash=config_hash(config);(*out).count=(*c.domain).count;
+ (*out).cpus=(*c.domain).cpus;(*out).mailboxes=(*c.domain).mailboxes;(*out).ops=(*c.domain).ops;(*out).new_pat=new_pat;(*out).old_kind=old_kind;
+ i=0;while i<c.readers.len{(*out).epochs[i]=(*((*c.domain).cpus+i)).online_epoch;(*out).apics[i]=(*((*c.domain).cpus+i)).apic_id;(*out).hashes[i]=mtrr_hash(&c.readers[i]);(*out).range_ptrs[i]=c.readers[i].ranges.ptr;(*out).range_lens[i]=c.readers[i].ranges.len;i+=1;}
+ i=0;while i<c.receipts.len{c.receipts[i]=pg.EMPTY_RETIRED;i+=1;}
+ return OK;
+}}
+unsafe fn config_hash(config:*const Config)u64{unsafe{
+ let c=*config;var h:u64=14695981039346656037;
+ h=wrapping_mul(h^c.physical,1099511628211 as u64);h=wrapping_mul(h^(c.pages as u64),1099511628211 as u64);
+ var i:usize=0;while i<c.aliases.len{h=wrapping_mul(h^c.aliases[i].virtual_base,1099511628211 as u64);h=wrapping_mul(h^c.aliases[i].current_cache_type,1099511628211 as u64);i+=1;}
+ i=0;while i<c.readers.len{let r=c.readers[i];h=wrapping_mul(h^r.pat,1099511628211 as u64);h=wrapping_mul(h^r.cr0,1099511628211 as u64);i+=1;}
+ return h;
+}}
+unsafe fn stable(context:*const Context)bool{unsafe{
+ let c=(*context).config;let d=c.domain;
+ if (*d).count!=(*context).count||(*d).cpus!=(*context).cpus||(*d).mailboxes!=(*context).mailboxes||(*d).ops!=(*context).ops
+  ||!topology(&(*context).config,(*context).root)||config_hash(&(*context).config)!=(*context).binding_hash{return false;}
+ var i:usize=0;while i<(*context).count{let reader=*(c.domain as *tlb.Domain);let v=*(reader.cpus+i);
+  var expected=c.readers[i].pat;if (*context).pat!=0{expected=(*context).new_pat;}
+  if c.readers[i].ranges.ptr!=(*context).range_ptrs[i]||c.readers[i].ranges.len!=(*context).range_lens[i]{return false;}
+  if v.online_epoch!=(*context).epochs[i]||v.apic_id!=(*context).apics[i]||v.pat!=expected||mtrr_hash(&c.readers[i])!=(*context).hashes[i]{return false;}
+  i+=1;
+ }return true;
+}}
+unsafe fn poison(context:*Context,code:u64)u64{unsafe{
+ (*context).poisoned=1;(*context).last_error=code;(*context).busy=0;return code;
+}}
+// Hardware replies are per reader; a zero aggregate callback return is not ACK.
+unsafe fn invoke(context:*Context,phase:u64,value:u64)u64{unsafe{
+ let c=(*context).config;var i:usize=0;while i<16{(*context).replies[i]=EMPTY_REPLY;i+=1;}
+ (*context).phase=phase;(*context).callbacks+=1;
+ let result=c.callback(c.cookie,phase,(*context).root,value,&(*context).replies[0],(*context).count);
+ if result!=0{return result;}
+ if phase==FIRST_BARRIER||phase==CACHE_MAINT||phase==PAT_UPDATE||phase==SECOND_BARRIER{
+  if !topology(&(*context).config,(*context).root){return EPOCH_CHANGED;}
+  i=0;while i<(*context).count{let reply=(*context).replies[i];let actual=*((*context).cpus+i);
+   var pat=c.readers[i].pat;if phase==PAT_UPDATE||phase==SECOND_BARRIER{pat=(*context).new_pat;}
+   if reply.ack!=1||reply.epoch!=(*context).epochs[i]||reply.root!=(*context).root||reply.cr0!=c.readers[i].cr0
+    ||reply.pat!=pat||reply.mtrr_hash!=(*context).hashes[i]||actual.pat!=pat||actual.apic_id!=(*context).apics[i]
+    ||actual.online_epoch!=(*context).epochs[i]{return CALLBACK_FAILED;}
+   i+=1;
+  }
+  let mask=((1 as u64)<<((*context).count as u64))-1;
+  if phase==FIRST_BARRIER{(*context).first=mask;}
+  if phase==CACHE_MAINT{(*context).cache=mask;}
+  if phase==PAT_UPDATE{(*context).pat=mask;}
+  if phase==SECOND_BARRIER{(*context).second=mask;}
+ }
+ return OK;
+}}
+pub unsafe fn execute_migration(context:*Context)u64{unsafe{
+ if !object(context as u64,sizeof(Context) as u64,8){return INVALID;}
+ if (*context).bound==0{return INVALID;}if (*context).poisoned!=0{return POISONED;}
+ if (*context).busy!=0{return BUSY;}if (*context).sealed!=0{return SEALED;}
+ if !stable(context){return EPOCH_CHANGED;}
+ if (*context).complete!=0{return OK;}
+ let c=(*context).config;
+ var view:pg.PoolView=pg.PoolView{tables:null,metadata:null,count:0,physical:0,address_mask:0,used:0,nx:false};
+ match pg.inspect(c.space,&view){ok=>{},err(e)=>{return e;},}
+ if view.physical!=(*context).root||view.tables!=(*context).table_pointer||view.metadata!=(*context).metadata
+  ||view.count!=(*context).table_count||view.address_mask!=(*context).address_mask{return EPOCH_CHANGED;}
+ let found=scan(&(*context).config,&view,(*context).new_pat!=c.readers[0].pat);if found!=OK{return found;}
+ var steps:[5]plan.Step=[plan.Step{kind:0,arg:0};5];var count:usize=0;
+ let planned=plan.plan_migration((*context).old_kind,plan.WC,steps[..],&count);if planned!=plan.OK{return planned;}
+ if count!=5{return INVALID;}
+ (*context).busy=1;var step:usize=0;var barriers:usize=0;
+ while step<count{
+  let kind=steps[step].kind;
+  if kind==plan.REVOKE_ALIASES{
+   (*context).phase=REVOKE;var a:usize=0;while a<c.aliases.len{var page:usize=0;while page<c.pages{
+    let va=c.aliases[a].virtual_base+(page as u64)*4096;let at=(*context).retired;
+    match pg.unmap_live(c.space,va,&c.receipts[at]){ok=>{},err(e)=>{return poison(context,e);},}
+    (*context).retired+=1;(*context).revoked+=1;
+    let status=invoke(context,REVOKE,va);if status!=OK{return poison(context,status);}
+    page+=1;
+   }a+=1;}
+  }else if kind==plan.FLUSH_TLB{
+   var phase=FIRST_BARRIER;if barriers!=0{phase=SECOND_BARRIER;}
+   let status=invoke(context,phase,0);if status!=OK{return poison(context,status);}
+   if barriers==0{
+    // Only after actual all-reader invalidation may detached tables be reused.
+    (*context).phase=RECLAIM;var n:usize=0;while n<(*context).retired{
+     match pg.reclaim(c.space,&c.receipts[n]){ok=>{},err(e)=>{return poison(context,e);},}
+     (*context).reclaimed+=1;let observed=invoke(context,RECLAIM,n);if observed!=OK{return poison(context,observed);}n+=1;
+    }
+   }barriers+=1;
+  }else if kind==plan.FLUSH_CACHE{
+   let status=invoke(context,CACHE_MAINT,(*context).old_kind);if status!=OK{return poison(context,status);}
+  }else if kind==plan.REMAP{
+   let pat_status=invoke(context,PAT_UPDATE,(*context).new_pat);if pat_status!=OK{return poison(context,pat_status);}
+   (*context).phase=REMAP;var a:usize=0;while a<c.aliases.len{var page:usize=0;while page<c.pages{
+    let va=c.aliases[a].virtual_base+(page as u64)*4096;let pa=c.physical+(page as u64)*4096;
+    match pg.map_live(c.space,va,pa,pg.WRITE|pg.WRITE_COMBINING){ok=>{},err(e)=>{return poison(context,e);},}
+    (*context).remapped+=1;let observed=invoke(context,REMAP,va);if observed!=OK{return poison(context,observed);}page+=1;
+   }a+=1;}
+  }else{return poison(context,INVALID);}
+  step+=1;
+ }
+ if barriers!=2||(*context).first==0||(*context).cache==0||(*context).pat==0||(*context).second==0{return poison(context,CALLBACK_FAILED);}
+ (*context).phase=COMPLETE;(*context).complete=1;(*context).busy=0;return OK;
+}}
+pub unsafe fn seal(context:*Context)u64{unsafe{
+ if !object(context as u64,sizeof(Context) as u64,8)||(*context).bound==0{return INVALID;}
+ if (*context).busy!=0{return BUSY;}if (*context).poisoned!=0{return POISONED;}
+ (*context).sealed=1;return OK;
+}}
+// Read-only scalar audit API; no writable output may alias transaction storage.
+pub unsafe fn audit(context:*const Context,index:u64)u64{unsafe{
+ if !object(context as u64,sizeof(Context) as u64,8){return MAX;}
+ if index==0{return (*context).bound;}if index==1{return (*context).poisoned;}if index==2{return (*context).busy;}
+ if index==3{return (*context).sealed;}if index==4{return (*context).held;}if index==5{return (*context).complete;}
+ if index==6{return (*context).phase;}if index==7{return (*context).last_error;}if index==8{return (*context).revoked as u64;}
+ if index==9{return (*context).retired as u64;}if index==10{return (*context).reclaimed as u64;}if index==11{return (*context).remapped as u64;}
+ if index==12{return (*context).callbacks;}if index==13{return (*context).first;}if index==14{return (*context).cache;}
+ if index==15{return (*context).pat;}if index==16{return (*context).second;}return MAX;
+}}

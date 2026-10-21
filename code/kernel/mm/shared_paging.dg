@@ -1,0 +1,63 @@
+// One BSP writer, IF=0, and a fixed online reader domain sharing this root.
+// The caller's synchronous Flush must invalidate the BSP AND every reader;
+// it must fail-stop without returning if any hardware acknowledgement fails.
+// Retired tables and owned frames then remain held. Seal before the reader
+// topology/CR3 policy changes; a sealed Context is permanently read-only.
+module mm.shared_paging;
+import mm.active_paging as active;
+import mm.paging as paging;
+import mm.errors as errors;
+import boot.preflight as preflight;
+import smp.tlb as tlb;
+import smp.context as cpu;
+pub type Stats=active.Stats;pub type Flush=active.Flush;
+pub const EMPTY_STATS:Stats=active.EMPTY_STATS;
+pub error InvalidDomain=0x060e_0001;pub error Sealed=0x060e_0002;
+pub struct Context { inner:active.Context,domain:*tlb.Domain,root:u64,count:usize,bound:bool,busy:bool,sealed:bool }
+pub const EMPTY_CONTEXT:Context=Context{inner:active.EMPTY_CONTEXT,domain:null,root:0,count:0,bound:false,busy:false,sealed:false};
+unsafe fn domain_valid(domain:*const tlb.Domain,root:u64,count:usize)!void{unsafe{
+ if domain==null||(*domain).ready!=1||(*domain).pending!=0||count==0||count>16||(*domain).count!=count||(*domain).cpus==null{return error.InvalidDomain;}
+ var i:usize=0;while i<count{
+  let c=*((*domain).cpus+i);
+  if c.logical_id!=i as u64||c.state!=cpu.ONLINE||c.epoch==0||c.online_epoch!=c.epoch||c.cr3!=root||(c.cr4&0x20080)!=0{return error.InvalidDomain;}
+  var j:usize=0;while j<i{if (*((*domain).cpus+j)).apic_id==c.apic_id{return error.InvalidDomain;}j+=1;}
+  i+=1;
+ }
+}return;}
+pub unsafe fn bind(context:*Context,space:*paging.Space,state:*const preflight.State,virtual:u64,pages:u64,physical:u64,frames:u64,domain:*tlb.Domain,flush:Flush)!void{unsafe{
+ if context==null||space==null||state==null||domain==null{return error.errors.InvalidArgument;}
+ if (*context).bound{return error.errors.AlreadyInitialized;}
+ let root=try paging.root_physical(space);let count=(*domain).count;try domain_valid(domain,root,count);
+ try active.bind(&(*context).inner,space,state,virtual,pages,physical,frames,flush);
+ (*context).domain=domain;(*context).root=root;(*context).count=count;(*context).bound=true;
+}return;}
+unsafe fn operation(inner:*active.Context,state:*const preflight.State,kind:u64,virtual:u64,physical:u64,flags:u64)!void{unsafe{
+ if kind==1{return active.map_large(inner,state,virtual,physical,flags);}
+ if kind==2{return active.split_large(inner,state,virtual);}
+ if kind==3{return active.merge_large(inner,state,virtual);}
+ if kind==4{return active.map(inner,state,virtual,physical,flags);}
+ if kind==5{return active.replace(inner,state,virtual,physical,flags);}
+ if kind==6{return active.protect(inner,state,virtual,flags);}
+ return active.unmap(inner,state,virtual);
+}}
+unsafe fn run(context:*Context,state:*const preflight.State,kind:u64,virtual:u64,physical:u64,flags:u64)!void{unsafe{
+ if context==null{return error.errors.InvalidArgument;}if !(*context).bound{return error.errors.NotInitialized;}
+ if (*context).busy{return error.active.Busy;}if (*context).sealed{return error.Sealed;}
+ try domain_valid((*context).domain,(*context).root,(*context).count);
+ (*context).busy=true;let result=operation(&(*context).inner,state,kind,virtual,physical,flags);
+ (*context).busy=false;return result;
+}}
+pub unsafe fn map_large(c:*Context,s:*const preflight.State,v:u64,p:u64,f:u64)!void{unsafe{return run(c,s,1,v,p,f);}}
+pub unsafe fn split_large(c:*Context,s:*const preflight.State,v:u64)!void{unsafe{return run(c,s,2,v,0,0);}}
+pub unsafe fn merge_large(c:*Context,s:*const preflight.State,v:u64)!void{unsafe{return run(c,s,3,v,0,0);}}
+pub unsafe fn map(c:*Context,s:*const preflight.State,v:u64,p:u64,f:u64)!void{unsafe{return run(c,s,4,v,p,f);}}
+pub unsafe fn replace(c:*Context,s:*const preflight.State,v:u64,p:u64,f:u64)!void{unsafe{return run(c,s,5,v,p,f);}}
+pub unsafe fn protect(c:*Context,s:*const preflight.State,v:u64,f:u64)!void{unsafe{return run(c,s,6,v,0,f);}}
+pub unsafe fn unmap(c:*Context,s:*const preflight.State,v:u64)!void{unsafe{return run(c,s,7,v,0,0);}}
+pub unsafe fn query(c:*const Context,v:u64,out:*paging.Mapping)!void{unsafe{return active.query(&(*c).inner,v,out);}}
+pub unsafe fn stats(c:*const Context,out:*Stats)!void{unsafe{return active.stats(&(*c).inner,out);}}
+pub unsafe fn seal(c:*Context)!void{unsafe{
+ if c==null{return error.errors.InvalidArgument;}
+ if !(*c).bound{return error.errors.NotInitialized;}if (*c).busy{return error.active.Busy;}
+ if (*c).sealed{return error.Sealed;}try domain_valid((*c).domain,(*c).root,(*c).count);(*c).sealed=true;
+}return;}

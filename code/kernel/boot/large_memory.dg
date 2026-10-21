@@ -1,0 +1,160 @@
+// Normal private-root BSP lifecycle, before AP startup. A real buddy lease is
+// held until every alias and detached table is retired. No firmware alias,
+// executable/user/cache transition or persistent 2 MiB BSS allocation exists.
+module boot.large_memory;
+import boot.memory_startup as startup;
+import boot.preflight as preflight;
+import boot.object_memory as object_memory;
+import mm.phys_buddy as buddy;
+import mm.paging as paging;
+import mm.active_paging as active;
+
+pub const WINDOW:u64=0xffff_a800_0000_0000;
+pub error InvalidIntegration=0x020f_0001;
+const HHDM:u64=0xffff_8000_0000_0000;
+const ADDRESS:u64=0x000f_ffff_ffff_f000;
+const FIRST:u64=0x1122_3344_0000_0000;
+const LAST:u64=0x8877_6655_0000_0000;
+pub struct Report {
+ pub version:u64,pub attempted:u64,pub complete:u64,pub phase:u64,pub steps:u64,
+ pub root:u64,pub window:u64,pub physical:u64,pub pages:u64,pub order:u64,
+ pub free_before:u64,pub free_held:u64,pub free_after:u64,
+ pub tables_before:u64,pub tables_mapped:u64,pub tables_split:u64,pub tables_merged:u64,pub tables_after:u64,
+ pub sample_first:u64,pub sample_last:u64,pub split_value:u64,pub replacement_value:u64,pub restored_value:u64,pub merge_value:u64,
+ pub merge_error:u64,pub invlpg:u64,pub full_flush:u64,pub retired_tables:u64,pub held:u64,
+ pub cr0:u64,pub cr3:u64,pub cr4:u64,pub efer:u64,pub rflags:u64,pub pat:u64,pub error_code:u64,
+ pub large_entry:u64,pub split_entry:u64,pub merged_entry:u64,
+}
+pub var REPORT:Report=Report{version:1,attempted:0,complete:0,phase:0,steps:0,root:0,window:WINDOW,physical:0,pages:512,order:9,
+ free_before:0,free_held:0,free_after:0,tables_before:0,tables_mapped:0,tables_split:0,tables_merged:0,tables_after:0,
+ sample_first:0,sample_last:0,split_value:0,replacement_value:0,restored_value:0,merge_value:0,
+ merge_error:0,invlpg:0,full_flush:0,retired_tables:0,held:0,cr0:0,cr3:0,cr4:0,efer:0,rflags:0,pat:0,error_code:0,
+ large_entry:0,split_entry:0,merged_entry:0};
+var CONTEXT:active.Context=active.EMPTY_CONTEXT;
+var STATE:preflight.State=preflight.EMPTY_STATE;
+unsafe extern "sysv64" fn large_memory_flush(kind:u64,virtual:u64)void;
+unsafe extern "sysv64" fn large_memory_data(write:u64)u64;
+unsafe extern "sysv64" fn large_memory_raw(root:u64,pool:u64,pages:u64,physical:u64,kind:u64)u64;
+unsafe extern "sysv64" fn large_memory_pt(copy:u64,entries:*u64)u64;
+
+// Compact, bounded hardware reads live in the same assembly bridge as the
+// existing flush callback. Ownership and every transaction stay in Dong.
+unsafe fn raw(kind:u64)!u64{unsafe{
+ let view=startup.runtime_pointer();if view==null{return error.InvalidIntegration;}
+ let entry=large_memory_raw(REPORT.root,(*view).pool_physical,(*view).pool_pages,REPORT.physical,kind);
+ if entry==0{return error.InvalidIntegration;}return entry;
+}}
+unsafe fn data(write:u64)!void{unsafe{
+ if large_memory_data(write)!=0{return error.InvalidIntegration;}
+}return;}
+unsafe fn pt(copy:u64,entries:*u64)!void{unsafe{
+ if large_memory_pt(copy,entries)!=0{return error.InvalidIntegration;}
+}return;}
+unsafe fn used(extra:u64)!u64{unsafe{
+ let count=(try paging.used_tables(startup.space_pointer())) as u64;
+ if count!=REPORT.tables_before+extra{return error.InvalidIntegration;}return count;
+}}
+unsafe fn phase(value:u64)void{unsafe{REPORT.phase=value;REPORT.steps|=1<<(value-1);}return;}
+// Share the call/capture code, while still reading actual hardware controls
+// immediately before every operation (including every cleanup unmap).
+unsafe fn mutate(kind:u64,index:u64)!void{unsafe{
+ object_memory.read_controls(&STATE);
+ if kind==1{return active.map_large(&CONTEXT,&STATE,WINDOW,REPORT.physical,paging.WRITE);}
+ if kind==2{return active.split_large(&CONTEXT,&STATE,WINDOW);}
+ if kind==3{return active.replace(&CONTEXT,&STATE,WINDOW+5*4096,REPORT.physical+index*4096,paging.WRITE);}
+ if kind==4{return active.merge_large(&CONTEXT,&STATE,WINDOW);}
+ if kind==5{return active.unmap(&CONTEXT,&STATE,WINDOW+index*4096);}
+ return error.InvalidIntegration;
+}}
+unsafe fn run_inner()!void{unsafe{
+ let space=startup.space_pointer();let allocator=startup.allocator_pointer();
+ if space==null||allocator==null{return error.InvalidIntegration;}
+ object_memory.read_controls(&STATE);let before=STATE;
+ REPORT.root=try paging.root_physical(space);
+ REPORT.free_before=(try buddy.free_pages(allocator)) as u64;
+ REPORT.tables_before=(try paging.used_tables(space)) as u64;
+ // A count alone does not prove an order-9 block exists. Only alloc supplies
+ // the actual exact lease; its pre-allocation OOM leaves the ledger unchanged.
+ var physical:u64=0;let acquired=buddy.alloc(allocator,9);
+ match acquired{ok(value)=>{physical=value;},err(code)=>{
+  REPORT.error_code=code;
+  // Only this exact pre-lease allocator call may report unsupported/OOM.
+  // All later allocation failures still propagate while the lease stays held.
+  if code==0x0200_0007{
+   REPORT.free_after=(try buddy.free_pages(allocator)) as u64;REPORT.tables_after=try used(0);
+   if REPORT.free_after!=REPORT.free_before{return error.InvalidIntegration;}return;
+  }
+  let ignored=try acquired;return error.InvalidIntegration;
+ },}
+ REPORT.physical=physical;REPORT.held=1;
+ REPORT.free_held=(try buddy.free_pages(allocator)) as u64;
+ if physical==0||(physical&0x1f_ffff)!=0||REPORT.free_held+512!=REPORT.free_before{return error.InvalidIntegration;}
+ try active.bind(&CONTEXT,space,&STATE,WINDOW,512,physical,512,large_memory_flush);
+ phase(1);
+
+ try mutate(1,0);
+ REPORT.tables_mapped=try used(2);try data(1);try data(0);REPORT.large_entry=try raw(1);
+ REPORT.sample_first=volatile_load(WINDOW as *const u64);REPORT.sample_last=volatile_load((WINDOW+511*4096) as *const u64);
+ phase(2);
+
+ try mutate(2,0);
+ REPORT.tables_split=try used(3);try data(0);REPORT.split_entry=try raw(0);
+ REPORT.split_value=volatile_load((WINDOW+5*4096) as *const u64);phase(3);
+
+ // Reuse another page in this same held block; do not acquire an unrelated
+ // frame that the Context does not own. Warm large/page translations above.
+ try mutate(3,6);
+ REPORT.replacement_value=volatile_load((WINDOW+5*4096) as *const u64);
+ if REPORT.replacement_value!=(FIRST|6){return error.InvalidIntegration;}phase(4);
+
+ let entries=(HHDM+(REPORT.split_entry&ADDRESS)) as *u64;
+ // This already-owned, mapped and warmed page holds the exact 4096-byte PT
+ // snapshot. It needs no BSS page, new lease or alias. Only its two known data
+ // tags are restored afterwards; intervening payload bytes were unspecified.
+ try pt(1,entries);
+ var stats_before=active.EMPTY_STATS;try active.stats(&CONTEXT,&stats_before);
+ let refused=mutate(4,0);
+ match refused{ok=>{return error.InvalidIntegration;},err(code)=>{REPORT.merge_error=code;},}
+ if REPORT.merge_error!=0x0203_0007||(try raw(3))!=REPORT.split_entry{return error.InvalidIntegration;}
+ let unchanged=try used(3);try pt(0,entries);
+ var stats_after=active.EMPTY_STATS;try active.stats(&CONTEXT,&stats_after);
+ if stats_before.invlpg!=stats_after.invlpg||stats_before.full_flush!=stats_after.full_flush
+  ||stats_before.retired_tables!=stats_after.retired_tables{return error.InvalidIntegration;}
+ phase(5);
+
+ try mutate(3,5);
+ let restored=try raw(0);try data(0);REPORT.restored_value=volatile_load((WINDOW+5*4096) as *const u64);
+ phase(6);
+
+ try mutate(4,0);
+ REPORT.tables_merged=try used(2);try data(0);REPORT.merged_entry=try raw(1);
+ REPORT.merge_value=volatile_load((WINDOW+5*4096) as *const u64);phase(7);
+
+ try mutate(2,0);
+ let split=try raw(0);try data(0);phase(8);
+ var index:u64=0;while index<512{
+  try mutate(5,index);index+=1;
+ }
+ let absent=try raw(2);REPORT.tables_after=try used(0);
+ try active.stats(&CONTEXT,&stats_after);REPORT.invlpg=stats_after.invlpg;REPORT.full_flush=stats_after.full_flush;
+ REPORT.retired_tables=stats_after.retired_tables;
+ if REPORT.invlpg!=2||REPORT.full_flush!=516||REPORT.retired_tables!=4{return error.InvalidIntegration;}
+ phase(9);
+
+ object_memory.read_controls(&STATE);try preflight.unchanged(&before,&STATE);try startup.validate_active(STATE.cr3);
+ // Both mappings and all temporary table slots are now gone; only this point
+ // permits returning the precise original order-9 lease to the real buddy.
+ try buddy.free(allocator,physical,9);REPORT.held=0;
+ REPORT.free_after=(try buddy.free_pages(allocator)) as u64;
+ if REPORT.free_after!=REPORT.free_before{return error.InvalidIntegration;}
+ REPORT.cr0=STATE.cr0;REPORT.cr3=STATE.cr3;REPORT.cr4=STATE.cr4;REPORT.efer=STATE.efer;REPORT.rflags=STATE.rflags;REPORT.pat=STATE.pat;
+ phase(10);REPORT.complete=1;
+}return;}
+
+pub unsafe fn run()!void{unsafe{
+ if REPORT.attempted!=0{return error.InvalidIntegration;}REPORT.attempted=1;
+ let completed=run_inner();match completed{ok=>{},err(code)=>{
+  REPORT.error_code=code;
+  return completed;
+ },}
+}return;}

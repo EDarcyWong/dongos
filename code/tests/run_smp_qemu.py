@@ -83,12 +83,20 @@ def verify(qmp,state,serial,build):
         raise ValueError('SMP physical report differs from serial')
     contexts=glob('smp.runtime','CPUS',4096)
     domain=struct.unpack('<14Q',glob('smp.runtime','DOMAIN',112))
+    expected_probes=2;expected_observed=data['marker_b']
+    shared_symbol=services.symbol('smp.large_memory','REPORT')
+    if shared_symbol in symbols:
+        from tests.run_p2_shared_large_qemu import decode_report,validate_report
+        layout=json.loads((build/'dong_layout.json').read_text())
+        shared=validate_report(decode_report(kernel(symbols[shared_symbol],504,'shared large owner report'),layout))
+        if shared['root']!=root or shared['count']!=4:raise ValueError('shared large reader root/count differs')
+        expected_probes=shared['probes_after'];expected_observed=shared['reader_value']
     boxes=kernel(data['mailbox_pointer'],1024,'TLB mailboxes')
     stress=kernel(data['stress_pointer'],1024,'actual per CPU stress')
     lows=struct.unpack('<16Q',glob('smp.runtime','LOW',128))
     if domain[0:2]!=(1,0) or domain[2:5]!=(data['context_pointer'],4,data['mailbox_pointer']) or domain[13]!=0:
         raise ValueError('live TLB domain not safely quiescent')
-    if domain[6]!=domain[7] or domain[8]!=domain[9] or domain[8]!=domain[7]*3 or sum(domain[10:13])!=domain[7] or domain[12]!=2:
+    if domain[6]!=domain[7] or domain[8]!=domain[9] or domain[8]!=domain[7]*3 or sum(domain[10:13])!=domain[7] or domain[12]!=expected_probes:
         raise ValueError('live TLB accounting inconsistent')
     if domain[7]<data['tlb_broadcasts']:raise ValueError('live TLB domain regressed')
     registers=qmp.request('human-monitor-command',{'command-line':'info registers -a'})
@@ -113,7 +121,7 @@ def verify(qmp,state,serial,build):
             if int(re.search(pattern,r)[1],16)!=expected:raise ValueError('AP actual GS/GDT/IDT/TSS differs')
         if c[26:30]!=(1,1,0,0) or c[30]!=domain[7]+1:raise ValueError('AP real ping/TLB IPI count differs')
         b=struct.unpack_from('<8Q',boxes,i*64)
-        if b[0]!=domain[6] or b[3]!=domain[6] or b[5:]!=(data['marker_b'],0,0):raise ValueError('AP final TLB mailbox differs')
+        if b[0]!=domain[6] or b[3]!=domain[6] or b[5:]!=(expected_observed,0,0):raise ValueError('AP final TLB mailbox differs')
         for bottom,top in ((c[11],c[12]),(c[16],c[17]),(c[18],c[19]),(c[20],c[21])):
             if top-bottom!=16384 or bottom%4096 or pte(bottom-4096)!=0 or pte(top)!=0:raise ValueError('AP stack guard absent')
             guard_count+=2;ranges.append((bottom,top))

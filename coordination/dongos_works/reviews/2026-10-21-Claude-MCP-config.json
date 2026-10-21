@@ -1,0 +1,47 @@
+{
+  "desktop": {
+    "client": "claude",
+    "path": "C:\\Users\\cdh\\AppData\\Local\\Claude-3p\\claude_desktop_config.json",
+    "changed": true,
+    "server": "coordination-tasks",
+    "backup": "C:\\Users\\cdh\\AppData\\Local\\Claude-3p\\claude_desktop_config.json.coordination-backup-20261021T143223Z-0f5444"
+  },
+  "claude_code": {
+    "client": "claude",
+    "path": "C:\\Users\\cdh\\.claude.json",
+    "changed": false,
+    "server": "coordination-tasks"
+  },
+  "unrelated_settings_preserved": true,
+  "config_sha256": "35af7e52993796c300baf8b170268550eff77e43072845863a76c0dee67db38f",
+  "entry": {
+    "command": "C:\\Python312\\python.exe",
+    "args": [
+      "-u",
+      "D:\\projects\\2026\\dongos\\coordination\\coordinate.py",
+      "mcp",
+      "--owner",
+      "claude",
+      "--url",
+      "http://127.0.0.1:8765"
+    ],
+    "type": "stdio"
+  },
+  "verification": {
+    "result": "coordination/dongos_works/.local/claude-mcp-verify-c0809a4447/result.json",
+    "passed": true,
+    "actual_stdio_initialize": true,
+    "owner": "claude",
+    "role": "worker",
+    "tools": 9,
+    "task_documents_read": [
+      "claude:P2EXEC1",
+      "claude:P2WC1"
+    ],
+    "mutated_tasks": false,
+    "desktop_live_tool_calls_observed": true,
+    "desktop_log": "C:/Users/cdh/AppData/Local/Claude-3p/logs/main.log"
+  },
+  "config_retained_sha256": "95d39779933afe98db6119ef30b3064d872069ca2eba265dfcdf7388c6d2dd86",
+  "desktop_normalized_optional_type": true
+}

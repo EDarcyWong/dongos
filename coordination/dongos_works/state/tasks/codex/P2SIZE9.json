@@ -1,0 +1,103 @@
+{
+  "assignment_owner": "codex",
+  "auto_dispatch": false,
+  "auto_verify": false,
+  "candidate": null,
+  "checks": [
+    "module:lang.tests.test_optimization_cli",
+    "module:lang.tests.test_ssa_effects",
+    "module:lang.tests.test_ssa_memory",
+    "module:lang.tests.test_ssa_native"
+  ],
+  "claim_from_status": "todo",
+  "claim_token": "f3310d68b2b94fdab3380d7f6faf1c59",
+  "claimed_at": "2026-10-21T17:26:07+00:00",
+  "claimed_by": "codex-mcp-6fe7be60df984d37",
+  "completed_at": "2026-10-21T17:45:10+00:00",
+  "complexity": "standard",
+  "created_at": "2026-10-21T17:26:07+00:00",
+  "delivery": "codex-works/deliveries/P2SIZE9.md",
+  "depends_on": [],
+  "description": "P2ALIAS8首次完整实际链接后kernel PT_LOAD span=2129616B，超现有2MiB 32464B；tools.elf_image已正确拒绝，未运行超限客体，证据reviews/2026-10-22-P2ALIAS8-budget-overflow.json。保持镜像/loader/2MiB窗口及默认Dong编译ABI，禁止扩大上限或修改语义。仅提供显式正式kernel编译flags策略：runtime_level>=5使用现有function_sections和可选release O1 SSA后端，诊断/独立用户态保留原策略；其不支持的函数由现有编译器先完整拒绝SSA再原L1 fallback，内存volatile/atomic/cleanup等不新放宽。默认compile_file/CLI及services编译不改变，不新增优化算法。\n\n与在途P2ALIAS8路径不重叠：本项新tools/kernel_budget.py策略和说明/交付；P2ALIAS8负责人在本人已声明tools/build.py中显式调用该策略。编译器Python与bootstrap/DeepSeek任务全部只读，不修改在途正式测试输入。实际运行既有CLI优化、SSA effects/memory/native正负例定向0skip，核对策略确实被正式kernel调用、编译产物含真实SSA与L1fallback manifest；真实新完整release kernel必须回到2MiB以内并记录span/SHA/所有输入/对象/命令，仍可能需要进一步实现收敛则如实保留，不凭flags宣称预算通过。协调者随后由P2ALIAS8执行真实1/4CPU及负控/桌面/P5验收，不能用通过本任务宿主回归替代硬件消费者验收。独立源码审查+正式复验0skip/source稳定+真实文件落盘才分别accept/integrate。仍不建PR，全部任务完成前不推送/关机。",
+  "document": "codex-works/tasks/P2SIZE9-board.md",
+  "historical": false,
+  "id": "codex:P2SIZE9",
+  "integration_note": "已完成真实主目录文件集成并逐项SHA与已验收formal指纹完全相同，见reviews/2026-10-22-P2SIZE9-main-files.json。正式0skip稳定复验通过；build.py/user.memory接入与实际客体验收由独立P2ALIAS8负责，本状态不扩大组件验收范围。",
+  "legacy_hash": "9067660d515692681f825868dd70c0cf5ab94f9e7db261c56c5e3c719d824a4e",
+  "number": "P2SIZE9",
+  "owner": "codex",
+  "rev": 6,
+  "review_note": "已实际审查授权文件及build.py调用契约。仅runtime>=5 kernel显式使用已有function_sections/O1，services和默认compile_file未变，不新增SSA语义。正式job1b92ef213054497f8f83beeaf40a8eb8四模块16tests/0skip，source_stable/process_stopped/execution_exited全部true。实际IR66SSA/1036L1。O1单独仅省4096仍超限，原失败留存；组合独立P2SIZE10后真实kernel1994448B/2MiB内，余102704B。正常1CPU和4CPU原始回放及桌面/P5已通过，P2ALIAS8另验收最新顺序与真实负控。只验收本策略，不把组件通过冒充全部P2完成。",
+  "status": "integrated",
+  "title": "[P2预算接续] 正式服务内核启用现有可选O1后端",
+  "updated_at": "2026-10-21T18:18:38+00:00",
+  "verification": {
+    "checks": [
+      {
+        "cancelled": false,
+        "elapsed_seconds": 0.812,
+        "execution_exited": true,
+        "passed": true,
+        "process_stopped": true,
+        "returncode": 0,
+        "skips": 0,
+        "spec": "module:lang.tests.test_optimization_cli",
+        "tests": 4,
+        "timed_out": false
+      },
+      {
+        "cancelled": false,
+        "elapsed_seconds": 0.203,
+        "execution_exited": true,
+        "passed": true,
+        "process_stopped": true,
+        "returncode": 0,
+        "skips": 0,
+        "spec": "module:lang.tests.test_ssa_effects",
+        "tests": 5,
+        "timed_out": false
+      },
+      {
+        "cancelled": false,
+        "elapsed_seconds": 3.891,
+        "execution_exited": true,
+        "passed": true,
+        "process_stopped": true,
+        "returncode": 0,
+        "skips": 0,
+        "spec": "module:lang.tests.test_ssa_memory",
+        "tests": 3,
+        "timed_out": false
+      },
+      {
+        "cancelled": false,
+        "elapsed_seconds": 2.032,
+        "execution_exited": true,
+        "passed": true,
+        "process_stopped": true,
+        "returncode": 0,
+        "skips": 0,
+        "spec": "module:lang.tests.test_ssa_native",
+        "tests": 4,
+        "timed_out": false
+      }
+    ],
+    "execution_exited": true,
+    "fingerprint": {
+      "codex-works/deliveries/P2SIZE9.md": "ec27b4413ebd08551e690ea4ac21a135814ccdccb3917a7142c580a4f5bac494",
+      "docs/p2-kernel-budget-o1.md": "8d4468d9b830ba8e5e6687c6e36bb9e18f6dd901af4f0fbf981288cdd3fa3918",
+      "tools/kernel_budget.py": "01678e8e32c6061778fbd379c81ce2f20a580678d37e4f6f070ad219e202f321"
+    },
+    "finished_at": "2026-10-21T17:58:12+00:00",
+    "job": "1b92ef213054497f8f83beeaf40a8eb8",
+    "passed": true,
+    "process_stopped": true,
+    "source_stable": true,
+    "summary": "定向复验通过，等待源码/契约审查"
+  },
+  "write_paths": [
+    "tools/kernel_budget.py",
+    "docs/p2-kernel-budget-o1.md",
+    "codex-works/deliveries/P2SIZE9.md"
+  ]
+}

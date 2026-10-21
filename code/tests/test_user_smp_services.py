@@ -38,6 +38,8 @@ unsafe extern "sysv64" fn user_validate_frame(frame:*abi.Frame)u64;
 unsafe extern "sysv64" fn smp_service_fixture_event(phase:u64,slot:u64,value:u64)u64;
 unsafe fn wake_waiters()!void{return;}
 unsafe fn wake_irqs()!void{return;}
+// This fixture has no P5 DMA context. The dedicated P5 oracle covers its hooks.
+unsafe fn fixture_skip_retire(id:usize)!void{return;}
 unsafe fn revoke_loaded(id:usize,inc:u64)!void{unsafe{let result=smp_service_fixture_event(2,id as u64,inc);if result!=0{return error.Protocol;}(*(memory.processes()+id)).ready=0;}return;}
 unsafe fn retire(id:usize,state:u64,status:u64)!void{unsafe{try retire_one(id,state,status);}return;}
 unsafe fn perform(frame:*abi.Frame)!usize{unsafe{
@@ -85,6 +87,7 @@ pub struct Process{pub frame:abi.Frame,pub root:u64,pub ready:u64}
 var P:[16]Process=[Process{frame:abi.EMPTY,root:0,ready:0};16];
 pub var OBJECT_FAILED:bool=false;pub var STAGE_FAILED:bool=false;pub var UNSHARE_FAILED:bool=false;pub var RESOURCE_FAILED:bool=false;
 pub fn processes()*Process{unsafe{return &P[0];}}pub fn frame_count()usize{return 17;}
+pub fn generation(id:usize)u64{return 1;}
 '''
 WINDOWS='''module user.window_broker;pub var FAILED:bool=false;pub var EPOCH:u64=0;
 pub unsafe fn owner_gone(owner:u64)!void{return;}pub unsafe fn compositor_gone(epoch:u64)!void{return;}
@@ -92,6 +95,7 @@ pub unsafe fn owner_gone(owner:u64)!void{return;}pub unsafe fn compositor_gone(e
 DEVICE='''module user.device_host;pub var PCI_FAILED:bool=false;pub error Invalid=0x060b_0040;
 unsafe extern "sysv64" fn smp_service_fixture_irq(vector:u64)u64;
 pub unsafe fn interrupt(vector:u64)!u64{unsafe{let x=smp_service_fixture_irq(vector);}return 0;}
+pub unsafe fn dma_stop(slot:usize,configuration:u64,owner:u64,incarnation:u64,root:u64,generation:u64,smp:u64,code:u64)void{return;}
 '''
 CMAIN=r'''
 extern U ABI us_setup(U),us_project(void),us_select(void),us_op(U),us_fault(void),us_guard(U),us_irq(U),us_get(U);
@@ -124,7 +128,7 @@ class Tests(unittest.TestCase):
   for needle in ('U ABI dong_user_smp_service(', 'U ABI dong_user_smp_project('):c=c.replace(block(c,needle),'')
   c=c[:c.index('int main(void)')]+CMAIN+MUTATION_POLICY
   controls={
-   'retire-without-remote-detach':('try smp_bridge.retire(id);',''),
+   'retire-without-remote-detach':('let stopped=smp_bridge.retire(id);','let stopped=fixture_skip_retire(id);'),
    'missing-test-role-mask':('if cfg>=7&&cfg<=11{SMP_TEST_SLOTS|=1<<slot as u64;}',''),
    'stale-test-role-mask':('SMP_TEST_SLOTS&=~(1<<id as u64);',''),
    'test-mask-includes-normal-GUI':('if cfg>=7&&cfg<=11{SMP_TEST_SLOTS|=1<<slot as u64;}','if cfg>=7{SMP_TEST_SLOTS|=1<<slot as u64;}'),

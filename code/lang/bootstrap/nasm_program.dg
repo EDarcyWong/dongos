@@ -37,6 +37,9 @@ struct State{p:*const ir.Program,w:*const Workspace,at:usize,status:u64,frame_by
 struct Region{p:u64,n:usize}
 fn span(p:u64,n:usize)bool{return n==0||(p!=0&&n<=NONE-p);}
 fn overlap(a:u64,n:usize,b:u64,m:usize)bool{return n!=0&&m!=0&&a<b+m&&b<a+n;}
+fn equal(a:[]const u8,b:[]const u8)bool{
+ if a.len!=b.len{return false;}var i:usize=0;while i<a.len{if a[i]!=b[i]{return false;}i+=1;}return true;
+}
 unsafe fn put(s:*State,text:[]const u8)bool{unsafe{
  if (*s).status!=0{return false;}
  if text.len>(*(*s).w).text.len-(*s).at{(*s).status=CAPACITY;return false;}
@@ -198,9 +201,7 @@ unsafe fn static_value(s:*State,u:usize,id:usize,t:usize,depth:usize)bool{unsafe
  if n.kind==ast.NULL{return zeros(s,size);}
  if n.kind==ast.CAST{return static_value(s,u,n.a,t,depth+1);}
  if typ.kind==sem.SLICE&&n.kind==ast.STRING{let tok=(*g).tokens[(*g).units[u].token_start+n.token];put(s,"dq ");string_label(s,u,id);put(s,",");number(s,tok.value_length);return put(s,"\n");}
- if typ.kind==sem.POINTER&&n.kind==ast.UNARY&&n.op==1062{let r=(*g).refs[(*g).units[u].node_start+n.a];
-  if r.kind==binding.GLOBAL&&r.target<(*g).symbols.len&&(*g).symbols[r.target].kind==names.CONST{return put(s,"dq ")&&symbol(s,r.target)&&put(s,"\n");}
- }
+ if typ.kind==sem.POINTER&&n.kind==ast.UNARY&&n.op==1062{return static_pointer(s,u,id,depth+1);}
  if typ.kind==sem.ARRAY&&(n.kind==ast.ARRAY||n.kind==ast.REPEAT){var child=n.a;var i:usize=0;
   while i<typ.count{if child==NONE{(*s).status=INVALID;return false;}if !static_value(s,u,child,typ.element,depth+1){return false;}if n.kind==ast.ARRAY{child=(*g).nodes[(*g).units[u].node_start+child].next;}i+=1;}return true;
  }
@@ -213,6 +214,59 @@ unsafe fn static_value(s:*State,u:usize,id:usize,t:usize,depth:usize)bool{unsafe
   }if off>size{(*s).status=INVALID;return false;}return zeros(s,size-off);
  }
  (*s).status=UNSUPPORTED;return false;
+}}
+// Resolve the checked symbol and byte displacement of a static lvalue. Only
+// global storage, struct field offsets and folded constant array indices are
+// accepted; no source literal is reparsed and no runtime value is consulted.
+unsafe fn static_place(s:*State,u:usize,id:usize,depth:usize,index:*usize,offset:*usize)bool{unsafe{
+ let g=(*(*s).p).graph;if depth>=256||u>=(*g).units.len||id>=(*g).units[u].node_count{(*s).status=INVALID;return false;}
+ let global=(*g).units[u].node_start+id;let n=(*g).nodes[global];
+ if n.kind==ast.NAME||(n.kind==ast.FIELD&&(*g).refs[global].kind==binding.GLOBAL){
+  let r=(*g).refs[global];if r.kind!=binding.GLOBAL||r.target>=(*g).symbols.len{(*s).status=UNSUPPORTED;return false;}
+  let sy=(*g).symbols[r.target];if sy.kind!=names.CONST&&sy.kind!=names.GLOBAL{(*s).status=UNSUPPORTED;return false;}
+  *index=r.target;*offset=0;return true;
+ }
+ if n.kind==ast.UNARY&&n.op==1062{return static_place(s,u,n.a,depth+1,index,offset);}
+ if n.kind==ast.FIELD{
+  let base=(*g).info[(*g).units[u].node_start+n.a].typ;if base>=(*g).types.len||(*g).types[base].kind!=sem.STRUCT{(*s).status=UNSUPPORTED;return false;}
+  if !static_place(s,u,n.a,depth+1,index,offset){return false;}
+  let t=(*g).types[base];let name=names.text((*g).sources,(*g).units,(*g).tokens,u,n.token);var i:usize=0;var extra:usize=NONE;
+  while i<t.length{let field=(*g).fields[t.first+i];let node=(*g).nodes[(*g).units[field.unit].node_start+field.node];
+   let key=names.text((*g).sources,(*g).units,(*g).tokens,field.unit,node.token);
+   if equal(name,key){extra=(*g).field_offsets[t.first+i];break;}i+=1;
+  }if extra==NONE{(*s).status=UNSUPPORTED;return false;}
+  if *offset>NONE-extra{(*s).status=INVALID;return false;}*offset+=extra;return true;
+ }
+ if n.kind==ast.INDEX{
+  let bt=(*g).info[(*g).units[u].node_start+n.a].typ;if bt>=(*g).types.len||(*g).types[bt].kind!=sem.ARRAY{(*s).status=UNSUPPORTED;return false;}
+  if !static_place(s,u,n.a,depth+1,index,offset){return false;}
+  let t=(*g).types[bt];let gi=(*g).units[u].node_start+n.b;if (*g).value_states[gi]!=2{(*s).status=UNSUPPORTED;return false;}
+  let v=(*g).values[gi];if v.kind!=1||v.negative||v.used>2||v.first>(*g).limbs.len||v.used>(*g).limbs.len-v.first{(*s).status=UNSUPPORTED;return false;}
+  var count:usize=0;if v.used!=0{count=(*g).limbs[v.first]as usize;}if v.used>1{count|=((*g).limbs[v.first+1]as usize)<<32;}
+  if count>=t.count{(*s).status=INVALID;return false;}
+  let size=(*g).layouts[t.element].size;if count!=0&&size>NONE/count{(*s).status=INVALID;return false;}let add=count*size;
+  if *offset>NONE-add{(*s).status=INVALID;return false;}*offset+=add;return true;
+ }
+ (*s).status=UNSUPPORTED;return false;
+}}
+unsafe fn static_pointer(s:*State,u:usize,id:usize,depth:usize)bool{unsafe{
+ var index:usize=0;var offset:usize=0;if !static_place(s,u,id,depth,&index,&offset){return false;}
+ return put(s,"dq ")&&symbol(s,index)&&(offset==0||(put(s,"+")&&number(s,offset)))&&put(s,"\n");
+}}
+unsafe fn static_globals(s:*State)bool{unsafe{
+ let g=(*(*s).p).graph;var any=false;var i:usize=0;while i<(*g).symbols.len{if (*g).symbols[i].kind==names.GLOBAL{any=true;break;}i+=1;}
+ if !any{return true;}if !put(s,"section .data\n"){return false;}
+ i=0;while i<(*g).symbols.len&&(*s).status==0{let sy=(*g).symbols[i];
+  if sy.kind==names.GLOBAL{
+   let global=(*g).units[sy.unit].node_start+sy.declaration;let t=(*g).node_types[global];
+   if t>=(*g).types.len{(*s).status=INVALID;return false;}
+   if !put(s,"align ")||!number(s,(*g).layouts[t].alignment)||!put(s,"\n"){return false;}
+   if sy.flags==1{if !put(s,"global ")||!symbol(s,i)||!put(s,"\n"){return false;}}
+   if !symbol(s,i)||!put(s,":\n"){return false;}
+   // A scalar declaration owns no folded value; the checked initializer node
+   // supplies the canonical bytes for both mutable scalars and aggregates.
+   if !static_value(s,sy.unit,(*g).nodes[global].b,t,0){return false;}
+  }i+=1;}return true;
 }}
 unsafe fn static_constants(s:*State)bool{unsafe{let g=(*(*s).p).graph;var i:usize=0;while i<(*g).symbols.len{let sy=(*g).symbols[i];if sy.kind==names.CONST{
  let global=(*g).units[sy.unit].node_start+sy.declaration;let t=(*g).node_types[global];if t>=(*g).types.len{(*s).status=INVALID;return false;}
@@ -319,7 +373,7 @@ unsafe fn valid(p:*const ir.Program)bool{unsafe{
    if words==NONE||x.operation<ir.CONSTANT||x.operation>ir.SUBSLICE{return false;}
    if x.operation==ir.CONSTANT&&words!=1{return false;}
    if x.operation>=ir.ZERO{var destination_words=words;if x.operation==ir.STATIC_ADDRESS{destination_words=1;}if !offset(x.destination,destination_words,f.frame_bytes){return false;}
-    if x.operation==ir.STATIC_ADDRESS{if x.value>=(*g).symbols.len||(*g).symbols[x.value].kind!=names.CONST{return false;}}
+    if x.operation==ir.STATIC_ADDRESS{if x.value>=(*g).symbols.len||((*g).symbols[x.value].kind!=names.CONST&&(*g).symbols[x.value].kind!=names.GLOBAL){return false;}}
     if x.operation==ir.SUBSLICE{if x.typ>=(*g).types.len||(*g).types[x.typ].kind!=sem.SLICE||words!=2||!offset(x.a,1,f.frame_bytes)||!offset(x.b,1,f.frame_bytes)||!offset(x.value,1,f.frame_bytes)||!offset(x.extra,1,f.frame_bytes){return false;}}
     if x.operation==ir.ZERO&&!ir.aggregate(g,x.typ){return false;}
     if x.operation==ir.PAIR&&(words!=2||!offset(x.a,1,f.frame_bytes)||!offset(x.b,1,f.frame_bytes)){return false;}
@@ -364,7 +418,7 @@ pub unsafe fn emit(p:*const ir.Program,w:*const Workspace,out:[]u8,written:*usiz
   if node.kind==ast.STRING{let token=(*(*p).graph).tokens[unit.token_start+node.token];string_label(&s,u,j);put(&s,": db ");var b:usize=0;
    while b<token.value_length{if b!=0{put(&s,",");}number(&s,(*(*p).graph).strings[unit.string_start+token.value_start+b]as u64);b+=1;}
    if token.value_length==0{put(&s,"0");}put(&s,"\n");}j+=1;}u+=1;}
- static_constants(&s);
+ static_constants(&s);static_globals(&s);
  put(&s,"%ifidn __OUTPUT_FORMAT__,elf64\nsection .note.GNU-stack noalloc noexec nowrite progbits\n%endif\n");
  if s.status!=0{return s.status;}if out.len<s.at{return CAPACITY;}
  i=0;while i<s.at{out[i]=(*w).text[i];i+=1;}*written=s.at;return OK;

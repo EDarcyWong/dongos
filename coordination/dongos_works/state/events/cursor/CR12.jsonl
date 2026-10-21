@@ -15,5 +15,3 @@
 {"at":"2026-10-18T14:45:02+00:00","data":{"rev":11,"status":"accepted"},"kind":"accept","task_id":"cursor:CR12"}
 {"at":"2026-10-18T14:51:35+00:00","data":{"rev":12,"status":"integrated"},"kind":"integrate","task_id":"cursor:CR12"}
 {"at":"2026-10-19T11:42:09+00:00","data":{"rev":14,"status":"integrated"},"kind":"state_reconciled","task_id":"cursor:CR12"}
-{"at":"2026-10-19T04:21:48+00:00","data":{"rev":1,"status":"todo"},"kind":"imported","task_id":"cursor:CR12"}
-{"at":"2026-10-19T04:43:01+00:00","data":{"rev":13,"status":"integrated"},"kind":"state_restored","task_id":"cursor:CR12"}

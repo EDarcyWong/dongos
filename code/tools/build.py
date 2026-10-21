@@ -99,6 +99,10 @@ def assemble(source: Path, output: Path, *, fmt: str, test: bool, stage: str,
     # capabilities rather than guessing from the major version. Every other
     # warning remains an error, including unsupported relocation widths.
     help_text = subprocess.run([nasm, "-h"], check=True, capture_output=True, text=True).stdout
+    if re.search(r'(?m)^\s*-h\s+-\S+', help_text):
+        help_text += '\n' + subprocess.run(
+            [nasm, "-h", "-w"], check=True, capture_output=True, text=True,
+        ).stdout
     for warning in ("reloc-rel-dword", "reloc-abs-qword"):
         if re.search(r"(?m)^\s*" + re.escape(warning) + r"\s", help_text):
             command.append("-w-" + warning)
@@ -171,10 +175,20 @@ def build(*, test: bool = False, stage: str = "p1", cpu_case: str | None = None,
         # the existing 2MiB image envelope. Isolated diagnostic probes retain
         # debug instrumentation; both modes remain native-tested.
         kernel_mode = "release" if runtime_level >= 5 else "debug"
-        execute([sys.executable, "-m", "lang.dongc", "--mode", kernel_mode, "--root", str(ROOT / "lang/examples"),
-                 "--root", str(ROOT / "kernel"), "--root", str(ROOT / "lang/std"), *service_roots, "--emit-asm", str(generated),
+        from tools.kernel_budget import kernel_flags
+        kernel_sections = kernel_flags(runtime_level)
+        kernel_profile = None
+        profile_flags = []
+        kernel_source_root = ROOT / "kernel"
+        if runtime_level >= 5:
+            from tools.kernel_storage_profile import generate as kernel_storage_profile
+            profile_root, kernel_profile = kernel_storage_profile(output, runtime_level)
+            kernel_source_root = profile_root
+            profile_flags = ["--emit-ir", str(output / "kernel-optimization.json")]
+        execute([sys.executable, "-m", "lang.dongc", "--mode", kernel_mode, *kernel_sections, *profile_flags, "--root", str(ROOT / "lang/examples"),
+                 "--root", str(kernel_source_root), "--root", str(ROOT / "lang/std"), *service_roots, "--emit-asm", str(generated),
                  "--emit-layout", str(layout_path),
-                 str(ROOT / ("kernel/smp_probe.dg" if runtime_level >= 5 else "kernel/services_probe.dg" if runtime_level >= 5 else "kernel/user_probe.dg" if runtime_level == 4 else
+                 str(kernel_source_root / "smp_probe.dg" if runtime_level >= 5 else ROOT / ("kernel/user_probe.dg" if runtime_level == 4 else
                              "kernel/runtime_probe.dg" if runtime_level else "kernel/memory_probe.dg"))])
         layout = json.loads(layout_path.read_text(encoding="utf-8"))
         (output / "bootinfo_layout.inc").write_text(generate(layout, "boot.abi.BootInfo"), encoding="ascii")
@@ -299,7 +313,7 @@ def build(*, test: bool = False, stage: str = "p1", cpu_case: str | None = None,
             kernel_objects.append(assemble(ROOT / "kernel/user/context.asm", output / "user", fmt="elf64", test=test, stage=stage))
             kernel_objects.append(assemble(ROOT / "kernel/services_run.asm", output, fmt="elf64", test=test, stage=stage, defines=defines))
         if runtime_level >= 5:
-            for source in ("kernel/smp/bootstrap.asm","kernel/smp_runtime.asm"):
+            for source in ("kernel/smp/bootstrap.asm","kernel/smp_runtime.asm","kernel/smp/large_memory.asm","kernel/smp/alias_memory.asm"):
                 kernel_objects.append(assemble(ROOT/source,output,fmt="elf64",test=test,stage=stage,defines=defines))
         if runtime_level >= 4:
             kernel_objects.append(assemble(ROOT / "kernel/user/shared_barrier.asm", output,
@@ -328,7 +342,8 @@ def build(*, test: bool = False, stage: str = "p1", cpu_case: str | None = None,
             kernel_objects.append(assemble(ROOT / "boot/trace_clock.asm", output / "kernel-trace",
                                            fmt="elf64", test=test, stage=stage))
         kernel_elf = output / "kernel.elf"
-        execute([elf_linker, "-nostdlib", "-z", "max-page-size=0x1000", "-T", str(ROOT / "kernel/linker.ld"),
+        kernel_gc = ["--gc-sections"] if runtime_level >= 5 else []
+        execute([elf_linker, "-nostdlib", *kernel_gc, "-z", "max-page-size=0x1000", "-T", str(ROOT / "kernel/linker.ld"),
                  "-o", str(kernel_elf), *map(str, kernel_objects)])
         raw = materialize(kernel_elf.read_bytes())
         (output / "kernel.bin").write_bytes(raw)
@@ -365,9 +380,11 @@ def build(*, test: bool = False, stage: str = "p1", cpu_case: str | None = None,
     if input_paths:
         after=fingerprints();(output/'source-after.json').write_text(json.dumps(after,indent=2)+'\n')
         manifest=dict(desktop_scale=desktop_scale,runtime_level=runtime_level,kernel_mode=kernel_mode,test=test,graphics_case=graphics_case,smp_case=smp_case,compiler_job=compiler_job,
+            kernel_function_sections=runtime_level>=5,kernel_gc_sections=runtime_level>=5,
+            kernel_optimization=1 if runtime_level>=5 else 0,kernel_storage_profile=kernel_profile,
             source_unchanged=inputs_before==after,source_sha256=after,
             artifacts={str(p.resolve()):hashlib.sha256(p.read_bytes()).hexdigest() for p in
-                (output/'kernel.bin',output/'kernel.elf',esp/'DONGOS.IMG',esp/'EFI/BOOT/BOOTX64.EFI',*((esp/'SERVICES.BIN',) if runtime_level>=5 else ()))})
+                (output/'kernel.bin',output/'kernel.elf',esp/'DONGOS.IMG',esp/'EFI/BOOT/BOOTX64.EFI',*((esp/'SERVICES.BIN',output/'kernel-optimization.json',profile_root/'build/storage_profile.dg') if runtime_level>=5 else ()))})
         (output/'build-inputs.json').write_text(json.dumps(manifest,indent=2)+'\n')
         if inputs_before!=after:raise ToolError('Build inputs changed during compilation; retained artifacts are not accepted')
     print(f"Built {boot_dir / 'BOOTX64.EFI'}", flush=True)

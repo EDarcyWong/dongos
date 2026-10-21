@@ -16,7 +16,7 @@ def inject(source):
     return source[:module_end] + DECL + source[module_end:].replace(ANCHOR, ANCHOR + CALL)
 
 def hashes(root):
-    return {str(p.relative_to(root)): digest(p) for p in sorted(root.rglob('*'))
+    return {p.relative_to(root).as_posix(): digest(p) for p in sorted(root.rglob('*'))
             if p.is_file() and not any(x in ('build', '__pycache__', '.git') for x in p.relative_to(root).parts)
             and p.suffix != '.pyc'}
 

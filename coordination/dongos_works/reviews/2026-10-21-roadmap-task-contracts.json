@@ -1,0 +1,75 @@
+{
+  "source": "coordination-tasks MCP get_task; requirements checked against implementation and original acceptance evidence",
+  "tasks": [
+    {
+      "id": "cursor:P5CTX1",
+      "status": "integrated",
+      "rev": 7,
+      "created_at": "2026-10-20T15:26:25+00:00",
+      "description": "所属阶段：P5设备故障恢复。接续main 244b18c的reset-hold、整块DMA租约和别名拒绝；只完成真实运行时的精确持有上下文，不实现回收或声称P5完成。旧cursor:CR43/codex:CX6存在异机同号异义且已归档，不恢复，不作为依赖。本任务按最新版分工给Cursor，在本人客户端手动worker MCP读取、领取和执行，不启动AI CLI。\n\n真实缺口：services.dg的syscall 0x63当前try devices.dma_acquire失败后直接返回；memory.DmaLease已经保留分配前HELD、完整舍入块和partial attempted/mapped，但与Catalog owner/incarnation、设备token/generation尚未绑定。device_host真实revoke_owner有可信隔离/reset-hold，services.retire_one已有smp_bridge.retire，不重写已有账本、停止、分配或复位算法。\n\n实施范围：\n1. 在真实0x63调用devices.dma_acquire之前，从可信内核Catalog owner、当前slot、device_host原角色绑定及memory.process/root/generation建立有界内核私有上下文，用户不传物理地址、token或所谓“已排空”布尔证明。至少固定slot/configuration、owner与incarnation、旧device token和设备generation、可信ECAM/硬件identity、memory root及独立memory generation。三种generation不能互相替代，blk.Lease的常量token=1不能作为恢复唯一身份。\n2. 在真实申请成功和err两分支均保存实际memory.dma_snapshot，不因try提前返回而丢失失败回执。覆盖COMPLETE、部分own/map的HELD、HELD且physical=0；无快照/尚未进入申请单独表示，不能用全零捏造租约。保存完整pages（含未映射舍入尾部）、physical/virtual/root/generation/attempted/mapped/state。\n3. 首次记录身份与原租约不可被重复请求、错误请求、新incarnation、不同root或slot重用覆盖。可单调追加同一笔申请/退休的状态，但不得把后次申请/新根接管为旧记录。无有效上下文的新控制器/未申请路径保持原行为；上下文错误不得短路现有隔离或使错误路径跳过quarantine。\n4. 接入真实services retire/revoke与device_host路径，将已有永久停止、撤权前后设备generation、隔离和reset结果附到同一上下文。已有SMP退休ACK的范围和时序必须如实说明，不将其冒充撤映射后的全核TLB退休。现代VirtIO reset成功仅记RESET_CONFIRMED，DMA drain始终UNKNOWN；其他控制器不借用VirtIO结论。失败sticky held，不自动重试或重新发布。\n5. 不修改memory.dg/devices.dg/device_manager.dg/Process/Frame布局，不增加公共syscall，不调用ledger.recover/reclaim、不清PINNED、不释放或零化DMA、不撤销/重发新token、不重启驱动。新上下文是后续可信回收的前置记录，不是回收授权。\n\n验证：checks首先编译并实际执行debug/release的真实services 0x63生产分支及host退休hook；允许抽取原分支/函数并在fixture中明确stub硬件/内存边界，必须绑定源码SHA，不能只测新helper或文本存在。独立C oracle核对成功/部分失败/physical=0/无快照/copy_out失败、身份每字段错配、重入/重复请求、旧owner/新incarnation、token/root/各generation变化，以及reset失败与成功仍drain未知且无回收。至少两类实际坏源：删除申请err后的snapshot；允许后次覆盖旧owner/root。坏体须正常构建运行后按指定数值/轨迹断言拒绝，不以构建失败、崩溃或超时充数。有限边界不跑笛卡尔积。保存命令、退出码、输入前后SHA、stdout/stderr和真实坏体拒绝证据；零skip。\n集成前由Codex独立复验：既有test_dma_lease/test_dma_alias/test_device_manager/test_virtio_quiesce/test_dma_release及完整services/device_host/memory依赖图编译；如修改退休时序，再定向核对test_user_domain/test_user_smp_services。worker仅跑声明checks，不运行OS/VM、不提交/推送、不改DB/index/任务书/他人文件，不自授验收/集成。docs/p5-recovery-context.md必须区分真实内核接线、宿主stub边界与未取得的guest/DMA drain证明。\n\n交付位置与主线映射（以本段为准）：遵守新组件先放本人works的规则。只读main244b18c的kernel/user/device_host.dg和kernel/user/services.dg，各复制一份到cursor-works/src/p5/user/同名文件后修改；保持原module user.device_host/user.services及完整生产控制流，不剪掉原行为。主目录kernel/user文件不在worker可写范围。编译/测试把cursor-works/src/p5置于import roots首位，其余生产依赖只读来自主线完整闭包；记录两基线SHA和修改diff，不能复制整个lang掩盖替换。docs交付在cursor-works/src/p5/recovery-context.md，三个测试在cursor-works/tests/p5_recovery_context_fixture.dg、p5_recovery_context_probe.c、test_p5_recovery_context.py。验收后Codex将两个完整源码、文档和路径适配测试实际集成到主线，再登记integrated；不把works副本存在当生产已接线。checks仅运行discover:cursor-works/tests:test_p5_recovery_context.py，既有主线P5相关回归由Codex在集成时定向复验。",
+      "checks": [
+        "discover:cursor-works/tests:test_p5_recovery_context.py"
+      ],
+      "write_paths": [
+        "cursor-works/src/p5/user/device_host.dg",
+        "cursor-works/src/p5/user/services.dg",
+        "cursor-works/src/p5/recovery-context.md",
+        "cursor-works/tests/p5_recovery_context_fixture.dg",
+        "cursor-works/tests/p5_recovery_context_probe.c",
+        "cursor-works/tests/test_p5_recovery_context.py",
+        "cursor-works/deliveries/P5CTX1.md"
+      ],
+      "verification_finished_at": "2026-10-20T15:53:56+00:00"
+    },
+    {
+      "id": "codex:P5CTX2",
+      "status": "integrated",
+      "rev": 6,
+      "created_at": "2026-10-21T11:33:52+00:00",
+      "description": "所属阶段：P5设备故障恢复。接续已integrated rev7的cursor:P5CTX1，按用户明确要求由Codex直接实现、测试、独立验收与本地集成，不建PR、不提交或推送。当前基线Git main的最新提交及本地P5CTX1源码SHA必须另行封存，不能用G6/旧reset-hold CI覆盖本次变更。\n\n本项只完成真实客体故障下的DmaContext核验，不实现DMA drain/unpin/free/reuse/新token发布或驱动重启，不修改内核生产算法/公共ABI。复用现有run_virtio_reset_qemu、只读QMP物理转储及隔离UD2 fixture；不重写另一套虚拟机执行器。新增严格ABI驱动的DmaContext嵌套字段/原始字节解码与验证：实际0x63成功申请记录需绑定Catalog owner/incarnation、slot/configuration、原设备token/generation/完整identity与ECAM、memory root/独立generation以及全部DmaLease字段，正常control与故障fault均核对。故障核对原owner已停止、全核已有ACK、路由/隔离/reset/撤权记录及真实ledger代际、sticky held=1、drain=UNKNOWN，lease/原身份在两次稳定观察间不变，不能把撤映射前ACK当TLB回收证明。不虚构请求后错误/partial lease的guest结果（P5CTX1已有native证据）；本项真实guest范围为initialized-queue UD2和正常control。原始物理转储、布局manifest、symbols、ESP/源码前后SHA、运行命令/退出/串口/清理结果都保留，validator须能离线独立重放，禁止guest内存/寄存器写入和生产后门。新增源码mutant或实际原始回执逐字段篡改负控必须确定拒绝，不能仅text存在；结构/短读/错layout/身份每字段/代际/partial租约/错误phase/drain伪造/后次身份租约覆盖都需要host controls。不要把mock guest结果记作真实通过。\n\n用户已明确授权本项真实客体测试。协调器身份在独立冻结副本中构建运行本机QEMU TCG control/fault，使用新建临时ESP/数据盘和匹配固件，不接触物理盘/现有VM；CLI worker不启动OS/VM。受限checks只运行host unittest并零skip，真实客体结果由Codex协调者另行实际运行并独审后记录。任何环境失败保留原失败并修复/复测，未有真实control/fault证据不得登记任务验收或集成。现有fixture如需Windows路径规范化/模块导入适配只修必要边界，保留旧断言。主线文件范围为本任务显式声明的7个路径，其它变更保留不混入。\n\n验收：声明的host定向checks独立隔离通过且源稳定；现有test_virtio_reset_guest和P5CTX1 native回归通过；新的完整runtime7 normal/fault构建、真实4CPU control/fault各至少一次，两次只读稳定观察及完整原始字节可重放。独立审查源码/契约/host负控和真实guest物理证据后accepted，核对主线文件与验收SHA及实际运行来源后登记integrated。docs必须保留P5 partial、drain UNKNOWN、无回收/重启和无PR边界。",
+      "checks": [
+        "module:tests.test_p5_recovery_context_guest",
+        "module:tests.test_virtio_reset_guest"
+      ],
+      "write_paths": [
+        "tests/p5_recovery_context_guest.py",
+        "tests/test_p5_recovery_context_guest.py",
+        "tests/run_virtio_reset_qemu.py",
+        "tests/test_virtio_reset_guest.py",
+        "tests/p5_virtio_reset_fixture.py",
+        "docs/p5-recovery-context-guest.md",
+        "codex-works/deliveries/P5CTX2.md"
+      ],
+      "verification_finished_at": "2026-10-21T11:54:57+00:00"
+    },
+    {
+      "id": "codex:P2LIVE1",
+      "status": "integrated",
+      "rev": 6,
+      "created_at": "2026-10-21T12:03:31+00:00",
+      "description": "所属阶段：P2 CPU与内存扩展。用户明确授权Codex继续开发、测试、独立验收和真实本地集成，不建PR、不提交/推送；接续主线既有mm.paging/huge_page_plan大页机制，不恢复归档pool:P2HUGE1等旧任务，不重复组件实现。本项只闭环正常内核私有根的BSP/AP启动前活动WB/NX大页事务；不以本项宣称P2全部扩展、动态EXEC/WC消费者、多核大页/PCID已完成。\n\n生产：复用paging.map_large_live/split_large_live/merge_large_live，为active_paging增加有完整Context窗口/帧范围/真实控制快照/计数溢出/Busy重入保护的map_large、split_large、merge_large；不改变既有Context/Stats ABI，不放开USER/EXEC/WC。大页整个512页都必须位于owned范围，拒绝错对齐/越界且失败不变；split必须完整同根失效后返回，merge隔离旧PT直到full-root flush完成才reclaim；不能把INVLPG单页当整个大页转换协议。保留既有4KiB与page_cache契约。\n\n正常启动：新boot.large_memory从真实startup buddy持有order9块，窗口独立2MiB，运行在已经激活的正常私有根、保护位开启、IF0且AP尚未启动；真实硬件controls每步重读。不增加2MiB BSS或固件恒等别名。真实写读512页、split后替换子页证明CPU走新表、非均匀merge拒绝且失败不变、恢复后merge/失效/PT回收，再安全移除全部映射/完整根失效、最后才归还精确原order9块。最终allocator free_pages、paging used_tables、全树allowlist恢复基线。异常保持资源持有并明确返回错误，不能失败后提前free。启动钩子在既有memory_mutation_probe验证完成后实际调用，不是只加独立未调用probe；各runtime正常路径都执行。静态REPORT记录真实root/lease/phase/readback/counts，独立guest runner用只读QMP pmemsave读取实际链接物理字节，布局/ELF/源码/构建/命令/串口/清理/前后SHA留证，不写guest内存寄存器。\n\n测试：新原生Dong+C独立raw页表/回调模型，debug/release及真实坏源（漏fullflush、merge提前reclaim、范围绕过）确定拒绝，成功回调中重入Busy、PT隔离未复用、AD/错误路径覆盖；旧test_active_paging和paging/P2planner回归，必要时仅修旧C probe缺失sfence builtin的Windows兼容边界，保持测试语义。实际QEMU由root协调者在冻结隔离副本运行（用户已授权），正常私有根至少debug/release或等价两构建，真实坏源guest负控确定拒绝；既有UEFI extension测试不能代替本项normalroot实测。host checks受限执行、不运行VM；真实guest证据独立审查后才能验收。七文件P5CTX2及其它既有dirty变更保留。\n\n交付：准确边界、未执行项/原始失败保留，独立源码/契约/测试与真实guest审查通过、正式checks零skip来源稳定后accepted；实际主目录文件逐SHA核对真实运行来源后integrated。",
+      "checks": [
+        "module:tests.test_active_large",
+        "module:tests.test_active_paging",
+        "module:tests.test_p2_active_large_qemu"
+      ],
+      "write_paths": [
+        "kernel/mm/active_paging.dg",
+        "kernel/boot/large_memory.dg",
+        "kernel/memory_probe.dg",
+        "kernel/memory_mutation.asm",
+        "tests/active_large_probe.dg",
+        "tests/active_large_probe.c",
+        "tests/test_active_large.py",
+        "tests/active_paging_probe.c",
+        "tests/run_p2_active_large_qemu.py",
+        "tests/test_p2_active_large_qemu.py",
+        "docs/p2-active-large.md",
+        "docs/p2-extensions.md",
+        "PLAN.md",
+        "codex-works/deliveries/P2LIVE1.md"
+      ],
+      "verification_finished_at": "2026-10-21T13:00:06+00:00"
+    }
+  ]
+}

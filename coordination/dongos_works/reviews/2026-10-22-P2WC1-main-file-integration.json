@@ -1,0 +1,38 @@
+{
+  "task": "claude:P2WC1",
+  "owner": "codex",
+  "accepted_rev": 9,
+  "actual_files": [
+    {
+      "source": "claude-works/src/mm/cache_alias_owner.dg",
+      "target": "code/kernel/mm/cache_alias_owner.dg",
+      "sha256": "eafdfa361b296cecd0248f0ad3a06a3c8d2e7064f539228dbc68fa1dea57a39e",
+      "byte_identical": true
+    },
+    {
+      "source": "claude-works/src/mm/cache_alias_owner.md",
+      "target": "code/docs/cache-alias-owner.md",
+      "sha256": "fb87713709a25567c3ea22919467a34bf11fc05987a460b4481558a18d495d58",
+      "byte_identical": true
+    },
+    {
+      "source": "claude-works/tests/cache_alias_owner_probe.dg",
+      "target": "code/tests/cache_alias_owner_probe.dg",
+      "sha256": "d77cf770754d59cbe12570c9a8de246f0e16bc9c80c9fe15a7f3ec3952acb9c9",
+      "byte_identical": true
+    },
+    {
+      "source": "claude-works/tests/cache_alias_owner_probe.c",
+      "target": "code/tests/cache_alias_owner_probe.c",
+      "sha256": "e181ac94826f359a7b4dceb052100cef7d8978be11d4222369bd6b02411e1917",
+      "byte_identical": true
+    },
+    {
+      "source": "claude-works/tests/test_cache_alias_owner.py",
+      "target": "code/tests/test_cache_alias_owner.py",
+      "sha256": "b2a75ce6aa12257d280f40ad761074ebc62c066c8fb92fb1e68988f389173490",
+      "byte_identical": true
+    }
+  ],
+  "normal_consumer_not_yet_hooked": true
+}

@@ -1,0 +1,90 @@
+{
+  "production_and_probe_compile": [
+    {
+      "target": "production",
+      "mode": "debug",
+      "passed": false,
+      "error_type": "CompileError",
+      "diagnostic": "expected an object type or void",
+      "formatted_diagnostic": "D:/projects/2026/dongos/coordination/dongos_works/claude-works/src/mm/exec_alias_owner.dg:37:61: error[E0301]: expected an object type or void\n    pub type FlushCallback = unsafe fn(root: u64, virtual: u64) -> u64;\n                                                                ^"
+    },
+    {
+      "target": "production",
+      "mode": "release",
+      "passed": false,
+      "error_type": "CompileError",
+      "diagnostic": "expected an object type or void",
+      "formatted_diagnostic": "D:/projects/2026/dongos/coordination/dongos_works/claude-works/src/mm/exec_alias_owner.dg:37:61: error[E0301]: expected an object type or void\n    pub type FlushCallback = unsafe fn(root: u64, virtual: u64) -> u64;\n                                                                ^"
+    },
+    {
+      "target": "probe",
+      "mode": "debug",
+      "passed": false,
+      "error_type": "CompileError",
+      "diagnostic": "expected '(', found 'fn'",
+      "formatted_diagnostic": "D:/projects/2026/dongos/coordination/dongos_works/claude-works/tests/exec_alias_owner_probe.dg:51:12: error[E0101]: expected '(', found 'fn'\n    pub export fn test_bind_and_query() void {\n               ^"
+    },
+    {
+      "target": "probe",
+      "mode": "release",
+      "passed": false,
+      "error_type": "CompileError",
+      "diagnostic": "expected '(', found 'fn'",
+      "formatted_diagnostic": "D:/projects/2026/dongos/coordination/dongos_works/claude-works/tests/exec_alias_owner_probe.dg:51:12: error[E0101]: expected '(', found 'fn'\n    pub export fn test_bind_and_query() void {\n               ^"
+    }
+  ],
+  "c_oracle_empty_probes": {
+    "command": [
+      "D:\\ProgramFiles\\Embarcadero\\Dev-Cpp\\TDM-GCC-64\\bin\\gcc.EXE",
+      "-std=c11",
+      "-O2",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "D:\\projects\\2026\\dongos\\coordination\\dongos_works\\claude-works\\tests\\exec_alias_owner_probe.c",
+      "D:\\projects\\2026\\dongos\\code\\build\\reviews\\P2EXEC1\\reverify-b5b0a4b9ba\\empty_probes.c",
+      "-o",
+      "D:\\projects\\2026\\dongos\\code\\build\\reviews\\P2EXEC1\\reverify-b5b0a4b9ba\\empty-probes.exe"
+    ],
+    "build_returncode": 1,
+    "build_stderr": "D:\\projects\\2026\\dongos\\coordination\\dongos_works\\claude-works\\tests\\exec_alias_owner_probe.c: In function 'check_wx_invariant':\nD:\\projects\\2026\\dongos\\coordination\\dongos_works\\claude-works\\tests\\exec_alias_owner_probe.c:128:81: error: unknown conversion type character 'z' in format [-Werror=format=]\n  128 |             fprintf(stderr, \"exec alias check failed: %s: failed to walk alias %zu\\n\",\n      |                                                                                 ^\nD:\\projects\\2026\\dongos\\coordination\\dongos_works\\claude-works\\tests\\exec_alias_owner_probe.c:128:29: error: too many arguments for format [-Werror=format-extra-args]\n  128 |             fprintf(stderr, \"exec alias check failed: %s: failed to walk alias %zu\\n\",\n      |                             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\nD:\\projects\\2026\\dongos\\coordination\\dongos_works\\claude-works\\tests\\exec_alias_owner_probe.c:128:81: error: unknown conversion type character 'z' in format [-Werror=format=]\n  128 |             fprintf(stderr, \"exec alias check failed: %s: failed to walk alias %zu\\n\",\n      |                                                                                 ^\nD:\\projects\\2026\\dongos\\coordination\\dongos_works\\claude-works\\tests\\exec_alias_owner_probe.c:128:29: error: too many arguments for format [-Werror=format-extra-args]\n  128 |             fprintf(stderr, \"exec alias check failed: %s: failed to walk alias %zu\\n\",\n      |                             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\nD:\\projects\\2026\\dongos\\coordination\\dongos_works\\claude-works\\tests\\exec_alias_owner_probe.c:138:66: error: unknown conversion type character 'z' in format [-Werror=format=]\n  138 |             fprintf(stderr, \"exec alias check failed: %s: alias %zu physical mismatch: \"\n      |                                                                  ^\nD:\\projects\\2026\\dongos\\coordination\\dongos_works\\claude-works\\tests\\exec_alias_owner_probe.c:138:29: error: unknown conversion type character 'l' in format [-Werror=format=]\n  138 |             fprintf(stderr, \"exec alias check failed: %s: alias %zu physical mismatch: \"\n      |                             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\nD:\\projects\\2026\\dongos\\coordination\\dongos_works\\claude-works\\tests\\exec_alias_owner_probe.c:139:35: note: format string is defined here\n  139 |                     \"expected 0x%llx, got 0x%llx\\n\",\n      |                                   ^\nD:\\projects\\2026\\dongos\\coordination\\dongos_works\\claude-works\\tests\\exec_alias_owner_probe.c:138:29: error: unknown conversion type character 'l' in format [-Werror=format=]\n  138 |             fprintf(stderr, \"exec alias check failed: %s: alias %zu physical mismatch: \"\n      |                             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\nD:\\projects\\2026\\dongos\\coordination\\dongos_works\\claude-works\\tests\\exec_alias_owner_probe.c:139:47: note: format string is defined here\n  139 |                     \"expected 0x%llx, got 0x%llx\\n\",\n      |                                               ^\nD:\\projects\\2026\\dongos\\coordination\\dongos_works\\claude-works\\tests\\exec_alias_owner_probe.c:138:29: error: too many arguments for format [-Werror=format-extra-args]\n  138 |             fprintf(stderr, \"exec alias check failed: %s: alias %zu physical mismatch: \"\n      |                             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\nD:\\projects\\2026\\dongos\\coordination\\dongos_works\\claude-works\\tests\\exec_alias_owner_probe.c:138:66: error: unknown conversion type character 'z' in format [-Werror=format=]\n  138 |             fprintf(stderr, \"exec alias check failed: %s: alias %zu physical mismatch: \"\n      |                                                                  ^\nD:\\projects\\2026\\dongos\\coordination\\dongos_works\\claude-works\\tests\\exec_alias_owner_probe.c:138:29: error: unknown conversion type character 'l' in format [-Werror=format=]\n  138 |             fprintf(stderr, \"exec alias check failed: %s: alias %zu physical mismatch: \"\n      |                             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\nD:\\projects\\2026\\dongos\\coordination\\dongos_works\\claude-works\\tests\\exec_alias_owner_probe.c:139:35: note: format string is defined here\n  139 |                     \"expected 0x%llx, got 0x%llx\\n\",\n      |                                   ^\nD:\\projects\\2026\\dongos\\coordination\\dongos_works\\claude-works\\tests\\exec_alias_owner_probe.c:138:29: error: unknown conversion type character 'l' in format [-Werror=format=]\n  138 |             fprintf(stderr, \"exec alias check failed: %s: alias %zu physical mismatch: \"\n      |                             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\nD:\\projects\\2026\\dongos\\coordination\\dongos_works\\claude-works\\tests\\exec_alias_owner_probe.c:139:47: note: format string is defined here\n  139 |                     \"expected 0x%llx, got 0x%llx\\n\",\n      |                                               ^\nD:\\projects\\2026\\dongos\\coordination\\dongos_works\\claude-works\\tests\\exec_alias_owner_probe.c:138:29: error: too many arguments for format [-Werror=format-extra-args]\n  138 |             fprintf(stderr, \"exec alias check failed: %s: alias %zu physical mismatch: \"\n      |                             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\nD:\\projects\\2026\\dongos\\coordination\\dongos_works\\claude-works\\tests\\exec_alias_owner_probe.c: In function 'test_wx_transition_verified':\nD:\\projects\\2026\\dongos\\coordination\\dongos_works\\claude-works\\tests\\exec_alias_owner_probe.c:187:84: error: unknown conversion type character 'z' in format [-Werror=format=]\n  187 |             fprintf(stderr, \"exec alias check failed: W^X violated after callback %zu (%s)\\n\",\n      |                                                                                    ^\nD:\\projects\\2026\\dongos\\coordination\\dongos_works\\claude-works\\tests\\exec_alias_owner_probe.c:187:89: error: format '%s' expects argument of type 'char *', but argument 3 has type 'size_t' {aka 'long long unsigned int'} [-Werror=format=]\n  187 |             fprintf(stderr, \"exec alias check failed: W^X violated after callback %zu (%s)\\n\",\n      |                                                                                        ~^\n      |                                                                                         |\n      |                                                                                         char *\n      |                                                                                        %I64d\n  188 |                     i, name);\n      |                     ~                                                                    \n      |                     |\n      |                     size_t {aka long long unsigned int}\nD:\\projects\\2026\\dongos\\coordination\\dongos_works\\claude-works\\tests\\exec_alias_owner_probe.c:187:29: error: too many arguments for format [-Werror=format-extra-args]\n  187 |             fprintf(stderr, \"exec alias check failed: W^X violated after callback %zu (%s)\\n\",\n      |                             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\nD:\\projects\\2026\\dongos\\coordination\\dongos_works\\claude-works\\tests\\exec_alias_owner_probe.c:187:84: error: unknown conversion type character 'z' in format [-Werror=format=]\n  187 |             fprintf(stderr, \"exec alias check failed: W^X violated after callback %zu (%s)\\n\",\n      |                                                                                    ^\nD:\\projects\\2026\\dongos\\coordination\\dongos_works\\claude-works\\tests\\exec_alias_owner_probe.c:187:89: error: format '%s' expects argument of type 'char *', but argument 3 has type 'size_t' {aka 'long long unsigned int'} [-Werror=format=]\n  187 |             fprintf(stderr, \"exec alias check failed: W^X violated after callback %zu (%s)\\n\",\n      |                                                                                        ~^\n      |                                                                                         |\n      |                                                                                         char *\n      |                                                                                        %I64d\n  188 |                     i, name);\n      |                     ~                                                                    \n      |                     |\n      |                     size_t {aka long long unsigned int}\nD:\\projects\\2026\\dongos\\coordination\\dongos_works\\claude-works\\tests\\exec_alias_owner_probe.c:187:29: error: too many arguments for format [-Werror=format-extra-args]\n  187 |             fprintf(stderr, \"exec alias check failed: W^X violated after callback %zu (%s)\\n\",\n      |                             ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\ncc1.exe: all warnings being treated as errors\n"
+  },
+  "source_before": {
+    "claude-works/src/mm/exec_alias_owner.dg": "9117125237cd95f8665b79b5dffd5f1e03d33ae99802957f4705eeba2f4896b1",
+    "claude-works/src/mm/exec_alias_owner.md": "6aab787bd1db826e4afc9eff2f516a0b0ef26612d920a2c332532acba9b891e1",
+    "claude-works/tests/exec_alias_owner_probe.dg": "4786aa9b2caf2c9fbb6a12e018e88bf462a1709b990d4c9ddda6e2ecec1c9b4f",
+    "claude-works/tests/exec_alias_owner_probe.c": "4c043b40e641af67ae0c6deded4a711064a12cee7c4ae0a89cb16f4cfe5ef40d",
+    "claude-works/tests/test_exec_alias_owner.py": "55c2d293ba893945cf925b09a46a3bbf760fda944c70ab9f190e70393995490c",
+    "claude-works/deliveries/P2EXEC1.md": "1f88bb51a4e8b270ca01f52f9dc779f9f6a9f0d4003759170cd088b451fa2b17"
+  },
+  "source_after": {
+    "claude-works/src/mm/exec_alias_owner.dg": "9117125237cd95f8665b79b5dffd5f1e03d33ae99802957f4705eeba2f4896b1",
+    "claude-works/src/mm/exec_alias_owner.md": "6aab787bd1db826e4afc9eff2f516a0b0ef26612d920a2c332532acba9b891e1",
+    "claude-works/tests/exec_alias_owner_probe.dg": "4786aa9b2caf2c9fbb6a12e018e88bf462a1709b990d4c9ddda6e2ecec1c9b4f",
+    "claude-works/tests/exec_alias_owner_probe.c": "4c043b40e641af67ae0c6deded4a711064a12cee7c4ae0a89cb16f4cfe5ef40d",
+    "claude-works/tests/test_exec_alias_owner.py": "55c2d293ba893945cf925b09a46a3bbf760fda944c70ab9f190e70393995490c",
+    "claude-works/deliveries/P2EXEC1.md": "1f88bb51a4e8b270ca01f52f9dc779f9f6a9f0d4003759170cd088b451fa2b17"
+  },
+  "source_unchanged": true,
+  "note": "Read-only review evidence; C-only empty-probe demonstration exposes vacuous oracle, not a successful production build or required Dong mutant.",
+  "c_oracle_empty_probes_with_submitted_flags": {
+    "command": [
+      "D:\\ProgramFiles\\Embarcadero\\Dev-Cpp\\TDM-GCC-64\\bin\\gcc.EXE",
+      "-std=c11",
+      "-O2",
+      "-D__USE_MINGW_ANSI_STDIO=1",
+      "-Wall",
+      "-Wextra",
+      "-Werror",
+      "D:\\projects\\2026\\dongos\\coordination\\dongos_works\\claude-works\\tests\\exec_alias_owner_probe.c",
+      "D:\\projects\\2026\\dongos\\code\\build\\reviews\\P2EXEC1\\reverify-b5b0a4b9ba\\empty_probes.c",
+      "-o",
+      "D:\\projects\\2026\\dongos\\code\\build\\reviews\\P2EXEC1\\reverify-b5b0a4b9ba\\empty-probes.exe"
+    ],
+    "build_returncode": 0,
+    "returncode": 0,
+    "stdout": "Running exec_alias_owner tests...\n  test_bind_and_query...\n  test_two_alias_roundtrip...\n  test_hidden_alias_detection...\n  test_callback_failure...\n  test_seal_prevents_transition...\nAll exec_alias_owner tests passed.\n",
+    "stderr": "",
+    "note": "C harness returns success with five no-op probes and zero aliases/callbacks; not a Dong semantic mutant."
+  }
+}

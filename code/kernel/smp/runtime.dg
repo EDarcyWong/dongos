@@ -1,10 +1,13 @@
-// Real AP bring-up and shared-kernel TLB domain. All page-table construction
-// precedes SIPI. APs remain online with IRQs enabled after the bounded proof;
+// Real AP bring-up and shared-kernel TLB domain. Initial table construction
+// precedes SIPI. The subsequent large-page owner synchronizes all readers.
+// APs remain online with IRQs enabled after the bounded proof;
 // every later BSP invalidation waits for their hardware acknowledgement.
 module smp.runtime;
 import smp.context as context;
 import smp.policy as policy;
 import smp.tlb as tlb;
+import smp.large_memory as large;
+import smp.alias_memory as aliases;
 import boot.service_memory as resources;
 import boot.memory_startup as startup;
 import boot.acpi_startup as acpi;
@@ -233,6 +236,16 @@ pub unsafe fn begin()!void {
     return;
 }
 pub fn report_pointer()*const Report { unsafe { return &INFO; } }
+export("dong_smp_large_begin") fn large_begin()u64 {
+    unsafe {
+        match aliases.prepare(){ok=>{},err(code)=>{return code;},}
+        match large.run(&DOMAIN){ok=>{},err(code)=>{return code;},}
+        match aliases.run(&DOMAIN){ok=>{return 0;},err(code)=>{return code;},}
+    }
+}
+export("dong_shared_large_readers") fn large_readers(virtual:u64,expected:u64)u64 {
+    unsafe { match tlb.broadcast(&DOMAIN,virtual,2,expected) { ok=>{return 0;},err(code)=>{return code;}, } }
+}
 export("smp_invalidate_all") fn invalidate(virtual:u64,scope:u64)u64 {
     unsafe {
         if DOMAIN.ready==0 { return 0; }

@@ -1,0 +1,1319 @@
+// Three real isolated BSP services: shell -> FAT -> VirtIO. Each endpoint
+// keeps a distinct trusted caller/ticket; nested calls do not borrow user IDs.
+module user.services;
+import user.abi as abi;
+import boot.trace as trace;
+import boot.trace_runtime as boot_trace;
+import user.memory as memory;
+import user.compiler_job as compiler_job;
+import user.devices as devices;
+import ipc.handles as handles;
+import ipc.core as ipc;
+import boot.service_memory as resources;
+import exec.bundle as bundle;
+import lib.abi as sys;
+import drivers.virtio_pci as vp;
+import drivers.virtio_blk as blk;
+import arch.x86_64 as arch;
+import user.desktop as desktop;
+import lib.desktop as gui;
+import boot.power_startup as power;
+import irq.platform as platform;
+import user.processes as procs;
+import user.device_host as device_host;
+import lib.device_abi as dev;
+import input.console as console;
+import lib.process_abi as proc;
+import user.window_broker as windows;
+import lib.window_broker_abi as window;
+import sched.user_bridge as smp_bridge;
+import sched.user_domain as smp_domain;
+import sched.multicore as smp_queue;
+import ipc.cap_notify as capnotify;
+import lib.pci_inventory_abi as pci_inventory_abi;
+import user.shared_objects as shared;
+import lib.shared_abi as shared_abi;
+import lib.cap_notify_abi as capabi;
+pub error InvalidCall=0x050b_0001;
+pub error Protocol=0x050b_0002;
+pub error UserFailure=0x050b_0003;
+const COUNT: usize=16;
+var ACTIVE: usize=3;
+var GRAPHICS: bool=false;
+var COMPILER:bool=false;
+const NONE: usize=memory.LIMIT;
+const BOOT_ADDRESS: u64=0x7000_0000;
+pub struct Report {
+    pub version:u64,pub process_count:u64,pub syscalls:u64,pub calls:u64,pub replies:u64,
+    pub errors:u64,pub last_error:u64,pub last_pid:u64,pub last_syscall:u64,pub completed:u64,
+    pub steps:u64,pub shell_root:u64,pub fs_root:u64,pub block_root:u64,pub frames:u64,
+    pub bundle_physical:u64,pub arena_physical:u64,pub start_tsc:u64,pub end_tsc:u64,pub current:u64,
+}
+var INFO: Report=Report { version:1,process_count:0,syscalls:0,calls:0,replies:0,errors:0,last_error:0,
+    last_pid:0,last_syscall:0,completed:0,steps:0,shell_root:0,fs_root:0,block_root:0,frames:0,
+    bundle_physical:0,arena_physical:0,start_tsc:0,end_tsc:0,current:0 };
+const EMPTY_BOOT:sys.Boot=sys.Boot { version:1,process:0,endpoint:0,filesystem:0,block:0,channel:0,
+    channel_address:0,channel_bytes:65536,configuration:0,dma:0,console:0,service_count:3,
+    reserved0:0,reserved1:0,reserved2:0,reserved3:0 };
+struct State { table:handles.Table,reply_pointer:u64,receive_pointer:u64,ticket:u64,waiting:u64,started:u64 }
+const EMPTY_STATE:State=State { table:handles.EMPTY_TABLE,reply_pointer:0,receive_pointer:0,ticket:0,waiting:0,started:0 };
+var STATES:[COUNT]State=[EMPTY_STATE;COUNT];
+var BOOTS:[COUNT]sys.Boot=[EMPTY_BOOT;COUNT];
+var ENDPOINTS:[COUNT]ipc.Endpoint=[ipc.EMPTY_ENDPOINT;COUNT];
+align(64) struct XState { bytes:[1024]u8 }
+var XSTATES:[COUNT]XState=[XState { bytes:[0;1024] };COUNT];
+var KERNEL_XSTATE:XState=XState { bytes:[0;1024] };
+var CURRENT:usize=0;
+var SMP_ENABLED:bool=false;
+// Trusted role mask for the explicit ordinary busy-workload XSAVE bad build.
+// GUI clients may reuse the same physical slots and must never be selected.
+var SMP_TEST_SLOTS:u64=0;
+var BUFFER:[4097]u8=[0;4097];
+pub var CATALOG:*procs.Catalog=null;
+var PRELOADED:[COUNT]bool=[false;COUNT];
+var DEPARTED:[COUNT]u64=[0;COUNT];
+var GUI_DEPARTED:[COUNT]u64=[0;COUNT];
+var USB_DEPARTED:u64=0;
+var CAP_NOTICES:capnotify.Registry=capnotify.EMPTY_REGISTRY;
+var CAP_OFFERS:[COUNT]capnotify.Delivery=[capnotify.EMPTY_DELIVERY;COUNT];
+
+// One trusted request snapshot per process bounds ordinary CALL backpressure.
+// waiting=6 owns no endpoint ticket, capability offer or accepted request.
+struct PendingCall {sequence:u64,endpoint:u64,identity:u64,caller:u64,owner:u64,capability:u64,reply:u64,bytes:[64]u8}
+const EMPTY_PENDING_CALL:PendingCall=PendingCall{sequence:0,endpoint:0,identity:0,caller:0,owner:0,capability:0,reply:0,bytes:[0;64]};
+var PENDING_CALLS:[COUNT]PendingCall=[EMPTY_PENDING_CALL;COUNT];
+var PENDING_CALL_SEQUENCE:u64=0;
+
+var WAIT_AFTER:[COUNT]u64=[0;COUNT];
+var WAIT_POINTER:[COUNT]u64=[0;COUNT];
+var WAIT_DEADLINE:[COUNT]u64=[0;COUNT];
+var FS_RIGHTS:[COUNT]u64=[0;COUNT];
+var IRQ_TOKEN:[COUNT]u64=[0;COUNT];
+var IRQ_AFTER:[COUNT]u64=[0;COUNT];
+var IRQ_POINTER:[COUNT]u64=[0;COUNT];
+var IRQ_DEADLINE:[COUNT]u64=[0;COUNT];
+var CLOCK_HZ:u64=0;
+var EXECUTABLE:*u8=null;
+var EVENT:proc.Event=proc.EMPTY_EVENT;
+var KEYBOARD: *console.Queue=null;
+var KEY_BYTE:u8=0;
+var SNAPSHOT:proc.Snapshot=proc.EMPTY_SNAPSHOT;
+var LAUNCH_FAILED:bool=false;
+const MANAGER_OBJECT:u64=0x500;
+const DEVICE_MANAGER_OBJECT:u64=0x501;
+unsafe extern "sysv64" fn user_enter_kernel()void;
+unsafe extern "sysv64" fn user_validate_frame(frame:*const abi.Frame)u64;
+unsafe extern "sysv64" fn services_pcid_metric(index:u64)u64;
+unsafe extern "sysv64" fn services_smp_pcid_metric(index:u64)u64;
+unsafe extern "sysv64" fn sched_xstate_save(out:*u8)void;
+unsafe extern "sysv64" fn sched_xstate_restore(input:*const u8)void;
+unsafe extern "sysv64" fn services_write_bytes(input:*const u8,bytes:usize)u64;
+unsafe extern "sysv64" fn services_character()u64;
+unsafe extern "sysv64" fn services_i8042_read()u64;
+unsafe extern "sysv64" fn services_i8042_write(port:u64,value:u64)u64;
+unsafe fn process(id:usize)*memory.Process { unsafe { return memory.processes()+id; } }
+pub fn first()*abi.Frame { unsafe { if GRAPHICS{CURRENT=5;return &(*process(5)).frame;}return &(*process(0)).frame; } }
+pub fn report_pointer()*const Report { unsafe { return &INFO; } }
+unsafe fn install_identity(id:usize,cfg:usize,generation:u64,argument:u64)!void{unsafe{
+    if STATES[id].table.ready==0{try handles.init(&STATES[id].table);}
+    BOOTS[id]=EMPTY_BOOT;BOOTs_common(id);
+    ENDPOINTS[id]=ipc.EMPTY_ENDPOINT;
+    try ipc.endpoint_init(&ENDPOINTS[id],(generation-1)*16+id as u64+1,id as u64+1);
+    BOOTS[id].endpoint=try handles.install(&STATES[id].table,handles.ENDPOINT,id as u64+1,handles.WAIT|handles.REPLY);
+    BOOTS[id].channel=try handles.install(&STATES[id].table,handles.SHARED,200+id as u64,handles.READ|handles.WRITE|handles.MAP);
+    if id==0||id==3||(id>=7&&id!=13){
+        BOOTS[id].filesystem=try handles.install(&STATES[id].table,handles.ENDPOINT,2,handles.CALL);
+        FS_RIGHTS[id]=395;if id==0||id==3{FS_RIGHTS[id]=1023;}
+    }
+    if id==0{
+        BOOTS[id].console=try handles.install(&STATES[id].table,handles.CONSOLE,devices.CONSOLE_OBJECT,handles.READ|handles.WRITE);
+        if !COMPILER{BOOTS[id].reserved3=try handles.install(&STATES[id].table,handles.DEVICE,power.POWER_OBJECT,handles.WRITE);}
+        if GRAPHICS{try BOOTs_manager(id);BOOTS[id].reserved1=procs.CONFIGS as u64;}
+    }
+    if id==1{BOOTS[id].block=try handles.install(&STATES[id].table,handles.ENDPOINT,3,handles.CALL);}
+    if id==2&&GRAPHICS{BOOTS[id].block=try handles.install(&STATES[id].table,handles.ENDPOINT,14,handles.CALL);}
+    if id==2||id==4||id==13{
+        BOOTS[id].configuration=try handles.install(&STATES[id].table,handles.CONFIGURATION,devices.CONFIGURATION_OBJECT,handles.READ|handles.WRITE);
+        BOOTS[id].dma=try handles.install(&STATES[id].table,handles.DMA,devices.DMA_OBJECT,handles.READ|handles.WRITE|handles.MAP);
+        BOOTS[id].reserved0=devices.region_base();BOOTs_region(id);
+    }
+    if id==3{
+        BOOTS[id].console=try handles.install(&STATES[id].table,handles.DEVICE,gui.DISPLAY_OBJECT,handles.READ|handles.WRITE|handles.MAP);
+        BOOTS[id].reserved0=gui.DESCRIPTOR;
+        try BOOTs_manager(id);BOOTS[id].reserved1=procs.CONFIGS as u64;
+    }
+    if id==4{
+        BOOTS[id].console=try handles.install(&STATES[id].table,handles.CONSOLE,gui.INPUT_OBJECT,handles.READ|handles.WRITE);
+        BOOTS[id].reserved3=gui.DESCRIPTOR;
+    }
+    if id==5||id==6{
+        let manager=try handles.install(&STATES[id].table,handles.PROCESS_MANAGER,MANAGER_OBJECT,handles.READ|handles.WRITE|handles.WAIT);
+        BOOTS[id].reserved0=manager;BOOTS[id].reserved1=procs.CONFIGS as u64;
+        BOOTS[id].reserved2=generation;BOOTS[id].reserved3=CLOCK_HZ;
+        if id==6{BOOTS[id].configuration=try handles.install(&STATES[id].table,handles.DEVICE_MANAGER,DEVICE_MANAGER_OBJECT,handles.READ|handles.WRITE);}
+    }
+    if id==13{
+        if cfg!=13{return error.Protocol;}
+        BOOTS[id].console=try handles.install(&STATES[id].table,handles.ENDPOINT,5,handles.CALL);
+        BOOTS[id].channel_address=0x5100_0000;
+    }
+    if id>=7&&id!=13{
+        if cfg>=procs.CONFIGS{return error.Protocol;}
+        BOOTS[id].reserved0=argument;
+        BOOTS[id].reserved1=cfg as u64;BOOTS[id].reserved2=generation;BOOTS[id].reserved3=CLOCK_HZ;
+        if cfg>=14&&cfg<=17{
+            BOOTS[id].console=try handles.install(&STATES[id].table,handles.ENDPOINT,4,handles.CALL);
+            try desktop.map_client_font(id);
+            if cfg==14{try BOOTs_manager(id);BOOTS[id].reserved1=procs.CONFIGS as u64;}
+        }
+        if cfg==7&&(*CATALOG).states[10].state==proc.READY{
+            let peer=(*CATALOG).slot[10];
+            BOOTS[id].block=try handles.install(&STATES[id].table,handles.ENDPOINT,peer+1,handles.CALL);
+        }
+    }
+    let boot_page=try memory.anonymous(id,BOOT_ADDRESS);
+    try memory.copy_out(id,BOOT_ADDRESS,slice_from_raw_parts((&BOOTS[id]) as *const u8,sizeof(sys.Boot)));
+    try memory.readonly_data(id,BOOT_ADDRESS);
+    memory.runtime_copy_bytes(&XSTATES[id].bytes[0],&KERNEL_XSTATE.bytes[0],1024);
+    // This one-shot owner publication is the final fallible identity step.
+    // A Boot mapping failure must leave the optional driver attachable.
+    if GRAPHICS{try shared.bind_owner(id,((id as u64+1)<<32)|generation);}
+    if id==13{try device_host.xhci_attach(id,((id as u64+1)<<32)|generation,generation);}
+}return;}
+unsafe fn BOOTs_common(id:usize)void{unsafe{
+    BOOTS[id].process=id as u64+1;BOOTS[id].service_count=3;if GRAPHICS{BOOTS[id].service_count=7;}
+    BOOTS[id].channel_address=0x5000_0000;if id==2{BOOTS[id].channel_address=0x5100_0000;}
+    if id==3{BOOTS[id].channel_address=0x5200_0000;}if id==4{BOOTS[id].channel_address=desktop.INPUT_QUEUE;}
+    if id>=7{BOOTS[id].channel_address=0x5300_0000+(id as u64-7)*0x10000;}
+}return;}
+unsafe fn BOOTs_region(id:usize)void{unsafe{
+    BOOTS[id].reserved1=devices.region_first();BOOTS[id].reserved2=devices.region_last();BOOTS[id].reserved3=CLOCK_HZ;
+}return;}
+unsafe fn BOOTs_manager(id:usize)!void{unsafe{
+    BOOTS[id].configuration=try handles.install(&STATES[id].table,handles.PROCESS_MANAGER,MANAGER_OBJECT,handles.READ|handles.WRITE|handles.WAIT);
+}return;}
+unsafe fn load_base(id:usize,image:[]const u8)!void{unsafe{
+    if GRAPHICS{try memory.load_random(id,image);}
+    else{try memory.load(id,image,0x1000_0000+id as u64*0x0100_0000,memory.STACK_TOP-id as u64*0x0100_0000);}
+}return;}
+pub unsafe fn prepare(kernel_physical:u64)!void{unsafe{
+    if INFO.process_count!=0{return error.Protocol;}
+    if !resources.is_applied(){try resources.apply();}
+    var anchor=resources.Block{physical:0,virtual:0,pages:0};try resources.allocate(1,1,&anchor);
+    try devices.initialize();try memory.initialize(kernel_physical);
+    var clock=platform.EMPTY_REPORT;try platform.describe(&clock);if clock.tsc_hz==0{return error.Protocol;}CLOCK_HZ=clock.tsc_hz;
+    // All service profiles share the existing 16384-frame USER quota within
+    // the loader-held arena. The shell's
+    // current BSS already exceeds the old 512-frame diagnostic table alone.
+    try memory.enable_arena(16384);
+    if GRAPHICS{
+        var model=anchor;try resources.allocate((sizeof(procs.Catalog)+4095)/4096,1,&model);
+        CATALOG=model.virtual as *procs.Catalog;try procs.initialize(CATALOG,CLOCK_HZ);boot_trace.configure((*CATALOG).count,0x3c000);try device_host.initialize();try shared.initialize();
+    }
+    var image=bundle.Contents{pointer:null,length:0};
+    try resources.find("shell",&image);try load_base(0,slice_from_raw_parts(image.pointer,image.length));
+    try resources.find("fs",&image);try load_base(1,slice_from_raw_parts(image.pointer,image.length));
+    try resources.find("block",&image);try load_base(2,slice_from_raw_parts(image.pointer,image.length));
+    if GRAPHICS{
+        try resources.find("compositor",&image);try memory.load_random(3,slice_from_raw_parts(image.pointer,image.length));
+        try resources.find("input",&image);try memory.load_random(4,slice_from_raw_parts(image.pointer,image.length));
+        try desktop.prepare(3,4);
+        let keyboard_page=try memory.anonymous(4,console.ADDRESS);
+        KEYBOARD=(try memory.owned_alias(4,console.ADDRESS,true)) as *console.Queue;
+        try memory.share(4,0,console.ADDRESS,false);
+        try resources.find("init",&image);try memory.load_random(5,slice_from_raw_parts(image.pointer,image.length));
+        try procs.start(CATALOG,5,5,0,&SNAPSHOT);boot_trace.event(trace.SERVICE_START,5,SNAPSHOT.generation,(*CATALOG).configs[5].dependencies);
+    }
+    var i:usize=0;while i<16{
+        let a=try memory.anonymous(0,0x5000_0000+i as u64*4096);try memory.share(0,1,0x5000_0000+i as u64*4096,true);
+        let b=try memory.anonymous(1,0x5100_0000+i as u64*4096);try memory.share(1,2,0x5100_0000+i as u64*4096,true);
+        if GRAPHICS{let c=try memory.anonymous(1,0x5200_0000+i as u64*4096);try memory.share(1,3,0x5200_0000+i as u64*4096,true);}
+        i+=1;
+    }
+    if GRAPHICS{
+        var app:usize=7;while app<COUNT{if app==13{app+=1;continue;}i=0;while i<16{
+            let channel=try memory.anonymous(1,0x5300_0000+(app as u64-7)*0x10000+i as u64*4096);i+=1;
+        }try probe_pages(app);app+=1;}
+    }
+    sched_xstate_save(&KERNEL_XSTATE.bytes[0]);
+    var loaded:usize=3;if GRAPHICS{loaded=6;}
+    i=0;while i<loaded{try install_identity(i,i,1,0);if GRAPHICS&&i<5{PRELOADED[i]=true;STATES[i].waiting=4;}i+=1;}
+    INFO.process_count=loaded as u64;INFO.steps=7;
+    INFO.shell_root=(*process(0)).root;INFO.fs_root=(*process(1)).root;INFO.block_root=(*process(2)).root;
+    INFO.bundle_physical=(*resources.plan_pointer()).bundle.physical;INFO.arena_physical=(*resources.plan_pointer()).arena.physical;
+    INFO.start_tsc=arch.read_tsc();
+}return;}
+unsafe fn authority(token:u64,kind:u64,rights:u64)!u64 {
+    unsafe { var found=handles.EMPTY_VIEW; try handles.lookup(&STATES[CURRENT].table,token,kind,rights,&found); return found.object; }
+}
+unsafe fn endpoint(token:u64,rights:u64)!usize {
+    unsafe { let object=try authority(token,handles.ENDPOINT,rights);
+        if object==0 || object>ACTIVE as u64 { return error.Protocol; } return (object-1) as usize; }
+}
+
+unsafe fn pending_call_enqueue(id:usize,frame:*abi.Frame)!void{unsafe{
+    if CATALOG==null||!SMP_ENABLED||CURRENT>=ACTIVE||id>=ACTIVE||STATES[CURRENT].waiting!=0
+        ||PENDING_CALLS[CURRENT].sequence!=0||PENDING_CALL_SEQUENCE==0xffff_ffff_ffff_ffff{return error.Protocol;}
+    let owner=(ENDPOINTS[id].owner-1) as usize;
+    if owner>=ACTIVE||owner==CURRENT||!managed(CURRENT)||!managed(owner)||ENDPOINTS[id].live!=1{return error.proc.PeerGone;}
+    PENDING_CALL_SEQUENCE+=1;
+    var pending=EMPTY_PENDING_CALL;pending.sequence=PENDING_CALL_SEQUENCE;pending.endpoint=id as u64;
+    pending.identity=ENDPOINTS[id].identity;pending.caller=owner_key(CURRENT);pending.owner=owner_key(owner);
+    pending.capability=(*frame).rdi;pending.reply=(*frame).rdx;
+    var byte:usize=0;while byte<64{pending.bytes[byte]=BUFFER[byte];byte+=1;}
+    PENDING_CALLS[CURRENT]=pending;STATES[CURRENT].ticket=0;STATES[CURRENT].reply_pointer=pending.reply;STATES[CURRENT].waiting=6;
+}return;}
+unsafe fn pending_call_finish(slot:usize,status:u64)void{unsafe{
+    PENDING_CALLS[slot]=EMPTY_PENDING_CALL;STATES[slot].waiting=0;(*process(slot)).frame.rax=status;
+}return;}
+// Only ordinary CALL/RECEIVE/REPLY and revoke paths invoke this function.
+// None is classified as a read-only policy=1 syscall. Queue projection and
+// read-only yield/IRQ polling never admit calls or touch capability lifetime.
+unsafe fn pending_call_pump(id:usize)!void{unsafe{
+    if CATALOG==null||!SMP_ENABLED{return;}
+    if id>=ACTIVE{return error.Protocol;}
+    var pass:usize=0;while pass<COUNT&&ENDPOINTS[id].state==ipc.IDLE{
+        var slot=NONE;var sequence:u64=0xffff_ffff_ffff_ffff;var scan:usize=0;
+        while scan<ACTIVE{let item=PENDING_CALLS[scan];
+            if item.sequence!=0&&item.endpoint==id as u64&&(slot==NONE||item.sequence<sequence){slot=scan;sequence=item.sequence;}
+            scan+=1;
+        }
+        if slot==NONE{return;}
+        let pending=PENDING_CALLS[slot];
+        // A stale record must never alter a reused process's saved Frame.
+        if !managed(slot)||pending.caller!=owner_key(slot){return error.Protocol;}
+        if STATES[slot].waiting!=6||STATES[slot].ticket!=0||STATES[slot].reply_pointer!=pending.reply{return error.Protocol;}
+        let owner=(ENDPOINTS[id].owner-1) as usize;
+        if ENDPOINTS[id].live!=1||ENDPOINTS[id].identity!=pending.identity||owner>=ACTIVE||!managed(owner)
+            ||pending.owner!=owner_key(owner){pending_call_finish(slot,0x0511_0008);pass+=1;continue;}
+        var permit=handles.EMPTY_VIEW;var status:u64=0;
+        match handles.lookup(&STATES[slot].table,pending.capability,handles.ENDPOINT,handles.CALL,&permit){ok=>{},err(e)=>{status=e;},}
+        if status==0&&permit.object!=id as u64+1{status=0x050b_0002;}
+        if status==0{match memory.check_range(slot,pending.reply,64,true){ok=>{},err(e)=>{status=e;},}}
+        if status!=0{pending_call_finish(slot,status);pass+=1;continue;}
+        var ticket:u64=0;match ipc.call(&ENDPOINTS[id],slot as u64+1,pending.bytes[..]){ok(value)=>{ticket=value;},err(e)=>{status=e;},}
+        if status!=0{pending_call_finish(slot,status);pass+=1;continue;}
+        // Only the original core's successful admission publishes a ticket,
+        // consumes endpoint capacity and clears the old capability offer.
+        CAP_OFFERS[id]=capnotify.EMPTY_DELIVERY;
+        PENDING_CALLS[slot]=EMPTY_PENDING_CALL;STATES[slot].ticket=ticket;STATES[slot].waiting=1;INFO.calls+=1;
+        if STATES[owner].waiting==2{try accept(id);}return;
+    }
+}return;}
+unsafe fn pending_calls_departed(id:usize)void{unsafe{
+    var slot:usize=0;while slot<ACTIVE{let pending=PENDING_CALLS[slot];
+        if pending.sequence!=0{
+            if slot==id{PENDING_CALLS[slot]=EMPTY_PENDING_CALL;}
+            else if (pending.owner>>32)==id as u64+1{
+                // Same-incarnation queued callers receive peer loss without
+                // fabricating a reply or assigning an endpoint ticket.
+                if managed(slot)&&pending.caller==owner_key(slot)&&STATES[slot].waiting==6{pending_call_finish(slot,0x0511_0008);}
+                else{PENDING_CALLS[slot]=EMPTY_PENDING_CALL;}
+            }
+        }slot+=1;
+    }
+}return;}
+
+unsafe fn accept(id:usize)!void {
+    unsafe {
+        let owner=(ENDPOINTS[id].owner-1) as usize;
+        var message=ipc.EMPTY_MESSAGE; var token:u64=0;
+        try ipc.accept(&ENDPOINTS[id],owner as u64+1,&message,&token);
+        try memory.copy_out(owner,STATES[owner].receive_pointer,message.bytes[..]);
+        STATES[owner].waiting=0; (*process(owner)).frame.rax=0; (*process(owner)).frame.rdx=token;
+    }
+    return;
+}
+unsafe fn managed(slot:usize)bool{unsafe{
+    if slot>=ACTIVE||(*process(slot)).ready!=1{return false;}
+    return CATALOG==null||procs.current(CATALOG,slot)!=procs.NONE;
+}}
+unsafe fn wake_waiters()!void{unsafe{
+    if CATALOG==null{return;}
+    var id:usize=0;while id<ACTIVE{
+        if STATES[id].waiting==3&&managed(id){
+            var status:u64=0;var found=false;
+            match procs.event(CATALOG,id,WAIT_AFTER[id],&EVENT){ok(value)=>{found=value;},err(e)=>{status=e;},}
+            if !found&&status==0&&WAIT_DEADLINE[id]!=0&&arch.read_tsc()>=WAIT_DEADLINE[id]{status=0x0511_0007;}
+            if found{try memory.copy_out(id,WAIT_POINTER[id],slice_from_raw_parts((&EVENT) as *const u8,sizeof(proc.Event)));}
+            if found||status!=0{STATES[id].waiting=0;(*process(id)).frame.rax=status;}
+        }id+=1;
+    }
+}return;}
+unsafe fn runnable()!usize{unsafe{
+    try wake_waiters();try wake_irqs();var step:usize=1;
+    while step<ACTIVE{let candidate=(CURRENT+step)%ACTIVE;
+        if managed(candidate)&&STATES[candidate].waiting==0{return candidate;}step+=1;
+    }
+    if managed(CURRENT)&&STATES[CURRENT].waiting==0{return CURRENT;}
+    if SMP_ENABLED{return NONE;}
+}return error.Protocol;}
+unsafe fn manager(token:u64,right:u64)!void{unsafe{
+    if CATALOG==null||(try authority(token,handles.PROCESS_MANAGER,right))!=MANAGER_OBJECT
+        ||(CURRENT!=0&&CURRENT!=3&&CURRENT!=5&&CURRENT!=6&&procs.current(CATALOG,CURRENT)!=14){return error.Protocol;}
+}return;}
+unsafe fn close_table(id:usize)!void{unsafe{
+    var i:usize=0;while i<32{let item=STATES[id].table.entries[i];
+        if item.live==1{try capnotify.close(&CAP_NOTICES,&STATES[id].table,(item.generation<<8)|i as u64+1);}i+=1;
+    }
+}return;}
+var CANCELED:[COUNT]u64=[0;COUNT];
+unsafe fn revoke_loaded(id:usize,incarnation:u64)!void{unsafe{
+    cap_departed(id);
+    pending_calls_departed(id);STATES[id].waiting=9;
+    // An unstarted preload has no published incarnation or filesystem
+    // session. Do not fabricate a departure for its future first generation.
+    if incarnation!=0{DEPARTED[id]=incarnation;}FS_RIGHTS[id]=0;
+    try device_host.revoke_owner(((id as u64+1)<<32)|incarnation);
+    var ep:usize=0;while ep<ACTIVE{
+        if ENDPOINTS[ep].live==1{
+            let caller=ENDPOINTS[ep].caller;
+            if ENDPOINTS[ep].owner==id as u64+1&&caller!=0&&caller<=ACTIVE as u64&&caller!=id as u64+1{
+                let other=(caller-1) as usize;
+                if STATES[other].waiting==1{STATES[other].waiting=0;(*process(other)).frame.rax=0x0511_0008;INFO.replies+=1;}
+            }
+            if ENDPOINTS[ep].caller==id as u64+1&&ENDPOINTS[ep].owner!=id as u64+1{if ENDPOINTS[ep].state==ipc.ACCEPTED{if CANCELED[ep]!=0{return error.Protocol;}CANCELED[ep]=ENDPOINTS[ep].token;}INFO.replies+=1;}
+            try ipc.detach(&ENDPOINTS[ep],id as u64+1);
+        }ep+=1;
+    }
+    ep=0;while ep<ACTIVE{try pending_call_pump(ep);ep+=1;}
+    var actor:usize=0;while actor<ACTIVE{
+        var h:usize=0;while h<32{let item=STATES[actor].table.entries[h];
+            if item.live==1&&item.kind==handles.ENDPOINT&&item.object==id as u64+1{
+                try handles.close(&STATES[actor].table,(item.generation<<8)|(h as u64+1));
+            }h+=1;
+        }actor+=1;
+    }
+    try close_table(id);WAIT_POINTER[id]=0;WAIT_AFTER[id]=0;WAIT_DEADLINE[id]=0;PRELOADED[id]=false;
+    // A faulting driver never causes a live DMA lease to be reused. The
+    // trusted device broker isolates it; its address space stays quarantined.
+    if id==4{KEYBOARD=null;}
+    if memory.dma_pinned(id){try devices.quarantine(id);return;}
+    try memory.destroy(id);
+    if GRAPHICS{var owner=((id as u64+1)<<32)|incarnation;if incarnation==0{owner=shared.bound_owner(id);}try shared.owner_gone(id,owner);}
+}return;}
+unsafe fn retire_one(id:usize,state:u64,status:u64)!void{unsafe{
+    if CATALOG==null||id>=ACTIVE||!managed(id){return error.proc.Stale;}
+    // Retire logical authority before any memory can be reclaimed.
+    let incarnation=(*CATALOG).incarnation[id];
+    let cfg=procs.current(CATALOG,id);
+    // Quiesce/detach all running and RETURNING references before aliases/root.
+    var dma_smp:u64=0;let dma_owner=((id as u64+1)<<32)|incarnation;
+    let dma_root=(*process(id)).root;let dma_memory_generation=memory.generation(id);
+    if SMP_ENABLED{let stopped=smp_bridge.retire(id);match stopped{
+        ok=>{dma_smp=1;device_host.dma_stop(id,cfg,dma_owner,incarnation,dma_root,dma_memory_generation,1,0);},
+        err(e)=>{device_host.dma_stop(id,cfg,dma_owner,incarnation,dma_root,dma_memory_generation,2,e);return stopped;},
+    }SMP_TEST_SLOTS&=~(1<<id as u64);}
+    // Withdraw every shared alias while both roots still exist. A failed
+    // withdrawal permanently stops scheduling before either root is freed.
+    if id==3&&windows.EPOCH!=0{try windows.compositor_gone(windows.EPOCH);}
+    else if cfg>=14&&cfg<=17{
+        try windows.owner_gone(((id as u64+1)<<32)|incarnation);
+        if incarnation>GUI_DEPARTED[id]{GUI_DEPARTED[id]=incarnation;}
+    }
+    let terminated=procs.terminate(CATALOG,id,state,status);match terminated{
+        ok=>{device_host.dma_stop(id,cfg,dma_owner,incarnation,dma_root,dma_memory_generation,dma_smp,0);},
+        err(e)=>{device_host.dma_stop(id,cfg,dma_owner,incarnation,dma_root,dma_memory_generation,dma_smp,e);return terminated;},
+    }
+    boot_trace.event(trace.SERVICE_STOP,cfg,(*CATALOG).states[cfg as usize].generation,0);
+    if id==13&&cfg==13&&incarnation>USB_DEPARTED{USB_DEPARTED=incarnation;}
+    try revoke_loaded(id,incarnation);
+}return;}
+unsafe fn discard_preloaded(id:usize)!void{unsafe{
+    if CATALOG==null||id>=5||!PRELOADED[id]||(*process(id)).ready!=1
+        ||procs.current(CATALOG,id)!=procs.NONE||(*CATALOG).incarnation[id]!=0{return error.Protocol;}
+    // Its immutable Boot capabilities and shared channels describe a provider
+    // which has departed. Rebuild through the normal transactional launch;
+    // this root has never run, so no catalog terminal event is published.
+    try revoke_loaded(id,0);
+}return;}
+unsafe fn retire(id:usize,state:u64,status:u64)!void{unsafe{
+    let origin=procs.current(CATALOG,id);if origin>=procs.CONFIGS as u64{return error.proc.Stale;}
+    try retire_one(id,state,status);
+    // Bounded kernel cascade also covers ordinary processes started manually.
+    // No dependent may retain capabilities after its provider has departed.
+    var affected:u64=1<<origin;
+    var pass:usize=0;while pass<COUNT{var changed=false;var slot:usize=0;
+        while slot<ACTIVE{
+        if PRELOADED[slot]&&slot<(*CATALOG).count&&((*CATALOG).configs[slot].dependencies&affected)!=0{
+            try discard_preloaded(slot);affected|=1<<slot as u64;changed=true;
+        }else if managed(slot){let cfg=procs.current(CATALOG,slot);
+            match procs.dependencies(CATALOG,cfg as usize){ok=>{},err(e)=>{
+                try retire_one(slot,proc.KILLED,e);affected|=1<<cfg;changed=true;
+            },}
+        }slot+=1;}if !changed{return;}pass+=1;
+    }
+}return;}
+unsafe fn image_name(id:usize)[]const u8{
+    if id==0{return "shell";}if id==1{return "fs";}if id==2{return "block";}
+    if id==3{return "compositor";}if id==4{return "input";}if id==5{return "init";}
+    if id==6{return "devmgr";}if id==7{return "echo";}if id==8{return "fault";}
+    if id==9{return "waiter";}if id==10{return "ipc-peer";}if id==11{return "fs-reader";}
+    if id==13{return "xhci";}if id==14{return "terminal";}if id==15{return "files";}
+    if id==16{return "editor";}if id==17{return "settings";}
+    return "";
+}
+unsafe fn probe_pages(id:usize)!void{unsafe{
+    let address=0x5320_0000+(id as u64-7)*8192;
+    let a=try memory.anonymous(1,address);let b=try memory.anonymous(1,address+4096);
+}return;}
+unsafe fn channels(id:usize,generation:u64,argument:u64)!void{unsafe{
+    var i:usize=0;
+    if id==13{
+        // The fixed block root owns these channel pages across FS restart.
+        // A failed xHCI stage can discard aliases without freeing that owner.
+        while i<16{try memory.share(2,13,0x5100_0000+i as u64*4096,true);i+=1;}return;
+    }
+    if id>=7{
+        while i<16{try memory.share(1,id,0x5300_0000+(id as u64-7)*0x10000+i as u64*4096,true);i+=1;}
+        let address=0x5320_0000+(id as u64-7)*8192+((generation-1)&1)*4096;
+        let word=(try memory.owned_alias(1,address,true)) as *u64;
+        *word=argument;
+        try memory.share_at(1,id,address,0x4400_0000,false);return;
+    }
+    if id==1{
+        while i<16{
+            let a=try memory.anonymous(1,0x5000_0000+i as u64*4096);
+            try memory.share(2,1,0x5100_0000+i as u64*4096,true);
+            let c=try memory.anonymous(1,0x5200_0000+i as u64*4096);i+=1;
+        }
+        var app:usize=7;while app<COUNT{if app==13{app+=1;continue;}i=0;while i<16{
+            let a=try memory.anonymous(1,0x5300_0000+(app as u64-7)*0x10000+i as u64*4096);i+=1;
+        }try probe_pages(app);app+=1;}return;
+    }
+    if id==0{while i<16{try memory.share(1,0,0x5000_0000+i as u64*4096,true);i+=1;}
+        if KEYBOARD!=null{try memory.share(4,0,console.ADDRESS,false);}return;}
+    if id==3{while i<16{try memory.share(1,3,0x5200_0000+i as u64*4096,true);i+=1;}
+        try desktop.recreate(3);return;}
+    if id==5||id==6{return;}
+    return error.Protocol;
+}}
+unsafe fn abort_launch(slot:usize)!void{unsafe{
+    let closed=close_table(slot);match closed{ok=>{},err(e)=>{LAUNCH_FAILED=true;return closed;},}
+    ENDPOINTS[slot]=ipc.EMPTY_ENDPOINT;FS_RIGHTS[slot]=0;CANCELED[slot]=0;
+    STATES[slot].waiting=9;STATES[slot].started=0;
+    let aborted=memory.stage_abort(slot);match aborted{ok=>{},err(e)=>{LAUNCH_FAILED=true;return aborted;},}
+}return;}
+unsafe fn launch(id:usize,expected:u64,argument:u64,image:[]const u8)!void{unsafe{
+    if CATALOG==null||id>=(*CATALOG).count{return error.proc.Stale;}
+    try procs.allowed(CATALOG,CURRENT,id,true);try procs.dependencies(CATALOG,id);
+    if (*CATALOG).states[id].generation!=expected||(*CATALOG).states[id].process!=0{return error.proc.Stale;}
+    if (*CATALOG).sequence==0xffff_ffff_ffff_ffff||(*CATALOG).states[id].generation==0xffff_ffff_ffff_ffff{return error.Protocol;}
+    var slot=id;if id>=7&&id!=13{slot=7;while slot<COUNT&&(slot==13||(*process(slot)).ready!=0||procs.current(CATALOG,slot)!=procs.NONE){slot+=1;}if slot==COUNT{return error.Protocol;}}
+    if (*CATALOG).incarnation[slot]>=0x0fff_ffff{return error.proc.Exhausted;}
+    let generation=(*CATALOG).incarnation[slot]+1;
+    if !PRELOADED[slot]{
+        if (*process(slot)).ready!=0{return error.Protocol;}
+        var contents=bundle.Contents{pointer:null,length:0};var bytes=image;
+        if bytes.len==0{let name=image_name(id);if name.len==0{return error.Protocol;}try resources.find(name,&contents);bytes=slice_from_raw_parts(contents.pointer,contents.length);}
+        try memory.stage_random(slot,bytes);
+        let mapped=channels(slot,generation,argument);match mapped{ok=>{},err(e)=>{try abort_launch(slot);return mapped;},}
+        let installed=install_identity(slot,id,generation,argument);match installed{ok=>{},err(e)=>{try abort_launch(slot);return installed;},}
+    }
+    if id==3&&windows.EPOCH!=generation{try windows.initialize(generation);}
+    let started=procs.start(CATALOG,id,slot,argument,&SNAPSHOT);match started{ok=>{},err(e)=>{
+        if !PRELOADED[slot]{try abort_launch(slot);}return started;
+    },}
+    if !PRELOADED[slot]{let committed=memory.stage_commit(slot);match committed{ok=>{},err(e)=>{LAUNCH_FAILED=true;return committed;},}}
+    boot_trace.event(trace.SERVICE_START,id as u64,SNAPSHOT.generation,(*CATALOG).configs[id].dependencies);
+    STATES[slot].waiting=0;STATES[slot].started=0;CANCELED[slot]=0;
+    if PRELOADED[slot]{PRELOADED[slot]=false;}
+}return;}
+unsafe fn process_call(frame:*abi.Frame)!usize{unsafe{
+    let code=(*frame).rax;
+    if code==proc.RUNTIME{
+        try manager((*frame).rdi,handles.READ);
+        if (*frame).rdx!=0||(*frame).r10!=0||(*frame).r8!=0||(*frame).r9!=0{return error.Protocol;}
+        try memory.check_range(CURRENT,(*frame).rsi,sizeof(proc.Runtime),true);
+        var out=proc.EMPTY_RUNTIME;out.cr4=runtime_pcid_metric(0);out.pcide=runtime_pcid_metric(3);
+        out.switches=runtime_pcid_metric(1);out.retained=runtime_pcid_metric(2);
+        out.user_root=(*process(CURRENT)).root;out.incarnation=(*CATALOG).incarnation[CURRENT];
+        if out.pcide>1||((out.cr4>>17)&1)!=out.pcide{return error.Protocol;}
+        try memory.copy_out(CURRENT,(*frame).rsi,slice_from_raw_parts((&out) as *const u8,sizeof(proc.Runtime)));
+        (*frame).rax=0;return CURRENT;
+    }
+    if code==proc.RESTART_SERVICE{
+        try manager((*frame).rdi,handles.WRITE);let cfg=(*frame).rsi as usize;
+        if CURRENT!=0||(cfg!=1&&cfg!=3)||(*frame).r10!=0||(*frame).r8!=0||(*frame).r9!=0{return error.Protocol;}
+        if (*CATALOG).states[cfg].generation!=(*frame).rdx||(*CATALOG).states[cfg].process==0{return error.proc.Stale;}
+        if (*CATALOG).states[2].state!=proc.READY||(*CATALOG).states[4].state!=proc.READY{return error.proc.Dependency;}
+        try retire((*CATALOG).slot[cfg] as usize,proc.KILLED,0);
+        if managed(CURRENT){(*frame).rax=0;return CURRENT;}return try runnable();
+    }
+    if code==0x89{
+        if (*frame).rsi!=0||(*frame).rdx!=0||(*frame).r10!=0||(*frame).r8!=0||(*frame).r9!=0{return error.Protocol;}
+        // P5's shell uses the same readiness diagnostic without a desktop
+        // trace/catalog. Accept only that exact mark; no timestamp is supplied.
+        if CATALOG==null{
+            if CURRENT!=0||(*frame).rdi!=1{return error.Protocol;}
+            (*frame).rax=0;return CURRENT;
+        }
+        if !managed(CURRENT){return error.Protocol;}
+        let cfg=procs.current(CATALOG,CURRENT);
+        if (cfg!=0||(*frame).rdi!=1)&&(cfg!=3||((*frame).rdi!=2&&(*frame).rdi!=3)){return error.Protocol;}
+        (*frame).rax=boot_trace.mark(cfg,(*CATALOG).states[cfg as usize].generation,(*frame).rdi);return CURRENT;
+    }
+    if code==0x86{
+        let id=try endpoint((*frame).rdi,handles.WAIT|handles.REPLY);
+        if id!=CURRENT||(*frame).rsi!=0||(*frame).rdx!=0||(*frame).r10!=0||(*frame).r8!=0||(*frame).r9!=0{return error.Protocol;}
+        (*frame).rax=1;if CATALOG!=null{(*frame).rax=(*CATALOG).incarnation[CURRENT];}return CURRENT;
+    }
+    if code==proc.MARK_READY{
+        let id=try endpoint((*frame).rdi,handles.WAIT|handles.REPLY);
+        if id!=CURRENT||(*frame).rdx!=0||(*frame).r10!=0||(*frame).r8!=0||(*frame).r9!=0{return error.Protocol;}
+        if CATALOG!=null{let cfg=procs.current(CATALOG,CURRENT);let was_ready=(*CATALOG).states[cfg as usize].state==proc.READY;try procs.mark_ready(CATALOG,CURRENT,(*frame).rsi);if !was_ready{boot_trace.event(trace.SERVICE_READY,cfg,(*CATALOG).states[cfg as usize].generation,0);}}
+        else{if (*frame).rsi!=1{return error.Protocol;}}
+        (*frame).rax=0;return CURRENT;
+    }
+    if code==proc.CONFIG{
+        try manager((*frame).rdi,handles.READ);let id=(*frame).rsi as usize;
+        try procs.allowed(CATALOG,CURRENT,id,false);
+        try memory.check_range(CURRENT,(*frame).rdx,sizeof(proc.Config),true);
+        if (*frame).r10!=0{try memory.check_range(CURRENT,(*frame).r10,sizeof(proc.Snapshot),true);}
+        if (*frame).r8!=0||(*frame).r9!=0{return error.Protocol;}
+        try memory.copy_out(CURRENT,(*frame).rdx,slice_from_raw_parts((&(*CATALOG).configs[id]) as *const u8,sizeof(proc.Config)));
+        if (*frame).r10!=0{try memory.copy_out(CURRENT,(*frame).r10,slice_from_raw_parts((&(*CATALOG).states[id]) as *const u8,sizeof(proc.Snapshot)));}
+        (*frame).rax=0;return CURRENT;
+    }
+    if code==proc.SPAWN||code==proc.EXEC{
+        try manager((*frame).rdi,handles.WRITE);if (*frame).r9!=0{return error.Protocol;}
+        try memory.check_range(CURRENT,(*frame).r8,sizeof(proc.Snapshot),true);
+        if code==proc.SPAWN{
+            if (*frame).rsi>=procs.CONFIGS as u64||(*frame).rsi==12{return error.proc.Stale;}
+            try launch((*frame).rsi as usize,(*frame).rdx,(*frame).r10,slice_from_raw_parts(null as *const u8,0));
+        }else{
+            let bytes=(*frame).rdx;if bytes==0||bytes>proc.MAX_EXEC_IMAGE as u64{return error.Protocol;}
+            try memory.check_range(CURRENT,(*frame).rsi,bytes as usize,false);
+            if EXECUTABLE==null{var held=resources.Block{physical:0,virtual:0,pages:0};try resources.allocate((proc.MAX_EXEC_IMAGE+4095)/4096,1,&held);EXECUTABLE=held.virtual as *u8;}
+            try memory.copy_in(CURRENT,(*frame).rsi,slice_from_raw_parts(EXECUTABLE,bytes as usize));
+            try launch(12,(*CATALOG).states[12].generation,(*frame).r10,slice_from_raw_parts(EXECUTABLE as *const u8,bytes as usize));
+        }
+        try memory.copy_out(CURRENT,(*frame).r8,slice_from_raw_parts((&SNAPSHOT) as *const u8,sizeof(proc.Snapshot)));
+        (*frame).rax=0;return CURRENT;
+    }
+    if code==proc.WAIT{
+        try manager((*frame).rdi,handles.WAIT);
+        if (*frame).r10>1||(*frame).r9!=0{return error.Protocol;}
+        try memory.check_range(CURRENT,(*frame).rdx,sizeof(proc.Event),true);
+        if try procs.event(CATALOG,CURRENT,(*frame).rsi,&EVENT){
+            try memory.copy_out(CURRENT,(*frame).rdx,slice_from_raw_parts((&EVENT) as *const u8,sizeof(proc.Event)));(*frame).rax=0;return CURRENT;
+        }
+        if (*frame).r10==0{return error.proc.WouldBlock;}
+        if (*frame).r8!=0&&arch.read_tsc()>=(*frame).r8{return error.proc.Timeout;}
+        WAIT_AFTER[CURRENT]=(*frame).rsi;WAIT_POINTER[CURRENT]=(*frame).rdx;WAIT_DEADLINE[CURRENT]=(*frame).r8;
+        STATES[CURRENT].waiting=3;(*frame).rax=0;return try runnable();
+    }
+    if code==proc.KILL{
+        try manager((*frame).rdi,handles.WRITE);
+        if (*frame).r10!=0||(*frame).r8!=0||(*frame).r9!=0{return error.Protocol;}
+        let token=(*frame).rsi;let pid=token&255;
+        if pid==0||pid>COUNT as u64{return error.proc.Stale;}let target=(pid-1) as usize;
+        let cfg=procs.current(CATALOG,target);
+        if cfg>=procs.CONFIGS as u64||(*CATALOG).states[cfg as usize].process!=token{return error.proc.Stale;}
+        try procs.allowed(CATALOG,CURRENT,cfg as usize,true);
+        if target==5||target==CURRENT{return error.Protocol;}
+        try retire(target,proc.KILLED,(*frame).rdx);(*frame).rax=0;return CURRENT;
+    }
+}return error.InvalidCall;}
+unsafe fn owner_key(id:usize)u64{unsafe{return ((id as u64+1)<<32)|(*CATALOG).incarnation[id];}}
+unsafe fn gui_role(id:usize)u64{unsafe{
+    if CATALOG==null||id>=ACTIVE||!managed(id){return 0;}
+    let cfg=procs.current(CATALOG,id);if cfg<14||cfg>17{return 0;}
+    let state=(*CATALOG).states[cfg as usize];let incarnation=(*CATALOG).incarnation[id];
+    if incarnation==0||incarnation>0x0fff_ffff||(*CATALOG).slot[cfg as usize]!=id as u64
+        ||state.process!=((incarnation<<8)|(id as u64+1))
+        ||(state.state!=proc.STARTING&&state.state!=proc.READY){return 0;}
+    return cfg-13;
+}}
+unsafe fn accepted_caller(token:u64,ticket:u64)!usize{unsafe{
+    let ep=try endpoint(token,handles.WAIT|handles.REPLY);
+    if ep!=CURRENT||ENDPOINTS[ep].owner!=CURRENT as u64+1||ENDPOINTS[ep].live!=1
+        ||ENDPOINTS[ep].state!=ipc.ACCEPTED||ticket==0||ENDPOINTS[ep].token!=ticket
+        ||ENDPOINTS[ep].caller==0||ENDPOINTS[ep].caller>ACTIVE as u64{return error.Protocol;}
+    let caller=(ENDPOINTS[ep].caller-1) as usize;
+    if caller==CURRENT||!managed(caller)||STATES[caller].waiting!=1||STATES[caller].ticket!=ticket{return error.Protocol;}
+    return caller;
+}}
+unsafe fn window_server(token:u64)!void{unsafe{
+    if !GRAPHICS||CATALOG==null||CURRENT!=3||!managed(3)||procs.current(CATALOG,3)!=3
+        ||windows.EPOCH==0||windows.EPOCH!=(*CATALOG).incarnation[3]
+        ||(try endpoint(token,handles.WAIT|handles.REPLY))!=3{return error.Protocol;}
+}return;}
+unsafe fn window_call(frame:*abi.Frame)!usize{unsafe{
+    try window_server((*frame).rdi);let code=(*frame).rax;let epoch=windows.EPOCH;
+    if code==window.REVOKE{
+        if (*frame).rsi!=0||(*frame).r10!=0||(*frame).r8!=0||(*frame).r9!=0{return error.Protocol;}
+        try windows.revoke(epoch,(*frame).rdx);(*frame).rax=0;return CURRENT;
+    }
+    if code==window.PEER{
+        if (*frame).r10!=0||(*frame).r8!=0||(*frame).r9!=0{return error.Protocol;}
+        try memory.check_range(CURRENT,(*frame).rdx,sizeof(window.Peer),true);
+        var peer=window.Peer{version:1,owner:0,epoch:epoch,role:0};var departed=COUNT;
+        if (*frame).rsi==0{
+            var i:usize=0;while i<ACTIVE{if GUI_DEPARTED[i]!=0{
+                departed=i;peer.owner=((i as u64+1)<<32)|GUI_DEPARTED[i];break;
+            }i+=1;}
+        }else{
+            let caller=try accepted_caller((*frame).rdi,(*frame).rsi);let role=gui_role(caller);
+            if role==0{return error.Protocol;}peer.owner=owner_key(caller);peer.role=role;
+        }
+        try memory.copy_out(CURRENT,(*frame).rdx,slice_from_raw_parts((&peer) as *const u8,sizeof(window.Peer)));
+        if departed<COUNT{GUI_DEPARTED[departed]=0;}(*frame).rax=0;return CURRENT;
+    }
+    let caller=try accepted_caller((*frame).rdi,(*frame).rsi);
+    if gui_role(caller)==0{return error.Protocol;}
+    if code==window.ALLOCATE{
+        try memory.check_range(CURRENT,(*frame).r9,sizeof(window.Lease),true);
+        var lease=window.EMPTY_LEASE;
+        try windows.allocate(owner_key(caller),epoch,(*frame).rdx,(*frame).r10&0xffff_ffff,(*frame).r10>>32,(*frame).r8,&lease);
+        try memory.copy_out(CURRENT,(*frame).r9,slice_from_raw_parts((&lease) as *const u8,sizeof(window.Lease)));
+        (*frame).rax=0;return CURRENT;
+    }
+    if code==window.FONT{
+        if (*frame).r8!=0||(*frame).r9!=0{return error.Protocol;}
+        try memory.check_range(CURRENT,(*frame).r10,sizeof(window.Font),true);
+        var font=window.EMPTY_FONT;
+        try desktop.client_font(caller,owner_key(caller),epoch,(*frame).rdx,&font);
+        try memory.copy_out(CURRENT,(*frame).r10,slice_from_raw_parts((&font) as *const u8,sizeof(window.Font)));
+        (*frame).rax=0;return CURRENT;
+    }
+}return error.InvalidCall;}
+unsafe fn device_call(frame:*abi.Frame)!usize{unsafe{
+    if CATALOG==null{return error.Protocol;}let code=(*frame).rax;
+    if code==dev.ENUMERATE||code==dev.BIND||code==dev.REVOKE{
+        if CURRENT!=6||(try authority((*frame).rdi,handles.DEVICE_MANAGER,handles.READ|handles.WRITE))!=DEVICE_MANAGER_OBJECT{return error.Protocol;}
+        if (*frame).r8!=0||(*frame).r9!=0{return error.Protocol;}
+        if code==dev.ENUMERATE{
+            if (*frame).rsi>32||(*frame).r10!=0{return error.Protocol;}
+            try memory.check_range(CURRENT,(*frame).rdx,sizeof(dev.Device),true);
+            try device_host.enumerate((*frame).rsi);
+            try memory.copy_out(CURRENT,(*frame).rdx,slice_from_raw_parts((&device_host.VIEW) as *const u8,sizeof(dev.Device)));
+        }else if code==dev.BIND{
+            try memory.check_range(CURRENT,(*frame).r10,sizeof(dev.Binding),true);
+            try device_host.bind((*frame).rsi,(*frame).rdx);
+            try memory.copy_out(CURRENT,(*frame).r10,slice_from_raw_parts((&device_host.BINDING) as *const u8,sizeof(dev.Binding)));
+        }else{
+            if (*frame).r10!=0{return error.Protocol;}
+            let cfg=try device_host.revoke((*frame).rsi,(*frame).rdx);
+            if cfg<procs.CONFIGS as u64&&(*CATALOG).states[cfg as usize].process!=0{
+                let slot=(*CATALOG).slot[cfg as usize];try retire(slot as usize,proc.FAULTED,0x0512_0008);
+            }
+        }
+        (*frame).rax=0;return CURRENT;
+    }
+    if code==dev.PCI_IRQ_BIND{
+        if CURRENT!=2||!managed(CURRENT)||procs.current(CATALOG,CURRENT)!=2
+            ||(try authority((*frame).rdi,handles.CONFIGURATION,handles.READ|handles.WRITE))!=devices.CONFIGURATION_OBJECT
+            ||(*frame).rsi!=(*CATALOG).incarnation[CURRENT]||(*frame).r10!=0||(*frame).r8!=0||(*frame).r9!=0{return error.Protocol;}
+        try memory.check_range(CURRENT,(*frame).rdx,sizeof(dev.Irq),true);
+        try device_host.bind_pci_irq(owner_key(CURRENT),(*frame).rsi);
+        let object=device_host.IRQ.token;var local:u64=0;
+        match handles.install(&STATES[CURRENT].table,handles.INTERRUPT,object,handles.WAIT|handles.SIGNAL){
+            ok(token)=>{local=token;},err(e)=>{try device_host.close_pci_irq(object,owner_key(CURRENT));return error.handles.NoSpace;},
+        }
+        device_host.IRQ.token=local;
+        try memory.copy_out(CURRENT,(*frame).rdx,slice_from_raw_parts((&device_host.IRQ) as *const u8,sizeof(dev.Irq)));
+        (*frame).rax=0;return CURRENT;
+    }
+    if code==dev.IRQ_BIND{
+        if CURRENT!=4||(try authority((*frame).rdi,handles.CONSOLE,handles.READ|handles.WRITE))!=gui.INPUT_OBJECT
+            ||(*frame).rdx!=(*CATALOG).incarnation[CURRENT]||(*frame).r8!=0||(*frame).r9!=0{return error.Protocol;}
+        try memory.check_range(CURRENT,(*frame).r10,sizeof(dev.Irq),true);
+        try device_host.bind_irq(owner_key(CURRENT),(*frame).rdx,(*frame).rsi);
+        let token=try handles.install(&STATES[CURRENT].table,handles.INTERRUPT,device_host.IRQ.token,handles.WAIT|handles.SIGNAL);
+        device_host.IRQ.token=token;
+        try memory.copy_out(CURRENT,(*frame).r10,slice_from_raw_parts((&device_host.IRQ) as *const u8,sizeof(dev.Irq)));
+        (*frame).rax=0;return CURRENT;
+    }
+    if code==dev.IRQ_WAIT{
+        let token=try authority((*frame).rdi,handles.INTERRUPT,handles.WAIT);
+        if (*frame).r10>1||(*frame).r9!=0{return error.Protocol;}
+        try memory.check_range(CURRENT,(*frame).rdx,sizeof(dev.Irq),true);
+        let polled=device_host.poll_irq(token,owner_key(CURRENT),(*frame).rsi);
+        match polled{ok=>{
+            device_host.IRQ.token=(*frame).rdi;
+            try memory.copy_out(CURRENT,(*frame).rdx,slice_from_raw_parts((&device_host.IRQ) as *const u8,sizeof(dev.Irq)));(*frame).rax=0;return CURRENT;
+        },err(e)=>{
+            if e==0x0512_0001{return error.dev.Invalid;}
+            if e==0x0512_0002{return error.dev.Denied;}
+            if e==0x0512_0003{return error.dev.Busy;}
+            if e==0x0512_0004{return error.dev.Stale;}
+            if e!=0x0512_0006{return error.Protocol;}
+        },}
+        if (*frame).r10==0{return error.dev.WouldBlock;}
+        if (*frame).r8!=0&&arch.read_tsc()>=(*frame).r8{return error.dev.Timeout;}
+        IRQ_TOKEN[CURRENT]=(*frame).rdi;IRQ_AFTER[CURRENT]=(*frame).rsi;IRQ_POINTER[CURRENT]=(*frame).rdx;IRQ_DEADLINE[CURRENT]=(*frame).r8;
+        STATES[CURRENT].waiting=5;(*frame).rax=0;return try runnable();
+    }
+    if code==dev.IRQ_ACK{
+        let token=try authority((*frame).rdi,handles.INTERRUPT,handles.SIGNAL);
+        if (*frame).rdx!=0||(*frame).r10!=0||(*frame).r8!=0||(*frame).r9!=0{return error.Protocol;}
+        try device_host.ack_irq(token,owner_key(CURRENT),(*frame).rsi);(*frame).rax=0;return CURRENT;
+    }
+}return error.InvalidCall;}
+unsafe fn wake_irqs()!void{unsafe{
+    if CATALOG==null{return;}
+    var id:usize=0;while id<ACTIVE{
+        if STATES[id].waiting==5&&managed(id){
+            var view=handles.EMPTY_VIEW;var status:u64=0;
+            let permit=handles.lookup(&STATES[id].table,IRQ_TOKEN[id],handles.INTERRUPT,handles.WAIT,&view);
+            match permit{ok=>{},err(e)=>{status=e;},}
+            if status==0{let polled=device_host.poll_irq(view.object,owner_key(id),IRQ_AFTER[id]);
+                match polled{ok=>{
+                    device_host.IRQ.token=IRQ_TOKEN[id];
+                    try memory.copy_out(id,IRQ_POINTER[id],slice_from_raw_parts((&device_host.IRQ) as *const u8,sizeof(dev.Irq)));
+                    STATES[id].waiting=0;(*process(id)).frame.rax=0;
+                },err(e)=>{if e!=0x0512_0006{status=e;}},}
+            }
+            if status==0&&STATES[id].waiting==5&&IRQ_DEADLINE[id]!=0&&arch.read_tsc()>=IRQ_DEADLINE[id]{status=0x0512_0007;}
+            if status!=0{STATES[id].waiting=0;(*process(id)).frame.rax=status;}
+        }id+=1;
+    }
+}return;}
+unsafe fn cap_source(actor:usize,offer:*const capabi.Offer)!void{unsafe{
+    var value=handles.EMPTY_VIEW;try capnotify.validate(&CAP_NOTICES,&STATES[actor].table,offer,&value);
+    if value.kind==handles.ENDPOINT{
+        if value.object==0||value.object>ACTIVE as u64{return error.Protocol;}
+        let peer=(value.object-1) as usize;
+        if !managed(peer)||ENDPOINTS[peer].live!=1||ENDPOINTS[peer].owner!=value.object{return error.proc.PeerGone;}
+    }
+}return;}
+unsafe fn cap_departed(id:usize)void{unsafe{
+    var ep:usize=0;while ep<ACTIVE{
+        let item=CAP_OFFERS[ep];
+        if item.live==1&&((item.caller>>32)==id as u64+1||(item.receiver>>32)==id as u64+1){CAP_OFFERS[ep]=capnotify.EMPTY_DELIVERY;}
+        ep+=1;
+    }
+}return;}
+unsafe fn capability_call(frame:*abi.Frame)!usize{unsafe{
+    if CATALOG==null||!managed(CURRENT){return error.Protocol;}
+    let code=(*frame).rax;
+    if code==capabi.CREATE{
+        if (*frame).rdx!=0||(*frame).r10!=0||(*frame).r8!=0||(*frame).r9!=0{return error.Protocol;}
+        try memory.check_range(CURRENT,(*frame).rdi,8,true);
+        let token=try capnotify.create(&CAP_NOTICES,&STATES[CURRENT].table,(*frame).rsi);
+        try memory.copy_out(CURRENT,(*frame).rdi,slice_from_raw_parts((&token) as *const u8,8));
+        (*frame).rax=0;return CURRENT;
+    }
+    if code==capabi.SIGNAL{
+        if (*frame).rdx!=0||(*frame).r10!=0||(*frame).r8!=0||(*frame).r9!=0{return error.Protocol;}
+        try capnotify.signal(&CAP_NOTICES,&STATES[CURRENT].table,(*frame).rdi,(*frame).rsi);
+        (*frame).rax=0;return CURRENT;
+    }
+    if code==capabi.TAKE{
+        if (*frame).r10!=0||(*frame).r8!=0||(*frame).r9!=0{return error.Protocol;}
+        try memory.check_range(CURRENT,(*frame).rdx,8,true);var bits:u64=0;
+        try capnotify.take(&CAP_NOTICES,&STATES[CURRENT].table,(*frame).rdi,(*frame).rsi,&bits);
+        try memory.copy_out(CURRENT,(*frame).rdx,slice_from_raw_parts((&bits) as *const u8,8));
+        (*frame).rax=0;return CURRENT;
+    }
+    if code==capabi.EXPORT_ENDPOINT{
+        if (*frame).r10!=0||(*frame).r8!=0||(*frame).r9!=0{return error.Protocol;}
+        let id=try endpoint((*frame).rdi,handles.WAIT|handles.REPLY);
+        if id!=CURRENT||ENDPOINTS[id].owner!=CURRENT as u64+1||ENDPOINTS[id].live!=1
+            ||((*frame).rdx&handles.CALL)==0||((*frame).rdx&~(handles.CALL|handles.TRANSFER))!=0{return error.Protocol;}
+        try memory.check_range(CURRENT,(*frame).rsi,8,true);
+        let token=try handles.install(&STATES[CURRENT].table,handles.ENDPOINT,CURRENT as u64+1,(*frame).rdx);
+        try memory.copy_out(CURRENT,(*frame).rsi,slice_from_raw_parts((&token) as *const u8,8));
+        (*frame).rax=0;return CURRENT;
+    }
+    if code==capabi.CALL_CAP{
+        if (*frame).r8!=0||(*frame).r9!=0{return error.Protocol;}
+        let id=try endpoint((*frame).rdi,handles.CALL);let owner=(ENDPOINTS[id].owner-1) as usize;
+        if owner==CURRENT||owner>=ACTIVE{return error.Protocol;}
+        if !managed(owner)||ENDPOINTS[id].live!=1{return error.proc.PeerGone;}
+        try memory.check_range(CURRENT,(*frame).rdx,64,true);
+        var offer=capabi.EMPTY_OFFER;
+        try memory.copy_in(CURRENT,(*frame).r10,slice_from_raw_parts((&offer) as *u8,sizeof(capabi.Offer)));
+        try cap_source(CURRENT,&offer);
+        try memory.copy_in(CURRENT,(*frame).rsi,BUFFER[..64]);
+        let ticket=try ipc.call(&ENDPOINTS[id],CURRENT as u64+1,BUFFER[..64]);
+        CAP_OFFERS[id]=capnotify.Delivery{live:1,caller:owner_key(CURRENT),receiver:owner_key(owner),ticket:ticket,offer:offer};
+        STATES[CURRENT].ticket=ticket;STATES[CURRENT].reply_pointer=(*frame).rdx;STATES[CURRENT].waiting=1;
+        INFO.calls+=1;if STATES[owner].waiting==2{try accept(id);}
+        if STATES[owner].waiting==0{return owner;}return try runnable();
+    }
+    if code==capabi.CLAIM{
+        if (*frame).r10!=0||(*frame).r8!=0||(*frame).r9!=0{return error.Protocol;}
+        let caller=try accepted_caller((*frame).rdi,(*frame).rsi);
+        let id=try endpoint((*frame).rdi,handles.WAIT|handles.REPLY);let pending=CAP_OFFERS[id];
+        if pending.live!=1||pending.ticket!=(*frame).rsi||pending.caller!=owner_key(caller)
+            ||pending.receiver!=owner_key(CURRENT){return error.Protocol;}
+        try memory.check_range(CURRENT,(*frame).rdx,sizeof(capabi.Received),true);
+        try cap_source(caller,&pending.offer);var received=capabi.EMPTY_RECEIVED;
+        try capnotify.deliver(&CAP_NOTICES,&STATES[caller].table,&STATES[CURRENT].table,&pending.offer,&received);
+        try memory.copy_out(CURRENT,(*frame).rdx,slice_from_raw_parts((&received) as *const u8,sizeof(capabi.Received)));
+        CAP_OFFERS[id]=capnotify.EMPTY_DELIVERY;(*frame).rax=0;return CURRENT;
+    }
+}return error.InvalidCall;}
+unsafe fn perform(frame:*abi.Frame)!usize {
+    unsafe {
+        let code=(*frame).rax; INFO.last_syscall=code; INFO.last_pid=CURRENT as u64+1;
+        if COMPILER&&CURRENT==compiler_job.SLOT{
+            if code!=0xff||!compiler_job.RUNNING{return error.Protocol;}
+            let finished=compiler_job.finish((*frame).rdi);match finished{ok=>{},err(e)=>{LAUNCH_FAILED=true;return error.Protocol;},}
+            STATES[0].waiting=0;(*process(0)).frame.rax=0;ACTIVE=3;return 0;
+        }
+        if code==0x8a{
+            if !COMPILER||GRAPHICS||CATALOG!=null||CURRENT!=0||ACTIVE!=3
+                ||(*frame).rsi!=0||(*frame).rdx!=0||(*frame).r10!=0||(*frame).r8!=0||(*frame).r9!=0{return error.Protocol;}
+            let started=compiler_job.start((*frame).rdi);match started{ok=>{},err(e)=>{
+                if compiler_job.FAILED||memory.STAGE_FAILED{LAUNCH_FAILED=true;}return error.Protocol;
+            },}
+            STATES[0].waiting=7;STATES[compiler_job.SLOT]=EMPTY_STATE;ACTIVE=4;return compiler_job.SLOT;
+        }
+        if code>=0x80&&code<=0x89{return try process_call(frame);}
+        if code>=capabi.CREATE&&code<=capabi.EXPORT_ENDPOINT{return try capability_call(frame);}
+        if code>=shared_abi.CREATE&&code<=shared_abi.INFO{return try shared_call(frame);}
+        if code>=0x90&&code<=0x96{return try device_call(frame);}
+        if code==pci_inventory_abi.ENUMERATE{return try pci_inventory_call(frame);}
+        if code>=window.ALLOCATE&&code<=window.PEER{return try window_call(frame);}
+        if code==1 { (*frame).rax=CURRENT as u64+1; return CURRENT; }
+        if code==2 { (*frame).rax=BOOT_ADDRESS; return CURRENT; }
+        if code==3 { (*frame).rax=0; return runnable(); }
+        if code==0x10 {
+            var cap=handles.EMPTY_VIEW;try capnotify.view(&STATES[CURRENT].table,(*frame).rdi,&cap);
+            if cap.kind==handles.INTERRUPT&&device_host.is_pci_irq(cap.object){try device_host.close_pci_irq(cap.object,owner_key(CURRENT));}
+            try capnotify.close(&CAP_NOTICES,&STATES[CURRENT].table,(*frame).rdi); (*frame).rax=0; return CURRENT;
+        }
+        if code==0x11 { (*frame).rax=try capnotify.duplicate(&CAP_NOTICES,&STATES[CURRENT].table,(*frame).rdi,(*frame).rsi); return CURRENT; }
+        if code==0x22 {
+            let id=try endpoint((*frame).rdi,handles.CALL);
+            let owner=(ENDPOINTS[id].owner-1) as usize;
+            if owner==CURRENT { return error.Protocol; }
+            if !managed(owner)||ENDPOINTS[id].live!=1{return error.proc.PeerGone;}
+            try memory.check_range(CURRENT,(*frame).rdx,64,true);
+            try memory.copy_in(CURRENT,(*frame).rsi,BUFFER[..64]);
+            if SMP_ENABLED&&CATALOG!=null{
+                try pending_call_enqueue(id,frame);try pending_call_pump(id);
+                if STATES[CURRENT].waiting==0{return CURRENT;}
+                if STATES[owner].waiting==0{return owner;}return try runnable();
+            }
+            let token=try ipc.call(&ENDPOINTS[id],CURRENT as u64+1,BUFFER[..64]);
+            CAP_OFFERS[id]=capnotify.EMPTY_DELIVERY;
+            STATES[CURRENT].ticket=token; STATES[CURRENT].reply_pointer=(*frame).rdx; STATES[CURRENT].waiting=1;
+            INFO.calls+=1;
+            if STATES[owner].waiting==2 { try accept(id); }
+            if STATES[owner].waiting==0{return owner;}return try runnable();
+        }
+        if code==0x23 {
+            let id=try endpoint((*frame).rdi,handles.WAIT);
+            if ENDPOINTS[id].owner!=CURRENT as u64+1 { return error.Protocol; }
+            try memory.check_range(CURRENT,(*frame).rsi,64,true);
+            CANCELED[id]=0;STATES[CURRENT].receive_pointer=(*frame).rsi;
+            try pending_call_pump(id);
+            if ENDPOINTS[id].state==ipc.PENDING { try accept(id); return CURRENT; }
+            STATES[CURRENT].waiting=2; (*frame).rax=0; return runnable();
+        }
+        if code==0x25{
+            let id=try endpoint((*frame).rdi,handles.WAIT);
+            if id!=CURRENT||ENDPOINTS[id].owner!=CURRENT as u64+1
+                ||(*frame).r10!=0||(*frame).r8!=0||(*frame).r9!=0{return error.Protocol;}
+            try memory.check_range(CURRENT,(*frame).rsi,64,true);
+            try memory.check_range(CURRENT,(*frame).rdx,8,true);
+            if (*frame).rsi<(*frame).rdx+8&&(*frame).rdx<(*frame).rsi+64{return error.Protocol;}
+            if ENDPOINTS[id].state!=ipc.PENDING{return error.proc.WouldBlock;}
+            var message=ipc.EMPTY_MESSAGE;var ticket:u64=0;
+            try ipc.accept(&ENDPOINTS[id],CURRENT as u64+1,&message,&ticket);
+            try memory.copy_out(CURRENT,(*frame).rsi,message.bytes[..]);
+            try memory.copy_out(CURRENT,(*frame).rdx,slice_from_raw_parts((&ticket) as *const u8,8));
+            CANCELED[id]=0;(*frame).rax=0;return CURRENT;
+        }
+        if code==0x24 || code==0x26 {
+            let id=try endpoint((*frame).rdi,handles.REPLY);
+            if code==0x26 { try memory.check_range(CURRENT,(*frame).r10,64,true); }
+            try memory.copy_in(CURRENT,(*frame).rdx,BUFFER[..64]);
+            if CANCELED[id]!=0&&(*frame).rsi==CANCELED[id]{
+                CANCELED[id]=0;if CAP_OFFERS[id].ticket==(*frame).rsi{CAP_OFFERS[id]=capnotify.EMPTY_DELIVERY;}(*frame).rax=0;
+                if code==0x26{
+                    STATES[CURRENT].receive_pointer=(*frame).r10;
+                    try pending_call_pump(id);
+                    if ENDPOINTS[id].state==ipc.PENDING{try accept(id);return CURRENT;}
+                    STATES[CURRENT].waiting=2;return try runnable();
+                }try pending_call_pump(id);return CURRENT;
+            }
+            let caller=(ENDPOINTS[id].caller-1) as usize;
+            if caller>=ACTIVE { return error.Protocol; }
+            try ipc.reply(&ENDPOINTS[id],CURRENT as u64+1,(*frame).rsi,BUFFER[..64]);
+            var message=ipc.EMPTY_MESSAGE;
+            try ipc.take_reply(&ENDPOINTS[id],caller as u64+1,STATES[caller].ticket,&message);
+            try memory.copy_out(caller,STATES[caller].reply_pointer,message.bytes[..]);
+            CAP_OFFERS[id]=capnotify.EMPTY_DELIVERY;
+            STATES[caller].waiting=0; (*process(caller)).frame.rax=0; (*frame).rax=0; INFO.replies+=1;
+            if code==0x26 { STATES[CURRENT].receive_pointer=(*frame).r10; STATES[CURRENT].waiting=2; }
+            try pending_call_pump(id);return caller;
+        }
+        if code==0x2c{
+            let id=try endpoint((*frame).rdi,handles.WAIT|handles.REPLY);
+            if CURRENT!=1||id!=CURRENT||(*frame).rsi!=0||(*frame).rdx!=0||(*frame).r10!=0||(*frame).r8!=0||(*frame).r9!=0{return error.Protocol;}
+            (*frame).rax=0;var pid:usize=0;while pid<ACTIVE{if DEPARTED[pid]!=0{
+                (*frame).rax=((pid as u64+1)<<32)|DEPARTED[pid];DEPARTED[pid]=0;break;
+            }pid+=1;}return CURRENT;
+        }
+        if code==0x2d{
+            if CURRENT!=1||(*frame).rdx!=0||(*frame).r10!=0||(*frame).r8!=0||(*frame).r9!=0{return error.Protocol;}
+            let caller=try accepted_caller((*frame).rdi,(*frame).rsi);let role=gui_role(caller);
+            var scope:u64=0;if role==window.FILES||role==window.EDITOR{scope=1;}
+            if role==window.SETTINGS{scope=2;}
+            (*frame).rax=(scope<<32)|role;return CURRENT;
+        }
+        if code==0x2e{
+            if !GRAPHICS||CATALOG==null||CURRENT!=4||!managed(4)||procs.current(CATALOG,4)!=4
+                ||(*frame).rsi!=0||(*frame).rdx!=0||(*frame).r10!=0||(*frame).r8!=0||(*frame).r9!=0
+                ||(try endpoint((*frame).rdi,handles.WAIT|handles.REPLY))!=4{return error.Protocol;}
+            // Only a trusted Catalog retirement records this epoch. No HID
+            // message or elapsed idle interval can synthesize a departure.
+            var value:u64=0;
+            if USB_DEPARTED!=0{
+                if USB_DEPARTED>0x0fff_ffff{return error.Protocol;}
+                value=(0x5548_4450<<32)|USB_DEPARTED;
+            }(*frame).rax=value;USB_DEPARTED=0;return CURRENT;
+        }
+        if code==0x2f{
+            if !GRAPHICS||CATALOG==null||CURRENT!=4||!managed(4)||procs.current(CATALOG,4)!=4
+                ||(*frame).rsi!=0||(*frame).rdx!=0||(*frame).r10!=0||(*frame).r8!=0||(*frame).r9!=0
+                ||(try endpoint((*frame).rdi,handles.WAIT|handles.REPLY))!=4{return error.Protocol;}
+            var value:u64=0;
+            if managed(13)&&procs.current(CATALOG,13)==13&&(*CATALOG).states[13].state==proc.READY{
+                let incarnation=(*CATALOG).incarnation[13];
+                if incarnation==0||incarnation>0x0fff_ffff{return error.Protocol;}
+                value=(0x5548_5244<<32)|incarnation;
+            }(*frame).rax=value;return CURRENT;
+        }
+        if code==0x29||code==0x2a||code==0x2b {
+            let id=try endpoint((*frame).rdi,handles.WAIT|handles.REPLY);
+            if (*frame).rdx!=0 || (*frame).r10!=0 || (*frame).r8!=0 || (*frame).r9!=0
+                || ENDPOINTS[id].owner!=CURRENT as u64+1 || ENDPOINTS[id].initialized!=1 || ENDPOINTS[id].live!=1
+                || ENDPOINTS[id].state!=ipc.ACCEPTED || ENDPOINTS[id].token!=(*frame).rsi
+                || ENDPOINTS[id].caller==0 || ENDPOINTS[id].caller>ACTIVE as u64
+                || ENDPOINTS[id].caller==ENDPOINTS[id].owner {return error.Protocol;}
+            let caller=(ENDPOINTS[id].caller-1) as usize;(*frame).rax=ENDPOINTS[id].caller;
+            if code==0x2a{var owner_generation:u64=1;var caller_generation:u64=1;
+                if CATALOG!=null{owner_generation=(*CATALOG).incarnation[CURRENT];caller_generation=(*CATALOG).incarnation[caller];}
+                (*frame).rax=(owner_generation<<32)|caller_generation;
+            }
+            if code==0x2b{(*frame).rax=FS_RIGHTS[caller];}
+            return CURRENT;
+        }
+        if code==0x60 {
+            if (try authority((*frame).rdi,handles.CONFIGURATION,handles.READ))!=devices.CONFIGURATION_OBJECT || (CURRENT!=2 && (!GRAPHICS || (CURRENT!=4&&CURRENT!=13))) { return error.Protocol; }
+            try memory.check_range(CURRENT,(*frame).rdx,4,true);
+            let value=try devices.configuration_read((*frame).rsi);
+            write_unaligned((&BUFFER[0]) as *u32,value);
+            try memory.copy_out(CURRENT,(*frame).rdx,BUFFER[..4]); (*frame).rax=0; return CURRENT;
+        }
+        if code==0x61 {
+            if (try authority((*frame).rdi,handles.CONFIGURATION,handles.READ|handles.WRITE))!=devices.CONFIGURATION_OBJECT { return error.Protocol; }
+            try memory.check_range(CURRENT,(*frame).rdx,6*sizeof(vp.Bar),true);
+            if GRAPHICS&&CURRENT!=13{try device_host.attach_pci(CURRENT,owner_key(CURRENT));}
+            try devices.grant(CURRENT,&STATES[CURRENT].table,(*frame).rsi);
+            try memory.copy_out(CURRENT,(*frame).rdx,slice_from_raw_parts(devices.granted_bars(CURRENT) as *const u8,6*sizeof(vp.Bar)));
+            (*frame).rax=0; return CURRENT;
+        }
+        if code==0x62 { let object=try authority((*frame).rdi,handles.DEVICE,handles.MAP); (*frame).rax=try devices.mapped(CURRENT,object); return CURRENT; }
+        if code==0x63 {
+            if (try authority((*frame).rdi,handles.DMA,handles.MAP|handles.WRITE))!=devices.DMA_OBJECT { return error.Protocol; }
+            try memory.check_range(CURRENT,(*frame).r10,sizeof(blk.Lease),true);
+            var dma_tracked=false;var dma_owner:u64=0;var dma_root:u64=0;var dma_generation:u64=0;
+            if CATALOG!=null{
+                if !managed(CURRENT)||(*CATALOG).ready!=1||CURRENT>=procs.SLOTS{return error.Protocol;}
+                let dma_configuration=procs.current(CATALOG,CURRENT);let dma_incarnation=(*CATALOG).incarnation[CURRENT];
+                if dma_configuration>=(*CATALOG).count as u64||dma_configuration>=procs.CONFIGS as u64
+                    ||dma_incarnation==0||dma_incarnation>0x0fff_ffff{return error.Protocol;}
+                let dma_state=(*CATALOG).states[dma_configuration as usize];
+                if (*CATALOG).slot[dma_configuration as usize]!=CURRENT as u64||dma_state.configuration!=dma_configuration
+                    ||dma_state.process!=((dma_incarnation<<8)|(CURRENT as u64+1))
+                    ||(dma_state.state!=proc.STARTING&&dma_state.state!=proc.READY){return error.Protocol;}
+                dma_owner=owner_key(CURRENT);dma_root=(*process(CURRENT)).root;dma_generation=memory.generation(CURRENT);
+                dma_tracked=try device_host.dma_begin(CURRENT,dma_configuration,dma_owner,
+                    dma_incarnation,dma_root,dma_generation,(*frame).rsi,(*frame).rdx);
+            }
+            let acquired=devices.dma_acquire(CURRENT,(*frame).rsi,(*frame).rdx);match acquired{
+                ok=>{if dma_tracked{device_host.dma_finish(CURRENT,dma_owner,dma_root,dma_generation,0);}},
+                err(e)=>{if dma_tracked{device_host.dma_finish(CURRENT,dma_owner,dma_root,dma_generation,e);}try device_host.dma_result(acquired);},
+            }
+            try memory.copy_out(CURRENT,(*frame).r10,slice_from_raw_parts(devices.dma_lease(CURRENT) as *const u8,sizeof(blk.Lease)));
+            (*frame).rax=0; return CURRENT;
+        }
+        // DMA close is intentionally not recycled yet. The kernel retains
+        // ownership even if a driver lies about device reset completion.
+        if code==0x64 { return error.devices.Busy; }
+        if code==0x65 {
+            if CURRENT!=2 || (try authority((*frame).rdi,handles.CONFIGURATION,handles.READ|handles.WRITE))!=devices.CONFIGURATION_OBJECT {return error.Protocol;}
+            try devices.ahci_enable(CURRENT,(*frame).rsi);(*frame).rax=0;return CURRENT;
+        }
+        if code==0x66 {
+            if CURRENT!=2 || (*frame).rsi!=0 || (*frame).rdx!=0 || (*frame).r10!=0 || (*frame).r8!=0 || (*frame).r9!=0
+                || (try authority((*frame).rdi,handles.CONFIGURATION,handles.READ|handles.WRITE))!=devices.CONFIGURATION_OBJECT {return error.Protocol;}
+            try devices.nvme_enable(CURRENT);(*frame).rax=0;return CURRENT;
+        }
+        if code==0x67{
+            if !GRAPHICS||CATALOG==null||CURRENT!=13||procs.current(CATALOG,CURRENT)!=13
+                ||(*frame).rsi!=0||(*frame).rdx!=0||(*frame).r10!=0||(*frame).r8!=0||(*frame).r9!=0
+                ||(try authority((*frame).rdi,handles.CONFIGURATION,handles.READ|handles.WRITE))!=devices.CONFIGURATION_OBJECT{return error.Protocol;}
+            try devices.xhci_enable(CURRENT,owner_key(CURRENT),(*CATALOG).incarnation[CURRENT]);
+            (*frame).rax=0;return CURRENT;
+        }
+        if code==0x70 {
+            if (*frame).rsi>4096 { return error.Protocol; }
+            let count=(*frame).rsi as usize;
+            try memory.copy_in(CURRENT,(*frame).rdi,BUFFER[..count]);
+            (*frame).rax=services_write_bytes(&BUFFER[0],count); return CURRENT;
+        }
+        if code==0x71 {
+            if (try authority((*frame).rdi,handles.CONSOLE,handles.READ))!=devices.CONSOLE_OBJECT { return error.Protocol; }
+            (*frame).rax=services_character();
+            if (*frame).rax==256&&KEYBOARD!=null&&CATALOG!=null&&managed(4){
+                match console.pop(KEYBOARD,&KEY_BYTE){ok(found)=>{if found{(*frame).rax=KEY_BYTE as u64;}},err(e)=>{(*frame).rax=e;},}
+            }
+            return CURRENT;
+        }
+        if code==0x73 { (*frame).rax=arch.read_tsc(); return CURRENT; }
+        if code==0x78 {
+            if CURRENT!=0 || INFO.calls!=INFO.replies { return error.Protocol; }
+            if (try authority((*frame).rdi,handles.DEVICE,handles.WRITE))!=power.POWER_OBJECT { return error.Protocol; }
+            let action=(*frame).rsi;
+            try power.validate_request(action);
+            var message="DONGOS_POWER_RESET_REQUEST\r\n";
+            if action==2 { message="DONGOS_POWER_S5_REQUEST\r\n"; }
+            if services_write_bytes(message.ptr,message.len)!=0 { return error.Protocol; }
+            try power.request_q35(action);
+            // request_q35 always returns an error if hardware did not leave.
+            return error.power.ExecutionReturned;
+        }
+        if code==0x74 {
+            if !GRAPHICS || CURRENT!=3 || (try authority((*frame).rdi,handles.DEVICE,handles.WRITE))!=gui.DISPLAY_OBJECT { return error.Protocol; }
+            desktop.presented(arch.read_tsc());(*frame).rax=0;return CURRENT;
+        }
+        if code==0x77 {
+            if !GRAPHICS || CURRENT!=3 || (try authority((*frame).rdi,handles.DEVICE,handles.WRITE))!=gui.DISPLAY_OBJECT { return error.Protocol; }
+            match desktop.select_font((*frame).rsi) {
+                ok(bytes)=>{(*frame).rax=bytes;},
+                err(code)=>{if memory.RESOURCE_FAILED { INFO.last_error=code;INFO.errors+=1;return NONE; }(*frame).rax=code;},
+            }
+            return CURRENT;
+        }
+        if code==0x75 || code==0x76 {
+            if !GRAPHICS || CURRENT!=4 || (try authority((*frame).rdi,handles.CONSOLE,handles.READ|handles.WRITE))!=gui.INPUT_OBJECT { return error.Protocol; }
+            if code==0x75 { (*frame).rax=services_i8042_read();return CURRENT; }
+            if ((*frame).rsi!=0x60 && (*frame).rsi!=0x64) || (*frame).rdx>255 { return error.Protocol; }
+            (*frame).rax=services_i8042_write((*frame).rsi,(*frame).rdx);return CURRENT;
+        }
+        if code==0xff||code==0xfe{
+            if CATALOG!=null{var state=proc.EXITED;if code==0xfe{state=proc.FAULTED;}
+                try retire(CURRENT,state,(*frame).rdi);return try runnable();
+            }
+        }
+        if code==0xff {
+            if CURRENT!=0 || (*frame).rdi!=0 || INFO.calls!=INFO.replies { return error.Protocol; }
+            INFO.completed=1; INFO.steps|=24; INFO.end_tsc=arch.read_tsc(); return NONE;
+        }
+        if code==0xfe { INFO.last_error=(*frame).rdi; return error.UserFailure; }
+    }
+    return error.InvalidCall;
+}
+pub var USER_FAULTS:u64=0;
+pub var USER_IRQS:u64=0;
+export("dong_user_exception_dispatch") fn exception(context:*const u64)*abi.Frame{unsafe{
+    if CATALOG==null||context==null||CURRENT>=ACTIVE||!managed(CURRENT)||(*(context+19)&3)!=3{return null;}
+    user_enter_kernel();sched_xstate_save(&XSTATES[CURRENT].bytes[0]);
+    let frame=&(*process(CURRENT)).frame;
+    memory.runtime_copy_bytes(frame as *u8,(context+1) as *const u8,120);
+    // Preserve DF/RF from this trusted hardware capture: an IRQ can interrupt
+    // a backward REP copy. user_resume_frame uses the dedicated IRET validator.
+    (*frame).rip=*(context+18);(*frame).rflags=*(context+20);(*frame).rsp=*(context+21);
+    (*frame).cr3=(*process(CURRENT)).root;(*frame).fs_base=0;(*frame).gs_base=0;(*frame).reserved=0;
+    let vector=*(context+16);var next=CURRENT;
+    if vector==0x51||vector==0x5c||vector==0x60{
+        let delivered=device_host.interrupt(vector);match delivered{ok(owner)=>{USER_IRQS+=1;},err(e)=>{},}
+        if device_host.PCI_FAILED{return null;}
+        match wake_irqs(){ok=>{},err(e)=>{return null;},}
+    }else{
+        USER_FAULTS+=1;
+        match retire(CURRENT,proc.FAULTED,vector){ok=>{},err(e)=>{return null;},}
+        match runnable(){ok(id)=>{next=id;},err(e)=>{return null;},}
+    }
+    if next>=ACTIVE||!managed(next){return null;}
+    CURRENT=next;INFO.current=next as u64+1;sched_xstate_restore(&XSTATES[next].bytes[0]);return &(*process(next)).frame;
+}}
+export("dong_user_dispatch") fn dispatch(frame:*abi.Frame)*abi.Frame {
+    unsafe {
+        user_enter_kernel();
+        sched_xstate_save(&XSTATES[CURRENT].bytes[0]);
+        (*process(CURRENT)).frame=*frame; STATES[CURRENT].started=1;
+        INFO.syscalls+=1;
+        let saved=&(*process(CURRENT)).frame;
+        var next=CURRENT;
+        var valid=true;
+        if CATALOG!=null&&user_validate_frame(saved)==0{
+            valid=false;USER_FAULTS+=1;
+            match retire(CURRENT,proc.FAULTED,0x0405_0001){ok=>{},err(e)=>{return null;},}
+            match runnable(){ok(id)=>{next=id;},err(e)=>{return null;},}
+        }
+        if valid{match perform(saved) {
+            ok(id)=>{next=id;},
+            err(code)=>{
+                INFO.errors+=1;
+                if LAUNCH_FAILED||memory.STAGE_FAILED||memory.UNSHARE_FAILED||memory.RESOURCE_FAILED||memory.OBJECT_FAILED||device_host.PCI_FAILED||windows.FAILED{INFO.last_error=code;next=NONE;}
+                else if INFO.last_syscall==0xfe || INFO.last_syscall==0xff {
+                    if INFO.last_error==0 { INFO.last_error=code; } next=NONE;
+                } else { (*saved).rax=code; }
+            },
+        }
+        }
+        // SHARED_POSTCHECK_BEGIN
+        if memory.OBJECT_FAILED{INFO.last_error=0x0410_0004;next=NONE;}
+        if device_host.PCI_FAILED{INFO.last_error=0x050b_0002;next=NONE;}
+        // SHARED_POSTCHECK_END
+        INFO.frames=memory.frame_count() as u64;
+        if CATALOG!=null{INFO.process_count=0;var id:usize=0;while id<ACTIVE{if managed(id){INFO.process_count+=1;}id+=1;}}
+        if next==NONE { sched_xstate_restore(&KERNEL_XSTATE.bytes[0]); return null; }
+        if next>=ACTIVE { INFO.last_error=0x050b_0002; sched_xstate_restore(&KERNEL_XSTATE.bytes[0]); return null; }
+        CURRENT=next; INFO.current=next as u64+1;
+        sched_xstate_restore(&XSTATES[next].bytes[0]);
+        return &(*process(next)).frame;
+    }
+}
+export("dong_desktop_enable") fn enable_desktop()void { unsafe { if INFO.process_count==0 { GRAPHICS=true;ACTIVE=COUNT; } } return; }
+export("dong_compiler_enable") fn enable_compiler()void{unsafe{if INFO.process_count==0&&!GRAPHICS{COMPILER=true;}}return;}
+unsafe fn pci_inventory_call(frame:*abi.Frame)!usize{unsafe{
+ if !GRAPHICS||CATALOG==null||!managed(CURRENT)||(CURRENT!=2&&CURRENT!=4&&CURRENT!=13)
+  ||(*frame).r10!=0||(*frame).r8!=0||(*frame).r9!=0{return error.Protocol;}
+ if (try authority((*frame).rdi,handles.CONFIGURATION,handles.READ))!=devices.CONFIGURATION_OBJECT{return error.Protocol;}
+ try memory.check_range(CURRENT,(*frame).rdx,sizeof(pci_inventory_abi.Entry),true);
+ var entry=pci_inventory_abi.EMPTY;try device_host.read_pci_inventory((*frame).rsi,&entry);
+ try memory.copy_out(CURRENT,(*frame).rdx,slice_from_raw_parts((&entry) as *const u8,sizeof(pci_inventory_abi.Entry)));
+ (*frame).rax=0;return CURRENT;
+}return error.InvalidCall;}
+unsafe fn shared_call(frame:*abi.Frame)!usize{unsafe{
+ if CATALOG==null||!managed(CURRENT)||memory.OBJECT_FAILED
+  ||(*frame).r10!=0||(*frame).r8!=0||(*frame).r9!=0{return error.Protocol;}
+ let code=(*frame).rax;let owner=owner_key(CURRENT);
+ if code==shared_abi.CREATE{
+  try memory.check_range(CURRENT,(*frame).rdx,8,true);
+  let token=try shared.create(&STATES[CURRENT].table,(*frame).rdi,(*frame).rsi);
+  try memory.copy_out(CURRENT,(*frame).rdx,slice_from_raw_parts((&token) as *const u8,8));
+ }else if code==shared_abi.MAP{
+  try memory.check_range(CURRENT,(*frame).rdx,sizeof(shared_abi.Mapping),true);var out=shared_abi.EMPTY_MAPPING;
+  try shared.map(CURRENT,owner,&STATES[CURRENT].table,(*frame).rdi,(*frame).rsi,&out);
+  try memory.copy_out(CURRENT,(*frame).rdx,slice_from_raw_parts((&out) as *const u8,sizeof(shared_abi.Mapping)));
+ }else if code==shared_abi.UNMAP{
+  if (*frame).rsi!=0||(*frame).rdx!=0{return error.Protocol;}try shared.unmap(CURRENT,owner,(*frame).rdi);
+ }else if code==shared_abi.INFO{
+  if (*frame).rdx!=0{return error.Protocol;}try memory.check_range(CURRENT,(*frame).rsi,sizeof(shared_abi.Info),true);
+  var out=shared_abi.EMPTY_INFO;try shared.info(&STATES[CURRENT].table,(*frame).rdi,&out);
+  try memory.copy_out(CURRENT,(*frame).rsi,slice_from_raw_parts((&out) as *const u8,sizeof(shared_abi.Info)));
+ }else{return error.InvalidCall;}
+ (*frame).rax=0;return CURRENT;
+}return error.InvalidCall;}
+// Isolated SMP mode: this module executes side effects only on BSP under BKL.
+// The domain is the sole GPR/xstate authority; old dispatch remains unselected.
+pub unsafe fn enable_smp()!void{unsafe{
+    let b=smp_bridge.pointer();if b==null||(*b).ready!=1||(*b).failed!=0||SMP_ENABLED||CATALOG==null{return error.Protocol;}
+    let d=(*b).domain;if (*d).owner!=0||(*d).lock!=1{return error.Protocol;}
+    CURRENT=NONE;SMP_ENABLED=true;
+}return;}
+unsafe fn runtime_pcid_metric(index:u64)u64{unsafe{
+    if SMP_ENABLED{return services_smp_pcid_metric(index);}return services_pcid_metric(index);
+}}
+export("dong_user_smp_project") fn smp_project()u64{unsafe{
+    if memory.OBJECT_FAILED||device_host.PCI_FAILED{return 0x060b_0011;}
+    let b=smp_bridge.pointer();if b==null||!SMP_ENABLED||(*b).failed!=0{return 0x060b_0011;}
+    let d=(*b).domain;if (*d).owner!=0||(*d).lock!=1||CURRENT!=NONE{return 0x060b_0011;}
+    let waiters=wake_waiters();match waiters{ok=>{},err(e)=>{return e;},}
+    let irqs=wake_irqs();match irqs{ok=>{},err(e)=>{return e;},}
+    var slot:usize=0;while slot<ACTIVE{
+        let p=(*d).processes+slot;
+        if managed(slot){
+            let incarnation=(*CATALOG).incarnation[slot];
+            if (*p).token==0{
+                let cfg=procs.current(CATALOG,slot);var affinity:u64=1;
+                // Hardware services/compositor/init stay BSP. Ordinary apps
+                // may execute concurrently and migrate between eligible CPUs.
+                if cfg>=7&&cfg!=13{affinity=(*d).online;}
+                SMP_TEST_SLOTS&=~(1<<slot as u64);
+                if cfg>=7&&cfg<=11{SMP_TEST_SLOTS|=1<<slot as u64;}
+                var token:u64=0;
+                let added=smp_domain.admit(d,0,slot,incarnation,(*process(slot)).root,
+                    (&(*process(slot)).frame) as u64,(&XSTATES[slot].bytes[0]) as u64,8,affinity,&token);
+                match added{ok=>{},err(e)=>{return e;},}
+                if STATES[slot].waiting!=0{return 0x060b_0011;}
+            }else if (*p).incarnation!=incarnation||(*p).root!=(*process(slot)).root{return 0x060b_0011;}
+            if (*(*d).engine).threads[slot].state==smp_queue.BLOCKED&&STATES[slot].waiting==0{
+                let woken=smp_domain.wake(d,0,slot,incarnation);match woken{ok=>{},err(e)=>{return e;},}
+            }
+        }else if (*p).token!=0{return 0x060b_0011;}
+        slot+=1;
+    }
+    INFO.frames=memory.frame_count() as u64;INFO.process_count=(*(*d).engine).count;return 0;
+}}
+// This hint is calculated only by BSP from the authoritative saved Frame and
+// live Catalog/domain identity. It is never a user-provided skip flag. Unknown,
+// invalid, mutation, fault and ECAM-window replacement retain both barriers.
+export("dong_user_smp_service_policy") fn smp_service_policy(slot:usize,event:u64,pointer:u64)u64{unsafe{
+ if CATALOG==null{return 0;}
+ let b=smp_bridge.pointer();if b==null||!SMP_ENABLED||(*b).failed!=0||slot>=ACTIVE||event!=257||CURRENT!=NONE{return 0;}
+ let d=(*b).domain;let p=(*d).processes+slot;let cpu=(*d).cpus;
+ if (*d).owner!=0||(*d).lock!=1||(*cpu).mode!=smp_domain.LOCKED||(*cpu).slot!=slot as u64
+  ||(*cpu).token!=(*p).token||(*p).token==0||(*p).root!=(*process(slot)).root||(*cpu).incarnation!=(*p).incarnation
+  ||(*p).incarnation!=(*CATALOG).incarnation[slot]||pointer!=(&(*process(slot)).frame) as u64||!managed(slot){return 0;}
+ let frame=pointer as *abi.Frame;if user_validate_frame(frame)!=1{return 0;}
+ if (*frame).rax==3{
+  if (*frame).rdi!=0||(*frame).rsi!=0||(*frame).rdx!=0||(*frame).r10!=0||(*frame).r8!=0||(*frame).r9!=0{return 0;}
+  // runnable() wakes blocked lifecycle/IRQ outputs through owned RAM aliases;
+  // it changes no PTE/capability/lifetime. Queue projection remains BSP+BKL.
+  return 1;
+ }
+ if (*frame).rax==dev.IRQ_WAIT{
+  if (*frame).r10!=dev.NONBLOCK||(*frame).r8!=0||(*frame).r9!=0{return 0;}
+  var irq=handles.EMPTY_VIEW;match handles.lookup(&STATES[slot].table,(*frame).rdi,handles.INTERRUPT,handles.WAIT,&irq){ok=>{},err(e)=>{return 0;},}
+  match memory.check_range(slot,(*frame).rdx,sizeof(dev.Irq),true){ok=>{},err(e)=>{return 0;},}
+  if !device_host.irq_poll_readonly(irq.object,((slot as u64+1)<<32)|(*CATALOG).incarnation[slot],(*frame).rsi){return 0;}
+  return 1;
+ }
+ if (*frame).rax==0x73{
+  if (*frame).rdi!=0||(*frame).rsi!=0||(*frame).rdx!=0||(*frame).r10!=0||(*frame).r8!=0||(*frame).r9!=0{return 0;}return 1;
+ }
+ if (*frame).rax!=0x60||(slot!=2&&(!GRAPHICS||(slot!=4&&slot!=13)))||(*frame).r10!=0||(*frame).r8!=0||(*frame).r9!=0{return 0;}
+ var view=handles.EMPTY_VIEW;match handles.lookup(&STATES[slot].table,(*frame).rdi,handles.CONFIGURATION,handles.READ,&view){ok=>{},err(e)=>{return 0;},}
+ if view.object!=devices.CONFIGURATION_OBJECT{return 0;}
+ match memory.check_range(slot,(*frame).rdx,4,true){ok=>{},err(e)=>{return 0;},}
+ if !devices.configuration_read_stable((*frame).rsi){return 0;}return 1;
+}}
+export("dong_user_smp_service") fn smp_service(slot:usize,event:u64,pointer:u64)u64{unsafe{
+    let b=smp_bridge.pointer();if b==null||!SMP_ENABLED||(*b).failed!=0||slot>=ACTIVE||event==0||CURRENT!=NONE{return 0x060b_0011;}
+    let d=(*b).domain;let p=(*d).processes+slot;let cpu=(*d).cpus;
+    if (*d).owner!=0||(*d).lock!=1||(*cpu).mode!=smp_domain.LOCKED||(*cpu).slot!=slot as u64
+        ||(*cpu).token!=(*p).token||(*p).incarnation!=(*CATALOG).incarnation[slot]||pointer!=(&(*process(slot)).frame) as u64||!managed(slot){return 0x060b_0011;}
+    CURRENT=slot;INFO.current=slot as u64+1;let frame=pointer as *abi.Frame;var failure:u64=0;
+    if event==257{
+        INFO.syscalls+=1;STATES[slot].started=1;
+        if user_validate_frame(frame)==0{
+            USER_FAULTS+=1;let result=retire(slot,proc.FAULTED,0x0405_0001);match result{ok=>{},err(e)=>{failure=e;},}
+        }else{
+            let operation=(*frame).rax;
+            match perform(frame){ok(hint)=>{},err(code)=>{
+                INFO.errors+=1;
+                if LAUNCH_FAILED||memory.STAGE_FAILED||memory.UNSHARE_FAILED||memory.RESOURCE_FAILED||memory.OBJECT_FAILED||device_host.PCI_FAILED||windows.FAILED||operation==0xfe||operation==0xff{failure=code;}
+                else{(*frame).rax=code;}
+            },}
+        }
+    }else if event==258{
+        // A trusted IRQ capture may contain a user-controlled unusable RSP,
+        // flags or other return state. Retire only that process through the
+        // same global detach/flush/reclaim path as a real CPL3 exception.
+        USER_FAULTS+=1;let result=retire(slot,proc.FAULTED,0x0405_0001);match result{ok=>{},err(e)=>{failure=e;},}
+    }else if event<=32{
+        USER_FAULTS+=1;let result=retire(slot,proc.FAULTED,event-1);match result{ok=>{},err(e)=>{failure=e;},}
+    }else{failure=0x060b_0011;}
+    if memory.OBJECT_FAILED{failure=0x0410_0004;}
+    if device_host.PCI_FAILED{failure=0x060b_0011;}
+    CURRENT=NONE;if failure!=0{INFO.last_error=failure;return failure;}return 0;
+}}
+export("dong_user_smp_interrupt") fn smp_interrupt(vector:u64)u64{unsafe{
+    let b=smp_bridge.pointer();if b==null||!SMP_ENABLED||(*b).failed!=0||CURRENT!=NONE{return 0x060b_0011;}
+    let d=(*b).domain;if (*d).owner!=0||(*d).lock!=1||(vector!=0x51&&vector!=0x5c&&vector!=0x60){return 0x060b_0011;}
+    match device_host.interrupt(vector){ok(owner)=>{USER_IRQS+=1;},err(e)=>{},}
+    if device_host.PCI_FAILED{return 0x060b_0011;}
+    match wake_irqs(){ok=>{return 0;},err(e)=>{return e;},}
+}}

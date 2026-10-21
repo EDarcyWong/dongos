@@ -1,0 +1,24 @@
+{
+  "actual_kernel_span": 2129616,
+  "limit": 2097152,
+  "over_by": 32464,
+  "loads": [
+    {
+      "virtual": 18446744071562067968,
+      "filesz": 1256867,
+      "memsz": 1256867
+    },
+    {
+      "virtual": 18446744071563325440,
+      "filesz": 68664,
+      "memsz": 68664
+    },
+    {
+      "virtual": 18446744071563395072,
+      "filesz": 98096,
+      "memsz": 802512
+    }
+  ],
+  "build_failed_closed": true,
+  "no_guest_run": true
+}

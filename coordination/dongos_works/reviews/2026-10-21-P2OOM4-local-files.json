@@ -1,0 +1,27 @@
+{
+  "task": "codex:P2OOM4",
+  "accepted_rev": 8,
+  "actual_source_root": "D:\\projects\\2026\\dongos\\code",
+  "actual_works_root": "D:\\projects\\2026\\dongos\\coordination\\dongos_works",
+  "all_seven_files_physically_present": true,
+  "main_sha256": {
+    "tests/p2_fragmented_fixture.py": "76449adae26e3badab5e8e82f02b873c89d881dee96352cef01ef81a206aff07",
+    "tests/run_p2_fragmented_qemu.py": "ba20248f8997b6b0477d636d1e4f9d14bc4524f9b870a399aa281cb2495be294",
+    "tests/test_p2_fragmented_fixture.py": "420249bb2879f9b703a8636c1c1e4f759b8e3165ba3c46668cfb66107f17b59d",
+    "docs/p2-fragmented-large.md": "9511e81b8435d1845106634e7065f630989ea468be74b26d3f9eeb9b1ab7a24d",
+    "docs/p2-extensions.md": "2d44b2d474fab6945411cbeebdb56687877134e5bac2dd8d1320c2d2c32b66bc",
+    "docs/remaining-plan.md": "b23e07a41c0a5bac0c809b8f9fd53c5a184353f11998bdf1b8ed7e658f0977f5",
+    "codex-works/deliveries/P2OOM4.md": "368e53a88c9d896b16a922fca98803a40ab9765c5ebbfabc1a7e583581d94be5"
+  },
+  "verified_sha256": {
+    "tests/p2_fragmented_fixture.py": "76449adae26e3badab5e8e82f02b873c89d881dee96352cef01ef81a206aff07",
+    "tests/run_p2_fragmented_qemu.py": "ba20248f8997b6b0477d636d1e4f9d14bc4524f9b870a399aa281cb2495be294",
+    "tests/test_p2_fragmented_fixture.py": "420249bb2879f9b703a8636c1c1e4f759b8e3165ba3c46668cfb66107f17b59d",
+    "docs/p2-fragmented-large.md": "9511e81b8435d1845106634e7065f630989ea468be74b26d3f9eeb9b1ab7a24d",
+    "docs/p2-extensions.md": "2d44b2d474fab6945411cbeebdb56687877134e5bac2dd8d1320c2d2c32b66bc",
+    "docs/remaining-plan.md": "b23e07a41c0a5bac0c809b8f9fd53c5a184353f11998bdf1b8ed7e658f0977f5",
+    "codex-works/deliveries/P2OOM4.md": "368e53a88c9d896b16a922fca98803a40ab9765c5ebbfabc1a7e583581d94be5"
+  },
+  "identical": true,
+  "note": "Implementation and test/docs are physically in the main code directory, delivery in mapped works root; no candidate remains to copy. Source integration checked after acceptance, before status integration."
+}

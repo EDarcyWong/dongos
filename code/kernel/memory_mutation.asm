@@ -14,6 +14,8 @@ default rel
 
 global memory_live_flush
 global object_memory_flush
+global large_memory_flush
+global large_memory_data, large_memory_raw, large_memory_pt
 global memory_live_map, memory_live_protect, memory_live_replace, memory_live_unmap
 global memory_mutation_probe
 global memory_live_page_a, memory_live_page_b
@@ -22,6 +24,7 @@ extern memory_read_controls
 extern dong_memory_live_init, dong_memory_live_map, dong_memory_live_protect
 extern dong_memory_live_replace, dong_memory_live_unmap, dong_memory_live_counts
 extern dong_memory_live_used, dong_memory_live_verify
+extern dong_memory_large_run
 extern dong_memory_validate_active, dong_memory_controls_unchanged
 extern kernel_fail
 
@@ -31,6 +34,7 @@ section .text
 ; stay quarantined through a full same-root CR3 reload, then DG reclaims them.
 ; PCIDE=PGE=0, IF=0; only the BSP may have used this root. No global mappings.
 object_memory_flush:
+large_memory_flush:
 memory_live_flush:
     cmp edi, 1
     je .page
@@ -41,6 +45,185 @@ memory_live_flush:
     ret
 .page:
     invlpg [rsi]
+    ret
+
+; Bounded startup-only loops for boot.large_memory. Ownership, actual CR3/
+; controls, publication and invalidation remain in Dong active_paging.
+; These helpers never change a page table or a control register.
+%define LARGE_VA 0xffffa80000000000
+%define LARGE_FIRST 0x1122334400000000
+%define LARGE_LAST 0x8877665500000000
+%define LARGE_BAD 0x020f0001
+
+; write=1 initializes both boundary words on every page; write=0 checks all
+; 1024 words. Ordinary MOVs are the actual volatile memory accesses here.
+large_memory_data:
+    cmp rdi, 1
+    ja .bad
+    mov rsi, LARGE_VA
+    xor edx, edx
+.loop:
+    mov r8, LARGE_FIRST
+    or r8, rdx
+    mov r9, LARGE_LAST
+    or r9, rdx
+    test edi, edi
+    jz .read
+    mov [rsi], r8
+    mov [rsi + 4088], r9
+    jmp .next
+.read:
+    cmp [rsi], r8
+    jne .bad
+    cmp [rsi + 4088], r9
+    jne .bad
+.next:
+    add rsi, 4096
+    inc edx
+    cmp edx, 512
+    jb .loop
+    xor eax, eax
+    ret
+.bad:
+    mov eax, LARGE_BAD
+    ret
+
+; root,pool,pages,physical,kind. Walk only the retained low-4GiB pool.
+; kind0: check the complete split table; kind1: check the 2MiB leaf.
+; Both return the actual nonzero PDE. kind2 requires an empty PML4 slot and
+; returns1. kind3 checks a PT parent/range and returns its raw PDE without
+; requiring contiguous leaves (the deliberate merge-rejection state).
+; A malformed address/parent/leaf or unknown kind returns0.
+large_memory_raw:
+    cmp r8, 3
+    ja .bad
+    test rdx, rdx
+    jz .bad
+    cmp rdx, 128
+    ja .bad
+    shl rdx, 12
+    test rsi, 4095
+    jnz .bad
+    test rsi, rsi
+    jz .bad
+    mov r9, 0x100000000
+    cmp rsi, r9
+    jae .bad
+    lea r10, [rsi + rdx]
+    cmp r10, r9
+    ja .bad
+    test rdi, 4095
+    jnz .bad
+    mov rax, rdi
+    sub rax, rsi
+    cmp rax, rdx
+    jae .bad
+    mov r10, HHDM_BASE
+    add rdi, r10
+    mov rax, [rdi + 336 * 8]
+    cmp r8, 2
+    jne .walk
+    test rax, rax
+    jnz .bad
+    mov eax, 1
+    ret
+.walk:
+%macro LARGE_PARENT 0
+    mov r10, rax
+    mov r11, 0xfff0000000000fdf ; only PA and hardware A may vary
+    and r10, r11
+    cmp r10, 7
+    jne .bad
+    mov r10, 0x000ffffffffff000
+    and rax, r10
+    mov rdi, rax
+    sub rax, rsi
+    cmp rax, rdx
+    jae .bad
+    mov r10, HHDM_BASE
+    add rdi, r10
+%endmacro
+    LARGE_PARENT
+    mov rax, [rdi]             ; PDPT slot0
+    LARGE_PARENT
+    mov rax, [rdi]             ; PD slot0: actual final PDE
+    mov r9, rax
+    cmp r8, 3
+    je .parent_only
+    test r8, r8
+    jz .split
+    and rax, ~0x60
+    mov r10, rcx
+    bts r10, 63
+    or r10, 0x83
+    cmp rax, r10
+    jne .bad
+    mov rax, r9
+    ret
+.parent_only:
+    LARGE_PARENT
+    mov rax, r9
+    ret
+.split:
+    LARGE_PARENT
+    bts rcx, 63
+    or rcx, 3
+    xor r11d, r11d
+.entry:
+    mov rax, [rdi + r11 * 8]
+    and rax, ~0x60
+    cmp rax, rcx
+    jne .bad
+    add rcx, 4096
+    inc r11d
+    cmp r11d, 512
+    jb .entry
+    mov rax, r9
+    ret
+.bad:
+    xor eax, eax
+    ret
+%unmacro LARGE_PARENT 0
+
+; copy=1 snapshots all512 raw entries into the already held/warmed page509.
+; copy=0 compares all512 exactly, then restores that page's boundary words.
+; The caller obtained pt from the checked raw walker and retains the lease.
+large_memory_pt:
+    cmp rdi, 1
+    ja .bad
+    test rsi, 4095
+    jnz .bad
+    mov r10, HHDM_BASE
+    mov rax, rsi
+    sub rax, r10
+    shr rax, 32
+    jnz .bad
+    mov r8, LARGE_VA + 509 * 4096
+    xor ecx, ecx
+.loop:
+    mov rax, [rsi + rcx * 8]
+    test edi, edi
+    jz .compare
+    mov [r8 + rcx * 8], rax
+    jmp .next
+.compare:
+    cmp rax, [r8 + rcx * 8]
+    jne .bad
+.next:
+    inc ecx
+    cmp ecx, 512
+    jb .loop
+    test edi, edi
+    jnz .done
+    mov rax, LARGE_FIRST | 509
+    mov [r8], rax
+    mov rax, LARGE_LAST | 509
+    mov [r8 + 4088], rax
+.done:
+    xor eax, eax
+    ret
+.bad:
+    mov eax, LARGE_BAD
     ret
 
 ; Public SysV wrappers capture ACTUAL controls immediately before each DG
@@ -248,6 +431,11 @@ memory_mutation_probe:
     or qword [r13 + MutationReport.steps], 512
     mov rdi, r13
     call dong_memory_live_verify
+    test rax, rax
+    jnz .return
+    ; Run the buddy-owned large-page lifecycle on this actual private root,
+    ; with hardening active and before any AP/user process can use the root.
+    call dong_memory_large_run
     jmp .return
 .bad:
     mov eax, 0x020b0001

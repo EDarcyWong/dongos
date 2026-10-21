@@ -1,0 +1,77 @@
+{
+  "project": "dongos",
+  "task_id": "codex:P2SMP3",
+  "verified_rev": 4,
+  "verification": {
+    "passed": true,
+    "checks": [
+      {
+        "spec": "module:tests.test_shared_large",
+        "passed": true,
+        "tests": 1,
+        "skips": 0,
+        "returncode": 0,
+        "cancelled": false,
+        "timed_out": false,
+        "process_stopped": true,
+        "execution_exited": true,
+        "elapsed_seconds": 27.968
+      },
+      {
+        "spec": "module:tests.test_p2_shared_large_guest",
+        "passed": true,
+        "tests": 3,
+        "skips": 0,
+        "returncode": 0,
+        "cancelled": false,
+        "timed_out": false,
+        "process_stopped": true,
+        "execution_exited": true,
+        "elapsed_seconds": 1.219
+      },
+      {
+        "spec": "module:tests.test_smp",
+        "passed": true,
+        "tests": 1,
+        "skips": 0,
+        "returncode": 0,
+        "cancelled": false,
+        "timed_out": false,
+        "process_stopped": true,
+        "execution_exited": true,
+        "elapsed_seconds": 3.266
+      }
+    ],
+    "process_stopped": true,
+    "execution_exited": true,
+    "source_stable": true,
+    "fingerprint": {
+      "kernel/mm/shared_paging.dg": "6775f7cee865d4d34fab43350bb1de8f3d8e78c6c5e05a3398ee02c98abfe77c",
+      "kernel/mm/active_paging.dg": "094bafd128aeb51f7e5c75fdfaf50f79e61c834f72b33fff1537b49c8d09a2f8",
+      "kernel/smp/large_memory.dg": "5b2de72f266760de2464641b78b515af332f7dca2d6e4c35a9082d19f8365693",
+      "kernel/smp/large_memory.asm": "56ec0946defb468a807bdb6372686e4b42e1654405263a86d5bf316f83d0b69f",
+      "kernel/smp/runtime.dg": "61846fbb6f57ea8376c13688ae264dd35fa38d18318b8af65dcdfcf38c1a09bb",
+      "kernel/smp_runtime.asm": "5c5f6f7f71e9eb7b2c800d4f7c00bfa1ffdfa65aab73198d3ff250e31c2cb6d9",
+      "tools/build.py": "637f5d23f16eef5bd61cf63b6739dee883b8ddb66367d3274a9001641f8f054c",
+      "tests/shared_large_probe.dg": "8b10e653fefc4cf3bd8c1d853b65cd382077ca2c96daaea438f668e692e59d41",
+      "tests/shared_large_probe.c": "a685ce4be1f4c05ef1c32021a72218beb5a7ce98bda858802c7b48bea5201667",
+      "tests/test_shared_large.py": "811c8f776c87f370c0effc4378a1eda8bad7f2d50fbf5410468892bf2a1fd902",
+      "tests/run_p2_shared_large_qemu.py": "2158f41cf20ccf0bfe8eab48d7e6eb75289ffe7e1767d07982c0cdd5a0cd36fc",
+      "tests/test_p2_shared_large_guest.py": "1975db253139b85f6da635350ff188ccb59d5ebb4181e2113ae065ce1f37e3fe",
+      "tests/run_smp_qemu.py": "e443630ff5aecf813b60d677edd037553e25e1ac1df1d828bbed925581013064",
+      "docs/p2-shared-large.md": "91a7a6dee11782fc36a33c99528773d963a5df9d91ffd637eee3728027afc117",
+      "PLAN.md": "5bb3ae2edf68edc9f414c2b542082d4932133ce9bbdf4d9ccb3a4b1fb156aeaa",
+      "codex-works/deliveries/P2SMP3.md": "5dc0389079839cd57b96061ed2148b7a937cbe1bb30943e2c62e285baafbab59"
+    },
+    "summary": "定向复验通过，等待源码/契约审查",
+    "finished_at": "2026-10-21T14:25:13+00:00",
+    "job": "4213e61d66af439d89c071b85f6c6550"
+  },
+  "source_review": "Coordinator read production wrapper, real hardware barrier, startup caller placement, allocator lifecycle and independent C/raw test contracts. No second AI reviewer claimed. All actual main files integrated before status changes.",
+  "limits": [
+    "one BSP writer/fixed shared kernel root/pre-user scheduling only",
+    "sealed lifetime lease; no arbitrary post-scheduler user-CR3 mutation",
+    "EXEC/WC are separate Claude candidates; no completed consumer claim"
+  ],
+  "no_pr": true
+}

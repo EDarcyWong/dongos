@@ -15,7 +15,3 @@
 {"at":"2026-10-18T15:12:06+00:00","data":{"rev":11,"status":"integrated"},"kind":"integrate","task_id":"cursor:CR16"}
 {"at":"2026-10-19T11:42:09+00:00","data":{"rev":14,"status":"integrated"},"kind":"state_reconciled","task_id":"cursor:CR16"}
 {"at":"2026-10-19T11:42:10+00:00","data":{"rev":15,"status":"integrated"},"kind":"document_changed","task_id":"cursor:CR16"}
-{"at":"2026-10-19T04:21:48+00:00","data":{"rev":1,"status":"todo"},"kind":"imported","task_id":"cursor:CR16"}
-{"at":"2026-10-19T04:43:01+00:00","data":{"rev":12,"status":"integrated"},"kind":"state_restored","task_id":"cursor:CR16"}
-{"at":"2026-10-19T04:44:21+00:00","data":{"rev":13,"status":"integrated"},"kind":"document_changed","task_id":"cursor:CR16"}
-{"at":"2026-10-20T01:32:42+00:00","data":{"rev":16,"status":"integrated"},"kind":"document_changed","task_id":"cursor:CR16"}

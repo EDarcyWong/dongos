@@ -1,0 +1,75 @@
+{
+  "assignment_owner": "codex",
+  "auto_dispatch": false,
+  "auto_verify": false,
+  "candidate": null,
+  "checks": [
+    "discover:codex-works/tests:test_l3_host_portability.py"
+  ],
+  "claim_from_status": "rework",
+  "claim_token": "a70e3b4f383b404a8dd23f0872de25f6",
+  "claimed_at": "2026-10-21T19:15:34+00:00",
+  "claimed_by": "codex-mcp-6fe7be60df984d37",
+  "completed_at": "2026-10-21T19:15:36+00:00",
+  "complexity": "standard",
+  "created_at": "2026-10-21T18:55:04+00:00",
+  "delivery": "codex-works/deliveries/L3HOST13.md",
+  "depends_on": [
+    "deepseek:L3A",
+    "codex:L3REG11"
+  ],
+  "description": "GitHub ci.yml真实全量language测试运行Ubuntu，新增L3A globals/native两桥虽然组装ELF64和COFF，却总把COFF送CC，本机Windows通过但Linux必然链接失败。只修测试桥按真实宿主选择链接/返回对象，仍两格式真实组装、显式SysV，不改已验收生产DG/ABI/语义或skip平台。候选先放codex-works/l3host内，不能在活跃L3冷复验期间修改其读取的主线桥；L3稳定退出后才真实复制主线。Windows正式兼容3项/零skip并保持原Windows分支，独立Linux容器实际完整L3A+兼容13项/零skip、源码与候选前后SHA、确切命令/工具/进程。缺Linux工具直接配置已有隔离测试容器，不把skip算通过。原L3A/L3REG11验收历史保留，本项明确后继修改。源码契约审查+独立正式+真实文件集成后分别accept/integrate。全部本轮任务闭合再提交GitHub main核对关机，仍无PR。",
+  "document": "codex-works/tasks/L3HOST13-board.md",
+  "historical": false,
+  "id": "codex:L3HOST13",
+  "integration_note": "全部7声明文件实际落盘，逐项SHA与accepted正式指纹完全一致；两主目录桥与隔离候选逐字节相同，见reviews/2026-10-22-L3HOST13-main-files.json。Windows正式outer1/inner3零skip和独立Linux实际15tests/0skip/1335源稳定均已验收。原L3A/L3REG11记录保留，本任务为明确后继；零参数旧harness修复REG14后继另验。",
+  "legacy_hash": "992db33803f43479498bad5714fcdaad1fd9e3bb9fc23c82a3606a764e711b3d",
+  "number": "L3HOST13",
+  "owner": "codex",
+  "rev": 9,
+  "review_note": "实际审查7声明路径和差异：两桥仍真实组装ELF64/COFF，仅按宿主选择CC链接对象；POSIX wrapper/observer -no-pie是非PIC种子对象的明确链接策略，独立固定4MiB native mapper保持PIE，目标DG/字节/ABI/oracle未改。Linux首轮真实musl loader do_relocs进入main前SEGV不算语义负控，同对象非PIE实际pipeline0后修复；失败与interrupted原场保留。隔离WSL私有ext4/mount namespace新完整Linux L3A6+native4+兼容3+主线CLI2=15tests/0skip/703.708s，1335源前后字节SHA一致，Python3.12.15/GCC15.2/NASM2.16.03，候选两桥SHA逐项等于本次正式fingerprint，详reviews/2026-10-22-L3HOST13-Linux-pass.json。Windows新正式ff16d33a6bb345e79c8a796eade946ab outer1/0skip/466.032s，实际child内层3/0skip/0errors/0failures；候选和主目录输入稳定，process_stopped/execution_exited/source_stable全部true。首正式61018e16因快照合并根未有project.json导入失败未跑桥，官方返修识别实际lang/dongc根后重跑，未绕过失败。两个测试桥源SHA与实际主目录一致；本机Alpine结果与尚未运行的GitHub Ubuntu整套CI分开，不冒称远端CI已绿；G5完整语言阶段不因此完成。",
+  "status": "integrated",
+  "title": "[发布门禁] 修复L3A测试桥的Linux/Windows宿主对象选择",
+  "updated_at": "2026-10-21T19:25:54+00:00",
+  "verification": {
+    "checks": [
+      {
+        "cancelled": false,
+        "elapsed_seconds": 466.032,
+        "execution_exited": true,
+        "passed": true,
+        "process_stopped": true,
+        "returncode": 0,
+        "skips": 0,
+        "spec": "discover:codex-works/tests:test_l3_host_portability.py",
+        "tests": 1,
+        "timed_out": false
+      }
+    ],
+    "execution_exited": true,
+    "fingerprint": {
+      "codex-works/deliveries/L3HOST13.md": "67124863b60241fa11dd300998c1b26aa39a2355f81ed87afede722142cc6996",
+      "codex-works/l3host/test_l3a_globals.py": "5dc8317f816600e52bed31d2ad48203b82b8c09ad04a773d8b656e1388859b1f",
+      "codex-works/l3host/test_l3a_native_regression.py": "13055eef21bb95230bf8b0fc53a496558ee1515b858fe4238358e48e7adbedde",
+      "codex-works/tests/test_l3_host_portability.py": "4ffe20b41733de7188ad4bda2db512d94182961edfbe023a3979e88555b57d5e",
+      "docs/l3-host-portability.md": "b964f21daeadd50376645ac46f8c1ac480c05283171d57d72eb1b865bfdb0526",
+      "lang/tests/test_l3a_globals.py": "5dc8317f816600e52bed31d2ad48203b82b8c09ad04a773d8b656e1388859b1f",
+      "lang/tests/test_l3a_native_regression.py": "13055eef21bb95230bf8b0fc53a496558ee1515b858fe4238358e48e7adbedde"
+    },
+    "finished_at": "2026-10-21T19:23:34+00:00",
+    "job": "ff16d33a6bb345e79c8a796eade946ab",
+    "passed": true,
+    "process_stopped": true,
+    "source_stable": true,
+    "summary": "定向复验通过，等待源码/契约审查"
+  },
+  "write_paths": [
+    "codex-works/l3host/test_l3a_globals.py",
+    "codex-works/l3host/test_l3a_native_regression.py",
+    "codex-works/tests/test_l3_host_portability.py",
+    "lang/tests/test_l3a_globals.py",
+    "lang/tests/test_l3a_native_regression.py",
+    "docs/l3-host-portability.md",
+    "codex-works/deliveries/L3HOST13.md"
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "task": "codex:P2BUILD5",
+  "accepted_rev": 5,
+  "actual_main_files_match_verified_sha256": true,
+  "files": {
+    "tools/build.py": "b7701e10a61ba316dff4b8057624d935dfde5249cca4585e9f209b9f32cb595f",
+    "tests/test_build_assembler.py": "049160c091a4a0557f20a371c5fdaa49ef83809ca24a83e83dbb60c7b8609dd3",
+    "codex-works/deliveries/P2BUILD5.md": "addd55692b3a5e6d5fc2cb2a932e056f2b8bfcae8b20229463ac4d9983490fb0"
+  },
+  "source_root": "D:\\projects\\2026\\dongos\\code",
+  "works_root": "D:\\projects\\2026\\dongos\\coordination\\dongos_works",
+  "candidate_copy_required": false,
+  "notes": "Implementation/test were edited in main under an explicit task; complete frozen source used for actual full build/guests. Delivery lives in mapped works root. Fingerprints checked after acceptance before status integration."
+}

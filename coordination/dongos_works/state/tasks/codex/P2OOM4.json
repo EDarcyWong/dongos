@@ -1,0 +1,74 @@
+{
+  "assignment_owner": "codex",
+  "auto_dispatch": false,
+  "auto_verify": false,
+  "candidate": null,
+  "checks": [
+    "module:tests.test_p2_fragmented_fixture"
+  ],
+  "claim_from_status": "rework",
+  "claim_token": "cad4100ab82c4f78ad3a731ce862b8d3",
+  "claimed_at": "2026-10-21T15:04:42+00:00",
+  "claimed_by": "codex-mcp-6fe7be60df984d37",
+  "completed_at": "2026-10-21T15:04:54+00:00",
+  "complexity": "standard",
+  "created_at": "2026-10-21T14:40:21+00:00",
+  "delivery": "codex-works/deliveries/P2OOM4.md",
+  "depends_on": [
+    "codex:P2SMP3"
+  ],
+  "description": "接续P2SMP3 integrated rev6，用户继续推进P2且不建PR。Claude P2EXEC1在途、P2WC1待领取，均不抢占。只修改声明7文件；生产kernel/既有P2SMP3指纹保持。新fixture只在协调者生成独立副本中向kernel/smp/large_memory.dg注入真实buddy操作：先占第二个order9块，持有第一半所有剩余368个order0页，归还order9，取其中一个order0页作为hole，再归还此前368页。形成实际free879>512但无order9的碎片状态，之后原生产buddy.alloc9必须真实返回OutOfMemory，未绑定/映射/失效/回收，也不改动原共享owner。不是mock返回OOM，不写 guest memory/register，不修改原目录kernel。fixture源码与生产树差异严格唯一目标文件、明确源码身份。正常baseline不变及2MiB加载ABI保持。宿主用相同Dong片段及真正buddy执行验证对照独立C原始metadata/free-list oracle，正确连贯基线分配成功，hole好体碎片OOM且分配失败前后完整账本不变；真实坏体归还hole或错误归还块由精确分配/状态断言拒绝，均正常构建执行。actual release runtime7 1/4CPU故障客体精确serial OOM和phase0/held0/complete0，实际allocator metadata/free heads、Space/table_meta/完整rootpool、Domain/owner为空/无window leaf及寄存器终止点通过只读QMP归档与离线复算；原有AP前proof报告/316构建身份绑定明确，不能以编译失败/超时/通用panic算预期OOM。正常最终P2SMP3主线/已有原始客体证据仍独立复算，不重建已验收planner或AP事务。实际碎片由独立fixture构造，不宣称覆盖全部真实固件碎片拓扑，TCG不能证明WC硬件性能。文档修正已完成共享根/封存持有与新90544B余量，旧结果按历史保留；P2 EXEC/WC与任意调度后多CR3仍待原负责人和正常消费者验收。交付后独立raw/C oracle审查+正式隔离定向复验0skip/source_stable，再accept与实际本地integrate分开登记。无提交/推送/PR、不启动AI CLI；只有根协调者执行明确授权的可丢弃QEMU验证。",
+  "document": "codex-works/tasks/P2OOM4-board.md",
+  "historical": false,
+  "id": "codex:P2OOM4",
+  "integration_note": "已先完成真实本地文件集成核验：主code的6个实现/测试/文档及works交付共7文件实际存在，逐项SHA与accepted正式复验fingerprint完全一致，见reviews/2026-10-21-P2OOM4-local-files.json。生产kernel/316正常构建输入及P5身份源码保持不变，正常2,006,608B/余90,544B；仅独立故障fixture2,031,184B。正式3tests/0skip、真实1/4CPU碎片OOM原始复算与正常1/4CPU/漏AP负控归档复算均通过。验收rev8与集成分开登记；无commit/push/PR。P2EXEC1返修和P2WC1在途、全P2待办保持。",
+  "legacy_hash": "4b611f9d9f9c741fdd6f63f1247543dfbc6200a500c19dde931fb47774d66610",
+  "number": "P2OOM4",
+  "owner": "codex",
+  "rev": 9,
+  "review_note": "已实际审查7文件与原契约：fixture在独立副本只注入真实buddy碎片操作，原生产alloc9返回02000007而非mock；独立C全1024页账本/完整前后比对和两类真实坏Dong正常执行精确拒绝。正式隔离job6220f8d4b029422b853165edbb78e929为3tests/0skip/exit0/6.812s，source_stable/process_stopped/execution_exited均true。根协调者另独立复算真实runtime7 1/4CPU原始数据：free879且无order9/10、phase0/held0/零发布、allocator/metadata/Space/table_meta/全pool软件位不变、owner未绑定/Domain不变，QEMU全停止；正常P2SMP3 1/4CPU及漏AP负控归档重放通过，主线316输入/P5源码保持。审查与完整证据见reviews/2026-10-21-P2OOM4-independent-review.json；首次copy冲突未执行测试并保留，不计成功。范围仅受控碎片拒绝，不关闭EXEC/WC或任意用户根。本项通过验收，待逐文件核对本地集成。",
+  "status": "integrated",
+  "title": "[P2] 真实碎片化order9 OOM拒绝、无发布证明与文档校准",
+  "updated_at": "2026-10-21T15:06:10+00:00",
+  "verification": {
+    "checks": [
+      {
+        "cancelled": false,
+        "elapsed_seconds": 6.812,
+        "execution_exited": true,
+        "passed": true,
+        "process_stopped": true,
+        "returncode": 0,
+        "skips": 0,
+        "spec": "module:tests.test_p2_fragmented_fixture",
+        "tests": 3,
+        "timed_out": false
+      }
+    ],
+    "execution_exited": true,
+    "fingerprint": {
+      "codex-works/deliveries/P2OOM4.md": "368e53a88c9d896b16a922fca98803a40ab9765c5ebbfabc1a7e583581d94be5",
+      "docs/p2-extensions.md": "2d44b2d474fab6945411cbeebdb56687877134e5bac2dd8d1320c2d2c32b66bc",
+      "docs/p2-fragmented-large.md": "9511e81b8435d1845106634e7065f630989ea468be74b26d3f9eeb9b1ab7a24d",
+      "docs/remaining-plan.md": "b23e07a41c0a5bac0c809b8f9fd53c5a184353f11998bdf1b8ed7e658f0977f5",
+      "tests/p2_fragmented_fixture.py": "76449adae26e3badab5e8e82f02b873c89d881dee96352cef01ef81a206aff07",
+      "tests/run_p2_fragmented_qemu.py": "ba20248f8997b6b0477d636d1e4f9d14bc4524f9b870a399aa281cb2495be294",
+      "tests/test_p2_fragmented_fixture.py": "420249bb2879f9b703a8636c1c1e4f759b8e3165ba3c46668cfb66107f17b59d"
+    },
+    "finished_at": "2026-10-21T15:05:22+00:00",
+    "job": "6220f8d4b029422b853165edbb78e929",
+    "passed": true,
+    "process_stopped": true,
+    "source_stable": true,
+    "summary": "定向复验通过，等待源码/契约审查"
+  },
+  "write_paths": [
+    "tests/p2_fragmented_fixture.py",
+    "tests/run_p2_fragmented_qemu.py",
+    "tests/test_p2_fragmented_fixture.py",
+    "docs/p2-fragmented-large.md",
+    "docs/p2-extensions.md",
+    "docs/remaining-plan.md",
+    "codex-works/deliveries/P2OOM4.md"
+  ]
+}

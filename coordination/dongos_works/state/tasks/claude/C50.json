@@ -21,10 +21,11 @@
   "document": "claude-works/tasks/C50-board.md",
   "historical": false,
   "id": "claude:C50",
+  "integration_note": "2026-10-20按实际代码补登记主线集成。已独立核对原任务/既有源码契约审查及正式复验：4tests/0skip、source_stable=true；当前四交付仍逐字节匹配验收指纹。生产已真实复制到code/lang/bootstrap/nasm_u64_forward_function.dg（478b1ed），与验收生产字节一致或仅LF/CRLF；说明及永久测试主线路径适配已审查，保留原语义/别名/原子性/真实坏Dong与完整ABI观察。CR40额外边界增强已核对，未改生产。本机NASM3分组探测维护后，9组件主线对应34项实际已全过0skip；A批20项775.031s且前后SHA稳定，B批本任务已通过，总manifest本轮保存。证据reviews/2026-10-20-mainline-registration-evidence.json与code/build/test/mainline-reconcile-*。本次仅登记既有已验收组件的实际文件集成，不宣称L3/G5/G6完成。",
   "legacy_hash": "8ac1eb928b1bd0cf1d135a816e9fbd903cfdbc7dfd18dc918979d30ed26f6d76",
   "number": "C50",
   "owner": "claude",
-  "rev": 10,
+  "rev": 11,
   "review_note": "C50 R1独立复审通过并关闭。实际复审原任务完整接线/预检/原子性契约、返修要求、R1交付/生产/说明和永久测试；生产SHA579df059…2857与首轮实际审查一致，最多6个kind0参数下C37<=156/C41<=454及1536最终scratch证明充分，真实capture→setup/call/cleanup/capture-return→exit接线正确。逐行对比永久测试R1，差异仅独立observation/host_anchor/parked_rax、RBX预设值断言和实际RBX坏Dong，既有map/返回槽/容量/别名/只读保护负控与16主要向量保留。新桥先独立捕获真实RAX和全部callee-saved/RSP，再从独立锚恢复宿主ABI，不用受测RBX定位观察区或信任返回RSP。正式独立作业563c3a6bab364e49b5d794a4511832d6：4项0skip，unittest145.957s/进程146.438s，returncode0、未取消未超时、source_stable=true。额外独立脚本解析16向量×debug/release32组好坏stdout，全部真实桥→包装器→callee别名→独立C目标链：callee调用1次、向量号/arity正确、入口rsp%16=8、收到的实参逐项正确，RAX等于独立位置加权hash；各自RSP平衡、rbp/r12..r15/canary/对齐正确，好RBX845282253045697467、真实坏Dong ret前add rbx,8返回RBX845282253045697475，均恰+8并在正常返回后由native rbx preserved数值拒绝。当前四交付与正式指纹一致，13只读依赖SHA稳定，直接依赖MCP均查询integrated。证据reviews/2026-10-19-C50-R1-evidence.json、reviews/2026-10-19-C49-C50-R1-audit.py、reviews/2026-10-19-C50-R1-test.diff，综合审查记录reviews/2026-10-19-C48-integrated-C49-C50-R1.md。仅组件验收，未集成C50；未运行OS/VM/全回归/AI CLI，不宣称完整IR/链接器/自举/L3完成。",
   "state_reconciliation": {
     "at": "2026-10-19T11:42:09+00:00",
@@ -38,9 +39,9 @@
     "snapshot_sha256": "a40cf9aabcbb43779b5c60414d7142cab791f85888022c84625568dbb579ac96",
     "verification_reexecuted": false
   },
-  "status": "accepted",
+  "status": "integrated",
   "title": "[L3] 实参重排与真实跨函数调用的完整SysV函数接线",
-  "updated_at": "2026-10-19T14:06:33+00:00",
+  "updated_at": "2026-10-20T13:12:18+00:00",
   "verification": {
     "checks": [
       {

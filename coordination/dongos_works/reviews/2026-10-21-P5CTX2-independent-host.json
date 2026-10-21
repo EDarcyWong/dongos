@@ -1,0 +1,42 @@
+{
+  "review_role": "independent-read-only-review",
+  "timestamp_utc": "2026-10-21T11:51:15.915353+00:00",
+  "command": [
+    "C:\\Python312\\python.exe",
+    "-m",
+    "unittest",
+    "-v",
+    "tests.test_p5_recovery_context_guest",
+    "tests.test_virtio_reset_guest"
+  ],
+  "cwd": "D:\\projects\\2026\\dongos\\code",
+  "returncode": 0,
+  "stdout": "",
+  "stderr": "test_actual_ledger_binding_and_hardware_raw_fields (tests.test_p5_recovery_context_guest.ContextGuestControls.test_actual_ledger_binding_and_hardware_raw_fields) ... ok\ntest_actual_production_structs_match_compiler_canonical_manifest (tests.test_p5_recovery_context_guest.ContextGuestControls.test_actual_production_structs_match_compiler_canonical_manifest) ... ok\ntest_control_rejects_every_retirement_phase (tests.test_p5_recovery_context_guest.ContextGuestControls.test_control_rejects_every_retirement_phase) ... ok\ntest_every_identity_lease_phase_and_error_raw_field (tests.test_p5_recovery_context_guest.ContextGuestControls.test_every_identity_lease_phase_and_error_raw_field) ... ok\ntest_exact_nested_abi_bytes_decode (tests.test_p5_recovery_context_guest.ContextGuestControls.test_exact_nested_abi_bytes_decode) ... ok\ntest_exact_size_short_reads_and_trailing_bytes (tests.test_p5_recovery_context_guest.ContextGuestControls.test_exact_size_short_reads_and_trailing_bytes) ... ok\ntest_individually_valid_raw_receipts_cannot_replace_the_first (tests.test_p5_recovery_context_guest.ContextGuestControls.test_individually_valid_raw_receipts_cannot_replace_the_first) ... ok\ntest_layout_names_types_offsets_sizes_and_duplicates (tests.test_p5_recovery_context_guest.ContextGuestControls.test_layout_names_types_offsets_sizes_and_duplicates) ... ok\ntest_offline_physical_reader_checks_order_role_length_hash_and_path (tests.test_p5_recovery_context_guest.ContextGuestControls.test_offline_physical_reader_checks_order_role_length_hash_and_path) ... ok\ntest_offline_replay_boundary_uses_raw_bytes_and_observation_ranges (tests.test_p5_recovery_context_guest.ContextGuestControls.test_offline_replay_boundary_uses_raw_bytes_and_observation_ranges) ... ok\ntest_offline_source_build_and_artifact_provenance_controls (tests.test_p5_recovery_context_guest.ContextGuestControls.test_offline_source_build_and_artifact_provenance_controls) ... ok\ntest_two_observations_cannot_replace_identity_root_generation_or_lease (tests.test_p5_recovery_context_guest.ContextGuestControls.test_two_observations_cannot_replace_identity_root_generation_or_lease) ... ok\ntest_control_distinct_from_fault (tests.test_virtio_reset_guest.ResetGuestControls.test_control_distinct_from_fault) ... ok\ntest_current_catalog_flags_are_exact (tests.test_virtio_reset_guest.ResetGuestControls.test_current_catalog_flags_are_exact) ... ok\ntest_exact_held_fault_receipt (tests.test_virtio_reset_guest.ResetGuestControls.test_exact_held_fault_receipt) ... ok\ntest_exact_injection_and_no_duplicate (tests.test_virtio_reset_guest.ResetGuestControls.test_exact_injection_and_no_duplicate) ... ok\ntest_isolated_copy_manifest_and_tamper (tests.test_virtio_reset_guest.ResetGuestControls.test_isolated_copy_manifest_and_tamper) ... ok\ntest_reject_symlinks_and_nested_output (tests.test_virtio_reset_guest.ResetGuestControls.test_reject_symlinks_and_nested_output) ... ok\ntest_rejects_false_receipts (tests.test_virtio_reset_guest.ResetGuestControls.test_rejects_false_receipts) ... ok\ntest_rejects_short_lease_and_live_owner (tests.test_virtio_reset_guest.ResetGuestControls.test_rejects_short_lease_and_live_owner) ... ok\ntest_retired_frame_capture_return_and_tag_controls (tests.test_virtio_reset_guest.ResetGuestControls.test_retired_frame_capture_return_and_tag_controls) ... ok\n\n----------------------------------------------------------------------\nRan 21 tests in 0.339s\n\nOK\n",
+  "elapsed_seconds": 0.4839999999999236,
+  "source_before": {
+    "tests/p5_recovery_context_guest.py": "ff14b043aea5e4f7fd0e72a8ee0fd465a8acb4351b6b189cfbd54dde3a97af75",
+    "tests/test_p5_recovery_context_guest.py": "81bdd8d2550cd7aa1e35fe388cda9a2e343bd99a38e6c82d105591a25958d97a",
+    "tests/run_virtio_reset_qemu.py": "46f6315cad0af1d1d331f21f98b4e596dd32767c5e25cdfe10a1542dd9321d59",
+    "tests/test_virtio_reset_guest.py": "a9916ad252147eb8ca728735bedf17f8a2741a64a58d9e5c35e2c0ae40abf89b",
+    "tests/p5_virtio_reset_fixture.py": "535e6b1fbe18507db4f09dc18a87e3b4b605396395b09bba3f29ad4998c898f1",
+    "kernel/user/device_host.dg": "823fc27763560ff880dd26b9e4da236a92cf55174d3e4a86bf0b234592ba95ce",
+    "kernel/user/memory.dg": "5ab902cd8b469cbefab0491810dfbc67029b3153bfaa5a048c17474444a3e121",
+    "services/lib/device_abi.dg": "3d4632146ecc803dc9f3b1573de86e551ebb3f5538a23212dcecb5f8fd406888"
+  },
+  "source_after": {
+    "tests/p5_recovery_context_guest.py": "ff14b043aea5e4f7fd0e72a8ee0fd465a8acb4351b6b189cfbd54dde3a97af75",
+    "tests/test_p5_recovery_context_guest.py": "81bdd8d2550cd7aa1e35fe388cda9a2e343bd99a38e6c82d105591a25958d97a",
+    "tests/run_virtio_reset_qemu.py": "46f6315cad0af1d1d331f21f98b4e596dd32767c5e25cdfe10a1542dd9321d59",
+    "tests/test_virtio_reset_guest.py": "a9916ad252147eb8ca728735bedf17f8a2741a64a58d9e5c35e2c0ae40abf89b",
+    "tests/p5_virtio_reset_fixture.py": "535e6b1fbe18507db4f09dc18a87e3b4b605396395b09bba3f29ad4998c898f1",
+    "kernel/user/device_host.dg": "823fc27763560ff880dd26b9e4da236a92cf55174d3e4a86bf0b234592ba95ce",
+    "kernel/user/memory.dg": "5ab902cd8b469cbefab0491810dfbc67029b3153bfaa5a048c17474444a3e121",
+    "services/lib/device_abi.dg": "3d4632146ecc803dc9f3b1573de86e551ebb3f5538a23212dcecb5f8fd406888"
+  },
+  "source_stable": true,
+  "tests": 21,
+  "zero_skip": true,
+  "passed": true,
+  "scope": "host frontend/raw ABI/validator/replay controls only; no VM started by reviewer"
+}

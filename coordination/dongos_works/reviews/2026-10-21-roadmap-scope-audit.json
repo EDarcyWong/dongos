@@ -1,0 +1,117 @@
+{
+  "checked_at": "2026-10-21T21:17:03+08:00",
+  "source": "Full roadmap audit; P5CTX2 live coordination status integrated rev6 reconfirmed",
+  "inspected_stages": 28,
+  "changed": [
+    {
+      "track": "language",
+      "id": "L3B",
+      "scope_notes": [
+        "验收范围为宿主有界自编译固定点；现有profile的客体固定点已由L3C验收，完整语言差分覆盖仍归L3/G5。",
+        "CX15原异机任务身份继续保留在历史档案，不作为L3B当前待办，也不据此把整体L3标为完成。"
+      ]
+    },
+    {
+      "track": "integration",
+      "id": "M7",
+      "scope_notes": [
+        "本节点为PR#7的代码合并与本地同步，已完成；PR8历史同步检查点244b18c已包含PR#7/#10/#8，无需重复合并。",
+        "异机任务记录继续保留为档案；DMA排空、unpin/free/reuse和驱动恢复归P5阶段后续验收。"
+      ]
+    },
+    {
+      "track": "integration",
+      "id": "M10",
+      "scope_notes": [
+        "本节点为PR#10的代码合并与本地同步，已完成；DMA排空、回收和设备恢复归P5阶段，代码合并不关闭这些阶段门槛。"
+      ]
+    },
+    {
+      "track": "coordination",
+      "id": "P5CTX1",
+      "scope_notes": [
+        "本任务精确持有上下文已验收并本地集成；按用户约定未提交或推送，不计入旧G6准确head的GitHub CI范围。",
+        "RESET_CONFIRMED与DMA drain UNKNOWN保持分开；后续真实客体核验已由P5CTX2完成，安全排空/退休/回收与驱动恢复仍归P5阶段。"
+      ]
+    },
+    {
+      "track": "coordination",
+      "id": "P5CTX2",
+      "scope_notes": [
+        "本任务验收范围为initialized-queue正常/故障终态的精确上下文核验与租约稳定持有，已完成；held=1、drain UNKNOWN属于已核实的持有状态。",
+        "DMA排空、撤映射后全核退休、回收/复用、新token及驱动重启属于P5阶段后续工作，不是P5CTX2未完成的验收项。"
+      ]
+    },
+    {
+      "track": "coordination",
+      "id": "P2LIVE1",
+      "scope_notes": [
+        "本任务验收范围为AP启动前BSP的临时WB/NX大页生命周期，已完成并恢复原4KiB树。",
+        "持久大页、AP在线后多核大页及EXEC/WC消费者属于P2阶段后续工作，不是P2LIVE1本项待办。"
+      ]
+    }
+  ],
+  "task_status_mutations": false,
+  "all_complete_nodes_have_no_remaining": true,
+  "stage_status": {
+    "P0": "complete",
+    "P1": "complete",
+    "P2": "partial",
+    "P3": "complete",
+    "P4": "complete",
+    "P5": "partial",
+    "P6": "partial",
+    "P7": "partial",
+    "P8": "partial",
+    "P9": "pending",
+    "L0": "complete",
+    "L1": "complete",
+    "L2": "complete",
+    "L3": "partial",
+    "L3A": "partial",
+    "L3B": "complete",
+    "L3C": "complete",
+    "M0": "complete",
+    "M7": "complete",
+    "M10": "complete",
+    "M8": "complete",
+    "M11": "complete",
+    "M3": "pending",
+    "C52": "complete",
+    "CXNASM3": "complete",
+    "P5CTX1": "complete",
+    "P5CTX2": "complete",
+    "P2LIVE1": "complete"
+  },
+  "changed_files_sha256": {
+    "coordination/dongos_works/roadmap.json": "7ce173db004b2eacb7ac579e5a0802dad6f75de91b2e46f11c39395c8fec9e9a",
+    "coordination/dongos_works/progress-map.md": "d6c5a419d743e809b212ae54363b9a80bada55e62c12026e62c41b8f16d8458f",
+    "coordination/dongos_coordination/roadmap.py": "8bb3eeeeedaf70cf2cbdd64da892f99d146efea37eb2ec17faefa64e72ceab4a",
+    "coordination/dongos_coordination/web/app.js": "77e2a31859028b59b337ccb36d78ba827cf02df189bb4a229c480df83d4bf9cc"
+  },
+  "validation": {
+    "schema_valid": true,
+    "live_api_matches_disk": true,
+    "live_app_js_matches_disk": true,
+    "all_complete_nodes_no_own_backlog": true,
+    "actual_parent_backlogs_retained": [
+      "P2",
+      "P5",
+      "L3",
+      "L3A"
+    ],
+    "python_roadmap_tests": {
+      "tests": 10,
+      "skips": 0,
+      "returncode": 0
+    },
+    "dom_tests": {
+      "tests": 9,
+      "skips": 0,
+      "returncode": 0
+    },
+    "fresh_actual_archive_replays": 4,
+    "new_vm_runs": 0
+  },
+  "completion_check": "coordination/dongos_works/reviews/2026-10-21-roadmap-completion-check.md"
+}

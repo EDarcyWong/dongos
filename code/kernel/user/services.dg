@@ -398,7 +398,12 @@ unsafe fn retire_one(id:usize,state:u64,status:u64)!void{unsafe{
     let incarnation=(*CATALOG).incarnation[id];
     let cfg=procs.current(CATALOG,id);
     // Quiesce/detach all running and RETURNING references before aliases/root.
-    if SMP_ENABLED{try smp_bridge.retire(id);SMP_TEST_SLOTS&=~(1<<id as u64);}
+    var dma_smp:u64=0;let dma_owner=((id as u64+1)<<32)|incarnation;
+    let dma_root=(*process(id)).root;let dma_memory_generation=memory.generation(id);
+    if SMP_ENABLED{let stopped=smp_bridge.retire(id);match stopped{
+        ok=>{dma_smp=1;device_host.dma_stop(id,cfg,dma_owner,incarnation,dma_root,dma_memory_generation,1,0);},
+        err(e)=>{device_host.dma_stop(id,cfg,dma_owner,incarnation,dma_root,dma_memory_generation,2,e);return stopped;},
+    }SMP_TEST_SLOTS&=~(1<<id as u64);}
     // Withdraw every shared alias while both roots still exist. A failed
     // withdrawal permanently stops scheduling before either root is freed.
     if id==3&&windows.EPOCH!=0{try windows.compositor_gone(windows.EPOCH);}
@@ -406,7 +411,10 @@ unsafe fn retire_one(id:usize,state:u64,status:u64)!void{unsafe{
         try windows.owner_gone(((id as u64+1)<<32)|incarnation);
         if incarnation>GUI_DEPARTED[id]{GUI_DEPARTED[id]=incarnation;}
     }
-    try procs.terminate(CATALOG,id,state,status);
+    let terminated=procs.terminate(CATALOG,id,state,status);match terminated{
+        ok=>{device_host.dma_stop(id,cfg,dma_owner,incarnation,dma_root,dma_memory_generation,dma_smp,0);},
+        err(e)=>{device_host.dma_stop(id,cfg,dma_owner,incarnation,dma_root,dma_memory_generation,dma_smp,e);return terminated;},
+    }
     boot_trace.event(trace.SERVICE_STOP,cfg,(*CATALOG).states[cfg as usize].generation,0);
     if id==13&&cfg==13&&incarnation>USB_DEPARTED{USB_DEPARTED=incarnation;}
     try revoke_loaded(id,incarnation);
@@ -1006,7 +1014,24 @@ unsafe fn perform(frame:*abi.Frame)!usize {
         if code==0x63 {
             if (try authority((*frame).rdi,handles.DMA,handles.MAP|handles.WRITE))!=devices.DMA_OBJECT { return error.Protocol; }
             try memory.check_range(CURRENT,(*frame).r10,sizeof(blk.Lease),true);
-            try devices.dma_acquire(CURRENT,(*frame).rsi,(*frame).rdx);
+            var dma_tracked=false;var dma_owner:u64=0;var dma_root:u64=0;var dma_generation:u64=0;
+            if CATALOG!=null{
+                if !managed(CURRENT)||(*CATALOG).ready!=1||CURRENT>=procs.SLOTS{return error.Protocol;}
+                let dma_configuration=procs.current(CATALOG,CURRENT);let dma_incarnation=(*CATALOG).incarnation[CURRENT];
+                if dma_configuration>=(*CATALOG).count as u64||dma_configuration>=procs.CONFIGS as u64
+                    ||dma_incarnation==0||dma_incarnation>0x0fff_ffff{return error.Protocol;}
+                let dma_state=(*CATALOG).states[dma_configuration as usize];
+                if (*CATALOG).slot[dma_configuration as usize]!=CURRENT as u64||dma_state.configuration!=dma_configuration
+                    ||dma_state.process!=((dma_incarnation<<8)|(CURRENT as u64+1))
+                    ||(dma_state.state!=proc.STARTING&&dma_state.state!=proc.READY){return error.Protocol;}
+                dma_owner=owner_key(CURRENT);dma_root=(*process(CURRENT)).root;dma_generation=memory.generation(CURRENT);
+                dma_tracked=try device_host.dma_begin(CURRENT,dma_configuration,dma_owner,
+                    dma_incarnation,dma_root,dma_generation,(*frame).rsi,(*frame).rdx);
+            }
+            let acquired=devices.dma_acquire(CURRENT,(*frame).rsi,(*frame).rdx);match acquired{
+                ok=>{if dma_tracked{device_host.dma_finish(CURRENT,dma_owner,dma_root,dma_generation,0);}},
+                err(e)=>{if dma_tracked{device_host.dma_finish(CURRENT,dma_owner,dma_root,dma_generation,e);}try device_host.dma_result(acquired);},
+            }
             try memory.copy_out(CURRENT,(*frame).r10,slice_from_raw_parts(devices.dma_lease(CURRENT) as *const u8,sizeof(blk.Lease)));
             (*frame).rax=0; return CURRENT;
         }

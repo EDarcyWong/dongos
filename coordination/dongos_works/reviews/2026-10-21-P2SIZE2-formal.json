@@ -1,0 +1,50 @@
+{
+  "id": "codex:P2SIZE2",
+  "rev": 4,
+  "status": "submitted",
+  "verification": {
+    "passed": true,
+    "checks": [
+      {
+        "spec": "module:lang.tests.test_function_sections",
+        "passed": true,
+        "tests": 2,
+        "skips": 0,
+        "returncode": 0,
+        "cancelled": false,
+        "timed_out": false,
+        "process_stopped": true,
+        "execution_exited": true,
+        "elapsed_seconds": 3.453
+      },
+      {
+        "spec": "module:tests.test_kernel_link_gc",
+        "passed": true,
+        "tests": 1,
+        "skips": 0,
+        "returncode": 0,
+        "cancelled": false,
+        "timed_out": false,
+        "process_stopped": true,
+        "execution_exited": true,
+        "elapsed_seconds": 2.016
+      }
+    ],
+    "process_stopped": true,
+    "execution_exited": true,
+    "source_stable": true,
+    "fingerprint": {
+      "lang/dongc/compiler.py": "2449dfe2e1fbdc5742ab08118685ec90ba04519bc67d9cd37877f29986b6f95d",
+      "lang/dongc/emitter.py": "2a927cca376613d240bc6df87bc164e7cbbb73fda5a29e079a417cba06ff956e",
+      "lang/dongc/__main__.py": "c190096a3f8416898b03f1c8ee5a6815a1da361e0417e965cb117d2c266329ec",
+      "tools/build.py": "8b08d2e79e89c264e96fbeb34ada3dda1fed59ca708dcc62973b7cc4cdf2983a",
+      "lang/tests/test_function_sections.py": "6b25c7805eba18ee7b24bde501025895d8bcd8816770a4d2cb78a6ef75340c4e",
+      "tests/test_kernel_link_gc.py": "0f4ee1d6444c64b4ff6dd3938b4d74ae98d0c487c129511192a487cf434ada4e",
+      "docs/p2-kernel-budget.md": "1e44489d23e1dec855aaa7955e26372e25176bd6c27ea4b1dbaa1b26972c77a5",
+      "codex-works/deliveries/P2SIZE2.md": "434d2fc5f127ae85597166080ef0ef0484c5a9eb7e47a304f54f648b3cde13d6"
+    },
+    "summary": "定向复验通过，等待源码/契约审查",
+    "finished_at": "2026-10-21T13:44:40+00:00",
+    "job": "6926b60f41224582ae9ee2c05bc743aa"
+  }
+}

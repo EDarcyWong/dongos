@@ -1,0 +1,316 @@
+{
+  "project": "dongos",
+  "task": {
+    "id": "claude:P2WC1",
+    "number": "P2WC1",
+    "owner": "codex",
+    "title": "[P2] 图形帧缓冲的缓存类型撤映射、同步与WC重映射事务",
+    "description": "用户于2026-10-21明确要求给Claude分配任务。本项属于P2剩余正常消费者的接续实现，非重做已有纯planner；用户要求不建PR，完成测试、独立验收和本地集成。Claude此前C52等队列已integrated，无本人未结在途。本人客户端worker MCP先读取完整原任务、依赖最新rev及写路径，claim成功后手动执行；不自动启动模型/AI CLI。\n\n只修改声明的claude-works文件，主线和其它负责人的候选全部只读，尤其不改Codex在途P2SMP3、DeepSeek L3/L3A、lang/dongc或tools/build.py。任务编号与模块全新，不恢复已归档pool:P2ALIAS1/P2PAT1/P2HUGE1，不把旧组件重新贴牌。本任务不自行运行OS/VM、不提交/推送/建PR，不自行accept/integrate。实际正常内核hook、硬件回调、客体正反例、最终验收与文件集成由Codex后续完成；本项submitted或组件验收不等于整个P2/EXEC/WC完成。\n\n实现必须实际调用现有Dong planner与mm.paging live API，不能返回一个未执行的step列表。单BSP写者、IF=0，管理固定共享内核根、PGE/PCIDE关闭，调度/user多CR3接管前使用并封存；不能声称任意活动用户根已受支持。需要硬件失效/缓存动作的地方用明确的unsafe同步回调，返回成功意味着实际全部读者完成。任何回调失败或中途页表错误，禁止后续grant/remap/reclaim、禁止free/reuse；Context记录poisoned/held、阶段、原始错误、完成的回调与退休回执，后续入口永久拒绝修改，保留可审计现场。首次发布前非法参数必须完整不变，发布后的失败只能承诺安全降权与持有，不能伪称回滚原子性。\n所有unsafe描述符完整端点/对齐/乘法/全部声明尾部别名预检，实际绑定Space/根/管理范围/物理所有权/读者epoch必须明确；不把“调用者列表完整”当任意系统证明。受控窗口/物理帧不含代码、栈、页表和普通运行时资源，不接受USER、global、PCID或未知缓存组合；大页覆盖明确拒绝，别顺手隐式拆分。已有大页事务/Context ABI不改。\n\n测试仅定向checks：真实Dong debug/release编译、NASM ELF64/COFF组装、显式SysV原生call及安全恢复后检查callee-saved/RSP；COFF组装不当Win64ABI证明。独立C直接遍历完整真实页表与元数据并记录每个硬件回调前后状态，不以生产query/planner作唯一期望，不用手写C/Python算法替代Dong生产事务。有限边界、同夹具好体先通过、源码/说明/测试/只读传递闭包前后SHA稳定、0skip。每类真实坏Dong成功构建链接并正常运行后由指定数值/内存/回调顺序/发布原子性断言拒绝；崩溃、构建失败、超时、纯文本差异不能代替语义负控。\n临时产物本人works/build/本编号/<唯一目录>。交付列完整API/unsafe前提、主线集成路径、真实命令/exit/tests/skips、输入与产物SHA、所有失败/负控观察及未运行限制。需要声明外文件先说明具体接线阻塞，由协调者发布后续范围，不能越权。\n\n生产模块mm.cache_alias_owner，未来集成kernel/mm同名路径。复用mm.cache_type_plan的PAT/MTRR求解、alias检查和plan_migration；不重写这些已验收算法。候选与P2EXEC1文件、接口状态完全独立，不依赖未验收的新owner。明确本项是实际页表迁移执行器，正常GOP配置/MSR与AP缓存回调由Codex后续接线，不以模型通过关闭图形WC或真实性能门槛。\n\n设计并在说明中冻结明确Context/Workspace/Binding/Callback/Result接口。范围为同一固定内核根、一段受信连续物理帧缓冲和其完整可读写NX别名范围，最多4096页、最多4个连续alias视图；实际GOP设备资源由调用者可信lease持有，不得调用buddy.free，也不得把帧缓冲当普通RAM。用有界完整根表池扫描核对所有该物理段的实际别名，拒绝未声明HHDM/额外别名、写/执行混合、错PA/错长度/别名cache类型不一致、大页覆盖及未知cache组合；不只逐项相信调用者列表。初始UC或WB策略按已有PAT/MTRR真实输入求有效类型，目标仅WC；遇到冲突/未定义MTRR保守拒绝。所有实际来源输入要校验，缓存类型不得仅由标志名称推断。\n\n实际执行plan_migration：撤销全部旧cache别名（unmap_live，保留Retired回执及物理lease）→本地与全部在线读者完成TLB屏障→所有读者完成缓存维护→按目标WC重映射全部别名→再次全读者TLB屏障，最后才发布新的view/ready。旧页表只在相应失效应答后reclaim；中途错/ACK缺失不得继续remap或发布ready、不得free/reuse原帧，并保留仍未可回收的精确回执。已合法完成的reclaim不能伪称从未发生，审计结果逐阶段可复算。底层map_live可能OOM，必须逐点模拟partial remap，poison持有且不发布完整view。不能把cache位从UC直接protect成WC而保留旧别名/TLB/cache。\n\nPAT4已在所有读者配置WC时可复用，或者要求硬件回调在全局读者停驻协议中完成WBINVD/PAT更改/读回；若允许更改，只能修改entry4，entry0 WB和entry3 UC及其它byte保持，先完整扫描根中没有其它使用entry4的映射；AP尚未接管其它user CR3是固定前提。每个读者CR0.CD/NW/PAT/MTRR同步确认和异常保留要在API中可表达；回调成功才视为动作完成，不能盲目接受BSP PAT快照代表所有AP。需要扩大到其它用户根、PAT4已有消费者或IRQ中仍访问旧帧缓冲时明确拒绝。缓存维护在原生模型中仅以独立可核对的同步回调模拟，不能声称真正执行了宿主WBINVD/MSR。\n\nC原始页表oracle覆盖多页/多别名、目标WC正确bit7（大页bit12不能混入）、UC/非WC保持、MTRR/PAT冲突、隐藏映射、epoch/根变化、一次成功/no-op，以及每个revoke/第一屏障/cache维护/PAT读回/remap/第二屏障失败点和OOM。验证完整已用/未用元数据、Retired隔离和view未发布。两个硬件callback屏障须区分phase，不能用同一布尔标志覆盖第二次。真实坏Dong至少：跳缓存维护；某个别名保留旧UC/WB；第二屏障前发布view；缺失ACK仍回收表或继续remap。好侧先通过，坏体正常返回由精确PTE/回执/轨迹/发布状态断言拒绝。\n最终交付清楚区分组件原生结果、实际客体待办、TCG不模拟WC合并性能与真实显示硬件E验收；不引入性能数字或宣称现有GOP已经切为WC。",
+    "assignment_owner": "codex",
+    "status": "submitted",
+    "rev": 8,
+    "write_paths": [
+      "claude-works/src/mm/cache_alias_owner.dg",
+      "claude-works/src/mm/cache_alias_owner.md",
+      "claude-works/tests/cache_alias_owner_probe.dg",
+      "claude-works/tests/cache_alias_owner_probe.c",
+      "claude-works/tests/test_cache_alias_owner.py",
+      "claude-works/deliveries/P2WC1.md"
+    ],
+    "depends_on": [],
+    "checks": [
+      "discover:claude-works/tests:test_cache_alias_owner.py"
+    ],
+    "auto_dispatch": false,
+    "auto_verify": false,
+    "complexity": "standard",
+    "created_at": "2026-10-21T14:22:40+00:00",
+    "updated_at": "2026-10-21T16:19:52+00:00",
+    "historical": false,
+    "document": "claude-works/tasks/P2WC1-board.md",
+    "delivery": "claude-works/deliveries/P2WC1.md",
+    "claimed_at": "2026-10-21T15:44:48+00:00",
+    "completed_at": "2026-10-21T16:19:00+00:00",
+    "claimed_by": "codex-mcp-6fe7be60df984d37",
+    "candidate": null,
+    "verification": {
+      "passed": true,
+      "checks": [
+        {
+          "spec": "discover:claude-works/tests:test_cache_alias_owner.py",
+          "passed": true,
+          "tests": 1,
+          "skips": 0,
+          "returncode": 0,
+          "cancelled": false,
+          "timed_out": false,
+          "process_stopped": true,
+          "execution_exited": true,
+          "elapsed_seconds": 41.593
+        }
+      ],
+      "process_stopped": true,
+      "execution_exited": true,
+      "source_stable": true,
+      "fingerprint": {
+        "claude-works/src/mm/cache_alias_owner.dg": "eafdfa361b296cecd0248f0ad3a06a3c8d2e7064f539228dbc68fa1dea57a39e",
+        "claude-works/src/mm/cache_alias_owner.md": "fb87713709a25567c3ea22919467a34bf11fc05987a460b4481558a18d495d58",
+        "claude-works/tests/cache_alias_owner_probe.dg": "d77cf770754d59cbe12570c9a8de246f0e16bc9c80c9fe15a7f3ec3952acb9c9",
+        "claude-works/tests/cache_alias_owner_probe.c": "e181ac94826f359a7b4dceb052100cef7d8978be11d4222369bd6b02411e1917",
+        "claude-works/tests/test_cache_alias_owner.py": "b2a75ce6aa12257d280f40ad761074ebc62c066c8fb92fb1e68988f389173490",
+        "claude-works/deliveries/P2WC1.md": "f4c9756641397ce112479912198aa8d196f1b46ed258091ecaaffc14683cec07"
+      },
+      "summary": "定向复验通过，等待源码/契约审查",
+      "finished_at": "2026-10-21T16:19:52+00:00",
+      "job": "fb6a510c71304793b955fb6baf25c53a"
+    },
+    "review_note": "",
+    "legacy_hash": "8f40daf5c4f27af514cfc58ce65dc24bf4162227e4611a087524d11c1a4c424c",
+    "claim_token": "f66fcf73614b4fbcbad91413039a6d85",
+    "pause_note": "用户明确要求Codex接手P2WC1修改。请原Claude客户端立即停止本任务编辑与全部外部进程，使用acknowledge_pause确认停止后由协调器转交Codex；不得继续修改/提交。原六文件和历史保留，不删覆盖，不将状态暂停当进程停止。Codex在确认前只读该候选，先处理已安全转交的EXEC。",
+    "assignment_history": [
+      {
+        "at": "2026-10-21T15:44:43+00:00",
+        "from_owner": "claude",
+        "to_owner": "codex",
+        "previous_claimed_by": "claude-mcp-20a536f9b9a3478e",
+        "note": "用户再次明确要求Codex接手P2WC1任务；官方事件seq1247记录operator已确认停止，note=交给codex，当前paused/confirmed rev4，无未确认停止。现保留原六文件/原完整任务书及历史，转交Codex领取后修复，不恢复旧Claude执行、不复制为重复任务；组件源码/原生正负例/独立正式复验/验收和真实本地集成分别完成，不建PR。与已接手P2EXEC1并行管理但先优先处理本WC任务。真实池身份只读前置codex:P2VIEW6在正式复验中，不允许伪造Space或省略全根别名扫描。"
+      }
+    ],
+    "claim_from_status": "todo",
+    "timing": {
+      "as_of": "2026-10-21T16:20:09+00:00",
+      "published_at": "2026-10-21T14:22:40+00:00",
+      "first_claimed_at": "2026-10-21T14:54:49+00:00",
+      "last_submitted_at": "2026-10-21T16:19:00+00:00",
+      "last_verified_at": "2026-10-21T16:19:52+00:00",
+      "last_modified_at": null,
+      "rounds": [
+        {
+          "number": 1,
+          "kind": "initial",
+          "owner": "claude",
+          "claimed_by": "claude-mcp-20a536f9b9a3478e",
+          "requested_at": null,
+          "claimed_at": "2026-10-21T14:54:49+00:00",
+          "submitted_at": null,
+          "ended_at": "2026-10-21T15:44:43+00:00",
+          "end_reason": "reassign",
+          "paused_seconds": 62,
+          "waiting_seconds": 1929,
+          "elapsed_seconds": 2994,
+          "active_seconds": 2932,
+          "ongoing": false
+        },
+        {
+          "number": 2,
+          "kind": "initial",
+          "owner": "codex",
+          "claimed_by": "codex-mcp-6fe7be60df984d37",
+          "requested_at": null,
+          "claimed_at": "2026-10-21T15:44:48+00:00",
+          "submitted_at": "2026-10-21T16:19:00+00:00",
+          "ended_at": "2026-10-21T16:19:00+00:00",
+          "end_reason": "submit",
+          "paused_seconds": 0,
+          "waiting_seconds": 5,
+          "elapsed_seconds": 2052,
+          "active_seconds": 2052,
+          "ongoing": false
+        }
+      ],
+      "timeline": [
+        {
+          "seq": 1186,
+          "at": "2026-10-21T14:22:40+00:00",
+          "task_id": "claude:P2WC1",
+          "kind": "created",
+          "data": {
+            "rev": 1,
+            "status": "todo"
+          }
+        },
+        {
+          "seq": 1202,
+          "at": "2026-10-21T14:54:49+00:00",
+          "task_id": "claude:P2WC1",
+          "kind": "claim",
+          "data": {
+            "rev": 2,
+            "status": "in_progress",
+            "owner": "claude",
+            "claimed_by": "claude-mcp-20a536f9b9a3478e",
+            "claimed_at": "2026-10-21T14:54:49+00:00",
+            "completed_at": null,
+            "resume_status": null
+          }
+        },
+        {
+          "seq": 1238,
+          "at": "2026-10-21T15:37:12+00:00",
+          "task_id": "claude:P2WC1",
+          "kind": "pause_requested",
+          "data": {
+            "rev": 3,
+            "status": "in_progress"
+          }
+        },
+        {
+          "seq": 1247,
+          "at": "2026-10-21T15:43:41+00:00",
+          "task_id": "claude:P2WC1",
+          "kind": "confirm_pause",
+          "data": {
+            "confirmed_by": "operator",
+            "note": "交给codex"
+          }
+        },
+        {
+          "seq": 1248,
+          "at": "2026-10-21T15:43:41+00:00",
+          "task_id": "claude:P2WC1",
+          "kind": "pause",
+          "data": {
+            "rev": 4,
+            "status": "paused",
+            "owner": "claude",
+            "claimed_by": "claude-mcp-20a536f9b9a3478e",
+            "claimed_at": "2026-10-21T14:54:49+00:00",
+            "completed_at": null,
+            "resume_status": "in_progress"
+          }
+        },
+        {
+          "seq": 1249,
+          "at": "2026-10-21T15:44:43+00:00",
+          "task_id": "claude:P2WC1",
+          "kind": "assignment_changed",
+          "data": {
+            "at": "2026-10-21T15:44:43+00:00",
+            "from_owner": "claude",
+            "to_owner": "codex",
+            "previous_claimed_by": "claude-mcp-20a536f9b9a3478e",
+            "note": "用户再次明确要求Codex接手P2WC1任务；官方事件seq1247记录operator已确认停止，note=交给codex，当前paused/confirmed rev4，无未确认停止。现保留原六文件/原完整任务书及历史，转交Codex领取后修复，不恢复旧Claude执行、不复制为重复任务；组件源码/原生正负例/独立正式复验/验收和真实本地集成分别完成，不建PR。与已接手P2EXEC1并行管理但先优先处理本WC任务。真实池身份只读前置codex:P2VIEW6在正式复验中，不允许伪造Space或省略全根别名扫描。"
+          }
+        },
+        {
+          "seq": 1250,
+          "at": "2026-10-21T15:44:43+00:00",
+          "task_id": "claude:P2WC1",
+          "kind": "reassign",
+          "data": {
+            "rev": 5,
+            "status": "todo",
+            "owner": "codex",
+            "claimed_by": null,
+            "claimed_at": null,
+            "completed_at": null,
+            "resume_status": null
+          }
+        },
+        {
+          "seq": 1251,
+          "at": "2026-10-21T15:44:48+00:00",
+          "task_id": "claude:P2WC1",
+          "kind": "claim",
+          "data": {
+            "rev": 6,
+            "status": "in_progress",
+            "owner": "codex",
+            "claimed_by": "codex-mcp-6fe7be60df984d37",
+            "claimed_at": "2026-10-21T15:44:48+00:00",
+            "completed_at": null,
+            "resume_status": null
+          }
+        },
+        {
+          "seq": 1255,
+          "at": "2026-10-21T16:19:00+00:00",
+          "task_id": "claude:P2WC1",
+          "kind": "submit",
+          "data": {
+            "rev": 7,
+            "status": "submitted",
+            "owner": "codex",
+            "claimed_by": "codex-mcp-6fe7be60df984d37",
+            "claimed_at": "2026-10-21T15:44:48+00:00",
+            "completed_at": "2026-10-21T16:19:00+00:00",
+            "resume_status": null
+          }
+        },
+        {
+          "seq": 1256,
+          "at": "2026-10-21T16:19:01+00:00",
+          "task_id": "claude:P2WC1",
+          "kind": "queued",
+          "data": {
+            "job": "fb6a510c71304793b955fb6baf25c53a",
+            "kind": "verify",
+            "provider": "python"
+          }
+        },
+        {
+          "seq": 1257,
+          "at": "2026-10-21T16:19:01+00:00",
+          "task_id": "claude:P2WC1",
+          "kind": "verification_started",
+          "data": {
+            "job": "fb6a510c71304793b955fb6baf25c53a"
+          }
+        },
+        {
+          "seq": 1259,
+          "at": "2026-10-21T16:19:52+00:00",
+          "task_id": "claude:P2WC1",
+          "kind": "verified",
+          "data": {
+            "rev": 8,
+            "status": "submitted"
+          }
+        },
+        {
+          "seq": 1260,
+          "at": "2026-10-21T16:19:52+00:00",
+          "task_id": "claude:P2WC1",
+          "kind": "job_finished",
+          "data": {
+            "job": "fb6a510c71304793b955fb6baf25c53a",
+            "status": "completed"
+          }
+        }
+      ],
+      "last_rework_requested_at": null,
+      "duration_basis": "经过时长为领取至执行完成（提交）的自然时间；办理时长另扣除明确暂停，不代表实际编辑净耗时",
+      "total_active_seconds": 4984,
+      "rework_active_seconds": 0,
+      "latest_round": {
+        "number": 2,
+        "kind": "initial",
+        "owner": "codex",
+        "claimed_by": "codex-mcp-6fe7be60df984d37",
+        "requested_at": null,
+        "claimed_at": "2026-10-21T15:44:48+00:00",
+        "submitted_at": "2026-10-21T16:19:00+00:00",
+        "ended_at": "2026-10-21T16:19:00+00:00",
+        "end_reason": "submit",
+        "paused_seconds": 0,
+        "waiting_seconds": 5,
+        "elapsed_seconds": 2052,
+        "active_seconds": 2052,
+        "ongoing": false
+      },
+      "history_incomplete": false,
+      "verifications": [
+        {
+          "id": "fb6a510c71304793b955fb6baf25c53a",
+          "status": "completed",
+          "queued_at": "2026-10-21T16:19:01+00:00",
+          "started_at": "2026-10-21T16:19:01+00:00",
+          "finished_at": "2026-10-21T16:19:52+00:00",
+          "elapsed_seconds": 51,
+          "check_seconds": 41.593
+        }
+      ]
+    }
+  }
+}

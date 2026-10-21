@@ -1,4 +1,4 @@
-// Exclusive BSP user address spaces. The first three table pools are kernel BSS; fresh
+// Exclusive BSP user address spaces. Startup-only pools use kernel BSS; fresh
 // user RAM is held from buddy and accessed only through supervisor aliases.
 // No AP/IRQ may race construction or copying. Failure during initial setup is
 // fail-stop; held memory is never returned while a translation can exist.
@@ -14,10 +14,12 @@ import boot.service_memory as resources;
 import user.entropy as entropy;
 import user.compiler_stack as compiler_stack;
 import ipc.shared_core as object_core;
+import build.storage_profile as storage_profile;
 import lib.shared_abi as object_abi;
 
 pub const LIMIT: usize = 16;
-const STATIC_LIMIT:usize=3;
+const STATIC_LIMIT:usize=storage_profile.STATIC_USER_POOLS;
+var WC_FRAMEBUFFER_PHYSICAL:u64=0;var WC_FRAMEBUFFER_BYTES:u64=0;
 pub const POOL_PAGES: usize = 32;
 pub const COMPOSITOR_POOL_PAGES:usize=128;
 pub const FRAME_LIMIT: usize = 512;
@@ -518,7 +520,7 @@ unsafe fn unshare_precheck(id:usize,base:u64,pages:usize)!void{unsafe{
     var page:usize=0;while page<pages{
         var m=paging.Mapping{physical:0,flags:0};
         try paging.query(&SPACES[id],base+page as u64*4096,&m);
-        if (m.flags&(paging.USER|paging.EXECUTE|paging.UNCACHED))!=paging.USER{return error.InvalidAccess;}
+        if (m.flags&(paging.USER|paging.EXECUTE|paging.UNCACHED|paging.WRITE_COMBINING))!=paging.USER{return error.InvalidAccess;}
         let index=try frame_index(m.physical);
         if *recycled(index)!=0||((m.flags&paging.WRITE)!=0&&(*record(index)).writable!=1){return error.InvalidAccess;}
         var alias=paging.Mapping{physical:0,flags:0};
@@ -811,7 +813,7 @@ pub unsafe fn share_at(source:usize,target:usize,source_virtual:u64,target_virtu
             || 4096>elf.USER_LIMIT-source_virtual || 4096>elf.USER_LIMIT-target_virtual { return error.InvalidAddress; }
         var mapping = paging.Mapping { physical: 0, flags: 0 };
         try paging.query(&SPACES[source],source_virtual,&mapping);
-        if (mapping.flags & (paging.USER | paging.EXECUTE | paging.UNCACHED)) != paging.USER
+        if (mapping.flags & (paging.USER | paging.EXECUTE | paging.UNCACHED | paging.WRITE_COMBINING)) != paging.USER
             || (write && (mapping.flags & paging.WRITE) == 0) { return error.InvalidAccess; }
         if dma_reserved(mapping.physical){return error.InvalidAccess;}
         let index = try frame_index(mapping.physical);
@@ -830,13 +832,41 @@ pub unsafe fn share_at(source:usize,target:usize,source_virtual:u64,target_virtu
 // because this mapping has no owned RAM Frame record.
 pub unsafe fn map_device(id: usize, virtual: u64, physical: u64, bytes: u64) !void {
     unsafe {
+        if WC_FRAMEBUFFER_PHYSICAL!=0&&bytes!=0&&physical<=0xffff_ffff_ffff_ffff-bytes
+            &&physical<WC_FRAMEBUFFER_PHYSICAL+WC_FRAMEBUFFER_BYTES&&WC_FRAMEBUFFER_PHYSICAL<physical+bytes{return error.InvalidAccess;}
+        return map_device_kind(id,virtual,physical,bytes,paging.UNCACHED);
+    }
+}
+// Unsafe setup-only handoff from the sealed all-reader GOP owner. The caller
+// has completed actual cache/PAT synchronization on every online CPU and must
+// never republish a different aperture. Verify the entire actual kernel view.
+pub unsafe fn publish_framebuffer(physical:u64,bytes:u64)!void{unsafe{
+ if WC_FRAMEBUFFER_PHYSICAL!=0||physical==0||(physical&4095)!=0||bytes==0||(bytes&4095)!=0||bytes>0x100_1000{return error.InvalidAddress;}
+ let screen=(*startup.runtime_pointer()).display;let first=(screen.framebuffer_base-0xffff_8000_0000_0000)&~(4095 as u64);
+ let offset=screen.framebuffer_base-0xffff_8000_0000_0000-first;
+ if physical!=first||screen.framebuffer_size>0x100_0000||bytes!=((offset+screen.framebuffer_size+4095)&~(4095 as u64)){return error.InvalidAddress;}
+ var off:u64=0;while off<bytes{var m=paging.Mapping{physical:0,flags:0};try paging.query(startup.space_pointer(),0xffff_8000_0000_0000+physical+off,&m);
+  if m.physical!=physical+off||m.flags!=(paging.WRITE|paging.WRITE_COMBINING){return error.InvalidAccess;}off+=4096;
+ }
+ WC_FRAMEBUFFER_PHYSICAL=physical;WC_FRAMEBUFFER_BYTES=bytes;
+}return;}
+// Only the sealed normal GOP owner can authorize the later compositor view.
+// Every kernel/user alias of this aperture must retain the same WC selector.
+pub unsafe fn map_framebuffer(id:usize,virtual:u64,physical:u64,bytes:u64)!void {
+    unsafe {
+        if WC_FRAMEBUFFER_PHYSICAL==0||physical!=WC_FRAMEBUFFER_PHYSICAL||bytes==0||bytes>WC_FRAMEBUFFER_BYTES{return error.InvalidAccess;}
+        return map_device_kind(id,virtual,physical,bytes,paging.WRITE_COMBINING);
+    }
+}
+unsafe fn map_device_kind(id:usize,virtual:u64,physical:u64,bytes:u64,cache:u64)!void {
+    unsafe {
         if id >= LIMIT || PROCESSES[id].ready == 0 || virtual < elf.USER_MIN || virtual >= elf.USER_LIMIT
             || bytes == 0 || (virtual & 4095) != 0 || (physical & 4095) != 0 || (bytes & 4095) != 0
             || bytes > elf.USER_LIMIT - virtual || physical == 0 || physical >= 0x1_0000_0000_0000
             || bytes > 0x1_0000_0000_0000 - physical { return error.InvalidAddress; }
         var offset: u64 = 0;
         while offset < bytes {
-            try paging.map_live(&SPACES[id],virtual + offset,physical + offset,paging.USER | paging.WRITE | paging.UNCACHED);
+            try paging.map_live(&SPACES[id],virtual + offset,physical + offset,paging.USER | paging.WRITE | cache);
             devices.runtime_invalidate(virtual + offset);
             offset += 4096;
         }

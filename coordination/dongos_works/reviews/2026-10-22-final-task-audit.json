@@ -1,0 +1,811 @@
+{
+  "total": 141,
+  "integrated": 122,
+  "historical_accepted": [
+    {
+      "id": "claude:C1",
+      "historical": true,
+      "status": "accepted"
+    },
+    {
+      "id": "claude:C2",
+      "historical": true,
+      "status": "accepted"
+    },
+    {
+      "id": "claude:C3",
+      "historical": true,
+      "status": "accepted"
+    },
+    {
+      "id": "claude:C4",
+      "historical": true,
+      "status": "accepted"
+    },
+    {
+      "id": "claude:C5",
+      "historical": true,
+      "status": "accepted"
+    },
+    {
+      "id": "claude:C6",
+      "historical": true,
+      "status": "accepted"
+    },
+    {
+      "id": "deepseek:D1",
+      "historical": true,
+      "status": "accepted"
+    },
+    {
+      "id": "deepseek:D10",
+      "historical": true,
+      "status": "accepted"
+    },
+    {
+      "id": "deepseek:D11",
+      "historical": true,
+      "status": "accepted"
+    },
+    {
+      "id": "deepseek:D12",
+      "historical": true,
+      "status": "accepted"
+    },
+    {
+      "id": "deepseek:D13",
+      "historical": true,
+      "status": "accepted"
+    },
+    {
+      "id": "deepseek:D2",
+      "historical": true,
+      "status": "accepted"
+    },
+    {
+      "id": "deepseek:D3",
+      "historical": true,
+      "status": "accepted"
+    },
+    {
+      "id": "deepseek:D4",
+      "historical": true,
+      "status": "accepted"
+    },
+    {
+      "id": "deepseek:D5",
+      "historical": true,
+      "status": "accepted"
+    },
+    {
+      "id": "deepseek:D6",
+      "historical": true,
+      "status": "accepted"
+    },
+    {
+      "id": "deepseek:D7",
+      "historical": true,
+      "status": "accepted"
+    },
+    {
+      "id": "deepseek:D8",
+      "historical": true,
+      "status": "accepted"
+    },
+    {
+      "id": "deepseek:D9",
+      "historical": true,
+      "status": "accepted"
+    }
+  ],
+  "nonhistorical_pending": [],
+  "task_states": [
+    {
+      "id": "claude:C1",
+      "status": "accepted",
+      "rev": 4
+    },
+    {
+      "id": "claude:C10",
+      "status": "integrated",
+      "rev": 8
+    },
+    {
+      "id": "claude:C11",
+      "status": "integrated",
+      "rev": 10
+    },
+    {
+      "id": "claude:C12",
+      "status": "integrated",
+      "rev": 8
+    },
+    {
+      "id": "claude:C13",
+      "status": "integrated",
+      "rev": 10
+    },
+    {
+      "id": "claude:C14",
+      "status": "integrated",
+      "rev": 10
+    },
+    {
+      "id": "claude:C15",
+      "status": "integrated",
+      "rev": 10
+    },
+    {
+      "id": "claude:C17",
+      "status": "integrated",
+      "rev": 10
+    },
+    {
+      "id": "claude:C2",
+      "status": "accepted",
+      "rev": 4
+    },
+    {
+      "id": "claude:C22",
+      "status": "integrated",
+      "rev": 9
+    },
+    {
+      "id": "claude:C23",
+      "status": "integrated",
+      "rev": 9
+    },
+    {
+      "id": "claude:C24",
+      "status": "integrated",
+      "rev": 8
+    },
+    {
+      "id": "claude:C25",
+      "status": "integrated",
+      "rev": 8
+    },
+    {
+      "id": "claude:C26",
+      "status": "integrated",
+      "rev": 8
+    },
+    {
+      "id": "claude:C27",
+      "status": "integrated",
+      "rev": 8
+    },
+    {
+      "id": "claude:C28",
+      "status": "integrated",
+      "rev": 8
+    },
+    {
+      "id": "claude:C29",
+      "status": "integrated",
+      "rev": 14
+    },
+    {
+      "id": "claude:C3",
+      "status": "accepted",
+      "rev": 4
+    },
+    {
+      "id": "claude:C30",
+      "status": "integrated",
+      "rev": 8
+    },
+    {
+      "id": "claude:C31",
+      "status": "integrated",
+      "rev": 12
+    },
+    {
+      "id": "claude:C32",
+      "status": "integrated",
+      "rev": 8
+    },
+    {
+      "id": "claude:C33",
+      "status": "integrated",
+      "rev": 14
+    },
+    {
+      "id": "claude:C34",
+      "status": "integrated",
+      "rev": 12
+    },
+    {
+      "id": "claude:C35",
+      "status": "integrated",
+      "rev": 12
+    },
+    {
+      "id": "claude:C36",
+      "status": "integrated",
+      "rev": 14
+    },
+    {
+      "id": "claude:C37",
+      "status": "integrated",
+      "rev": 16
+    },
+    {
+      "id": "claude:C38",
+      "status": "integrated",
+      "rev": 14
+    },
+    {
+      "id": "claude:C39",
+      "status": "integrated",
+      "rev": 7
+    },
+    {
+      "id": "claude:C4",
+      "status": "accepted",
+      "rev": 4
+    },
+    {
+      "id": "claude:C40",
+      "status": "integrated",
+      "rev": 9
+    },
+    {
+      "id": "claude:C41",
+      "status": "integrated",
+      "rev": 7
+    },
+    {
+      "id": "claude:C42",
+      "status": "integrated",
+      "rev": 7
+    },
+    {
+      "id": "claude:C43",
+      "status": "integrated",
+      "rev": 7
+    },
+    {
+      "id": "claude:C44",
+      "status": "integrated",
+      "rev": 7
+    },
+    {
+      "id": "claude:C45",
+      "status": "integrated",
+      "rev": 7
+    },
+    {
+      "id": "claude:C46",
+      "status": "integrated",
+      "rev": 7
+    },
+    {
+      "id": "claude:C47",
+      "status": "integrated",
+      "rev": 7
+    },
+    {
+      "id": "claude:C48",
+      "status": "integrated",
+      "rev": 13
+    },
+    {
+      "id": "claude:C49",
+      "status": "integrated",
+      "rev": 11
+    },
+    {
+      "id": "claude:C5",
+      "status": "accepted",
+      "rev": 4
+    },
+    {
+      "id": "claude:C50",
+      "status": "integrated",
+      "rev": 11
+    },
+    {
+      "id": "claude:C51",
+      "status": "integrated",
+      "rev": 6
+    },
+    {
+      "id": "claude:C52",
+      "status": "integrated",
+      "rev": 14
+    },
+    {
+      "id": "claude:C6",
+      "status": "accepted",
+      "rev": 4
+    },
+    {
+      "id": "claude:C7",
+      "status": "integrated",
+      "rev": 8
+    },
+    {
+      "id": "claude:C8",
+      "status": "integrated",
+      "rev": 8
+    },
+    {
+      "id": "claude:C9",
+      "status": "integrated",
+      "rev": 8
+    },
+    {
+      "id": "claude:P2EXEC1",
+      "status": "integrated",
+      "rev": 18
+    },
+    {
+      "id": "claude:P2WC1",
+      "status": "integrated",
+      "rev": 10
+    },
+    {
+      "id": "codex:CX1",
+      "status": "integrated",
+      "rev": 7
+    },
+    {
+      "id": "codex:CX2",
+      "status": "integrated",
+      "rev": 13
+    },
+    {
+      "id": "codex:CX3",
+      "status": "integrated",
+      "rev": 7
+    },
+    {
+      "id": "codex:CX4",
+      "status": "integrated",
+      "rev": 7
+    },
+    {
+      "id": "codex:CX5",
+      "status": "integrated",
+      "rev": 7
+    },
+    {
+      "id": "codex:CXNASM3",
+      "status": "integrated",
+      "rev": 6
+    },
+    {
+      "id": "codex:L3HOST13",
+      "status": "integrated",
+      "rev": 9
+    },
+    {
+      "id": "codex:L3MAIN12",
+      "status": "integrated",
+      "rev": 6
+    },
+    {
+      "id": "codex:L3PTR7",
+      "status": "integrated",
+      "rev": 6
+    },
+    {
+      "id": "codex:L3REG11",
+      "status": "integrated",
+      "rev": 6
+    },
+    {
+      "id": "codex:L3REG14",
+      "status": "integrated",
+      "rev": 9
+    },
+    {
+      "id": "codex:P2ALIAS8",
+      "status": "integrated",
+      "rev": 6
+    },
+    {
+      "id": "codex:P2BUILD5",
+      "status": "integrated",
+      "rev": 6
+    },
+    {
+      "id": "codex:P2LIVE1",
+      "status": "integrated",
+      "rev": 6
+    },
+    {
+      "id": "codex:P2OOM4",
+      "status": "integrated",
+      "rev": 9
+    },
+    {
+      "id": "codex:P2SIZE10",
+      "status": "integrated",
+      "rev": 9
+    },
+    {
+      "id": "codex:P2SIZE2",
+      "status": "integrated",
+      "rev": 6
+    },
+    {
+      "id": "codex:P2SIZE9",
+      "status": "integrated",
+      "rev": 6
+    },
+    {
+      "id": "codex:P2SMP3",
+      "status": "integrated",
+      "rev": 6
+    },
+    {
+      "id": "codex:P2VIEW6",
+      "status": "integrated",
+      "rev": 6
+    },
+    {
+      "id": "codex:P5CTX2",
+      "status": "integrated",
+      "rev": 6
+    },
+    {
+      "id": "cursor:CR1",
+      "status": "integrated",
+      "rev": 12
+    },
+    {
+      "id": "cursor:CR10",
+      "status": "integrated",
+      "rev": 8
+    },
+    {
+      "id": "cursor:CR11",
+      "status": "integrated",
+      "rev": 22
+    },
+    {
+      "id": "cursor:CR12",
+      "status": "integrated",
+      "rev": 14
+    },
+    {
+      "id": "cursor:CR13",
+      "status": "integrated",
+      "rev": 16
+    },
+    {
+      "id": "cursor:CR14",
+      "status": "integrated",
+      "rev": 9
+    },
+    {
+      "id": "cursor:CR15",
+      "status": "integrated",
+      "rev": 9
+    },
+    {
+      "id": "cursor:CR16",
+      "status": "integrated",
+      "rev": 15
+    },
+    {
+      "id": "cursor:CR17",
+      "status": "integrated",
+      "rev": 8
+    },
+    {
+      "id": "cursor:CR18",
+      "status": "integrated",
+      "rev": 8
+    },
+    {
+      "id": "cursor:CR19",
+      "status": "integrated",
+      "rev": 8
+    },
+    {
+      "id": "cursor:CR2",
+      "status": "integrated",
+      "rev": 15
+    },
+    {
+      "id": "cursor:CR20",
+      "status": "integrated",
+      "rev": 12
+    },
+    {
+      "id": "cursor:CR21",
+      "status": "integrated",
+      "rev": 15
+    },
+    {
+      "id": "cursor:CR22",
+      "status": "integrated",
+      "rev": 21
+    },
+    {
+      "id": "cursor:CR23",
+      "status": "integrated",
+      "rev": 12
+    },
+    {
+      "id": "cursor:CR24",
+      "status": "integrated",
+      "rev": 15
+    },
+    {
+      "id": "cursor:CR25",
+      "status": "integrated",
+      "rev": 12
+    },
+    {
+      "id": "cursor:CR26",
+      "status": "integrated",
+      "rev": 12
+    },
+    {
+      "id": "cursor:CR27",
+      "status": "integrated",
+      "rev": 12
+    },
+    {
+      "id": "cursor:CR28",
+      "status": "integrated",
+      "rev": 8
+    },
+    {
+      "id": "cursor:CR29",
+      "status": "integrated",
+      "rev": 10
+    },
+    {
+      "id": "cursor:CR3",
+      "status": "integrated",
+      "rev": 8
+    },
+    {
+      "id": "cursor:CR38",
+      "status": "integrated",
+      "rev": 10
+    },
+    {
+      "id": "cursor:CR39",
+      "status": "integrated",
+      "rev": 8
+    },
+    {
+      "id": "cursor:CR4",
+      "status": "integrated",
+      "rev": 8
+    },
+    {
+      "id": "cursor:CR40",
+      "status": "integrated",
+      "rev": 14
+    },
+    {
+      "id": "cursor:CR41",
+      "status": "integrated",
+      "rev": 8
+    },
+    {
+      "id": "cursor:CR42",
+      "status": "integrated",
+      "rev": 8
+    },
+    {
+      "id": "cursor:CR5",
+      "status": "integrated",
+      "rev": 8
+    },
+    {
+      "id": "cursor:CR6",
+      "status": "integrated",
+      "rev": 8
+    },
+    {
+      "id": "cursor:CR7",
+      "status": "integrated",
+      "rev": 8
+    },
+    {
+      "id": "cursor:CR8",
+      "status": "integrated",
+      "rev": 8
+    },
+    {
+      "id": "cursor:CR9",
+      "status": "integrated",
+      "rev": 8
+    },
+    {
+      "id": "cursor:P5CTX1",
+      "status": "integrated",
+      "rev": 7
+    },
+    {
+      "id": "deepseek:D1",
+      "status": "accepted",
+      "rev": 12
+    },
+    {
+      "id": "deepseek:D10",
+      "status": "accepted",
+      "rev": 6
+    },
+    {
+      "id": "deepseek:D11",
+      "status": "accepted",
+      "rev": 6
+    },
+    {
+      "id": "deepseek:D12",
+      "status": "accepted",
+      "rev": 4
+    },
+    {
+      "id": "deepseek:D13",
+      "status": "accepted",
+      "rev": 4
+    },
+    {
+      "id": "deepseek:D14",
+      "status": "integrated",
+      "rev": 8
+    },
+    {
+      "id": "deepseek:D15",
+      "status": "integrated",
+      "rev": 8
+    },
+    {
+      "id": "deepseek:D16",
+      "status": "integrated",
+      "rev": 13
+    },
+    {
+      "id": "deepseek:D17",
+      "status": "integrated",
+      "rev": 8
+    },
+    {
+      "id": "deepseek:D18",
+      "status": "integrated",
+      "rev": 8
+    },
+    {
+      "id": "deepseek:D19",
+      "status": "integrated",
+      "rev": 13
+    },
+    {
+      "id": "deepseek:D2",
+      "status": "accepted",
+      "rev": 12
+    },
+    {
+      "id": "deepseek:D20",
+      "status": "integrated",
+      "rev": 14
+    },
+    {
+      "id": "deepseek:D21",
+      "status": "integrated",
+      "rev": 12
+    },
+    {
+      "id": "deepseek:D22",
+      "status": "integrated",
+      "rev": 10
+    },
+    {
+      "id": "deepseek:D23",
+      "status": "integrated",
+      "rev": 9
+    },
+    {
+      "id": "deepseek:D24",
+      "status": "integrated",
+      "rev": 6
+    },
+    {
+      "id": "deepseek:D25",
+      "status": "integrated",
+      "rev": 6
+    },
+    {
+      "id": "deepseek:D27",
+      "status": "integrated",
+      "rev": 6
+    },
+    {
+      "id": "deepseek:D3",
+      "status": "accepted",
+      "rev": 12
+    },
+    {
+      "id": "deepseek:D4",
+      "status": "accepted",
+      "rev": 12
+    },
+    {
+      "id": "deepseek:D5",
+      "status": "accepted",
+      "rev": 4
+    },
+    {
+      "id": "deepseek:D6",
+      "status": "accepted",
+      "rev": 4
+    },
+    {
+      "id": "deepseek:D7",
+      "status": "accepted",
+      "rev": 6
+    },
+    {
+      "id": "deepseek:D8",
+      "status": "accepted",
+      "rev": 6
+    },
+    {
+      "id": "deepseek:D9",
+      "status": "accepted",
+      "rev": 6
+    },
+    {
+      "id": "deepseek:L3",
+      "status": "integrated",
+      "rev": 13
+    },
+    {
+      "id": "deepseek:L3A",
+      "status": "integrated",
+      "rev": 11
+    },
+    {
+      "id": "lmstudio:LM1",
+      "status": "integrated",
+      "rev": 10
+    },
+    {
+      "id": "lmstudio:LM2",
+      "status": "integrated",
+      "rev": 8
+    },
+    {
+      "id": "lmstudio:LM3",
+      "status": "integrated",
+      "rev": 8
+    },
+    {
+      "id": "lmstudio:LM4",
+      "status": "integrated",
+      "rev": 8
+    },
+    {
+      "id": "lmstudio:LM5",
+      "status": "integrated",
+      "rev": 8
+    },
+    {
+      "id": "lmstudio:LM6",
+      "status": "integrated",
+      "rev": 8
+    },
+    {
+      "id": "lmstudio:LM7",
+      "status": "integrated",
+      "rev": 8
+    },
+    {
+      "id": "lmstudio:LM8",
+      "status": "integrated",
+      "rev": 8
+    }
+  ],
+  "live_roadmap_verified": true,
+  "coordinator_validation_issues": []
+}

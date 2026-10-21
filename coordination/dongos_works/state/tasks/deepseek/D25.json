@@ -25,14 +25,15 @@
   "document": "deepseek-works/tasks/D25-board.md",
   "historical": false,
   "id": "deepseek:D25",
+  "integration_note": "2026-10-20按实际代码补登记主线集成。已独立核对原任务/既有源码契约审查及正式复验：3tests/0skip、source_stable=true；当前四交付仍逐字节匹配验收指纹。生产已真实复制到code/lang/bootstrap/nasm_i64_switch_function.dg（478b1ed），与验收生产字节一致或仅LF/CRLF；说明及永久测试主线路径适配已审查，保留原语义/别名/原子性/真实坏Dong与完整ABI观察。CR40额外边界增强已核对，未改生产。本机NASM3分组探测维护后，9组件主线对应34项实际已全过0skip；A批20项775.031s且前后SHA稳定，B批本任务已通过，总manifest本轮保存。证据reviews/2026-10-20-mainline-registration-evidence.json与code/build/test/mainline-reconcile-*。本次仅登记既有已验收组件的实际文件集成，不宣称L3/G5/G6完成。",
   "legacy_hash": "320452b72a3a2e6eb3b5ee209a44fa3c7d8a4ede38c7187e887f4e6294ba2be8",
   "number": "D25",
   "owner": "deepseek",
-  "rev": 5,
+  "rev": 6,
   "review_note": "已实际审查完整D25任务契约、四交付、生产源码/上界说明/永久测试。完整描述符、24字节乘法/对齐/端点/全区间别名及0..16arm/标签预检符合要求，真实复用C35/C11 signed排序与重复值拒绝，Case.value/block与原Arm顺序result绑定正确，各块独立C42 ret。prefix1585+17*136=3897界成立，三个同时存活局部帧1600/1088/1224避开单函数4096限制；全部依赖与容量判断后最终发布。正式独立作业a54f3e5a53d845f897bf9d2a4cdae27c：3tests/0skip/returncode0/150.891秒/source_stable=true，debug/release、ELF64/COFF和Windows显式SysV原生执行通过。21主要selector、35文本/容量/非法/只读用例和43独立基线预检有效；两个实际关联错配坏体及提前发布头部负控均由指定数值/失败原子性拒绝，同输入好侧先执行。额外只读产物审查核对19输入/依赖、303产物SHA及202组原生返回；全部保存寄存器/RSP/对齐/canary正确，两个关联错配坏体两模式共64组均正常返回后产生指定RAX差异。当前四文件仍匹配正式验收指纹，所有直接依赖integrated。证据reviews/2026-10-19-D25-evidence.json；审查reviews/2026-10-19-C52-D25-reviewed.md。无阻塞问题，登记受限组件验收；本轮未实际主线集成，不代表完整match/CFG/L3完成。",
-  "status": "accepted",
+  "status": "integrated",
   "title": "[L3] 接续CR35：有界i64 switch及case返回关联的完整SysV函数接线",
-  "updated_at": "2026-10-19T15:33:47+00:00",
+  "updated_at": "2026-10-20T13:12:23+00:00",
   "verification": {
     "checks": [
       {

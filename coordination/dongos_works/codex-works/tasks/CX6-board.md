@@ -1,19 +1,17 @@
-# CX6 — [L3] 将有界源码读取器接入已有DongOS文件句柄
+# CX6 — [P0/L3] 修复NASM 3分组帮助的警告能力探测并复核集成入口
 
 负责人：codex。状态：待领取。
 
-按用户完成L3授权，新增lib.compiler_source：仅消费已初始化的lib.files.Session和调用者已授权文件token，通过现有H_READ IPC接入bootstrap.guest_source_reader，分块<=61440，检查返回字节数后拷贝，零长度EOF与错误保持；不申请权限、不打开路径、不改内核配置。校验Session/channel与scratch/out/result完整区间不别名，失败预检无IPC与无写入。真实debug/release原生C传输桩检查消息、偏移、短读、EOF、超容量、错误、坏返回及原子性。仅声明文件，不抢GUEST4/5。
+所属阶段：P0工具链维护，关联L3整函数主线复验。源码核对发现lang/tests/test_dongc.py:nasm_flags只读取nasm -h；本机NASM3.02把reloc-rel-dword及reloc-abs-qword放在-h -w分组帮助中，主线C52测试在setUpClass组装时因合法RIP相对重定位被-Werror拒绝，0tests（build/test/bootstrap-nasm-u64-module/run-d0a567604d4b）。这是CX1能力探测在新帮助格式下的后继兼容修复，不重做已验收组件。仅改声明文件：按实际帮助格式探测两个完整警告名，兼容旧NASM不支持-h -w或未知参数的情况，保留-Wall/-Werror及其它警告；不得按版本硬猜、不无条件关闭未知警告、不吞真实探测失败。测试覆盖旧平铺帮助、新分组帮助、名字前缀误匹配、两个警告独立、真实失败传播，以及本机NASM合法RIP/绝对64位重定位实际组装与其它警告仍为错误。只跑定向兼容测试，不跑OS/VM。交付后须独立复验。
 
 ## 可修改文件
 
-- `services/lib/compiler_source.dg`
-- `services/lib/compiler_source.md`
-- `lang/tests/test_guest_files_reader.py`
-- `docs/l3-guest-source-integration.md`
+- `lang/tests/test_dongc.py`
+- `lang/tests/test_nasm_compatibility.py`
 - `codex-works/deliveries/CX6.md`
 
 ## 定向验收
 
-- `module:lang.tests.test_guest_files_reader`
+- `module:lang.tests.test_nasm_compatibility`
 
 交付：`codex-works/deliveries/CX6.md`。独立工作副本中执行；不提交、推送、运行OS/VM或修改归属外文件。完成后提交交付，等待独立复验。

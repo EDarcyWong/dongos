@@ -91,6 +91,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("-O", "--optimize", type=int, choices=(0, 1), default=0,
                         help="optional scalar SSA optimization; other functions use L1")
     parser.add_argument("-g", "--debug-info", action="store_true", help="emit source-level DWARF information")
+    parser.add_argument("--function-sections", action="store_true", help="emit separate code sections for linker garbage collection; incompatible with -g")
     parser.add_argument("--root", type=Path, action="append", help="explicit module source root (repeatable)")
     options = parser.parse_args(argv)
     if options.check and (options.emit_asm or options.emit_manifest or options.emit_layout or options.emit_ir):
@@ -99,13 +100,15 @@ def main(argv: list[str] | None = None) -> int:
         parser.error("provide --check, --emit-asm or --emit-layout")
     if options.emit_ir and not options.optimize:
         parser.error("--emit-ir requires --optimize 1")
+    if options.function_sections and options.debug_info:
+        parser.error("--function-sections cannot be combined with --debug-info")
     outputs = [path.resolve() for path in (options.emit_asm, options.emit_manifest, options.emit_layout, options.emit_ir) if path]
     if len(outputs) != len(set(outputs)) or options.source.resolve() in outputs:
         parser.error("output paths must be distinct and cannot overwrite the source")
     source, display_path = "", options.source.as_posix()
     try:
         compilation = compile_file(options.source, roots=options.root or [], mode=options.mode, target=options.target,
-                                   optimize=options.optimize, debug_info=options.debug_info)
+                                   optimize=options.optimize, debug_info=options.debug_info, function_sections=options.function_sections)
         if any(output in {Path(path).resolve() for path in compilation.source_files} for output in outputs):
             parser.error("output cannot overwrite an imported source file")
         if not options.check:

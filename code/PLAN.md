@@ -401,15 +401,15 @@ P1 已验证正常启动、载荷篡改、镜像截短和镜像缺失；后三�
 - [x] USER/CPL3权限专项：SMEP/NX区分、SMAP读写与AC对照、五条UMIP拒绝/关闭后实际结果；12项权限QEMU通过，见 `docs/user-permissions.md`
 - [x] P2核心阶段验收：当前正式版实启、全保护位640×480真实缺页panic，50项主线及9项包装器补验通过，524项同源宿主证据复用；扩展清单仍未完成，见 `docs/p2-acceptance.md`
 
-#### P2扩展（SMP已通过，其余四项保留）
+#### P2扩展（机制验证与正常消费者接入分别验收）
 
 - [x] 动态执行别名策略（跨别名W^X与撤权顺序已实现；QEMU双CPU实测过期TLB、SHOOTDOWN后消除、两CPU执行新生成代码；活动API仍拒绝USER/EXEC，P4接入，见 `docs/p2-extensions.md`）：原属P2扩展，先建立物理别名W^X/所有权及撤权同步契约，P4代码加载前复核；活动API当前仍拒绝USER/EXEC
-- [x] 大页/拆分（`mm.paging` 原生2MiB叶子、live拆分/合并/回收，QEMU实测CPU走新页表；内核启动路径尚未使用，见 `docs/p2-extensions.md`）：原属P2扩展，独立实现2MiB/4KiB转换、失败不变、失效及回收；当前私有树只用4KiB页
-- [ ] PCID生命周期与精确失效：关联P4多地址空间，启用前验证tag复用；当前PCIDE关闭
+- [x] 大页/拆分机制：`mm.paging` 原生2MiB叶子、live拆分/合并/回收及UEFI根QEMU验证已完成。P2LIVE1保持ABI的active事务已在正常私有根/AP启动前完成真实buddy order9演练，成功后恢复4KiB树；旧2096720B/余432B产物及超限失败保留。P2SIZE2函数节及链接GC释放106496B，完整release四核桌面回归通过。P2SMP3接入AP在线共享内核根，真实1/4核客体和完整物理转储复算验证了转换应答、临时表回收及最终WB/RW/NX封存大页持有视图；任务正式验收/集成以协调器为准，见 `docs/p2-shared-large.md`。调度器接管后的任意多CR3动态修改、EXEC及图形WC继续保留独立义务。
+- [ ] PCID生命周期与精确失效：关联P4既有多地址空间/tag/精确失效契约，不重复另造机制；能力门控、tag复用和真实支持CPU证明按P4范围验收。本项P2LIVE1启动演练保持PCIDE/PGE关闭
 - [x] SMP shootdown：runtime6 四核共享内核根，BSP 单写者等待全部 AP IPI 应答后回收；真实陈旧映射反例通过，PCID/PGE 关闭
 - [x] PAT写合并（`mm.paging` WRITE_COMBINING、PAT/MTRR、按Intel SDM Table 14-7逐格的有效类型与迁移顺序，QEMU实测PAT第4项WC及映射，见 `docs/p2-extensions.md`）：本次明确排期为图形阶段使用WC前完成，先验证PAT/MTRR、缓存类型迁移及冲突别名；当前保留WB/UC、不改PAT
 
-SMP一项已按独立客体验收，其余四项继续承担交付义务；核心阶段验收不将它们视为已实现或删除范围。原单一阶段标准仍为“故意缺页显示panic屏，保护位全开”；范围及依赖见 `docs/p2-acceptance.md`。
+大页、动态执行别名与PAT机制已有独立原生/历史探针证据；P2LIVE1及P2SMP3分别覆盖AP前BSP生命周期和AP在线、调度前共享内核根事务。P2SMP3完成后该owner永久封存，长期保留原租约，不能据此声称任意多地址空间动态修改已完成。图形WC、通用动态EXEC及P4/PCID相应证明继续承担交付义务，不因核心阶段通过而删除。原单一阶段标准仍为“故意缺页显示panic屏，保护位全开”；范围及依赖见 `docs/p2-acceptance.md`。以下带日期的既有阶段记录保留其历史时点。
 
 P2 CPU 基础实现：私有高半区 GDT/TSS/IDT，三组各 16 KiB 的 IST；正常启动在 Dong 探针前输出 `DONGOS_P2_CPU_READY`。异常保存完整 184 字节上下文，经有界串口和最低 640×480 的 GOP panic 屏报告，生产版停机；测试版以 37 区分正常成功和引导失败。回溯只读已知栈区间，最多 16 帧，重入只给最简标记。早期独立故障构建验证 INT3、UD2、#GP、#PF、坏 RSP、真实 #DF、除零和坏 RBP；后续新树权限与保护页验收见 `docs/paging-activation.md`。IRQ递送、生产用户进程/可返回用户异常和多核尚未实现；隔离CPL3权限测试已完成。
 

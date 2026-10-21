@@ -1,0 +1,243 @@
+{
+  "project": "dongos",
+  "task_id": "codex:P2LIVE1",
+  "baseline_head": "28fae186eade64aac9eec17fcc2fb30913b948f6",
+  "current_head": "28fae186eade64aac9eec17fcc2fb30913b948f6",
+  "local_files_present_and_integrated": true,
+  "formal_verified_rev": 4,
+  "formal_verification": {
+    "passed": true,
+    "checks": [
+      {
+        "spec": "module:tests.test_active_large",
+        "passed": true,
+        "tests": 1,
+        "skips": 0,
+        "returncode": 0,
+        "cancelled": false,
+        "timed_out": false,
+        "process_stopped": true,
+        "execution_exited": true,
+        "elapsed_seconds": 12.235
+      },
+      {
+        "spec": "module:tests.test_active_paging",
+        "passed": true,
+        "tests": 2,
+        "skips": 0,
+        "returncode": 0,
+        "cancelled": false,
+        "timed_out": false,
+        "process_stopped": true,
+        "execution_exited": true,
+        "elapsed_seconds": 16.063
+      },
+      {
+        "spec": "module:tests.test_p2_active_large_qemu",
+        "passed": true,
+        "tests": 9,
+        "skips": 0,
+        "returncode": 0,
+        "cancelled": false,
+        "timed_out": false,
+        "process_stopped": true,
+        "execution_exited": true,
+        "elapsed_seconds": 0.406
+      }
+    ],
+    "process_stopped": true,
+    "execution_exited": true,
+    "source_stable": true,
+    "fingerprint": {
+      "kernel/mm/active_paging.dg": "e64f134abaae22c02c6a0251a1f4a39e22569dccb09492eccac463011b111774",
+      "kernel/boot/large_memory.dg": "a6ad77b53f10bdb3b9593e5896f9d57862d41b3554be1b643d24759b1e5dbb55",
+      "kernel/memory_probe.dg": "8faec8f6b54dcb11e307544d6d7420aaceac04175949ca3c28c869e7e9e2e098",
+      "kernel/memory_mutation.asm": "e5a89555e736c55a1b7965a218ce1c94707977d7f4e57828cfc2291d9178964d",
+      "tests/active_large_probe.dg": "481ce1738c5604f7bb892413583d3c8ef82496b62aa838c52c591edd8c4bd1ed",
+      "tests/active_large_probe.c": "9e1adb17dec5e375d6be768742d874e77c2437ccfb495330c7034d68868a5dd7",
+      "tests/test_active_large.py": "000ad9f21245742407145c673d3aab97f29e989242637beb7e83b806606d2633",
+      "tests/active_paging_probe.c": "3d1058048b7b6c142382d7f876699068595e330ccbca0a8cae61d2c1e02f4948",
+      "tests/run_p2_active_large_qemu.py": "eb6159fe23e2dcb4ab3aed92daae92a90e77002cde3c6cf8f7950dca2dd554a1",
+      "tests/test_p2_active_large_qemu.py": "71f666d514717751749eebb0dff01d28dea0273f22b7d54f688446db3f26e17a",
+      "docs/p2-active-large.md": "83b0c7e159363c3ff0a98bcdc0031b79544369ace58f296757ee2ed55f553750",
+      "docs/p2-extensions.md": "4039ed140141234999e2bda24c49ad63d14e195918e5a03f1b27847281f24fb8",
+      "PLAN.md": "ade39007f26fd92f2beb18e63525a06e07da1bdd69baba9992f3d7375d57b1ea",
+      "codex-works/deliveries/P2LIVE1.md": "f1b7f083882a822baffb949a1ed0d06c4f3bdc92dd71fed1c3139271f237a9e1"
+    },
+    "summary": "定向复验通过，等待源码/契约审查",
+    "finished_at": "2026-10-21T13:00:06+00:00",
+    "job": "a8778fe9dfae4df6842a1ce3cb5efe1e"
+  },
+  "mapping": [
+    {
+      "path": "D:\\projects\\2026\\dongos\\code\\kernel\\mm\\active_paging.dg",
+      "sha256": "e64f134abaae22c02c6a0251a1f4a39e22569dccb09492eccac463011b111774",
+      "formal_sha256": "e64f134abaae22c02c6a0251a1f4a39e22569dccb09492eccac463011b111774",
+      "formal_identical": true
+    },
+    {
+      "path": "D:\\projects\\2026\\dongos\\code\\kernel\\boot\\large_memory.dg",
+      "sha256": "a6ad77b53f10bdb3b9593e5896f9d57862d41b3554be1b643d24759b1e5dbb55",
+      "formal_sha256": "a6ad77b53f10bdb3b9593e5896f9d57862d41b3554be1b643d24759b1e5dbb55",
+      "formal_identical": true
+    },
+    {
+      "path": "D:\\projects\\2026\\dongos\\code\\kernel\\memory_probe.dg",
+      "sha256": "8faec8f6b54dcb11e307544d6d7420aaceac04175949ca3c28c869e7e9e2e098",
+      "formal_sha256": "8faec8f6b54dcb11e307544d6d7420aaceac04175949ca3c28c869e7e9e2e098",
+      "formal_identical": true
+    },
+    {
+      "path": "D:\\projects\\2026\\dongos\\code\\kernel\\memory_mutation.asm",
+      "sha256": "e5a89555e736c55a1b7965a218ce1c94707977d7f4e57828cfc2291d9178964d",
+      "formal_sha256": "e5a89555e736c55a1b7965a218ce1c94707977d7f4e57828cfc2291d9178964d",
+      "formal_identical": true
+    },
+    {
+      "path": "D:\\projects\\2026\\dongos\\code\\tests\\active_large_probe.dg",
+      "sha256": "481ce1738c5604f7bb892413583d3c8ef82496b62aa838c52c591edd8c4bd1ed",
+      "formal_sha256": "481ce1738c5604f7bb892413583d3c8ef82496b62aa838c52c591edd8c4bd1ed",
+      "formal_identical": true
+    },
+    {
+      "path": "D:\\projects\\2026\\dongos\\code\\tests\\active_large_probe.c",
+      "sha256": "9e1adb17dec5e375d6be768742d874e77c2437ccfb495330c7034d68868a5dd7",
+      "formal_sha256": "9e1adb17dec5e375d6be768742d874e77c2437ccfb495330c7034d68868a5dd7",
+      "formal_identical": true
+    },
+    {
+      "path": "D:\\projects\\2026\\dongos\\code\\tests\\test_active_large.py",
+      "sha256": "000ad9f21245742407145c673d3aab97f29e989242637beb7e83b806606d2633",
+      "formal_sha256": "000ad9f21245742407145c673d3aab97f29e989242637beb7e83b806606d2633",
+      "formal_identical": true
+    },
+    {
+      "path": "D:\\projects\\2026\\dongos\\code\\tests\\active_paging_probe.c",
+      "sha256": "3d1058048b7b6c142382d7f876699068595e330ccbca0a8cae61d2c1e02f4948",
+      "formal_sha256": "3d1058048b7b6c142382d7f876699068595e330ccbca0a8cae61d2c1e02f4948",
+      "formal_identical": true
+    },
+    {
+      "path": "D:\\projects\\2026\\dongos\\code\\tests\\run_p2_active_large_qemu.py",
+      "sha256": "eb6159fe23e2dcb4ab3aed92daae92a90e77002cde3c6cf8f7950dca2dd554a1",
+      "formal_sha256": "eb6159fe23e2dcb4ab3aed92daae92a90e77002cde3c6cf8f7950dca2dd554a1",
+      "formal_identical": true
+    },
+    {
+      "path": "D:\\projects\\2026\\dongos\\code\\tests\\test_p2_active_large_qemu.py",
+      "sha256": "71f666d514717751749eebb0dff01d28dea0273f22b7d54f688446db3f26e17a",
+      "formal_sha256": "71f666d514717751749eebb0dff01d28dea0273f22b7d54f688446db3f26e17a",
+      "formal_identical": true
+    },
+    {
+      "path": "D:\\projects\\2026\\dongos\\code\\docs\\p2-active-large.md",
+      "sha256": "83b0c7e159363c3ff0a98bcdc0031b79544369ace58f296757ee2ed55f553750",
+      "formal_sha256": "83b0c7e159363c3ff0a98bcdc0031b79544369ace58f296757ee2ed55f553750",
+      "formal_identical": true
+    },
+    {
+      "path": "D:\\projects\\2026\\dongos\\code\\docs\\p2-extensions.md",
+      "sha256": "4039ed140141234999e2bda24c49ad63d14e195918e5a03f1b27847281f24fb8",
+      "formal_sha256": "4039ed140141234999e2bda24c49ad63d14e195918e5a03f1b27847281f24fb8",
+      "formal_identical": true
+    },
+    {
+      "path": "D:\\projects\\2026\\dongos\\code\\PLAN.md",
+      "sha256": "ade39007f26fd92f2beb18e63525a06e07da1bdd69baba9992f3d7375d57b1ea",
+      "formal_sha256": "ade39007f26fd92f2beb18e63525a06e07da1bdd69baba9992f3d7375d57b1ea",
+      "formal_identical": true
+    },
+    {
+      "path": "D:\\projects\\2026\\dongos\\coordination\\dongos_works\\codex-works\\deliveries\\P2LIVE1.md",
+      "sha256": "f1b7f083882a822baffb949a1ed0d06c4f3bdc92dd71fed1c3139271f237a9e1",
+      "formal_sha256": "f1b7f083882a822baffb949a1ed0d06c4f3bdc92dd71fed1c3139271f237a9e1",
+      "formal_identical": true
+    }
+  ],
+  "all_source_files": 1299,
+  "main_matches_actual_guest_sources": {
+    "a2": {
+      "result": "D:\\projects\\2026\\dongos\\coordination\\dongos_works\\.local\\p2live1-debaba97c9cd\\a2-source\\build\\test\\p2-active-large\\run-2122b0c5a9894ff18ce34cd4b1ce3ec3\\result.json",
+      "sha256": "10e4b7dffa3904d4f7b2f4b946ef66872d31667db6235b8a2c916e04eaa78101",
+      "files": 1299,
+      "identical_to_main": true
+    },
+    "b2": {
+      "result": "D:\\projects\\2026\\dongos\\coordination\\dongos_works\\.local\\p2live1-debaba97c9cd\\b2-source\\build\\test\\p2-active-large\\run-aefcb4bd99cb4dd29e3cec5b537a37eb\\result.json",
+      "sha256": "6b52952b970c0f10596035f17e843a2e199837dcc35794b6e12fbfaf0266cb5b",
+      "files": 1299,
+      "identical_to_main": true
+    },
+    "r2": {
+      "result": "D:\\projects\\2026\\dongos\\coordination\\dongos_works\\.local\\p2live1-debaba97c9cd\\r2-source\\build\\test\\p2live-runtime7\\run-a9cef0e3c79d\\result.json",
+      "sha256": "a46a30005bff1d7b96d57a0bde9c5fe616a7757d39b40696c0af85a538d7fbdd",
+      "files": 1299,
+      "identical_to_main": true
+    }
+  },
+  "key_source_freeze": {
+    "tests/active_large_probe.dg": "481ce1738c5604f7bb892413583d3c8ef82496b62aa838c52c591edd8c4bd1ed",
+    "tests/active_large_probe.c": "9e1adb17dec5e375d6be768742d874e77c2437ccfb495330c7034d68868a5dd7",
+    "tests/test_active_large.py": "000ad9f21245742407145c673d3aab97f29e989242637beb7e83b806606d2633",
+    "tests/run_p2_active_large_qemu.py": "eb6159fe23e2dcb4ab3aed92daae92a90e77002cde3c6cf8f7950dca2dd554a1",
+    "tests/test_p2_active_large_qemu.py": "71f666d514717751749eebb0dff01d28dea0273f22b7d54f688446db3f26e17a",
+    "kernel/mm/active_paging.dg": "e64f134abaae22c02c6a0251a1f4a39e22569dccb09492eccac463011b111774",
+    "kernel/boot/large_memory.dg": "a6ad77b53f10bdb3b9593e5896f9d57862d41b3554be1b643d24759b1e5dbb55",
+    "kernel/memory_probe.dg": "8faec8f6b54dcb11e307544d6d7420aaceac04175949ca3c28c869e7e9e2e098",
+    "kernel/memory_mutation.asm": "e5a89555e736c55a1b7965a218ce1c94707977d7f4e57828cfc2291d9178964d"
+  },
+  "mutant_only_changed": [
+    "kernel/mm/paging.dg"
+  ],
+  "preserved_p5": {
+    "tests/p5_recovery_context_guest.py": {
+      "sha256": "ff14b043aea5e4f7fd0e72a8ee0fd465a8acb4351b6b189cfbd54dde3a97af75",
+      "unchanged": true
+    },
+    "tests/test_p5_recovery_context_guest.py": {
+      "sha256": "81bdd8d2550cd7aa1e35fe388cda9a2e343bd99a38e6c82d105591a25958d97a",
+      "unchanged": true
+    },
+    "tests/run_virtio_reset_qemu.py": {
+      "sha256": "46f6315cad0af1d1d331f21f98b4e596dd32767c5e25cdfe10a1542dd9321d59",
+      "unchanged": true
+    },
+    "tests/test_virtio_reset_guest.py": {
+      "sha256": "a9916ad252147eb8ca728735bedf17f8a2741a64a58d9e5c35e2c0ae40abf89b",
+      "unchanged": true
+    },
+    "tests/p5_virtio_reset_fixture.py": {
+      "sha256": "535e6b1fbe18507db4f09dc18a87e3b4b605396395b09bba3f29ad4998c898f1",
+      "unchanged": true
+    },
+    "docs/p5-recovery-context-guest.md": {
+      "sha256": "e6c585d336cb7b27a4eb6ec26d8be5c34277585a2743e2781b8d7a807e56ff33",
+      "unchanged": true
+    },
+    "kernel/user/device_host.dg": {
+      "sha256": "823fc27763560ff880dd26b9e4da236a92cf55174d3e4a86bf0b234592ba95ce",
+      "unchanged": true
+    },
+    "kernel/user/services.dg": {
+      "sha256": "548c6dafa0f2e515bcefeba51ae28c754e68273c979275862c32b60b6a76fa65",
+      "unchanged": true
+    }
+  },
+  "independent_review_artifacts": {
+    "D:\\projects\\2026\\dongos\\coordination\\dongos_works\\reviews\\2026-10-21-P2LIVE1-independent-host-final.json": "4e99fd6fc705fcbdbb84a8b9f26ce2aedd020a97759364e1b44e9fb29aa9c672",
+    "D:\\projects\\2026\\dongos\\coordination\\dongos_works\\reviews\\2026-10-21-P2LIVE1-independent-guest.json": "f9eb9c07cd22406a48c5698e540c7ecefab713f115ae55b62285ca1d99b88fc1",
+    "D:\\projects\\2026\\dongos\\coordination\\dongos_works\\reviews\\2026-10-21-P2LIVE1-independent-runtime7.json": "08bf824e1bc2c8330b8c513ae0800127fcf9bfbcce6039ce83e0a0f4ebcde73e",
+    "D:\\projects\\2026\\dongos\\coordination\\dongos_works\\reviews\\2026-10-21-P2LIVE1-independent-review.json": "b5df6db78a54da1f1d2d80ea66375502c6275f15b3bb7326a1370d082535d94c",
+    "D:\\projects\\2026\\dongos\\coordination\\dongos_works\\reviews\\2026-10-21-P2LIVE1-independent-review.md": "ca2bede2e24cb4a63ce13616e14744e181e0a93e665de12c5122abdfe4e9f0b1"
+  },
+  "created_pr": false,
+  "created_commit": false,
+  "pushed": false,
+  "scope": "BSP pre-AP transient WB/NX large lifecycle; final ordinary 4KiB tree",
+  "coordinator_registration": "accepted and integrated separately after file verification",
+  "accepted_rev": 5,
+  "integrated_rev": 6,
+  "coordinator_status": "integrated",
+  "review_note": "独立源码/契约/测试及最终物理字节审查PASS、无阻塞，见reviews/2026-10-21-P2LIVE1-independent-review.md/.json及host-final/guest/runtime7证据。实际核Context/Stats ABI、全512页所有权/Busy/整根失效后回收、正常root/BSP启动接线、512页实际数据、非均匀merge精确不变和buddy精确归还。独立12 host0skip，既有planner/paging6项0skip；三类native坏源两模式定向拒绝；最终a2/b2 4/1CPU完整guest与raw portable replay通过，m2实际漏split链接phase2/steps3/held1/error020f0001拒绝。r2完整release runtime7构建及真实四核桌面/P5CTX2正常控制/P2Report回归通过，独立materialize 2096720B余432、350chunks核真。正式job a8778fe9dfae4df6842a1ce3cb5efe1e 三模块12项0skip/来源稳定，14文件主目录SHA与正式fingerprint一致。已核1299源码同实际guest、8个P5文件及HEAD基线保留；历史失败、unsupported OOM未实测和BSP临时布局边界记录准确。此为本轮P2LIVE1验收，不扩称持久/多核大页、EXEC/WC或PCID完成。",
+  "registration_evidence": "D:\\projects\\2026\\dongos\\coordination\\dongos_works\\reviews\\2026-10-21-P2LIVE1-registration.json"
+}

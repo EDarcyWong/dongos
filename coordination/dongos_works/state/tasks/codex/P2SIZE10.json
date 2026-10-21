@@ -1,0 +1,68 @@
+{
+  "assignment_owner": "codex",
+  "auto_dispatch": false,
+  "auto_verify": false,
+  "candidate": null,
+  "checks": [
+    "module:tests.test_kernel_storage_profile"
+  ],
+  "claim_from_status": "rework",
+  "claim_token": "46eefed7dc8c469aa3a59ffafbb65201",
+  "claimed_at": "2026-10-21T18:06:23+00:00",
+  "claimed_by": "codex-mcp-6fe7be60df984d37",
+  "completed_at": "2026-10-21T18:06:24+00:00",
+  "complexity": "standard",
+  "created_at": "2026-10-21T17:36:19+00:00",
+  "delivery": "codex-works/deliveries/P2SIZE10.md",
+  "depends_on": [],
+  "description": "P2ALIAS8完整normal kernel span2129616B超2MiB32464；已有O1只缩4096，仍2125520超28368，均被materialize正确拒绝，无超限客体。保持loader/镜像2MiB、进程容量16、每池32表、compositor128表和所有ownership/zero/failure-held语义。user.memory已有前三static其余service arena动态分配路径。正式runtime>=5服务arena实际已apply，可把static池数量3变2，使原pid2走同一已存在动态路径，释放128KiB BSS；runtime0..4和默认编译保持3，避免早期无service arena时破坏独立用户态测试。\n\n只提供默认kernel/build/storage_profile.dg（静态池3）和tools/kernel_storage_profile.py生成显式正式profile（2）及独立验证。P2ALIAS8负责人在自己已声明user.memory.dg把STATIC_LIMIT改为模块const，tools/build.py把生成根优先传入真实编译器并记录生成源SHA/策略；不是私改源码文本或默改编译器。默认源完整可编译，profile覆盖是明确编译输入并保存于artifact，不放宽语义或移动物理池所有权。P2SIZE9已有O1可组合但不得宣称O1单独解决预算。\n\n永久测试真实compile_file解析默认/正式两种profile，完整模块闭包stable、实际NASM ELF64/COFF，独立ELF符号/节测量TABLES分配确为3*32*4096或2*32*4096、其它池/Space/Process ABI不变；非法profile输入先拒绝并不覆盖既有输出。两版本都不是用手写C复制存储。实际完整正式kernel必须回到2MiB并记录输入、生成profile、输出SHA/span。真实pid2动态页表及1/4CPU桌面/P5验收由P2ALIAS8正常客体证明；本项不以源码字串或默认编译通过假冒真实客体。独立正式checks0skip/source稳定和实际源/契约审查后accept，真实文件落盘另integrate。仍不建PR/提前推送/关机。",
+  "document": "codex-works/tasks/P2SIZE10-board.md",
+  "historical": false,
+  "id": "codex:P2SIZE10",
+  "integration_note": "已完成真实主目录文件集成并逐项SHA与已验收formal指纹完全相同，见reviews/2026-10-22-P2SIZE10-main-files.json。正式0skip稳定复验通过；build.py/user.memory接入与实际客体验收由独立P2ALIAS8负责，本状态不扩大组件验收范围。",
+  "legacy_hash": "c0aa3354d4f701825badcd45478c30e024d687b3f8cc4982e97b1ec0775f9ea8",
+  "number": "P2SIZE10",
+  "owner": "codex",
+  "rev": 9,
+  "review_note": "已实际审查默认profile、生成器、对象验证及契约。默认3不变，runtime>=5单一显式kernel快照仅生成profile2；所有普通DG逐字节及SHA保留，resolver重复根拒绝未放宽。真实ELF64/COFF和独立ELF BSS符号测量393216/262144差131072，Space64/Process/Frame/Allocator布局相同，非法/冲突profile保持输出。正式首job因协调器把kernel/build当产物遗漏而失败，完整历史保留；修复通用源码快照并29协调器测试0skip后新job1f4dd601f8684ec19b8b14a25d944403为2tests/0skip且source_stable/process_stopped/execution_exited全部true。真实正式镜像1994448B；4CPU桌面/P5原始回放实际验证pid2既有arena完整32表、compositor128表和全GOP一致WC；硬件P2ALIAS8仍单独验收。",
+  "status": "integrated",
+  "title": "[P2预算接续] 正式服务镜像按既有arena分配第三用户页表池",
+  "updated_at": "2026-10-21T18:18:39+00:00",
+  "verification": {
+    "checks": [
+      {
+        "cancelled": false,
+        "elapsed_seconds": 8.328,
+        "execution_exited": true,
+        "passed": true,
+        "process_stopped": true,
+        "returncode": 0,
+        "skips": 0,
+        "spec": "module:tests.test_kernel_storage_profile",
+        "tests": 2,
+        "timed_out": false
+      }
+    ],
+    "execution_exited": true,
+    "fingerprint": {
+      "codex-works/deliveries/P2SIZE10.md": "d690a72161c9ffd992a7ddf228cd66babea49acc6406f3d3662277b55e4cc4aa",
+      "docs/p2-kernel-storage-profile.md": "98e1c8f10ca19f3536759b4f031e1dee595fca0f9c1486380610e4b19f49c586",
+      "kernel/build/storage_profile.dg": "c93003a549f5a6daa138f31b6672c5fc637b910d8bd83149c83844605d1b94d9",
+      "tests/test_kernel_storage_profile.py": "dbe7555a048fad6e33444b6b1f6177e570341493a0efd904f5759e8124fc2bcd",
+      "tools/kernel_storage_profile.py": "acca8eb73abc15e161549122eae7854d47205842bdf76bb724b39e9d12b2217a"
+    },
+    "finished_at": "2026-10-21T18:06:41+00:00",
+    "job": "1f4dd601f8684ec19b8b14a25d944403",
+    "passed": true,
+    "process_stopped": true,
+    "source_stable": true,
+    "summary": "定向复验通过，等待源码/契约审查"
+  },
+  "write_paths": [
+    "kernel/build/storage_profile.dg",
+    "tools/kernel_storage_profile.py",
+    "tests/test_kernel_storage_profile.py",
+    "docs/p2-kernel-storage-profile.md",
+    "codex-works/deliveries/P2SIZE10.md"
+  ]
+}

@@ -14,6 +14,8 @@ unsafe extern "sysv64" fn gui_validate(id:u64,address:u64,bytes:u64,write:u64)u6
 pub unsafe extern "sysv64" fn runtime_copy_bytes(out:*u8,input:*const u8,bytes:usize)void;
 pub fn processes()*Process{unsafe{return &PROCESSES[0];}}
 pub fn frame_count()usize{return 0;}
+// No DMA context exists in this GUI boundary model.
+pub fn generation(id:usize)u64{return 1;}
 pub unsafe fn reset()void{unsafe{var i:usize=0;while i<16{PROCESSES[i]=EMPTY;i+=1;}STAGE=16;OBJECT_FAILED=false;SHARED.ready=0;let initialized=core.initialize(&SHARED,0x100000,0x200000);match initialized{ok=>{},err(e)=>{OBJECT_FAILED=true;},}STAGE_FAILED=false;UNSHARE_FAILED=false;RESOURCE_FAILED=false;}return;}
 pub unsafe fn check_range(id:usize,address:u64,bytes:usize,write:bool)!void{unsafe{
  if id>=16||gui_validate(id as u64,address,bytes as u64,write as u64)!=0{return error.Invalid;}

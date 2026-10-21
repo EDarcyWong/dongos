@@ -1,0 +1,27 @@
+{
+  "coverage": "D:\\projects\\2026\\dongos\\coordination\\dongos_works\\.local\\runs\\5672d2e5c9f24ce995ac8d17a4edc476\\workspace\\build\\test\\G5\\run-5add20907d31\\coverage.json",
+  "source_stable": true,
+  "scope_complete": false,
+  "sources": 155,
+  "supported": 6,
+  "runtime": 22,
+  "gaps": 16,
+  "diagnostics": 2,
+  "negative": 5,
+  "remaining": [
+    "defer",
+    "enum",
+    "error",
+    "extern-sysv",
+    "extern-win64",
+    "method",
+    "orelse",
+    "try"
+  ],
+  "native_container": {
+    "passed": true,
+    "path": "D:\\projects\\2026\\dongos\\coordination\\dongos_works\\.local\\runs\\5672d2e5c9f24ce995ac8d17a4edc476\\workspace\\build\\test\\G5\\run-5add20907d31\\container\\native-2fc4ab5a36a9",
+    "execution": "real native_assembler ELF at original 0x400000, static pointers unchanged"
+  },
+  "compiler_sha256": "7468345e21e02ef44c96054293e16d96682f6c7447762a178b2701e8751a96a2"
+}

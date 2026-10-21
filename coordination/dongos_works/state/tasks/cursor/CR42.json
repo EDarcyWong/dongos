@@ -29,14 +29,15 @@
   "document": "cursor-works/tasks/CR42-board.md",
   "historical": false,
   "id": "cursor:CR42",
+  "integration_note": "2026-10-20按实际代码补登记主线集成。已独立核对原任务/既有源码契约审查及正式复验：4tests/0skip、source_stable=true；当前四交付仍逐字节匹配验收指纹。生产已真实复制到code/lang/bootstrap/nasm_slice_view_function.dg（478b1ed），与验收生产字节一致或仅LF/CRLF；说明及永久测试主线路径适配已审查，保留原语义/别名/原子性/真实坏Dong与完整ABI观察。CR40额外边界增强已核对，未改生产。本机NASM3分组探测维护后，9组件主线对应34项实际已全过0skip；A批20项775.031s且前后SHA稳定，B批本任务已通过，总manifest本轮保存。证据reviews/2026-10-20-mainline-registration-evidence.json与code/build/test/mainline-reconcile-*。本次仅登记既有已验收组件的实际文件集成，不宣称L3/G5/G6完成。",
   "legacy_hash": "ada503c66d03bbf982c7d6f10244bc0e9e77542802c807b813ea5a4a30fdafff",
   "number": "CR42",
   "owner": "cursor",
-  "rev": 7,
+  "rev": 8,
   "review_note": "用户授权Codex直接实现。实际审查frame48/四输入槽/PAIR输出槽、完整别名与stride/NONE前置、CR29联合无符号边界、C22+CR20 NULL合法性、stride乘法阈值及C24完整源端点carry，再计算子视图；端点恰MAX与NULL空合法。逐段界和1536预演重放合法，未访存元素/未自造块号。正式隔离3d115eec048d4b97bb0d207f8c670b2d：4项0skip、202.969秒，source_stable=true；22主要向量/模式，实际受保护源区及debug/release、ELF64/COFF。独立原始数值审计：删除bounds的4次PAIR错误、删除完整源端点carry的4次错误成功均正常返回；4次RBX坏体精确+8且正确PAIR/栈不变，两个出口覆盖。容量提前写头按完整原子性拒绝。验收；未集成主线。",
-  "status": "accepted",
+  "status": "integrated",
   "title": "[L3] 带边界与地址溢出检查的切片视图PAIR构造",
-  "updated_at": "2026-10-19T15:56:39+00:00",
+  "updated_at": "2026-10-20T13:12:22+00:00",
   "verification": {
     "checks": [
       {

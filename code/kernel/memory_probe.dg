@@ -9,6 +9,7 @@ import boot.runtime_view as runtime;
 import boot.preflight as preflight;
 import boot.activation as activation;
 import boot.live_memory as live;
+import boot.large_memory as large;
 import mm.active_paging as active;
 import cpu.hardening as hardening;
 import boot.object_memory as objects;
@@ -100,4 +101,10 @@ export("dong_memory_live_used") fn live_used(out: *u64) u64 {
 }
 export("dong_memory_live_verify") fn live_verify(report: *const live.Report) u64 {
     unsafe { match live.verify(report) { ok => { return 0; }, err(code) => { return code; }, } }
+}
+
+// Production startup runs this only after the original small-window lifecycle
+// has restored the root. The report remains in kernel BSS for read-only audit.
+export("dong_memory_large_run") fn large_run() u64 {
+    unsafe { match large.run() { ok => { return 0; }, err(code) => { return code; }, } }
 }

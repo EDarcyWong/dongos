@@ -3,12 +3,13 @@ import user.abi as abi;import user.processes as procs;import lib.process_abi as 
 import ipc.handles as handles;import usb_departed_windows as windows;
 import usb_departed_smp as smp_bridge;import usb_departed_trace as boot_trace;
 import boot.trace as trace;
+import usb_departed_dma as memory;import usb_departed_dma as device_host;
 // This native fixture covers the single-core retirement path. The SMP adapter
 // fails closed if reached, rather than simulating successful CPU quiescence.
 var SMP_ENABLED:bool=false;var SMP_TEST_SLOTS:u64=0;
 pub error Protocol=0x050b_0002;pub error InvalidCall=0x050b_0001;
 const COUNT:usize=16;var ACTIVE:usize=16;var CURRENT:usize=4;var GRAPHICS:bool=true;
-struct Process {ready:u64}var PROCESSES:[16]Process=[Process{ready:0};16];
+struct Process {ready:u64,root:u64}var PROCESSES:[16]Process=[Process{ready:0,root:0};16];
 struct State {table:handles.Table}var STATES:[16]State=[State{table:handles.EMPTY_TABLE};16];
 var CAPS:[16][6]u64=[[0;6];16];var GUI_DEPARTED:[16]u64=[0;16];var USB_DEPARTED:u64=0;
 var MODEL:procs.Catalog=procs.Catalog{ready:0,count:0,sequence:0,configs:[proc.EMPTY_CONFIG;32],

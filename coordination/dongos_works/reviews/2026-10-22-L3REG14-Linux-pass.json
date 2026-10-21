@@ -1,0 +1,13 @@
+{
+  "passed": true,
+  "tests": 1,
+  "skips": 0,
+  "failures": 0,
+  "errors": 0,
+  "elapsed_seconds": 176.721168123,
+  "candidate_sha256": "e475e1474f868c3c4b0b95d21dbc19ded64e0aaaad0a814a80beb9753cb1e858",
+  "source_stable": true,
+  "method": "actual original NativeCompilerTests.test_global_storage_is_supported, unmodified test source except zero-capacity driver boundary",
+  "full_result": "D:\\projects\\2026\\dongos\\coordination\\dongos_works\\.local\\l3host13-linux\\zero-args-linux-result-v3.json",
+  "full_result_sha256": "fc2bb1481c19829994a90019a3832b1c3b59a7918351f8d3fb2a5fffdc4e4020"
+}

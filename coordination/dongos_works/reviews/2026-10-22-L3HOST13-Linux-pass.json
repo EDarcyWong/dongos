@@ -1,0 +1,21 @@
+{
+  "passed": true,
+  "tests": 15,
+  "skips": 0,
+  "failures": 0,
+  "errors": 0,
+  "elapsed_seconds": 703.7079202379999,
+  "versions": {
+    "python3": "Python 3.12.15",
+    "gcc": "gcc (Alpine 15.2.0) 15.2.0",
+    "nasm": "NASM version 2.16.03 compiled on Jul 30 2025"
+  },
+  "source_stable": true,
+  "full_result": "D:\\projects\\2026\\dongos\\coordination\\dongos_works\\.local\\l3host13-linux\\linux-result.json",
+  "full_result_sha256": "55b4e1f2337913b6e7a95733f9e89a272dacc6dcff148030c5090b2b671e9403",
+  "source_count": 1335,
+  "candidate_sha256": {
+    "test_l3a_globals.py": "5dc8317f816600e52bed31d2ad48203b82b8c09ad04a773d8b656e1388859b1f",
+    "test_l3a_native_regression.py": "13055eef21bb95230bf8b0fc53a496558ee1515b858fe4238358e48e7adbedde"
+  }
+}

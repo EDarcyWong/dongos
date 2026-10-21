@@ -1,0 +1,189 @@
+{
+  "project": "dongos",
+  "checked_at": "2026-10-21T21:07:26+08:00",
+  "source": "coordination-tasks MCP live list_tasks/get_task",
+  "non_archived_total": 124,
+  "counts": {
+    "integrated": 105,
+    "accepted": 19
+  },
+  "local_head": "28fae186eade64aac9eec17fcc2fb30913b948f6",
+  "task_states": [
+    {
+      "id": "codex:P2LIVE1",
+      "rev": 6,
+      "status": "integrated",
+      "updated_at": "2026-10-21T13:04:58+00:00",
+      "verification": {
+        "passed": true,
+        "checks": [
+          {
+            "spec": "module:tests.test_active_large",
+            "passed": true,
+            "tests": 1,
+            "skips": 0,
+            "returncode": 0,
+            "cancelled": false,
+            "timed_out": false,
+            "process_stopped": true,
+            "execution_exited": true,
+            "elapsed_seconds": 12.235
+          },
+          {
+            "spec": "module:tests.test_active_paging",
+            "passed": true,
+            "tests": 2,
+            "skips": 0,
+            "returncode": 0,
+            "cancelled": false,
+            "timed_out": false,
+            "process_stopped": true,
+            "execution_exited": true,
+            "elapsed_seconds": 16.063
+          },
+          {
+            "spec": "module:tests.test_p2_active_large_qemu",
+            "passed": true,
+            "tests": 9,
+            "skips": 0,
+            "returncode": 0,
+            "cancelled": false,
+            "timed_out": false,
+            "process_stopped": true,
+            "execution_exited": true,
+            "elapsed_seconds": 0.406
+          }
+        ],
+        "process_stopped": true,
+        "execution_exited": true,
+        "source_stable": true,
+        "fingerprint": {
+          "kernel/mm/active_paging.dg": "e64f134abaae22c02c6a0251a1f4a39e22569dccb09492eccac463011b111774",
+          "kernel/boot/large_memory.dg": "a6ad77b53f10bdb3b9593e5896f9d57862d41b3554be1b643d24759b1e5dbb55",
+          "kernel/memory_probe.dg": "8faec8f6b54dcb11e307544d6d7420aaceac04175949ca3c28c869e7e9e2e098",
+          "kernel/memory_mutation.asm": "e5a89555e736c55a1b7965a218ce1c94707977d7f4e57828cfc2291d9178964d",
+          "tests/active_large_probe.dg": "481ce1738c5604f7bb892413583d3c8ef82496b62aa838c52c591edd8c4bd1ed",
+          "tests/active_large_probe.c": "9e1adb17dec5e375d6be768742d874e77c2437ccfb495330c7034d68868a5dd7",
+          "tests/test_active_large.py": "000ad9f21245742407145c673d3aab97f29e989242637beb7e83b806606d2633",
+          "tests/active_paging_probe.c": "3d1058048b7b6c142382d7f876699068595e330ccbca0a8cae61d2c1e02f4948",
+          "tests/run_p2_active_large_qemu.py": "eb6159fe23e2dcb4ab3aed92daae92a90e77002cde3c6cf8f7950dca2dd554a1",
+          "tests/test_p2_active_large_qemu.py": "71f666d514717751749eebb0dff01d28dea0273f22b7d54f688446db3f26e17a",
+          "docs/p2-active-large.md": "83b0c7e159363c3ff0a98bcdc0031b79544369ace58f296757ee2ed55f553750",
+          "docs/p2-extensions.md": "4039ed140141234999e2bda24c49ad63d14e195918e5a03f1b27847281f24fb8",
+          "PLAN.md": "ade39007f26fd92f2beb18e63525a06e07da1bdd69baba9992f3d7375d57b1ea",
+          "codex-works/deliveries/P2LIVE1.md": "f1b7f083882a822baffb949a1ed0d06c4f3bdc92dd71fed1c3139271f237a9e1"
+        },
+        "summary": "定向复验通过，等待源码/契约审查",
+        "finished_at": "2026-10-21T13:00:06+00:00",
+        "job": "a8778fe9dfae4df6842a1ce3cb5efe1e"
+      }
+    },
+    {
+      "id": "codex:P5CTX2",
+      "rev": 6,
+      "status": "integrated",
+      "updated_at": "2026-10-21T11:57:55+00:00",
+      "verification": {
+        "passed": true,
+        "checks": [
+          {
+            "spec": "module:tests.test_p5_recovery_context_guest",
+            "passed": true,
+            "tests": 12,
+            "skips": 0,
+            "returncode": 0,
+            "cancelled": false,
+            "timed_out": false,
+            "process_stopped": true,
+            "execution_exited": true,
+            "elapsed_seconds": 0.609
+          },
+          {
+            "spec": "module:tests.test_virtio_reset_guest",
+            "passed": true,
+            "tests": 9,
+            "skips": 0,
+            "returncode": 0,
+            "cancelled": false,
+            "timed_out": false,
+            "process_stopped": true,
+            "execution_exited": true,
+            "elapsed_seconds": 0.406
+          }
+        ],
+        "process_stopped": true,
+        "execution_exited": true,
+        "source_stable": true,
+        "fingerprint": {
+          "tests/p5_recovery_context_guest.py": "ff14b043aea5e4f7fd0e72a8ee0fd465a8acb4351b6b189cfbd54dde3a97af75",
+          "tests/test_p5_recovery_context_guest.py": "81bdd8d2550cd7aa1e35fe388cda9a2e343bd99a38e6c82d105591a25958d97a",
+          "tests/run_virtio_reset_qemu.py": "46f6315cad0af1d1d331f21f98b4e596dd32767c5e25cdfe10a1542dd9321d59",
+          "tests/test_virtio_reset_guest.py": "a9916ad252147eb8ca728735bedf17f8a2741a64a58d9e5c35e2c0ae40abf89b",
+          "tests/p5_virtio_reset_fixture.py": "535e6b1fbe18507db4f09dc18a87e3b4b605396395b09bba3f29ad4998c898f1",
+          "docs/p5-recovery-context-guest.md": "e6c585d336cb7b27a4eb6ec26d8be5c34277585a2743e2781b8d7a807e56ff33",
+          "codex-works/deliveries/P5CTX2.md": "af4ebcd8a5282f1a873e7ad7f8897879e57ff3ea2d6ab9f97ca187971320171b"
+        },
+        "summary": "定向复验通过，等待源码/契约审查",
+        "finished_at": "2026-10-21T11:54:57+00:00",
+        "job": "b15f655e12ea439bbe3af0aef39cf8be"
+      }
+    },
+    {
+      "id": "cursor:P5CTX1",
+      "rev": 7,
+      "status": "integrated",
+      "updated_at": "2026-10-20T16:08:39+00:00",
+      "verification": {
+        "passed": true,
+        "checks": [
+          {
+            "spec": "discover:cursor-works/tests:test_p5_recovery_context.py",
+            "passed": true,
+            "tests": 1,
+            "skips": 0,
+            "returncode": 0,
+            "cancelled": false,
+            "timed_out": false,
+            "process_stopped": true,
+            "execution_exited": true,
+            "elapsed_seconds": 8.281
+          }
+        ],
+        "process_stopped": true,
+        "execution_exited": true,
+        "source_stable": true,
+        "fingerprint": {
+          "cursor-works/src/p5/user/device_host.dg": "823fc27763560ff880dd26b9e4da236a92cf55174d3e4a86bf0b234592ba95ce",
+          "cursor-works/src/p5/user/services.dg": "548c6dafa0f2e515bcefeba51ae28c754e68273c979275862c32b60b6a76fa65",
+          "cursor-works/src/p5/recovery-context.md": "c664037393f5b40b4e8c3b93b7186b1eedf0c49af96315272903b2bf5944e4bb",
+          "cursor-works/tests/p5_recovery_context_fixture.dg": "caf529fef8b79aca3487baf23c0e6e20859cc6f60ec1c354b775bc53723f23eb",
+          "cursor-works/tests/p5_recovery_context_probe.c": "99f99218f7764ae98e5d5f8a3eaa94ae5bcbe03bfca6774bd25154e4b55487fe",
+          "cursor-works/tests/test_p5_recovery_context.py": "832e27b61707a27673cc1aa1b239e212cc32a6e328a5be5e5a35b0ed5cd0ba45",
+          "cursor-works/deliveries/P5CTX1.md": "631592e65792338d5b323196818ac61cb443f82b5af777e0d91dddce821f7de8"
+        },
+        "summary": "定向复验通过，等待源码/契约审查",
+        "finished_at": "2026-10-20T15:53:56+00:00",
+        "job": "5ed94c53b4b84458a0a53b052c63b8c9"
+      }
+    }
+  ],
+  "scope": "Local roadmap refresh only; no PR/commit/push, no task-state mutations, no GitHub recheck; earlier GitHub/G6 records remain historical evidence.",
+  "updated_files": {
+    "coordination/dongos_works/roadmap.json": "ef290f31d66906244a190ede81dc8ca6b56ae5b5269481c9c3888b664eb5066a",
+    "coordination/dongos_works/progress-map.md": "4cc51eb4dc6d8803352ee0cecf24d4ef7e64d14db531cd69c32a266259db6a92",
+    "code/docs/progress-map.md": "8bdf0b8fa2ba7ad8b148ef6f24a574d113bb1b2c2c0a9b968457b98a7c665193"
+  },
+  "validation": {
+    "schema_valid": true,
+    "live_http_roadmap_matches_disk": true,
+    "p2_p5_stage_partial_retained": true,
+    "new_tasks_complete": true,
+    "existing_roadmap_tests": {
+      "command": "C:/Python312/python.exe -X utf8 -m unittest discover -s tests -p test_roadmap.py -v",
+      "cwd": "D:/projects/2026/dongos/coordination",
+      "tests": 9,
+      "skips": 0,
+      "returncode": 0
+    }
+  }
+}

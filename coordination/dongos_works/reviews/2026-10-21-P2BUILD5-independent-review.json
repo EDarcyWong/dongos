@@ -1,0 +1,587 @@
+{
+  "task": "codex:P2BUILD5",
+  "reviewer": "Codex root coordinator",
+  "basis": "Actual source/contract review; independent isolated formal test process; raw C/guest decoders; separate-process raw replay; LLVM full disassembly comparison. No second AI reviewer was used.",
+  "source_change": "Four added production lines, no removals, only grouped-help when capability advertised; tests extend real production assemble coverage, existing CXNASM3 sources remain unchanged.",
+  "actual_evidence_root": "D:\\projects\\2026\\dongos\\coordination\\dongos_works\\.local\\p2build5-3de5a87604",
+  "evidence": {
+    "independent-build-review.json": {
+      "kernel_bytes": 2006608,
+      "headroom": 90544,
+      "nasm3_kernel_sha256": "9e9451686f27c04cf162d3e974fcf7a2dd2682e648210ee38872597a619eff99",
+      "nasm2_kernel_sha256": "d8d5703a73bce75bf9c74006646d932331c26acbf1bf4c07e7aa0eeef18bd8b9",
+      "kernel_byte_identical": false,
+      "elf_sha256": "91a96430e2476625c05a5a9ece377b7ac086c82c9ffaab51f63f82cd48d0a438",
+      "elf_materialize_matches": true,
+      "consumed_inputs": 316,
+      "main_input_hashes_match": true,
+      "frozen_source_hashes_match": true,
+      "only_consumed_source_change": [
+        "tools/build.py"
+      ],
+      "whole_tree_stable": true
+    },
+    "independent-guest-index.json": [
+      {
+        "file": "D:\\projects\\2026\\dongos\\coordination\\dongos_works\\.local\\p2build5-3de5a87604\\source\\build\\test\\p2-shared-large\\run-775602f41751\\result.json",
+        "sha256": "d3d502ab0148de9f8ea7c86b98a43c621cf864c833a0421d0789783791e65d68",
+        "cpus": 1,
+        "passed": true,
+        "raw_recomputed": true,
+        "p5_control_regression": null,
+        "elapsed_seconds": 32.75,
+        "observed": {
+          "report": {
+            "version": 1,
+            "attempted": 1,
+            "complete": 1,
+            "phase": 11,
+            "steps": 2047,
+            "root": 4194304,
+            "window": 18446647316686307328,
+            "physical": 6291456,
+            "pages": 512,
+            "order": 9,
+            "free_before": 880,
+            "free_held": 368,
+            "free_after": 368,
+            "tables_before": 42,
+            "tables_mapped": 44,
+            "tables_split": 45,
+            "tables_merged": 44,
+            "tables_after": 44,
+            "sample_first": 1234605615003729920,
+            "sample_last": 1234605615003730431,
+            "split_value": 1234605615003729925,
+            "replacement_value": 1234605615003729926,
+            "restored_value": 1234605615003729925,
+            "merge_value": 1234605615003729925,
+            "merge_error": 33751047,
+            "invlpg": 2,
+            "full_flush": 517,
+            "retired_tables": 4,
+            "held": 1,
+            "cr0": 2147549235,
+            "cr3": 4194304,
+            "cr4": 3411560,
+            "efer": 3328,
+            "rflags": 70,
+            "pat": 1974748653749254,
+            "error_code": 0,
+            "large_entry": 9223372036861067491,
+            "split_entry": 4374567,
+            "merged_entry": 9223372036861067491,
+            "domain_pointer": 18446744071563405960,
+            "count": 1,
+            "epoch_before": 7,
+            "epoch_after": 531,
+            "broadcasts_before": 7,
+            "broadcasts_after": 531,
+            "sent_before": 0,
+            "sent_after": 0,
+            "acks_before": 0,
+            "acks_after": 0,
+            "invalid_before": 4,
+            "invalid_after": 6,
+            "full_before": 1,
+            "full_after": 518,
+            "probes_before": 2,
+            "probes_after": 7,
+            "reader_value": 1234605615003729925,
+            "reader_checks": 0,
+            "sealed": 1,
+            "seal_error": 101580802,
+            "final_entry": 9223372036861067427,
+            "cleanup_tables": 42,
+            "domain_pending": 0,
+            "domain_failures": 0
+          },
+          "actual_buddy_free": 368,
+          "tree": {
+            "tables": 48,
+            "ordinary_pages": 11116,
+            "large_pages": 1,
+            "lease_aliases": 1
+          },
+          "owned_sha256": "c076a886bcdaa7c84c2749ae044ab44456bf6ceb71a1085a99f25fb9ab47bd4d",
+          "pool_sha256": "55e606876867a686b129f3ae45cd7b79a9848c5243dcc1d3e09dff9e427756c4"
+        }
+      },
+      {
+        "file": "D:\\projects\\2026\\dongos\\coordination\\dongos_works\\.local\\p2build5-3de5a87604\\source\\build\\test\\p2-shared-large\\run-eebafd6de452\\result.json",
+        "sha256": "23cd45b94af72fa72cc9208a465d67a85a50354ba0a2a7ce6856545ff1c0116f",
+        "cpus": 4,
+        "passed": true,
+        "raw_recomputed": true,
+        "p5_control_regression": true,
+        "elapsed_seconds": 28.53099999999904,
+        "observed": {
+          "report": {
+            "version": 1,
+            "attempted": 1,
+            "complete": 1,
+            "phase": 11,
+            "steps": 2047,
+            "root": 4194304,
+            "window": 18446647316686307328,
+            "physical": 6291456,
+            "pages": 512,
+            "order": 9,
+            "free_before": 880,
+            "free_held": 368,
+            "free_after": 368,
+            "tables_before": 42,
+            "tables_mapped": 44,
+            "tables_split": 45,
+            "tables_merged": 44,
+            "tables_after": 44,
+            "sample_first": 1234605615003729920,
+            "sample_last": 1234605615003730431,
+            "split_value": 1234605615003729925,
+            "replacement_value": 1234605615003729926,
+            "restored_value": 1234605615003729925,
+            "merge_value": 1234605615003729925,
+            "merge_error": 33751047,
+            "invlpg": 2,
+            "full_flush": 517,
+            "retired_tables": 4,
+            "held": 1,
+            "cr0": 2147549235,
+            "cr3": 4194304,
+            "cr4": 3411560,
+            "efer": 3328,
+            "rflags": 70,
+            "pat": 1974748653749254,
+            "error_code": 0,
+            "large_entry": 9223372036861067491,
+            "split_entry": 4374567,
+            "merged_entry": 9223372036861067491,
+            "domain_pointer": 18446744071563405960,
+            "count": 4,
+            "epoch_before": 13,
+            "epoch_after": 537,
+            "broadcasts_before": 13,
+            "broadcasts_after": 537,
+            "sent_before": 39,
+            "sent_after": 1611,
+            "acks_before": 39,
+            "acks_after": 1611,
+            "invalid_before": 4,
+            "invalid_after": 6,
+            "full_before": 7,
+            "full_after": 524,
+            "probes_before": 2,
+            "probes_after": 7,
+            "reader_value": 1234605615003729925,
+            "reader_checks": 15,
+            "sealed": 1,
+            "seal_error": 101580802,
+            "final_entry": 9223372036861067427,
+            "cleanup_tables": 42,
+            "domain_pending": 0,
+            "domain_failures": 0
+          },
+          "actual_buddy_free": 368,
+          "tree": {
+            "tables": 64,
+            "ordinary_pages": 18212,
+            "large_pages": 1,
+            "lease_aliases": 1
+          },
+          "owned_sha256": "c076a886bcdaa7c84c2749ae044ab44456bf6ceb71a1085a99f25fb9ab47bd4d",
+          "pool_sha256": "8a6f8ef174ac0fcf82084f0c4c4e0e65235475f90178b57c2b0dec2765eec036"
+        }
+      }
+    ],
+    "independent-encoding-review.json": {
+      "kernel_symbolized_stream_equal_after_documented_normalization": true,
+      "normalized_lines": 288606,
+      "rules": [
+        "cltq == movslq %eax,%rax: equivalent sign extension with one-byte encoding difference",
+        "LOCK prefix is combined/separate in objdump symbol boundary output",
+        "linker int3 alignment padding ignored; original full disassembly delta reviewed"
+      ],
+      "assembly_source_comparison": "all19 .asm files byte-identical",
+      "services": [
+        {
+          "service": "block",
+          "section_changes": {
+            ".symtab": {
+              "new_bytes": 76368,
+              "old_bytes": 76368
+            },
+            ".strtab": {
+              "new_bytes": 226119,
+              "old_bytes": 226140
+            }
+          }
+        },
+        {
+          "service": "compositor",
+          "section_changes": {
+            ".symtab": {
+              "new_bytes": 159600,
+              "old_bytes": 159600
+            },
+            ".strtab": {
+              "new_bytes": 441481,
+              "old_bytes": 441502
+            }
+          }
+        },
+        {
+          "service": "devmgr",
+          "section_changes": {
+            ".symtab": {
+              "new_bytes": 11232,
+              "old_bytes": 11232
+            },
+            ".strtab": {
+              "new_bytes": 25035,
+              "old_bytes": 25056
+            }
+          }
+        },
+        {
+          "service": "echo",
+          "section_changes": {
+            ".symtab": {
+              "new_bytes": 3960,
+              "old_bytes": 3960
+            },
+            ".strtab": {
+              "new_bytes": 4293,
+              "old_bytes": 4314
+            }
+          }
+        },
+        {
+          "service": "editor",
+          "section_changes": {
+            ".text": {
+              "new_bytes": 185076,
+              "old_bytes": 185060
+            },
+            ".symtab": {
+              "new_bytes": 87768,
+              "old_bytes": 87768
+            },
+            ".strtab": {
+              "new_bytes": 205574,
+              "old_bytes": 205595
+            }
+          }
+        },
+        {
+          "service": "fault",
+          "section_changes": {
+            ".symtab": {
+              "new_bytes": 3600,
+              "old_bytes": 3600
+            },
+            ".strtab": {
+              "new_bytes": 3887,
+              "old_bytes": 3908
+            }
+          }
+        },
+        {
+          "service": "files",
+          "section_changes": {
+            ".text": {
+              "new_bytes": 185076,
+              "old_bytes": 185060
+            },
+            ".symtab": {
+              "new_bytes": 87768,
+              "old_bytes": 87768
+            },
+            ".strtab": {
+              "new_bytes": 205573,
+              "old_bytes": 205594
+            }
+          }
+        },
+        {
+          "service": "fs",
+          "section_changes": {
+            ".symtab": {
+              "new_bytes": 88944,
+              "old_bytes": 88944
+            },
+            ".strtab": {
+              "new_bytes": 217507,
+              "old_bytes": 217528
+            }
+          }
+        },
+        {
+          "service": "fs-reader",
+          "section_changes": {
+            ".symtab": {
+              "new_bytes": 13680,
+              "old_bytes": 13680
+            },
+            ".strtab": {
+              "new_bytes": 23667,
+              "old_bytes": 23688
+            }
+          }
+        },
+        {
+          "service": "init",
+          "section_changes": {
+            ".symtab": {
+              "new_bytes": 16560,
+              "old_bytes": 16560
+            },
+            ".strtab": {
+              "new_bytes": 31961,
+              "old_bytes": 31982
+            }
+          }
+        },
+        {
+          "service": "input",
+          "section_changes": {
+            ".text": {
+              "new_bytes": 147860,
+              "old_bytes": 147860
+            },
+            ".symtab": {
+              "new_bytes": 72912,
+              "old_bytes": 72912
+            },
+            ".strtab": {
+              "new_bytes": 205441,
+              "old_bytes": 205462
+            }
+          }
+        },
+        {
+          "service": "ipc-peer",
+          "section_changes": {
+            ".symtab": {
+              "new_bytes": 3888,
+              "old_bytes": 3888
+            },
+            ".strtab": {
+              "new_bytes": 4276,
+              "old_bytes": 4297
+            }
+          }
+        },
+        {
+          "service": "settings",
+          "section_changes": {
+            ".text": {
+              "new_bytes": 185076,
+              "old_bytes": 185060
+            },
+            ".symtab": {
+              "new_bytes": 87768,
+              "old_bytes": 87768
+            },
+            ".strtab": {
+              "new_bytes": 205576,
+              "old_bytes": 205597
+            }
+          }
+        },
+        {
+          "service": "shell",
+          "section_changes": {
+            ".symtab": {
+              "new_bytes": 38712,
+              "old_bytes": 38712
+            },
+            ".strtab": {
+              "new_bytes": 78839,
+              "old_bytes": 78860
+            }
+          }
+        },
+        {
+          "service": "terminal",
+          "section_changes": {
+            ".text": {
+              "new_bytes": 185076,
+              "old_bytes": 185060
+            },
+            ".symtab": {
+              "new_bytes": 87768,
+              "old_bytes": 87768
+            },
+            ".strtab": {
+              "new_bytes": 205576,
+              "old_bytes": 205597
+            }
+          }
+        },
+        {
+          "service": "waiter",
+          "section_changes": {
+            ".symtab": {
+              "new_bytes": 3888,
+              "old_bytes": 3888
+            },
+            ".strtab": {
+              "new_bytes": 4266,
+              "old_bytes": 4287
+            }
+          }
+        },
+        {
+          "service": "xhci",
+          "section_changes": {
+            ".symtab": {
+              "new_bytes": 119448,
+              "old_bytes": 119448
+            },
+            ".strtab": {
+              "new_bytes": 348228,
+              "old_bytes": 348249
+            }
+          }
+        }
+      ],
+      "scope": "Encoding equivalence assessment, supplemented by actual one/four CPU and P5 tests; not a proof of all program behavior",
+      "services_with_changed_text_normalized_disassembly": [
+        {
+          "service": "editor",
+          "normalized_stream_equal": true,
+          "normalized_lines": 48890
+        },
+        {
+          "service": "files",
+          "normalized_stream_equal": true,
+          "normalized_lines": 48890
+        },
+        {
+          "service": "settings",
+          "normalized_stream_equal": true,
+          "normalized_lines": 48890
+        },
+        {
+          "service": "terminal",
+          "normalized_stream_equal": true,
+          "normalized_lines": 48890
+        },
+        {
+          "service": "input",
+          "normalized_stream_equal": true,
+          "normalized_lines": 38888
+        }
+      ],
+      "service_normalization_review": "Initial int3-only normalization exposed extra NOP alignment following UD2/RET; raw hunks reviewed. Including exact nop padding gives equal normalized instruction streams. Full original disassemblies retained."
+    },
+    "assembly-source-comparison.json": [
+      {
+        "file": "dong_probe.asm",
+        "identical": true
+      },
+      {
+        "file": "loader-trace/trace_loader.asm",
+        "identical": true
+      },
+      {
+        "file": "services/block/program.asm",
+        "identical": true
+      },
+      {
+        "file": "services/compositor/program.asm",
+        "identical": true
+      },
+      {
+        "file": "services/devmgr/program.asm",
+        "identical": true
+      },
+      {
+        "file": "services/echo/program.asm",
+        "identical": true
+      },
+      {
+        "file": "services/editor/program.asm",
+        "identical": true
+      },
+      {
+        "file": "services/fault/program.asm",
+        "identical": true
+      },
+      {
+        "file": "services/files/program.asm",
+        "identical": true
+      },
+      {
+        "file": "services/fs/program.asm",
+        "identical": true
+      },
+      {
+        "file": "services/fs-reader/program.asm",
+        "identical": true
+      },
+      {
+        "file": "services/init/program.asm",
+        "identical": true
+      },
+      {
+        "file": "services/input/program.asm",
+        "identical": true
+      },
+      {
+        "file": "services/ipc-peer/program.asm",
+        "identical": true
+      },
+      {
+        "file": "services/settings/program.asm",
+        "identical": true
+      },
+      {
+        "file": "services/shell/program.asm",
+        "identical": true
+      },
+      {
+        "file": "services/terminal/program.asm",
+        "identical": true
+      },
+      {
+        "file": "services/waiter/program.asm",
+        "identical": true
+      },
+      {
+        "file": "services/xhci/program.asm",
+        "identical": true
+      }
+    ],
+    "nasm2-compatibility.json": {
+      "returncode": 0,
+      "nasm": "D:\\projects\\2026\\dongos\\coordination\\dongos_works\\.local\\p5ctx2-20261021-193555\\toolchain\\nasm-2.16.03\\nasm.exe",
+      "command": [
+        "C:\\Python312\\python.exe",
+        "-m",
+        "unittest",
+        "tests.test_build_assembler",
+        "lang.tests.test_nasm_compatibility",
+        "-v"
+      ]
+    },
+    "scope-diff.json": {
+      "tools/build.py": {
+        "before_sha256": "637f5d23f16eef5bd61cf63b6739dee883b8ddb66367d3274a9001641f8f054c",
+        "after_sha256": "b7701e10a61ba316dff4b8057624d935dfde5249cca4585e9f209b9f32cb595f",
+        "diff": "--- accepted-before/tools/build.py\n+++ current/tools/build.py\n@@ -99,6 +99,10 @@\n     # capabilities rather than guessing from the major version. Every other\n     # warning remains an error, including unsupported relocation widths.\n     help_text = subprocess.run([nasm, \"-h\"], check=True, capture_output=True, text=True).stdout\n+    if re.search(r'(?m)^\\s*-h\\s+-\\S+', help_text):\n+        help_text += '\\n' + subprocess.run(\n+            [nasm, \"-h\", \"-w\"], check=True, capture_output=True, text=True,\n+        ).stdout\n     for warning in (\"reloc-rel-dword\", \"reloc-abs-qword\"):\n         if re.search(r\"(?m)^\\s*\" + re.escape(warning) + r\"\\s\", help_text):\n             command.append(\"-w-\" + warning)\n"
+      },
+      "tests/test_build_assembler.py": {
+        "before_sha256": "858b9510dbc4da3c4135f79cdb2186d4627cf8a1ae5cb336ea568f15e7a110f6",
+        "after_sha256": "049160c091a4a0557f20a371c5fdaa49ef83809ca24a83e83dbb60c7b8609dd3",
+        "diff": "--- accepted-before/tests/test_build_assembler.py\n+++ current/tests/test_build_assembler.py\n@@ -2,7 +2,12 @@\n from pathlib import Path\n from types import SimpleNamespace\n from unittest import TestCase, mock\n+import hashlib\n+import json\n+import re\n+import subprocess\n import tempfile\n+import uuid\n from tools import build\n \n class AssemblerCapabilities(TestCase):\n@@ -23,3 +28,112 @@\n                 self.assertIn('-DP1_TEST=1', command)\n                 self.assertEqual(expected, [x for x in command if x.startswith('-w-')])\n                 self.assertEqual(['nasm', '-h'], run.call_args.args[0])\n+\n+    def test_grouped_help_in_production_assemble_preserves_command_contract(self):\n+        summary = 'Usage: nasm\\n -h -opt show additional help\\n'\n+        warnings = ' reloc-rel-dword relative\\n reloc-abs-qword absolute\\n'\n+        with tempfile.TemporaryDirectory() as tmp, \\\n+             mock.patch.object(build, 'find_tool', return_value='nasm'), \\\n+             mock.patch.object(build.subprocess, 'run', side_effect=[\n+                 SimpleNamespace(stdout=summary), SimpleNamespace(stdout=warnings),\n+             ]) as run, mock.patch.object(build, 'execute') as execute:\n+            output = Path(tmp)\n+            result = build.assemble(Path('example.asm'), output, fmt='win64',\n+                                    test=True, stage='p1', defines={'RUNTIME_LEVEL': 7})\n+            self.assertEqual(result, output / 'example.obj')\n+            self.assertEqual([c.args[0] for c in run.call_args_list],\n+                             [['nasm', '-h'], ['nasm', '-h', '-w']])\n+            self.assertTrue(all(c.kwargs['check'] for c in run.call_args_list))\n+            command = execute.call_args.args[0]\n+            for flag in ('-Wall', '-Werror', '-DP1_TEST=1', '-DRUNTIME_LEVEL=7',\n+                         '-w-reloc-rel-dword', '-w-reloc-abs-qword'):\n+                self.assertIn(flag, command)\n+            self.assertEqual(command[command.index('-f') + 1], 'win64')\n+            self.assertEqual(command[command.index('-l') + 1], str(output / 'example.lst'))\n+            self.assertEqual(command[command.index('-o') + 1], str(result))\n+            self.assertEqual(command.count('-I'), 2)\n+            self.assertEqual(command[-1], 'example.asm')\n+\n+    def test_legacy_help_does_not_receive_group_option(self):\n+        unsupported = subprocess.CalledProcessError(2, ['nasm', '-h', '-w'])\n+        with tempfile.TemporaryDirectory() as tmp, \\\n+             mock.patch.object(build, 'find_tool', return_value='nasm'), \\\n+             mock.patch.object(build.subprocess, 'run', side_effect=[\n+                 SimpleNamespace(stdout=' -h print help\\n reloc-abs-qword pointer\\n'),\n+                 unsupported,\n+             ]) as run, mock.patch.object(build, 'execute') as execute:\n+            build.assemble(Path('old.asm'), Path(tmp), fmt='elf64', test=False, stage='p1')\n+            self.assertEqual(run.call_count, 1)\n+            self.assertEqual([a for a in execute.call_args.args[0] if a.startswith('-w-')],\n+                             ['-w-reloc-abs-qword'])\n+\n+    def test_grouped_warning_names_match_exactly_and_independently(self):\n+        for names in ((), ('reloc-rel-dword',), ('reloc-abs-qword',)):\n+            with self.subTest(names=names), tempfile.TemporaryDirectory() as tmp, \\\n+                 mock.patch.object(build, 'find_tool', return_value='nasm'), \\\n+                 mock.patch.object(build.subprocess, 'run', side_effect=[\n+                     SimpleNamespace(stdout=' -h -opt additional help\\n'),\n+                     SimpleNamespace(stdout=' reloc-rel-dword-extra wrong\\n reloc-abs-qword-extra wrong\\n'\n+                                     + ''.join(' ' + n + ' actual\\n' for n in names)),\n+                 ]), mock.patch.object(build, 'execute') as execute:\n+                build.assemble(Path('exact.asm'), Path(tmp), fmt='elf64', test=False, stage='p1')\n+                self.assertEqual([a for a in execute.call_args.args[0] if a.startswith('-w-')],\n+                                 ['-w-' + n for n in names])\n+\n+    def test_probe_failures_abort_before_assembly(self):\n+        for group in (False, True):\n+            failure = subprocess.CalledProcessError(3, ['nasm', '-h'])\n+            responses = [SimpleNamespace(stdout=' -h -opt additional help\\n'), failure] if group else [failure]\n+            with self.subTest(group=group), tempfile.TemporaryDirectory() as tmp, \\\n+                 mock.patch.object(build, 'find_tool', return_value='nasm'), \\\n+                 mock.patch.object(build.subprocess, 'run', side_effect=responses), \\\n+                 mock.patch.object(build, 'execute') as execute:\n+                with self.assertRaises(subprocess.CalledProcessError) as caught:\n+                    build.assemble(Path('bad.asm'), Path(tmp), fmt='elf64', test=False, stage='p1')\n+                self.assertIs(caught.exception, failure)\n+                execute.assert_not_called()\n+\n+    def test_real_production_assembler_legal_relocations_and_other_error(self):\n+        nasm = build.find_tool('nasm', 'NASM')\n+        state = build.ROOT / 'build/test/build-assembler' / ('run-' + uuid.uuid4().hex[:12])\n+        state.mkdir(parents=True)\n+        paths = [Path(build.__file__), Path(__file__)]\n+        hashes = lambda: {str(p): hashlib.sha256(p.read_bytes()).hexdigest() for p in paths}\n+        before = hashes()\n+        help_text = subprocess.run([nasm, '-h'], capture_output=True, text=True, check=True).stdout\n+        if re.search(r'(?m)^\\s*-h\\s+-\\S+', help_text):\n+            help_text += '\\n' + subprocess.run([nasm, '-h', '-w'], capture_output=True, text=True, check=True).stdout\n+        records = []\n+        snippets = {\n+            'reloc-rel-dword': 'bits 64\\ndefault rel\\nsection .text\\nprobe: lea rax,[rel data]\\nret\\nsection .rodata\\ndata: db 0\\n',\n+            'reloc-abs-qword': 'bits 64\\nsection .text\\nprobe: ret\\nsection .rodata\\ndata: dq probe\\n',\n+        }\n+        for name, text in snippets.items():\n+            source = state / (name + '.asm');source.write_text(text, encoding='ascii')\n+            for fmt in ('elf64', 'win64'):\n+                with self.subTest(name=name, fmt=fmt):\n+                    if re.search(r'(?m)^\\s*' + re.escape(name) + r'\\s', help_text):\n+                        raw = subprocess.run([nasm, '-f', fmt, '-Wall', '-Werror', '-o',\n+                                              str(state / 'raw.o'), str(source)], capture_output=True, text=True)\n+                        self.assertNotEqual(raw.returncode, 0)\n+                        self.assertIn(name, raw.stderr)\n+                        records.append(dict(name=name, fmt=fmt, raw_returncode=raw.returncode, raw_stderr=raw.stderr))\n+                    with mock.patch.object(build, 'find_tool', return_value=nasm):\n+                        obj = build.assemble(source, state / (name + '-' + fmt), fmt=fmt, test=False, stage='p1')\n+                    self.assertGreater(obj.stat().st_size, 0)\n+                    self.assertTrue(obj.with_suffix('.lst').is_file())\n+                    records.append(dict(name=name, fmt=fmt, production_returncode=0,\n+                                        object_sha256=hashlib.sha256(obj.read_bytes()).hexdigest()))\n+        overflow = state / 'overflow.asm';overflow.write_text('bits 64\\nsection .data\\ndb 256\\n', encoding='ascii')\n+        for fmt in ('elf64', 'win64'):\n+            with self.subTest(overflow=fmt), mock.patch.object(build, 'find_tool', return_value=nasm):\n+                with self.assertRaises(subprocess.CalledProcessError):\n+                    build.assemble(overflow, state / ('overflow-' + fmt), fmt=fmt, test=False, stage='p1')\n+                raw = subprocess.run([nasm, '-f', fmt, '-Wall', '-Werror', '-o', str(state / 'overflow.o'),\n+                                      str(overflow)], capture_output=True, text=True)\n+                self.assertNotEqual(raw.returncode, 0);self.assertIn('number-overflow', raw.stderr)\n+                records.append(dict(name='overflow', fmt=fmt, production_rejected=True, stderr=raw.stderr))\n+        self.assertEqual(hashes(), before)\n+        (state / 'result.json').write_text(json.dumps(dict(passed=True, source_before=before,\n+            source_after=hashes(), nasm=nasm, records=records), indent=2) + '\\n')\n+        print('Production assembler evidence:', state)\n"
+      }
+    }
+  },
+  "p5_production_sha256": {
+    "kernel/user/device_host.dg": "823fc27763560ff880dd26b9e4da236a92cf55174d3e4a86bf0b234592ba95ce",
+    "kernel/user/services.dg": "548c6dafa0f2e515bcefeba51ae28c754e68273c979275862c32b60b6a76fa65"
+  },
+  "main_head": "28fae186eade64aac9eec17fcc2fb30913b948f6",
+  "scope": "Build consumer repair only. Does not close P2 EXEC/WC or arbitrary user-root transactions; no commit/push/PR."
+}

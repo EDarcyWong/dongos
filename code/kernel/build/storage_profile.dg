@@ -1,0 +1,4 @@
+// Default/diagnostic kernels retain all three startup-only static pools.
+// The normal service build declares an explicit generated override input.
+module build.storage_profile;
+pub const STATIC_USER_POOLS:usize=3;

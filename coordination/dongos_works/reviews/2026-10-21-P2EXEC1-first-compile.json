@@ -1,0 +1,8 @@
+{
+  "compiled": false,
+  "error_type": "CompileError",
+  "code": "E0201",
+  "message": "global 'paging.READ' is missing or private",
+  "line": 397,
+  "file": "mm/exec_alias_owner.dg"
+}

@@ -1,0 +1,29 @@
+module cache_alias_owner_probe;
+import mm.cache_alias_owner as wc;
+import mm.paging as pg;
+import smp.tlb as tlb;
+import smp.context as cpu;
+export("wc_shapes") fn shapes(kind:u64)usize{
+ if kind==0{return sizeof(wc.Context);}if kind==1{return sizeof(wc.Config);}if kind==2{return sizeof(wc.ReaderConfig);}
+ if kind==3{return sizeof(wc.Reply);}if kind==4{return sizeof(pg.Retired);}if kind==5{return sizeof(tlb.Domain);}
+ if kind==6{return sizeof(cpu.Context);}return sizeof(pg.Space);
+}
+export("wc_bind") fn bind(config:*const wc.Config,out:*wc.Context)u64{unsafe{return wc.bind(config,out);}}
+export("wc_execute") fn execute(out:*wc.Context)u64{unsafe{return wc.execute_migration(out);}}
+export("wc_audit") fn audit(context:*const wc.Context,index:u64)u64{unsafe{return wc.audit(context,index);}}
+export("wc_seal") fn seal(context:*wc.Context)u64{unsafe{return wc.seal(context);}}
+export("wc_space_init") fn init(space:*pg.Space,pool:*pg.Table,count:usize,metadata:*u8)u64{unsafe{
+ *space=pg.EMPTY_SPACE;match pg.init(space,slice_from_raw_parts(pool,count),0x400000,slice_from_raw_parts(metadata,count),48,true){ok=>{return 0;},err(e)=>{return e;},}
+}}
+export("wc_domain_init") fn domain_init(domain:*tlb.Domain,cpus:*cpu.Context,count:usize,boxes:*tlb.Mailbox,ops:*const tlb.Ops)u64{unsafe{
+ *domain=tlb.EMPTY_DOMAIN;match tlb.initialize(domain,cpus,count,boxes,ops){ok=>{return 0;},err(e)=>{return e;},}
+}}
+export("wc_page_map") fn map(space:*pg.Space,va:u64,pa:u64,flags:u64)u64{unsafe{
+ match pg.map(space,va,pa,flags){ok=>{return 0;},err(e)=>{return e;},}
+}}
+export("wc_large_map") fn large(space:*pg.Space,va:u64,pa:u64)u64{unsafe{
+ match pg.map_large(space,va,pa,pg.WRITE){ok=>{return 0;},err(e)=>{return e;},}
+}}
+export("wc_tables") fn tables(space:*const pg.Space)u64{unsafe{
+ match pg.used_tables(space){ok(n)=>{return n as u64;},err(e)=>{return 0xffffffffffffffff;},}
+}}

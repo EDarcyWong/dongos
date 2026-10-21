@@ -26,6 +26,20 @@ def example(title='整体任务图'):
 
 
 class RoadmapTests(unittest.TestCase):
+    def test_accepted_scope_notes_are_separate_from_actual_remaining_work(self):
+        value = example()
+        stage = value['tracks'][0]['stages'][0]
+        stage['scope_notes'] = ['验收范围为持有核验，安全回收归P5阶段']
+        self.assertEqual(roadmap.validate(value), value)
+        stage['remaining'] = ['本项仍有未完成验收']
+        with self.assertRaisesRegex(ValueError, '已通过验收的节点不能包含本项待办'):
+            roadmap.validate(value)
+        stage['status'] = 'partial'
+        self.assertEqual(roadmap.validate(value), value)
+        stage['scope_notes'] = '不是列表'
+        with self.assertRaisesRegex(ValueError, 'scope_notes'):
+            roadmap.validate(value)
+
     def setUp(self):
         self.temp = tempfile.TemporaryDirectory()
         self.base = Path(self.temp.name)

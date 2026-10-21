@@ -1,0 +1,11 @@
+{
+  "physical_main_integration": true,
+  "fingerprint": {
+    "codex-works/l3reg14/test_bootstrap_native_compiler.py": "e475e1474f868c3c4b0b95d21dbc19ded64e0aaaad0a814a80beb9753cb1e858",
+    "lang/tests/test_bootstrap_native_compiler.py": "e475e1474f868c3c4b0b95d21dbc19ded64e0aaaad0a814a80beb9753cb1e858",
+    "lang/tests/test_native_zero_args.py": "33a67b5f768182c431dc7e5c6c343dae25fdeb91707dbfded01abf3a53ca39b1",
+    "docs/native-zero-argument-capacity.md": "21db8f43a2f119483b32b2eb7779461cbc2eee2d33d5c373e14f17e0dd64646b",
+    "codex-works/deliveries/L3REG14.md": "8e2983b7619c9f7bce4ab604666d8a027fb09824fb23dc946b92af319e35974f"
+  },
+  "candidate_byte_identical": true
+}

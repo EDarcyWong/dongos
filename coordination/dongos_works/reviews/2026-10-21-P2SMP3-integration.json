@@ -1,0 +1,76 @@
+{
+  "project": "dongos",
+  "task_id": "codex:P2SMP3",
+  "status": "integrated",
+  "rev": 6,
+  "verification": {
+    "passed": true,
+    "checks": [
+      {
+        "spec": "module:tests.test_shared_large",
+        "passed": true,
+        "tests": 1,
+        "skips": 0,
+        "returncode": 0,
+        "cancelled": false,
+        "timed_out": false,
+        "process_stopped": true,
+        "execution_exited": true,
+        "elapsed_seconds": 27.968
+      },
+      {
+        "spec": "module:tests.test_p2_shared_large_guest",
+        "passed": true,
+        "tests": 3,
+        "skips": 0,
+        "returncode": 0,
+        "cancelled": false,
+        "timed_out": false,
+        "process_stopped": true,
+        "execution_exited": true,
+        "elapsed_seconds": 1.219
+      },
+      {
+        "spec": "module:tests.test_smp",
+        "passed": true,
+        "tests": 1,
+        "skips": 0,
+        "returncode": 0,
+        "cancelled": false,
+        "timed_out": false,
+        "process_stopped": true,
+        "execution_exited": true,
+        "elapsed_seconds": 3.266
+      }
+    ],
+    "process_stopped": true,
+    "execution_exited": true,
+    "source_stable": true,
+    "fingerprint": {
+      "kernel/mm/shared_paging.dg": "6775f7cee865d4d34fab43350bb1de8f3d8e78c6c5e05a3398ee02c98abfe77c",
+      "kernel/mm/active_paging.dg": "094bafd128aeb51f7e5c75fdfaf50f79e61c834f72b33fff1537b49c8d09a2f8",
+      "kernel/smp/large_memory.dg": "5b2de72f266760de2464641b78b515af332f7dca2d6e4c35a9082d19f8365693",
+      "kernel/smp/large_memory.asm": "56ec0946defb468a807bdb6372686e4b42e1654405263a86d5bf316f83d0b69f",
+      "kernel/smp/runtime.dg": "61846fbb6f57ea8376c13688ae264dd35fa38d18318b8af65dcdfcf38c1a09bb",
+      "kernel/smp_runtime.asm": "5c5f6f7f71e9eb7b2c800d4f7c00bfa1ffdfa65aab73198d3ff250e31c2cb6d9",
+      "tools/build.py": "637f5d23f16eef5bd61cf63b6739dee883b8ddb66367d3274a9001641f8f054c",
+      "tests/shared_large_probe.dg": "8b10e653fefc4cf3bd8c1d853b65cd382077ca2c96daaea438f668e692e59d41",
+      "tests/shared_large_probe.c": "a685ce4be1f4c05ef1c32021a72218beb5a7ce98bda858802c7b48bea5201667",
+      "tests/test_shared_large.py": "811c8f776c87f370c0effc4378a1eda8bad7f2d50fbf5410468892bf2a1fd902",
+      "tests/run_p2_shared_large_qemu.py": "2158f41cf20ccf0bfe8eab48d7e6eb75289ffe7e1767d07982c0cdd5a0cd36fc",
+      "tests/test_p2_shared_large_guest.py": "1975db253139b85f6da635350ff188ccb59d5ebb4181e2113ae065ce1f37e3fe",
+      "tests/run_smp_qemu.py": "e443630ff5aecf813b60d677edd037553e25e1ac1df1d828bbed925581013064",
+      "docs/p2-shared-large.md": "91a7a6dee11782fc36a33c99528773d963a5df9d91ffd637eee3728027afc117",
+      "PLAN.md": "5bb3ae2edf68edc9f414c2b542082d4932133ce9bbdf4d9ccb3a4b1fb156aeaa",
+      "codex-works/deliveries/P2SMP3.md": "5dc0389079839cd57b96061ed2148b7a937cbe1bb30943e2c62e285baafbab59"
+    },
+    "summary": "定向复验通过，等待源码/契约审查",
+    "finished_at": "2026-10-21T14:25:13+00:00",
+    "job": "4213e61d66af439d89c071b85f6c6550"
+  },
+  "review_note": "已逐行审查声明16文件、共享owner契约、硬件失效桥、启动调用位置及独立C/raw测试有效性。固定同CR3/online epoch读者，BSP唯一写者IF0；所有AP实际ACK后方可回收，硬件错误fail-stop且lease/回执保留；seal后永久拒绝修改。真实buddy order9执行512页/项完整map/split/replace/拒merge/恢复/merge/unmap/永久remap，最终held512、free368、full517/invlpg2/retired4；四核本轮524广播/1572 AP ACK，旧SMP oracle已绑定真实P2最终观测。正式job4213e61d66af439d89c071b85f6c6550三模块5tests/0skip/exit0/source_stable/process_stopped。正常runtime7 release单/四核及单调用漏AP失效负控均实际通过，完整原始转储在主目录独立进程重新解码复算通过；负控actualPTE/BSP新页6对AP旧页5、phase3/ProbeMismatch/pending/held，非超时构建失败。316实际build输入匹配主目录，ELF物化逐字等于kernel.bin2006608B/余90544B；P5两生产SHA保持。无第二AI审查者声明，以源码审查+独立C/raw oracle+正式隔离子进程为据。证据.local/p2smp3-47d6915707/及reviews/2026-10-21-P2SMP3-formal.json。范围仅调度前固定共享内核根并封存持有，任意多用户CR3/EXEC/WC继续保留。",
+  "integration_note": "已完成真实本地文件集成，再登记状态：声明16文件均实存主目录并匹配正式复验指纹；主目录与完成的正常release runtime7构建316输入SHA一致。新模块/汇编桥/调用与GC构建接线、永久C/raw测试、PLAN及说明均已落盘，原P5及其它负责人候选未改。1/4CPU正常客体与唯一漏AP调用实际负控全部raw replay通过；ELF物化正确、原2MiB装载ABI不变。当前HEAD28fae186eade64aac9eec17fcc2fb30913b948f6，无PR/commit/push。正式5tests/0skip/source_stable及独立审查/原始归档详见本任务验收note。此登记不代表整体P2/EXEC/WC完成。",
+  "no_pr": true,
+  "head": "28fae186eade64aac9eec17fcc2fb30913b948f6",
+  "actual_evidence": "coordination/dongos_works/.local/p2smp3-47d6915707/"
+}

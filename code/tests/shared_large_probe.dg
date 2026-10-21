@@ -1,0 +1,59 @@
+module shared_large_probe;
+import mm.shared_paging as ap;
+import smp.tlb as tlb;
+import smp.context as cpu;
+import mm.paging as pg;
+import boot.preflight as preflight;
+export("al_context_size") fn context_size()usize{return sizeof(ap.Context);}
+export("al_context_align") fn context_align()usize{return alignof(ap.Context);}
+export("al_space_size") fn space_size()usize{return sizeof(pg.Space);}
+export("al_space_align") fn space_align()usize{return alignof(pg.Space);}
+export("al_reset") fn reset(context:*ap.Context,space:*pg.Space)void{unsafe{*context=ap.EMPTY_CONTEXT;*space=pg.EMPTY_SPACE;}return;}
+export("al_init") fn init(space:*pg.Space,pool:*pg.Table,count:usize,physical:u64,metadata:*u8)u64{unsafe{
+ match pg.init(space,slice_from_raw_parts(pool,count),physical,slice_from_raw_parts(metadata,count),52,true){ok=>{return 0;},err(e)=>{return e;},}
+}}
+var DOMAIN:tlb.Domain=tlb.EMPTY_DOMAIN;
+var CPUS:[4]cpu.Context=[cpu.EMPTY;4];
+export("sl_domain_fault") fn domain_fault(kind:u64)void{unsafe{
+ if kind==1{DOMAIN.pending=1;}if kind==2{CPUS[3].online_epoch=2;}
+ if kind==3{CPUS[2].cr3+=4096;}if kind==4{DOMAIN.count=3;}
+ if kind==5{CPUS[1].cr4|=0x20000;}if kind==6{CPUS[2].apic_id=0;}
+}return;}
+export("sl_seal") fn seal(context:*ap.Context)u64{unsafe{match ap.seal(context){ok=>{return 0;},err(e)=>{return e;},}}}
+export("al_bind") fn bind(context:*ap.Context,space:*pg.Space,state:*const preflight.State,virtual:u64,pages:u64,physical:u64,frames:u64,flush:ap.Flush)u64{unsafe{
+ DOMAIN=tlb.EMPTY_DOMAIN;DOMAIN.ready=1;DOMAIN.cpus=&CPUS[0];DOMAIN.count=4;
+ var i:usize=0;while i<4{CPUS[i]=cpu.EMPTY;CPUS[i].logical_id=i as u64;CPUS[i].apic_id=i as u64;CPUS[i].state=cpu.ONLINE;CPUS[i].epoch=1;CPUS[i].online_epoch=1;CPUS[i].cr3=try_root(space);CPUS[i].cr4=0x668;i+=1;}
+ match ap.bind(context,space,state,virtual,pages,physical,frames,&DOMAIN,flush){ok=>{return 0;},err(e)=>{return e;},}
+}}
+export("al_map_large") fn map_large(context:*ap.Context,state:*const preflight.State,virtual:u64,physical:u64,flags:u64)u64{unsafe{
+ match ap.map_large(context,state,virtual,physical,flags){ok=>{return 0;},err(e)=>{return e;},}
+}}
+export("al_split_large") fn split_large(context:*ap.Context,state:*const preflight.State,virtual:u64)u64{unsafe{
+ match ap.split_large(context,state,virtual){ok=>{return 0;},err(e)=>{return e;},}
+}}
+export("al_merge_large") fn merge_large(context:*ap.Context,state:*const preflight.State,virtual:u64)u64{unsafe{
+ match ap.merge_large(context,state,virtual){ok=>{return 0;},err(e)=>{return e;},}
+}}
+export("al_map") fn map(context:*ap.Context,state:*const preflight.State,virtual:u64,physical:u64,flags:u64)u64{unsafe{
+ match ap.map(context,state,virtual,physical,flags){ok=>{return 0;},err(e)=>{return e;},}
+}}
+export("al_replace") fn replace(context:*ap.Context,state:*const preflight.State,virtual:u64,physical:u64,flags:u64)u64{unsafe{
+ match ap.replace(context,state,virtual,physical,flags){ok=>{return 0;},err(e)=>{return e;},}
+}}
+export("al_protect") fn protect(context:*ap.Context,state:*const preflight.State,virtual:u64,flags:u64)u64{unsafe{
+ match ap.protect(context,state,virtual,flags){ok=>{return 0;},err(e)=>{return e;},}
+}}
+export("al_unmap") fn unmap(context:*ap.Context,state:*const preflight.State,virtual:u64)u64{unsafe{
+ match ap.unmap(context,state,virtual){ok=>{return 0;},err(e)=>{return e;},}
+}}
+export("al_query") fn query(context:*const ap.Context,virtual:u64,out:*pg.Mapping)u64{unsafe{
+ match ap.query(context,virtual,out){ok=>{return 0;},err(e)=>{return e;},}
+}}
+export("al_used") fn used(space:*const pg.Space)u64{unsafe{
+ match pg.used_tables(space){ok(n)=>{return n as u64;},err(e)=>{return e;},}
+}}
+export("al_stats") fn stats(context:*const ap.Context,out:*ap.Stats)u64{unsafe{
+ match ap.stats(context,out){ok=>{return 0;},err(e)=>{return e;},}
+}}
+
+unsafe fn try_root(space:*pg.Space)u64{unsafe{match pg.root_physical(space){ok(v)=>{return v;},err(e)=>{return 0;},}}}

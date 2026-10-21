@@ -1,16 +1,18 @@
 """Pure fixture/validator controls. Never launches a guest or a native build."""
 import copy, importlib.util, json, struct, tempfile, unittest
 from pathlib import Path
+from unittest import mock
 from tests import p5_virtio_reset_fixture as fixture
 from tests import run_virtio_reset_qemu as runner
+from tests.test_p5_recovery_context_guest import enrich
 
 
 def good():
-    return dict(fault_rip=0x10001000,expected_fault_rip=0x10001000,fault_instruction='0f0b',pending=dict(token=0,incarnation=0,event=0,affinity=0),identity=0x10421af4,command=0x402,status=0,lease=dict(physical=0x200000,pages=32,state=2,mapped=32,attempted=32,root=0x1000,generation=7),
+    return enrich(dict(fault_rip=0x10001000,expected_fault_rip=0x10001000,fault_instruction='0f0b',pending=dict(token=0,incarnation=0,event=0,affinity=0),identity=0x10421af4,command=0x402,status=0,lease=dict(physical=0x200000,pages=32,state=2,mapped=32,attempted=32,root=0x1000,generation=7),
         root=0x1000,memory_generation=7,memory_ready=1,pinned=1,quarantined=1,owner=(3<<32)|1,device_token=257,
         reset_state=2,reset_owner=(3<<32)|1,reset_token=257,snapshot=dict(state=4,status=6,process=0),
         catalog_slot=runner.life.NONE,configuration=runner.life.NONE,bridge_failed=0,domain_ready=1,domain_failed=0,
-        queue_thread=dict(state=0,frame=0),domain_process=dict(token=0,root=0,frame=0,xstate=0,retiring=0,retirement=0),completed=10,online=15,cpus=[dict(slot=16,token=0,acknowledged=10,captured=0,captured_token=259,mode=4,return_root=0x1000,block_seen=dict(valid=0)) for _ in range(4)])
+        queue_thread=dict(state=0,frame=0),domain_process=dict(token=0,root=0,frame=0,xstate=0,retiring=0,retirement=0),completed=10,online=15,cpus=[dict(slot=16,token=0,acknowledged=10,captured=0,captured_token=259,mode=4,return_root=0x1000,block_seen=dict(valid=0)) for _ in range(4)]))
 
 class ResetGuestControls(unittest.TestCase):
     def test_current_catalog_flags_are_exact(self):
@@ -61,6 +63,7 @@ class ResetGuestControls(unittest.TestCase):
         with self.assertRaises(ValueError):runner.validate(s)
     def test_control_distinct_from_fault(self):
         s=good();s.update(reset_state=0,reset_owner=0,reset_token=0,status=15,snapshot=dict(state=2,process=259))
+        s.update(catalog_slot=2,configuration=2,quarantined=0,command=0x406);enrich(s,True)
         runner.validate(s,True)
         with self.assertRaises(ValueError):runner.validate(s)
         with self.assertRaises(ValueError):runner.validate(good(),True)
@@ -77,6 +80,10 @@ class ResetGuestControls(unittest.TestCase):
             target.write_text('module drivers.block_service;\n'+fixture.ANCHOR+'\n')
             (src/'kernel').mkdir();(src/'kernel/keep.dg').write_text('unchanged')
             dst=base/'fixture';fixture.prepare(src,dst);fixture.verify(dst)
+            manifest=json.loads((dst/'p5-reset-fixture.json').read_text())
+            self.assertIn(fixture.TARGET,manifest['production_sha256'])
+            self.assertIn(fixture.TARGET,manifest['fixture_sha256'])
+            self.assertTrue(all('\\' not in name for name in manifest['production_sha256']))
             self.assertEqual((dst/'kernel/keep.dg').read_text(),'unchanged')
             self.assertNotIn('svc_user_ud2',target.read_text())
             with self.assertRaises(ValueError):fixture.prepare(src,dst)
@@ -87,6 +94,12 @@ class ResetGuestControls(unittest.TestCase):
             base=Path(temp);src=base/'source';target=src/fixture.TARGET;target.parent.mkdir(parents=True)
             target.write_text('module drivers.block_service;\n'+fixture.ANCHOR+'\n')
             with self.assertRaises(ValueError):fixture.prepare(src,src/'nested')
-            (src/'link').symlink_to(target)
-            with self.assertRaises(ValueError):fixture.prepare(src,base/'out')
+            # Exercise the filesystem classification boundary deterministically;
+            # Windows symlink creation can otherwise require unrelated privileges.
+            link=src/'link';link.write_text('symlink classification sentinel')
+            actual=Path.is_symlink
+            with mock.patch.object(Path,'is_symlink',lambda p:p==link or actual(p)):
+                with self.assertRaises(ValueError):fixture.prepare(src,base/'out')
+            with mock.patch.object(Path,'is_symlink',lambda p:p==base or actual(p)):
+                with self.assertRaises(ValueError):fixture.prepare(src,base/'out')
 if __name__=='__main__':unittest.main()

@@ -1,0 +1,17 @@
+{
+  "authorization": "用户明确要求接手两项修改，随后再次强调P2WC1；两项完成后持续其余任务，DeepSeek新交付复验失败由Codex直接修复。",
+  "exec": {
+    "task_id": "claude:P2EXEC1",
+    "owner": "codex",
+    "status": "in_progress",
+    "rev": 14
+  },
+  "wc": {
+    "task_id": "claude:P2WC1",
+    "owner": "codex",
+    "status": "in_progress",
+    "rev": 6,
+    "stopped_evidence": "operator confirm_pause seq1247 note交给codex; paused/confirmed rev4 before reassignment"
+  },
+  "no_pr": true
+}
