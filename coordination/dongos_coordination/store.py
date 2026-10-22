@@ -351,7 +351,11 @@ class Store:
                 if not (action == 'confirm_pause' and task.get('stop_unconfirmed') and
                         all(json.loads(job['data']).get('stop_unconfirmed') for job in unconfirmed_jobs)):
                     raise Conflict('任务有排队或运行中的作业，请先取消作业')
-            if action == 'archive' and state in ('paused', 'accepted', 'integrated'):
+            if action == 'resolve_identity' and state in ('paused', 'accepted', 'integrated'):
+                from .identity import prepare
+                task['identity_resolution'] = prepare(self, task, c, options, note)
+                task['review_note'] = task.get('review_note', '') + '\n\n身份校正：' + note
+            elif action == 'archive' and state in ('paused', 'accepted', 'integrated'):
                 if not note.strip():
                     raise ValueError('归档需要说明')
                 task.update(archived=True, archived_at=now(), archive_note=note,
@@ -761,7 +765,12 @@ class Store:
             jobs = [dict(r) for r in c.execute(
                 "SELECT id,status,created,updated,data FROM jobs WHERE task_id=? AND kind='verify' ORDER BY created,rowid",
                 (task['id'],))]
+        from .identity import separate
+        events, separated = separate(task, events)
         result = summarize(task, events, now())
+        if task.get('identity_resolution'):
+            result['identity_resolution'] = dict(task['identity_resolution'],
+                                                separated_events=separated)
         result['verifications'] = []
         for job in jobs:
             data = json.loads(job.pop('data'))

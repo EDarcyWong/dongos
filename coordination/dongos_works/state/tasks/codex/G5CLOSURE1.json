@@ -1,0 +1,39 @@
+{
+  "assignment_owner": "codex",
+  "auto_dispatch": false,
+  "auto_verify": false,
+  "candidate": null,
+  "checks": [
+    "discover:codex-works/tests:test_g5_closure_native.py"
+  ],
+  "claim_from_status": "todo",
+  "claim_token": "120d84dc859f48afb046ac075d91f0a0",
+  "claimed_at": "2026-10-22T08:35:33+00:00",
+  "claimed_by": "codex-mcp-a56c25d7f28e4bc4",
+  "completed_at": null,
+  "complexity": "standard",
+  "created_at": "2026-10-22T08:35:02+00:00",
+  "delivery": "codex-works/deliveries/G5CLOSURE1.md",
+  "depends_on": [
+    "codex:L3FLOWINT1"
+  ],
+  "description": "用户授权G5补齐并独立复验集成。真实最终6模块overlay在现有tools.compiler_job.exercise下失败：seed 3/0/2/6 frontend=57144296；证据code/build/test/g5-closure/run-7403d0762d5e。定位limits/紧凑化容量及目标panic runtime链接；保持实际56MiB arena、64KiB stack、2MiB最终ELF和同源固定点，不通过放宽用户/目标预算或宿主构造IR/修补产物规避。此任务独立候选compiler_job，测试借用G5FULL1最终6模块只读；native_assembler如需修复由G5FULL1声明路径实现。真实源构建debug/release、32原子预检、native语义/后端容量拒绝及真实两阶段ELF固定点，零skip源稳定官方复验后验收。无OS/VM/AI CLI/commit/push。",
+  "document": "codex-works/tasks/G5CLOSURE1-board.md",
+  "historical": false,
+  "id": "codex:G5CLOSURE1",
+  "legacy_hash": "0734a2764d6a0ce081cf00598a9e8b11fb1bd86acb458a3962f3fc45c43922c2",
+  "number": "G5CLOSURE1",
+  "owner": "codex",
+  "rev": 2,
+  "review_note": "",
+  "status": "in_progress",
+  "title": "G5 最终编译器闭包在56MiB pure job预算内的回归修复",
+  "updated_at": "2026-10-22T08:35:33+00:00",
+  "verification": null,
+  "write_paths": [
+    "codex-works/g5-closure/src/bootstrap/compiler_job.dg",
+    "codex-works/tests/test_g5_closure_native.py",
+    "codex-works/g5-closure/docs/closure.md",
+    "codex-works/deliveries/G5CLOSURE1.md"
+  ]
+}

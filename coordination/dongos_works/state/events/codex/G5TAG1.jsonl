@@ -1,0 +1,8 @@
+{"at":"2026-10-22T06:21:08+00:00","data":{"rev":1,"status":"todo"},"kind":"created","task_id":"codex:G5TAG1"}
+{"at":"2026-10-22T06:21:19+00:00","data":{"claimed_at":"2026-10-22T06:21:19+00:00","claimed_by":"codex-mcp-a56c25d7f28e4bc4","completed_at":null,"owner":"codex","resume_status":null,"rev":2,"status":"in_progress"},"kind":"claim","task_id":"codex:G5TAG1"}
+{"at":"2026-10-22T07:23:39+00:00","data":{"claimed_at":"2026-10-22T06:21:19+00:00","claimed_by":"codex-mcp-a56c25d7f28e4bc4","completed_at":"2026-10-22T07:23:39+00:00","owner":"codex","resume_status":null,"rev":3,"status":"submitted"},"kind":"submit","task_id":"codex:G5TAG1"}
+{"at":"2026-10-22T07:24:10+00:00","data":{"job":"0b88a6b34394403aa5f080cf3117883b","kind":"verify","provider":"python"},"kind":"queued","task_id":"codex:G5TAG1"}
+{"at":"2026-10-22T07:27:57+00:00","data":{"job":"0b88a6b34394403aa5f080cf3117883b"},"kind":"verification_started","task_id":"codex:G5TAG1"}
+{"at":"2026-10-22T07:40:50+00:00","data":{"rev":4,"status":"submitted"},"kind":"verified","task_id":"codex:G5TAG1"}
+{"at":"2026-10-22T07:40:50+00:00","data":{"job":"0b88a6b34394403aa5f080cf3117883b","status":"completed"},"kind":"job_finished","task_id":"codex:G5TAG1"}
+{"at":"2026-10-22T07:55:51+00:00","data":{"rev":5,"status":"accepted"},"kind":"accept","task_id":"codex:G5TAG1"}

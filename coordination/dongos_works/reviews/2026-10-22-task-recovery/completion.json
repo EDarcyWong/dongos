@@ -1,0 +1,196 @@
+{
+  "project": "dongos",
+  "updated_at": "2026-10-22T09:18:41+08:00",
+  "issues": [],
+  "active_task_counts_at_snapshot": {
+    "accepted": 19,
+    "integrated": 140,
+    "submitted": 3,
+    "in_progress": 1,
+    "rework": 1
+  },
+  "total_active_at_snapshot": 164,
+  "parallel_new_tasks_observed": [
+    {
+      "id": "codex:L3SYSV1",
+      "title": "[L3A/G5] 原生后端显式SysV定义、外部声明与链接别名",
+      "status": "submitted",
+      "rev": 3
+    },
+    {
+      "id": "codex:L3SYSVASM1",
+      "title": "[L3A] 原生汇编器接续SysV链接名的NASM符号转义",
+      "status": "submitted",
+      "rev": 3
+    },
+    {
+      "id": "codex:L3SYSVREG1",
+      "title": "[L3A] 同步SysV支持后的既有负例预期",
+      "status": "submitted",
+      "rev": 3
+    },
+    {
+      "id": "pool:L3METHOD1",
+      "title": "[L3/G5] 原生前端方法声明及接收者调用语义",
+      "status": "in_progress",
+      "rev": 2
+    },
+    {
+      "id": "pool:P9CORPUS1",
+      "title": "[P9] syscall与IPC结构化fuzz的确定性语料及重放格式",
+      "status": "rework",
+      "rev": 4
+    }
+  ],
+  "affected_final_states": {
+    "codex:CX6": {
+      "id": "codex:CX6",
+      "rev": 9,
+      "status": "integrated"
+    },
+    "codex:CX14": {
+      "id": "codex:CX14",
+      "rev": 7,
+      "status": "integrated"
+    },
+    "codex:CX15": {
+      "id": "codex:CX15",
+      "rev": 8,
+      "status": "integrated"
+    }
+  },
+  "original_task_books_restored": 17,
+  "reader_CX6_original_book_restored": true,
+  "restored_original_files": 35,
+  "cx6_foreign_events_preserved_and_separated": 5,
+  "cx6_correct_rounds": 1,
+  "cx6_correct_active_seconds": 265,
+  "formal_verifications": {
+    "codex:CX14": {
+      "passed": true,
+      "checks": [
+        {
+          "spec": "module:tests.test_compiler_job_launch",
+          "passed": true,
+          "tests": 3,
+          "skips": 0,
+          "returncode": 0,
+          "cancelled": false,
+          "timed_out": false,
+          "process_stopped": true,
+          "execution_exited": true,
+          "elapsed_seconds": 29.21
+        }
+      ],
+      "process_stopped": true,
+      "execution_exited": true,
+      "source_stable": true,
+      "fingerprint": {
+        "kernel/user/compiler_job.dg": "9b11796e1a219968c203d8e6bb54dcba96415f470a53c68ce08b53ecfa1341f3",
+        "kernel/user/services.dg": "548c6dafa0f2e515bcefeba51ae28c754e68273c979275862c32b60b6a76fa65",
+        "kernel/services_run.asm": "a1d997066a8265a0a5447fa8b3404bb2e40d4b0f903bc7e0217378afb689b7ec",
+        "services/compiler/controller.dg": "d70df25b20368b26ae90f5c19dc1998a4021e22975afd4fd3726329fce719e23",
+        "tools/build.py": "c5b67b1807a7932fac0a3b47d6d61329f9487c6c8fba8b696e3703d90df7c99f",
+        "tests/test_compiler_job_launch.py": "3b573c4255d79835e625da6484a85ea20acd8f41fc796db841ba5a5b4ff60459",
+        "tests/run_compiler_job_qemu.py": "ab7b8d5ab66101b93b6ffb38d3e5cddfbb0e45e5f7c0af5fdfd3e88c2d4d5d04",
+        "docs/l3-guest-compiler.md": "400295f8d05b73b8f04de8315410ef0301235a9672647a06a4d59527eae1d21f",
+        "codex-works/deliveries/CX14.md": "a8e6f0594757230093d4a5ace0acc15d5972d37f338e1406b6bfef6cae554f20"
+      },
+      "summary": "定向复验通过，等待源码/契约审查",
+      "finished_at": "2026-10-22T01:08:08+00:00",
+      "job": "d1dd123835f04bedbbd8dfb903054ace"
+    },
+    "codex:CX15": {
+      "passed": true,
+      "checks": [
+        {
+          "spec": "module:lang.tests.test_bootstrap_compiler_job",
+          "passed": true,
+          "tests": 1,
+          "skips": 0,
+          "returncode": 0,
+          "cancelled": false,
+          "timed_out": false,
+          "process_stopped": true,
+          "execution_exited": true,
+          "elapsed_seconds": 391.284
+        }
+      ],
+      "process_stopped": true,
+      "execution_exited": true,
+      "source_stable": true,
+      "fingerprint": {
+        "tools/compiler_job.py": "cd2c27cabfa04f898b6f3ca2e7cf3dc1c4031ae4e166c0d8690d01995cadc0af",
+        "docs/l3-compiler-job-host.md": "a0abbdc3b85acc3a84723f8c1511fce243a3b594faf7d67e71e17bf6adf8e4a2",
+        "codex-works/deliveries/CX15.md": "a7449b4984fdcedb151d44fb8679a73ec4096de671333d9d440548817c9a193a"
+      },
+      "summary": "定向复验通过，等待源码/契约审查",
+      "finished_at": "2026-10-22T01:07:18+00:00",
+      "job": "8d6893090cd74e3c96a9af844a27a15c"
+    }
+  },
+  "checks": {
+    "reader_and_nasm": {
+      "tests": 11,
+      "skips": 0,
+      "passed": true
+    },
+    "identity_resolution": {
+      "tests": 6,
+      "skips": 0,
+      "passed": true
+    },
+    "timing": {
+      "tests": 5,
+      "skips": 0,
+      "passed": true
+    },
+    "state_sync": {
+      "tests": 7,
+      "skips": 0,
+      "passed": true
+    },
+    "coordinator_full": {
+      "tests": 158,
+      "passed": 157,
+      "skips": 1,
+      "skip_reason": "Windows file symlinks unavailable",
+      "elapsed_seconds": 214.235,
+      "exit_code": 0
+    },
+    "javascript": {
+      "tests": 17,
+      "passed": 17,
+      "skips": 0,
+      "exit_code": 0
+    },
+    "final_consistency": {
+      "issues": 0,
+      "all_prior_cx6_raw_events_preserved": true,
+      "cx6_raw_events_after": 17,
+      "cx6_effective_rounds": 1,
+      "current_integrated_fingerprints_match": true,
+      "live_json_and_markdown_match": true,
+      "original_files_sha256_checked": 35,
+      "new_markdown_links_checked": 39,
+      "diff_check": "passed"
+    }
+  },
+  "historical_raw_guest_artifact_migrated": false,
+  "new_guest_execution": false,
+  "database_or_index_manually_edited": false,
+  "raw_events_deleted": false,
+  "committed_or_pushed": false,
+  "coordinator_reload": "official stop, then tool-managed serve session 1055; no active jobs at reload",
+  "final_observation": {
+    "at": "2026-10-22T01:24:43+00:00",
+    "counts": {
+      "accepted": 19,
+      "integrated": 140,
+      "submitted": 3,
+      "in_progress": 2
+    },
+    "total_active": 164,
+    "parallel_task_states_managed_by_other_clients": true
+  }
+}

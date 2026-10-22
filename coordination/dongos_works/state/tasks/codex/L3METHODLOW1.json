@@ -1,0 +1,79 @@
+{
+  "assignment_owner": "codex",
+  "auto_dispatch": false,
+  "auto_verify": false,
+  "candidate": null,
+  "checks": [
+    "module:lang.tests.test_l3_method_native"
+  ],
+  "claim_from_status": "todo",
+  "claim_token": "aaf1899e1dda4d63a61d383081be665d",
+  "claimed_at": "2026-10-22T04:12:22+00:00",
+  "claimed_by": "codex-mcp-8c76f5a25c8d4b71",
+  "completed_at": "2026-10-22T04:30:08+00:00",
+  "complexity": "standard",
+  "created_at": "2026-10-22T04:12:14+00:00",
+  "delivery": "codex-works/deliveries/L3METHODLOW1.md",
+  "depends_on": [
+    "codex:L3METHODINT1",
+    "codex:L3SYSVREG1"
+  ],
+  "description": "在已集成 L3METHOD1 R1 前端基础上，完成 METHOD 函数体及两种已解析方法调用的真实 lower_program/nasm_program 路径。callee 必须读取已发布 Info FUNCTION 的 unit/node，不能把 METHOD_CANDIDATE 组首项误当选中项。接收者仅求值一次且先于显式参数，嵌套调用参数池保留，方法符号包含名义 receiver 类型与模块避免同名冲突；保留 SysV/free 函数及失败原子性。新增真实 native 编译执行、seed 差分、同名不同 receiver/自由函数/跨模块/const/unsafe/stack/pair/副作用测试和真实错误 Dong 变体负控。更新已有 G5 method fixture 为必须支持，保留剩余 gap，不宣称完整 L3/G5/G6。独立定向零skip源稳定后登记验收集成。",
+  "document": "codex-works/tasks/L3METHODLOW1-board.md",
+  "historical": false,
+  "id": "codex:L3METHODLOW1",
+  "integration_note": "生产lower_program/nasm_program及文档、永久10项测试、G5 method必须原生通过接线已真实落盘并由正式冻结主线执行验证；生产lower89692f.../nasm26076b.../test54c312...与验收指纹一致。独立384值+2真实负控通过，标准语言983项发现中本模块10项唯一、无loader错误。登记真实文件集成，不代表完整L3/G5/G6。",
+  "legacy_hash": "be07463e4de417810edd4818eff3ca23d363f212f55c5428824796788fac2b42",
+  "number": "L3METHODLOW1",
+  "owner": "codex",
+  "rev": 6,
+  "review_note": "已审查lower/nasm实际源码、calleInfo/参数顺序/符号/SysV无体契约和永久测试有效性。正式058669dd13d2447c888d7e9c5f2d2f20：10项0skip，1016.226s，源稳定且进程退出；另对正式真实good/bad-head新源码和新C ABI观察器64组x两模式384值通过，坏董两次精确值拒绝（非编译失败）。详见codex-works/reviews/2026-10-22-L3METHODLOW1-integration.md。范围struct-pointer方法，G5仍partial。",
+  "status": "integrated",
+  "title": "L3/L3A 方法整程序降级、原生符号与执行差分",
+  "updated_at": "2026-10-22T04:51:00+00:00",
+  "verification": {
+    "checks": [
+      {
+        "cancelled": false,
+        "elapsed_seconds": 1016.226,
+        "execution_exited": true,
+        "passed": true,
+        "process_stopped": true,
+        "returncode": 0,
+        "skips": 0,
+        "spec": "module:lang.tests.test_l3_method_native",
+        "tests": 10,
+        "timed_out": false
+      }
+    ],
+    "execution_exited": true,
+    "fingerprint": {
+      "codex-works/deliveries/L3METHODLOW1.md": "ef226e8ea9628bea78949b00f8141942bca6d760cc3f1cf379b6a3aaa6abd4c6",
+      "docs/language-l2-l3.md": "623f71e52e9e14f1747426a92bcd5556eaa26d3dccce40dd0d428e0d5c3f5519",
+      "lang/bootstrap/lower_program.dg": "89692f186ecb639603a2c7f6497bb00c0c1eb15fd34f70fc6a92e49089c126d8",
+      "lang/bootstrap/lower_program.md": "1753d5dc16b42e09bd789e311767d7feb1d44424c0721fdf78a66abfe4ade135",
+      "lang/bootstrap/method-semantics.md": "4208d7fc76bf77007a016c1396af923fa397af8dcaad7365fb6e635322ce8fb0",
+      "lang/bootstrap/nasm_program.dg": "26076b3cc250ff61826776a7598342f347683e37627ca63318933337c3ef0349",
+      "lang/bootstrap/nasm_program.md": "59f40f46d7a4525b05280800c48129ba293c71f0c9ac74533f2c96ca1cd7f8fa",
+      "lang/tests/test_l3_method_native.py": "54c3128018ad06811489bcbf9b8838b3f721bf9c8f173d0ad4abf8de28d0a407",
+      "tools/g5_differential.py": "efbc8b2bd17be597a7949916d4dc516e8b4f7bf9e174b05d3c99625ab9d11228"
+    },
+    "finished_at": "2026-10-22T04:47:32+00:00",
+    "job": "058669dd13d2447c888d7e9c5f2d2f20",
+    "passed": true,
+    "process_stopped": true,
+    "source_stable": true,
+    "summary": "定向复验通过，等待源码/契约审查"
+  },
+  "write_paths": [
+    "lang/bootstrap/lower_program.dg",
+    "lang/bootstrap/nasm_program.dg",
+    "lang/bootstrap/lower_program.md",
+    "lang/bootstrap/nasm_program.md",
+    "lang/bootstrap/method-semantics.md",
+    "lang/tests/test_l3_method_native.py",
+    "tools/g5_differential.py",
+    "docs/language-l2-l3.md",
+    "codex-works/deliveries/L3METHODLOW1.md"
+  ]
+}

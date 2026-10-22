@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>DongOS · 协作工作台</title><link rel="stylesheet" href="/style.css"><script src="/app.js" defer></script></head>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="light dark"><title>DongOS · 协作工作台</title><script src="/theme-boot.js"></script><link rel="stylesheet" href="/style.css"><script src="/app.js" defer></script></head>
 <body data-view="list" data-page="overview">
 <aside class="nav">
 <a class="brand" href="#overview">◈<span>DongOS</span></a>
@@ -23,7 +23,7 @@
 <div class="nav-bottom"><span class="live-dot"></span>本地工作区<br><small>仅 127.0.0.1 · 每 2 秒更新 · 按 / 搜索</small></div>
 </aside>
 <main>
-<header class="page-header"><div><div class="eyebrow" id="page-eyebrow">WORKSPACE / COORDINATION</div><h1 id="page-title">概览</h1><p id="page-subtitle">任务进展、待处理事项和成员负载一览。</p></div><div class="header-actions"><span id="connection" role="status">正在连接…</span><button id="sync" class="button" type="button">同步任务书</button><button id="new-task" class="button primary" type="button">＋ 发布任务</button></div></header>
+<header class="page-header"><div><div class="eyebrow" id="page-eyebrow">WORKSPACE / COORDINATION</div><h1 id="page-title">概览</h1><p id="page-subtitle">任务进展、待处理事项和成员负载一览。</p></div><div class="header-actions"><button id="theme-toggle" class="button theme-toggle" type="button" aria-label="切换到深色模式" aria-pressed="false" title="切换到深色模式"><span class="theme-icon" aria-hidden="true">☾</span></button><span id="connection" role="status">正在连接…</span><button id="sync" class="button" type="button">同步任务书</button><button id="new-task" class="button primary" type="button">＋ 发布任务</button></div></header>
 <div id="notice" role="alert" hidden></div>
 <section id="issues" class="issues" hidden><h2>索引校验 <span class="muted">状态、依赖或文件归属存在问题</span></h2><ul></ul></section>
 

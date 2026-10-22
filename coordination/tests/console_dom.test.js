@@ -15,7 +15,7 @@ function documentFixture(){
     replaceChildren(...items){for(const child of this.children){child.parent=null;child.isConnected=false;}this.children=[];this._text='';this.append(...items);}
     replaceWith(item){const at=this.parent.children.indexOf(this);item.parent=this.parent;this.parent.children[at]=item;this.isConnected=false;}
     set textContent(value){this.replaceChildren();this._text=String(value??'');}get textContent(){return this._text+this.children.map(c=>c.textContent).join('');}
-    setAttribute(key,value){if(key==='id')this.id=value;else if(key==='class')this.className=value;else this.attrs[key]=String(value);}
+    setAttribute(key,value){if(key==='id')this.id=value;else if(key==='class')this.className=value;else if(key.startsWith('data-'))this.dataset[key.slice(5).replace(/-([a-z])/g,(_,c)=>c.toUpperCase())]=String(value);else this.attrs[key]=String(value);}
     getAttribute(key){if(key==='id')return this.id;if(key==='class')return this.className;if(key==='type')return this.type;if(key.startsWith('data-'))return this.dataset[key.slice(5).replace(/-([a-z])/g,(_,c)=>c.toUpperCase())];return this.attrs[key];}
     matches(selector){if(selector.startsWith('.'))return this.className.split(/\s+/).includes(selector.slice(1));if(selector.startsWith('#'))return this.id===selector.slice(1);const m=selector.match(/^([a-z][a-z0-9-]*)?(?:\[([^=\]]+)(?:=['"]?([^'"\]]+)['"]?)?\])?$/);return !!m&&(!m[1]||this.tagName===m[1])&&(!m[2]||(m[3]===undefined?this.getAttribute(m[2])!==undefined:this.getAttribute(m[2])===m[3]));}
     querySelectorAll(selector){return this.children.flatMap(c=>[...(c.matches(selector)?[c]:[]),...c.querySelectorAll(selector)]);}querySelector(selector){return this.querySelectorAll(selector)[0]||null;}
@@ -31,7 +31,7 @@ function documentFixture(){
     if(t.startsWith('<')){const tag=t.match(/^<([\w-]+)/)[1],attrs={};const tail=t.slice(tag.length+1,-1);for(const a of tail.matchAll(/([\w-]+)(?:="([^"]*)")?/g))attrs[a[1]]=a[2]??'';const e=new Element(tag,attrs);stack.at(-1).append(e);if(!voids.has(tag))stack.push(e);}
     else {const e=new Element('#text');e._text=t;stack.at(-1).append(e);}
   }
-  doc={body:root.querySelector('body'),activeElement:null,events:{},addEventListener(name,fn){(this.events[name]??=[]).push(fn);},async emit(name,extra={}){for(const fn of this.events[name]||[])await fn({preventDefault(){},...extra});},createElement:t=>new Element(t),createTextNode:text=>{const t=new Element('#text');t._text=text;return t;},getElementById:id=>root.querySelector('#'+id),querySelector:s=>root.querySelector(s),querySelectorAll:s=>root.querySelectorAll(s)};
+  doc={body:root.querySelector('body'),documentElement:root.querySelector('html'),activeElement:null,events:{},addEventListener(name,fn){(this.events[name]??=[]).push(fn);},async emit(name,extra={}){for(const fn of this.events[name]||[])await fn({preventDefault(){},...extra});},createElement:t=>new Element(t),createTextNode:text=>{const t=new Element('#text');t._text=text;return t;},getElementById:id=>root.querySelector('#'+id),querySelector:s=>root.querySelector(s),querySelectorAll:s=>root.querySelectorAll(s)};
   for(const e of root.querySelectorAll('select'))e.value=e.querySelector('option')?.value||'';
   return doc;
 }
@@ -45,6 +45,18 @@ function app(tasks){
   vm.runInContext(source.replace('}boot();','}')+"\nprojectId='demo'; state=snapshot; globalThis.app={render,showTask,showCreate,renderTaskMetrics,taskElapsed,go,attentionGroups};",context);
   return {document,location,window,requests,snapshot,api:context.app,setRespond:fn=>respond=fn,run:code=>vm.runInContext(code,context)};
 }
+
+test('theme toggle switches the workbench to dark and back',async()=>{
+  const f=app([]),html=f.document.documentElement,toggle=f.document.getElementById('theme-toggle');
+  assert.equal(html.getAttribute('data-theme'),'light');
+  assert.equal(toggle.getAttribute('aria-pressed'),'false');
+  await toggle.click();
+  assert.equal(html.getAttribute('data-theme'),'dark');
+  assert.equal(toggle.getAttribute('aria-pressed'),'true');
+  assert.equal(toggle.querySelector('.theme-icon').textContent,'☀');
+  await toggle.click();
+  assert.equal(html.getAttribute('data-theme'),'light');
+});
 
 test('accepted roadmap nodes separate future scope from actual stage work',()=>{
   const f=app([]);

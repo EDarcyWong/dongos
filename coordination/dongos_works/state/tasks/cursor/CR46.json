@@ -1,0 +1,76 @@
+{
+  "assignment_history": [
+    {
+      "at": "2026-10-20T07:28:00+00:00",
+      "from_owner": "cursor",
+      "note": "用户明确要求当前会话完成L3功能；CR46未领取无活动作业，接管诊断输出接线，保留原四文件及历史，不碰GUEST4。",
+      "previous_claimed_by": null,
+      "to_owner": "codex"
+    }
+  ],
+  "assignment_owner": "codex",
+  "auto_dispatch": false,
+  "auto_verify": false,
+  "candidate": null,
+  "checks": [
+    "discover:cursor-works/tests:test_guest_diagnostic_sink.py"
+  ],
+  "claim_from_status": "todo",
+  "claim_token": "2b2846fb943540cf9f83a157d4a22db4",
+  "claimed_at": "2026-10-20T07:28:02+00:00",
+  "claimed_by": "codex-mcp-d76b66689d824a70",
+  "completed_at": "2026-10-20T07:42:04+00:00",
+  "complexity": "standard",
+  "created_at": "2026-10-20T07:11:54+00:00",
+  "delivery": "cursor-works/deliveries/CR46.md",
+  "depends_on": [],
+  "description": "新增bootstrap.guest_diagnostic_sink，将现有frontend_diagnostics.render的单行诊断送到调用者已授权的Write回调，生产路径必须实际调用render而非复制诊断映射。显式sources/frontend.Result、渲染scratch、发送回调context及返回报告，所有可检查完整范围/别名/容量/溢出在第一次输出副作用前预检。render失败禁止调用sink；成功后仅发送实际written前缀，不发送尾部；处理短写、零进展有界停止、负/错误码、超过请求长度与偏移，累计已确认发送字节和错误阶段。不可回滚外部输出，不许报告完整诊断已发当只有前缀；不申请日志/文件权限、不进行syscall、不改现有format、position或frontend实现。原始sources/Result不变。测试真实正常源码/非法UTF8/绑定或语义错误产生的诊断与render基线逐字一致、Unicode位置、精确/不足容量、sink轨迹及错误后无后续输出；至少真实坏Dong跳过render失败/短写当全写负控。\n共同约定：按2026-10-20用户“完成L3，顺便发布几个任务”授权。Cursor客户端手动通过worker MCP读取最新rev/完整任务后领取，优先本人已领取/返修；不得启动AI CLI。只改声明cursor-works文件（映射coordination/dongos_works/cursor-works），不改主线/内核权限/容量/其它任务。不提交推送、不运行OS/VM，不扩大64MiB内存或16KiB栈。真实Dong debug/release原生执行、ELF64/COFF组装，失败不skip冒充通过；最多24主要语义组，实际坏Dong负控须成功构建后因准确断言拒绝。保存输入SHA/实际命令/产物SHA/退出及skip数；交付等待独立审查、复验、真实集成，不等于完整L3完成。只读背景code/docs/l3-native-selfhost-progress.md及docs/l3-guest-source-integration.md。不得重复CR43/44/D28/LM9旧暂停组件，不抢GUEST4/5/CX6。",
+  "document": "cursor-works/tasks/CR46-board.md",
+  "document_status": "todo",
+  "historical": false,
+  "id": "cursor:CR46",
+  "integration_note": "已真实复制生产源码/契约至code/lang/bootstrap并将永久测试仅路径适配到code/lang/tests；清单code/build/test/guest-integration/CR45-CR46-files.json。主线联合3 tests/0skip/877.096秒，源码稳定通过；CR45生产SHAd4e6abff...、CR46生产SHA46c59707...与验收候选一致。沿用独立review_catalog_sink及各正式复验。仅组件主线集成，非客体L3/FLUSH/重启验收。",
+  "legacy_hash": "ae25c0a5bd3f4ee62b7d2e95cb283ea4801a2e34802d708ea8e31f713478d7f3",
+  "number": "CR46",
+  "owner": "codex",
+  "rev": 8,
+  "review_note": "实现者之外的独立子代理review_catalog_sink已实际审查完整源码/契约/永久测试及实际负控产物，未发现阻塞；独立安全C探针复用已核对SHA对象重新链接debug/release，catalog18场景+sink12场景/模式全通过。报告reviews/2026-10-20-independent-catalog-sink-review.md及code/build/test/independent-catalog-sink/summary.json。正式隔离CR45 2tests0skip233.343秒、CR46 1test0skip638.269秒，均returncode0/source_stable/process_stopped/execution_exited=true，当前四文件指纹一致。准予组件验收；尚未集成，非L3整体验收。",
+  "status": "integrated",
+  "title": "[L3] 将原生前端诊断按有界回调发送给既有日志接收者",
+  "updated_at": "2026-10-22T00:59:06+00:00",
+  "verification": {
+    "checks": [
+      {
+        "cancelled": false,
+        "elapsed_seconds": 638.269,
+        "execution_exited": true,
+        "passed": true,
+        "process_stopped": true,
+        "returncode": 0,
+        "skips": 0,
+        "spec": "discover:cursor-works/tests:test_guest_diagnostic_sink.py",
+        "tests": 1,
+        "timed_out": false
+      }
+    ],
+    "execution_exited": true,
+    "fingerprint": {
+      "cursor-works/deliveries/CR46.md": "7957aa6cad367d2e3d3ba9ec4a002c791ee12ec5432c5e0c9869452975747644",
+      "cursor-works/lang/bootstrap/guest_diagnostic_sink.dg": "46c59707abc44dd34cba0885d8f0a438d5c0108c99dc2db104a7ca1d2d864a20",
+      "cursor-works/lang/bootstrap/guest_diagnostic_sink.md": "a5ab8761df2da5dc4c474c580c3cf1d751459c5ca01f3b32a3432a28e49b82e7",
+      "cursor-works/tests/test_guest_diagnostic_sink.py": "7b7504ee82c5b61c9b83be4186dc39ef5699b3aabc6222482fac5cf32ddb06ba"
+    },
+    "finished_at": "2026-10-20T07:55:37+00:00",
+    "job": "de63bae909114898a73d1e35b6e8fed5",
+    "passed": true,
+    "process_stopped": true,
+    "source_stable": true,
+    "summary": "定向复验通过，等待源码/契约审查"
+  },
+  "write_paths": [
+    "cursor-works/lang/bootstrap/guest_diagnostic_sink.dg",
+    "cursor-works/lang/bootstrap/guest_diagnostic_sink.md",
+    "cursor-works/tests/test_guest_diagnostic_sink.py",
+    "cursor-works/deliveries/CR46.md"
+  ]
+}

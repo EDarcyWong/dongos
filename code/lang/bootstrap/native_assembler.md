@@ -33,6 +33,14 @@ This is intentionally not general NASM. Leading/trailing whitespace and semicolo
 
 Branches/calls use rel32. Memory uses disp32, including a zero displacement. Immediate fields are full-sized rather than optimized. Consequently default NASM bytes generally differ despite equivalent execution. Forward/backward references are resolved in a second pass. RIP references use the end of the complete encoded instruction; symbol-valued `dq` uses the final text/data virtual addresses from the ELF layout. Unresolved and duplicate symbols fail. No relocation records or external linkage remain in the output. The current `elf64_image` profile maps text R+X and data R+W; the `.rodata` spelling does not promise runtime read-only protection.
 
+NASM `$identifier` escapes are supported for label definitions, `global`, direct
+calls/branches, RIP-relative references and symbol-valued `dq`. The escape is
+removed for hashing and symbol identity: `name` and `$name` refer to the same
+label and cannot both define it. `$rax` is a symbol operand, while `rax` retains
+its register meaning. Entry names passed to `assemble` use the unescaped symbol
+name. This supports compiler export aliases without adding unresolved externs
+or general NASM expression support. A bare `$` or doubled escape is rejected.
+
 ## Verification
 
 `NASM=/path/to/nasm python -m unittest lang.tests.test_bootstrap_native_assembler -v`
@@ -40,5 +48,12 @@ Branches/calls use rel32. Memory uses disp32, including a zero displacement. Imm
 Tests snapshot all three Dong components plus the independent kernel ELF validator before building debug/release C-ABI probes. Receipts, source snapshots, seed assembly, raw requests and responses are kept under `build/test/bootstrap-native-assembler/run-*`. Source edits during a run cannot change the tested snapshot. GCC/NASM build the probe; actual assembly requests execute the Dong assembler.
 
 The suite checks register and memory execution, conditional loops, forward/backward calls and branches, RIP data, absolute pointers, aliases, static data and alignment; independently NASM-assembled programs establish expected Linux execution behavior. Both optimization modes must produce identical images. The actual kernel `exec.elf.validate` parser accepts every successful image. Rejected cases cover malformed/unknown syntax, missing/duplicate symbols, integer ranges and every workspace/output capacity. Fifty-seven preflight cases cover all output/input alias classes, all mutable pair aliases, nulls, misalignment, pointer-span wrapping and typed-length overflow; the entire fixture must remain unchanged. Every request checks scratch/output canaries and full failure-output or success-suffix atomicity.
+
+`python -m unittest lang.tests.test_l3_escaped_symbols -v` also runs on Windows.
+It builds the assembler from a frozen Dong source snapshot in both modes,
+checks escaped/unescaped symbol identity, call/RIP/data relocations, rejection
+atomicity and exact/short output capacities, then maps the resulting ELF load
+segments on the host and executes an independent return-value check. It does
+not boot an OS or run a VM.
 
 For the large compiler dialect check, set `DONG_ASSEMBLER_FULL_INPUT` to a native compiler `.asm` and optionally `DONG_ASSEMBLER_FULL_ENTRY` (default `dong_frontend_check`). It is assembled and kernel-validated in both modes, but not executed: that function is not an OS entry stub. These tests do not build or boot an OS/VM and do not claim native compiler execution or a native machine-code fixed point merely from successful assembly.

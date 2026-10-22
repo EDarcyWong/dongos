@@ -187,6 +187,7 @@ class Handler(BaseHTTPRequestHandler):
                 return self.reply({'text': read_log_tail(source)})
             files = {'/': ('index.html', 'text/html; charset=utf-8'),
                      '/app.js': ('app.js', 'text/javascript; charset=utf-8'),
+                     '/theme-boot.js': ('theme-boot.js', 'text/javascript; charset=utf-8'),
                      '/style.css': ('style.css', 'text/css; charset=utf-8')}
             if path in files:
                 name, mime = files[path]

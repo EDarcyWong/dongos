@@ -383,6 +383,40 @@ unsafe fn top_function(s:*State,u:usize,id:usize,wrapper:usize)bool{unsafe{
  let t=Type{kind:FUNCTION,flags:flags,element:ret,count:0,first:first,length:count,unit:u,node:id,alignment:0};let typ=add_type(s,&t);
  if (*s).status!=0{return false;}(*w).node_types[gid(s,u,id)]=typ;return signature(s,typ,n.c==NONE);
 }}
+// Method declarations: pointer-to-struct receivers only (stricter than the seed's
+ // enum allowance). Exact (pointee,name) uniqueness, same-module ownership, and
+ // field-name clashes are checked here before any Graph publish.
+unsafe fn check_method(s:*State,index:usize)bool{unsafe{
+ let w=(*s).w;let sy=(*s).symbols[index];let g=gid(s,sy.unit,sy.declaration);let fn_typ=(*w).node_types[g];
+ if fn_typ>=(*s).type_count{fail(s,BAD_GRAPH,sy.unit,sy.declaration,60);return false;}
+ let t=(*w).types[fn_typ];if t.kind!=FUNCTION||t.length==0{fail(s,TYPE,sy.unit,sy.declaration,61);return false;}
+ let recv_node=(*w).fields[t.first].node;let recv=(*w).fields[t.first].typ;
+ if recv>=(*s).type_count||(*w).types[recv].kind!=POINTER{fail(s,TYPE,sy.unit,recv_node,62);return false;}
+ let pointee=(*w).types[recv].element;
+ if pointee>=(*s).type_count||(*w).types[pointee].kind!=STRUCT{fail(s,TYPE,sy.unit,recv_node,63);return false;}
+ let st=(*w).types[pointee];if st.unit!=sy.unit{fail(s,PRIVATE,sy.unit,recv_node,64);return false;}
+ if !get_layout(s,pointee,st.unit,st.node,0){return false;}
+ let method_name=text(s,sy.unit,sy.name_token);var f:usize=0;let st2=(*w).types[pointee];
+ while f<st2.length{let field=(*w).fields[st2.first+f];let node=*at(s,field.unit,field.node);
+  if equal(method_name,text(s,field.unit,node.token)){fail(s,TYPE,sy.unit,sy.declaration,65);return false;}f+=1;
+ }
+ var i:usize=0;while i<index{let other=(*s).symbols[i];
+  if other.kind==names.METHOD&&equal(method_name,text(s,other.unit,other.name_token)){
+   let ot=(*w).node_types[gid(s,other.unit,other.declaration)];
+   if ot<(*s).type_count{let ofn=(*w).types[ot];
+    if ofn.kind==FUNCTION&&ofn.length!=0{let orecv=(*w).fields[ofn.first].typ;
+     if orecv<(*s).type_count&&(*w).types[orecv].kind==POINTER&&(*w).types[orecv].element==pointee{
+      fail(s,TYPE,sy.unit,sy.declaration,66);return false;
+     }
+    }
+   }
+  }i+=1;
+ }return true;
+}}
+unsafe fn check_methods(s:*State)bool{unsafe{
+ var i:usize=0;while i<(*s).symbols.len&&(*s).status==0{if (*s).symbols[i].kind==names.METHOD{if !check_method(s,i){return false;}}i+=1;}
+ return (*s).status==0;
+}}
 
 // INVALID is a descriptor/alias failure and never modifies caller memory.
 // Other failures may change scratch but publish zero graph counts.
@@ -450,7 +484,9 @@ pub unsafe fn analyze(sources:[]const modules.Source,units:[]const modules.Unit,
  if s.status==0{
   i=0;while i<symbols.len{let sy=symbols[i];if sy.unit>=units.len||sy.declaration>=units[sy.unit].node_count{s.status=BAD_GRAPH;break;}i+=1;}
   i=0;while i<refs.len{let r=refs[i];if r.kind!=0{
-   if r.unit>=units.len||(r.kind==binding.GLOBAL&&r.target>=symbols.len)||(r.kind==binding.LOCAL&&r.target>=units[r.unit].node_count){s.status=BAD_GRAPH;break;}
+   if r.unit>=units.len{s.status=BAD_GRAPH;break;}
+   if (r.kind==binding.GLOBAL||r.kind==binding.METHOD_CANDIDATE)&&r.target>=symbols.len{s.status=BAD_GRAPH;break;}
+   if (r.kind==binding.LOCAL||r.kind==binding.DEFERRED_MEMBER)&&r.target>=units[r.unit].node_count{s.status=BAD_GRAPH;break;}
   }i+=1;}
  }
  if s.status==0{
@@ -480,6 +516,7 @@ pub unsafe fn analyze(sources:[]const modules.Source,units:[]const modules.Unit,
   i=0;while i<s.type_count&&s.status==0{let t=(*w).types[i];get_layout(&s,i,t.unit,t.node,0);
    if s.status==0&&t.kind==FUNCTION{signature(&s,i,false);}i+=1;
   }
+  if s.status==0{check_methods(&s);}
  }
  var tc:usize=0;var fc:usize=0;var lc:usize=0;var unchecked:usize=0;
  if s.status==0{tc=s.type_count;fc=s.field_count;lc=s.limb_count;unchecked=s.unchecked;}
@@ -609,7 +646,10 @@ unsafe fn rt_expr_general(c:*Runtime,id:usize,expected:usize,read:bool,depth:usi
   }else if r.kind==binding.GLOBAL{
    let symbol=(*s).symbols[r.target];typ=(*w).node_types[gid(s,symbol.unit,symbol.declaration)];
    if symbol.kind==names.GLOBAL||symbol.kind==names.CONST{flags=PLACE;if symbol.kind==names.GLOBAL{flags|=WRITE;}}
-   else if symbol.kind!=names.FUNCTION{return rt_fail(c,UNSUPPORTED,id,symbol.kind);}
+   else if symbol.kind!=names.FUNCTION&&symbol.kind!=names.METHOD{return rt_fail(c,UNSUPPORTED,id,symbol.kind);}
+  }else if r.kind==binding.METHOD_CANDIDATE{
+   // Method names are only values after receiver selection inside rt_call.
+   return rt_fail(c,TYPE,id,79);
   }else{return rt_fail(c,UNSUPPORTED,id,r.kind);}
  }else if n.kind==ast.UNARY{
   if n.op==1062{let child=rt_expr(c,n.a,NONE,true,depth+1);let f=(*rt_info(c,n.a)).flags;
@@ -776,12 +816,76 @@ unsafe fn rt_call(c:*Runtime,id:usize,expected:usize,depth:usize)usize{unsafe{
    let t=(*w).types[pointer];return rt_type(c,SLICE,t.flags,t.element,0,id);
   }return rt_fail(c,UNSUPPORTED,id,r.target as u64);
  }
+ // Functional method call: binding leaves a candidate group; select by exact
+ // receiver pointer type (including const), then check visibility/unsafe/arity.
+ // Publish the selected FUNCTION type on the callee expression Info (writable
+ // semantic output); refs/AST stay immutable and still name the candidate group.
+ if r.kind==binding.METHOD_CANDIDATE{
+  if n.b==NONE{return rt_fail(c,TYPE,id,80);}
+  let sy=(*s).symbols[r.target];let name=text(s,sy.unit,sy.name_token);let owner=sy.unit;
+  let recv=rt_expr(c,n.b,NONE,true,depth+1);if (*s).status!=0{return NONE;}
+  let callee=rt_select_method(c,owner,name,recv,id);if (*s).status!=0{return NONE;}
+  *rt_info(c,n.a)=Info{typ:callee,flags:0,length:0};
+  return rt_finish_method_call(c,id,callee,n.b,true,depth+1);
+ }
+ // Receiver call p.m(...): try method lookup on pointer-to-struct before field.
+ if r.kind==binding.DEFERRED_MEMBER{
+  let field=*at(s,u,n.a);let recv=rt_expr(c,field.a,NONE,true,depth+1);if (*s).status!=0{return NONE;}
+  if rt_kind(c,recv)==POINTER{let pointee=(*w).types[recv].element;
+   if pointee<(*s).type_count&&(*w).types[pointee].kind==STRUCT{
+    let name=text(s,u,field.token);let owner=(*w).types[pointee].unit;
+    let matched=rt_lookup_method(c,owner,name,recv);
+    if matched!=NONE{
+     let sy=(*s).symbols[matched];if sy.unit!=u&&sy.flags!=1{return rt_fail(c,PRIVATE,id,0);}
+     let callee=(*w).node_types[gid(s,sy.unit,sy.declaration)];
+     *rt_info(c,n.a)=Info{typ:callee,flags:0,length:0};
+     return rt_finish_method_call(c,id,callee,field.a,false,depth+1);
+    }
+   }
+  }
+ }
  let callee=rt_expr(c,n.a,NONE,true,depth+1);if (*s).status!=0{return NONE;}
  if rt_kind(c,callee)!=FUNCTION{return rt_fail(c,TYPE,id,19);}let t=(*w).types[callee];
  let direct=r.kind==binding.GLOBAL&&(*s).symbols[r.target].kind==names.FUNCTION;
  if (!direct||(t.flags&2)!=0)&&!rt_unsafe(c,id){return NONE;}
  var stopped=((*rt_info(c,n.a)).flags&NEVER)!=0;var arg=n.b;var i:usize=0;while arg!=NONE{if i>=t.length{return rt_fail(c,TYPE,id,20);}
   rt_expr(c,arg,(*w).fields[t.first+i].typ,true,depth+1);if (*s).status!=0{return NONE;}stopped=stopped||((*rt_info(c,arg)).flags&NEVER)!=0;arg=(*at(s,u,arg)).next;i+=1;
+ }
+ if i!=t.length{return rt_fail(c,TYPE,id,21);}if stopped{(*rt_info(c,id)).flags|=NEVER;}return t.element;
+}}
+// Scan METHOD symbols in owner for an exact receiver pointer match. Returns the
+ // matching symbol index, or NONE when no candidate fits (without failing).
+unsafe fn rt_lookup_method(c:*Runtime,owner:usize,name:[]const u8,recv:usize)usize{unsafe{
+ let s=(*c).s;let w=(*s).w;var found:usize=NONE;var i:usize=0;
+ while i<(*s).symbols.len{let sy=(*s).symbols[i];
+  if sy.kind==names.METHOD&&sy.unit==owner&&equal(name,text(s,sy.unit,sy.name_token)){
+   let ft=(*w).node_types[gid(s,sy.unit,sy.declaration)];
+   if ft<(*s).type_count{let t=(*w).types[ft];
+    if t.kind==FUNCTION&&t.length!=0&&rt_same(c,(*w).fields[t.first].typ,recv,0){found=i;break;}
+   }
+  }i+=1;
+ }return found;
+}}
+unsafe fn rt_select_method(c:*Runtime,owner:usize,name:[]const u8,recv:usize,id:usize)usize{unsafe{
+ let s=(*c).s;let w=(*s).w;let matched=rt_lookup_method(c,owner,name,recv);
+ if matched==NONE{return rt_fail(c,TYPE,id,81);}
+ let sy=(*s).symbols[matched];if sy.unit!=(*c).unit&&sy.flags!=1{return rt_fail(c,PRIVATE,id,0);}
+ return (*w).node_types[gid(s,sy.unit,sy.declaration)];
+}}
+// receiver_is_arg: functional get(p) passes the receiver as the first call arg;
+ // receiver form (&s).get() already typed the receiver expression separately.
+unsafe fn rt_finish_method_call(c:*Runtime,id:usize,callee:usize,receiver:usize,receiver_is_arg:bool,depth:usize)usize{unsafe{
+ let s=(*c).s;let u=(*c).unit;let w=(*s).w;let n=*at(s,u,id);
+ if callee>=(*s).type_count||(*w).types[callee].kind!=FUNCTION{return rt_fail(c,TYPE,id,19);}
+ let t=(*w).types[callee];if (t.flags&2)!=0&&!rt_unsafe(c,id){return NONE;}
+ if t.length==0{return rt_fail(c,TYPE,id,82);}
+ rt_accept(c,receiver,(*w).fields[t.first].typ);if (*s).status!=0{return NONE;}
+ var stopped=((*rt_info(c,receiver)).flags&NEVER)!=0;
+ var arg:usize=NONE;var i:usize=1;
+ if receiver_is_arg{arg=(*at(s,u,receiver)).next;}else{arg=n.b;}
+ while arg!=NONE{if i>=t.length{return rt_fail(c,TYPE,id,20);}
+  rt_expr(c,arg,(*w).fields[t.first+i].typ,true,depth+1);if (*s).status!=0{return NONE;}
+  stopped=stopped||((*rt_info(c,arg)).flags&NEVER)!=0;arg=(*at(s,u,arg)).next;i+=1;
  }
  if i!=t.length{return rt_fail(c,TYPE,id,21);}if stopped{(*rt_info(c,id)).flags|=NEVER;}return t.element;
 }}
@@ -1130,15 +1234,15 @@ pub unsafe fn analyze_program(sources:[]const modules.Source,units:[]const modul
   type_count:declaration.types,field_count:declaration.fields,limb_count:declaration.limbs,unchecked:0,limit:max_depth,status:0,error_unit:0,error_token:0,detail:0};
  var c=Runtime{s:&s,w:rw,unit:0,returns:VOID,unsafe_depth:0,loop_depth:0,snapshot_depth:0,in_defer:false,defer_token:0,live:true};
  i=0;while i<nodes.len{(*rw).info[i]=Info{typ:NONE,flags:0,length:0};(*rw).initialized[i]=0;i+=1;}
- // Declaration classes still awaiting their full semantic checks are explicit
- // rejections, including when unused, rather than unchecked program success.
- i=0;while i<symbols.len&&s.status==0{let sy=symbols[i];if sy.kind==names.METHOD||sy.kind==names.ERROR{fail(&s,UNSUPPORTED,sy.unit,sy.declaration,sy.kind);}i+=1;}
+ // Error declarations remain unsupported. Methods are validated in analyze and
+ // checked like free functions below (pointer-to-struct receivers only).
+ i=0;while i<symbols.len&&s.status==0{let sy=symbols[i];if sy.kind==names.ERROR{fail(&s,UNSUPPORTED,sy.unit,sy.declaration,sy.kind);}i+=1;}
  var u:usize=0;while u<units.len&&s.status==0{c.unit=u;i=0;while i<units[u].node_count&&s.status==0{let n=*at(&s,u,i);
   if n.kind==ast.GLOBAL{let typ=(*w).node_types[gid(&s,u,i)];rt_expr(&c,n.b,typ,true,0);
    if s.status==0&&!rt_static(&c,n.b,0){rt_fail(&c,CONSTANT,n.b,51);}
   }i+=1;
  }u+=1;}
- i=0;while i<symbols.len&&s.status==0{let sy=symbols[i];if sy.kind==names.FUNCTION{
+ i=0;while i<symbols.len&&s.status==0{let sy=symbols[i];if sy.kind==names.FUNCTION||sy.kind==names.METHOD{
   let n=*at(&s,sy.unit,sy.declaration);if n.c!=NONE{
    c.unit=sy.unit;c.returns=(*w).types[(*w).node_types[gid(&s,sy.unit,sy.declaration)]].element;
    c.unsafe_depth=0;c.loop_depth=0;c.snapshot_depth=0;c.in_defer=false;c.live=true;

@@ -1,0 +1,76 @@
+{
+  "assignment_history": [
+    {
+      "at": "2026-10-20T07:50:00+00:00",
+      "from_owner": "cursor",
+      "note": "用户要求当前会话完成L3功能；原执行已提交、CLI测试进程已退出，R1目前rework无活动作业，接管独立探针证明的Graph完整只读范围预检缺陷，保留原四文件/编号/交付审查历史，直接修复并复验。",
+      "previous_claimed_by": "cursor-mcp-415ed5783a554f4e",
+      "to_owner": "codex"
+    }
+  ],
+  "assignment_owner": "codex",
+  "auto_dispatch": false,
+  "auto_verify": false,
+  "candidate": null,
+  "checks": [
+    "discover:pool-works/tests:test_guest_compile_image.py"
+  ],
+  "claim_from_status": "rework",
+  "claim_token": "ade500d740fe4664a349dc0f650d4ac8",
+  "claimed_at": "2026-10-20T08:27:36+00:00",
+  "claimed_by": "codex-mcp-d76b66689d824a70",
+  "completed_at": "2026-10-20T08:28:35+00:00",
+  "complexity": "standard",
+  "created_at": "2026-10-20T04:44:48+00:00",
+  "delivery": "pool-works/deliveries/GUEST4.md",
+  "depends_on": [],
+  "description": "新增独立适配模块，接收真实frontend.Graph及现有compiler_driver.EmitLimits/工作区和native_assembler.Workspace，调用compiler_driver现有Dong发射函数后调用native_assembler.assemble，输出静态ELF和统一阶段结果。先查两模块导出签名，严格复用，不在Python/C重做IR或汇编，不修改既有模块。调用者明确传入口符号；说明函数入口并非OS启动入口，不生成假DongOS startup。最终ELF仅成功时发布；前阶段失败不调用后阶段；保留原status/stage/code，written=0，不把unsupported当成功；所有可检查描述符、容量、可写/只读和完整尾部别名在写前预检。参数复杂时先设计窄ABI，不申请隐藏内存。测试小型真实源码至少含局部变量、分支或循环、跨函数调用，用真实frontend构图，编译为ELF并由现有内核ELF验证器验证；宿主探针按已支持平台执行验证返回值，不能把可调用函数当OS进程启动；覆盖发射失败、汇编失败、容量失败和输出不变，加入损坏ELF/绕过汇编阶段的坏实现负控。该项不依赖任何新公共任务。\n共同约定：2026-10-20用户要求增加公共任务，不指定负责人，由DeepSeek/Claude/Cursor自主领取。先get_task/read_document读最新rev、完整范围与依赖，claim成功才执行，不抢占在途。只修改本项声明的pool-works文件，映射coordination/dongos_works/pool-works；源码路径相对code/，只读复用当前主线。每项交付Dong生产实现、接口说明、永久Python定向测试和交付报告，不以设计文档或Python替代生产实现。新模块独立，不直接修改内核、服务权限、现有编译器/配置或其它任务文件；需要额外文件先报告协调者。禁止自行提交推送、运行OS/VM、扩大64MiB内存/16KiB栈或授予写盘/进程权限。真实Dong编译执行测试须含debug/release、边界、失败原子性、canary及至少一个实际坏Dong实现负控；工具缺失须如实报告，不能skip冒充通过。最多24组主要语义向量，结构性非法参数可另列；保存来源SHA、命令、结果、失败与skip数量。独立复验及真实集成由Codex完成；本项成功不代表完整客体自举或L3完成。\n只读背景：code/docs/l3-native-selfhost-progress.md；当前已具frontend→lower_program→program_ir→nasm_program→compiler_driver与native_assembler，禁止重复已暂停CR43/CR44/D28/LM9的旧组件。",
+  "document": "pool-works/tasks/GUEST4-board.md",
+  "document_status": "todo",
+  "historical": false,
+  "id": "pool:GUEST4",
+  "integration_note": "已逐字真实复制guest_compile_image.dg/.md至code/lang/bootstrap，永久测试仅SOURCE/build输出路径适配至code/lang/tests/test_bootstrap_guest_compile_image.py。主线完整6tests/0skip/673.778秒全部通过；正式749.438秒通过；生产SHA5d69356d09ba92336377888fcdc38becf5eeb83d4940546b76fc37c5796030e7保持，三文件清单code/build/test/guest-integration/GUEST4-files.json。沿用独立源码/契约/Graph/空alignment/真实ELF复审，登记组件真实主线集成，非完整L3。",
+  "legacy_hash": "d9395f05ac2ba8af2e01dc14904a2d2a19d6e158463e7bc8d53c13e6afa746f6",
+  "number": "GUEST4",
+  "owner": "codex",
+  "rev": 14,
+  "review_note": "R1由独立review_io源码/契约/永久测试复审，并用冻结debug/release对象自身alignment witness确认两空slice缺陷关闭；四正常方法独立复放含20预检、真实ELF验证及入口36全部通过。完整正式7c3f234b... 6tests/0skip/749.438秒/source_stable/已停止退出，指纹一致；实际Graph prefix/skip assembler/UNSUPPORTED-as-OK三坏体各双模式精确拒绝。并行编排独立读审确认无竞态/无弱化。报告reviews/2026-10-20-independent-io-review.md。准予组件验收，不等同客体L3或FLUSH重启验收。",
+  "status": "integrated",
+  "title": "[L3] 将现有编译器文本输出接入原生汇编器",
+  "updated_at": "2026-10-22T00:59:08+00:00",
+  "verification": {
+    "checks": [
+      {
+        "cancelled": false,
+        "elapsed_seconds": 749.438,
+        "execution_exited": true,
+        "passed": true,
+        "process_stopped": true,
+        "returncode": 0,
+        "skips": 0,
+        "spec": "discover:pool-works/tests:test_guest_compile_image.py",
+        "tests": 6,
+        "timed_out": false
+      }
+    ],
+    "execution_exited": true,
+    "fingerprint": {
+      "pool-works/deliveries/GUEST4.md": "f694616c558c2041d687609f09ed2b744fbb21464b7f8de2b6740220f5509f36",
+      "pool-works/lang/bootstrap/guest_compile_image.dg": "5d69356d09ba92336377888fcdc38becf5eeb83d4940546b76fc37c5796030e7",
+      "pool-works/lang/bootstrap/guest_compile_image.md": "ad336fc5a8472fe8eff94793d8e1c98d020348fda3df7f517f72468db798f67d",
+      "pool-works/tests/test_guest_compile_image.py": "841f4200272041fd1e5916fa2f1263266ba9adead61a65152c458008ffb6a3d8"
+    },
+    "finished_at": "2026-10-20T08:41:25+00:00",
+    "job": "7c3f234b1ad04dd98c8782b22f9057b3",
+    "passed": true,
+    "process_stopped": true,
+    "source_stable": true,
+    "summary": "定向复验通过，等待源码/契约审查"
+  },
+  "write_paths": [
+    "pool-works/lang/bootstrap/guest_compile_image.dg",
+    "pool-works/lang/bootstrap/guest_compile_image.md",
+    "pool-works/tests/test_guest_compile_image.py",
+    "pool-works/deliveries/GUEST4.md"
+  ]
+}

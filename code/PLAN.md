@@ -1,5 +1,12 @@
 # DongOS：x86-64 汇编 PC 操作系统架构与推进计划
 
+- 最新任务恢复核对：2026-10-22T09:18:41+08:00。
+- 本轮17份缺失任务书、CX6同号异义和CX14/CX15旧状态均已处理完成。CX14 integrated rev7，CX15 integrated rev8；CX6 integrated rev9，已恢复读取器契约，分离5条原NASM事件，耗时恢复为1轮/265秒，原始事件全部保留。协调器issues=0；核对时间2026-10-22T09:18:41+08:00。
+- 当前MCP快照共164项活动任务：19 accepted、140 integrated、3 submitted、1 in_progress、1 rework。本轮同时观测到其它客户端新增5项并行任务，其状态按实时MCP继续变化，本轮没有接管或改动它们。
+- 当前阶段仍为P0/P1/P3/P4、L0/L1/L2及限定L3B/L3C已验收，P2/P5/P6/P7/P8及完整L3部分完成，P9待完成；P10另定。见[整体任务图](../coordination/dongos_works/progress-map.md)及[恢复报告](../coordination/dongos_works/reviews/2026-10-22-task-recovery/README.md)。
+
+以下保留原有记录；其中日期、任务数量、机器路径和“当前/下一步”均属于各自历史检查点，最新状态以上述记录及协调器为准。
+
 - 版本日期：2026-10-17
 - 负责人：cdH
 - 当前阶段（2026-10-17）：**P0/P1、L1和P2核心/P3已验收；P4百万IPC、P5持久化、P6四核/TLB及P7桌面里程碑保留。新增七样本时钟校准已由HPET/PM真实客体独立复算；GPT/ESP启动镜像已由QEMU实际从USB启动到桌面。窗口缩放功能、反向打断、半透明边框及SSE2回退已通过真实客体；当前200%拖动60.0216FPS/最慢7.0423ms。精确遮挡将四窗DPI移动帧降至约16–23ms，仍不宣称动画恒定60Hz。Q35关机/重启四次启动和原盘持久化通过，两个恶意服务的21项权限负控通过；dongfmt与VS Code高亮已交付。** 原生/客体证据分别见 `docs/clock-calibration.md`、`docs/usb-boot-image.md`；窗口过渡的性能优化、独立应用生命周期、P2扩展、PCID/init、AHCI/NVMe及P6余项继续承担交付义务。用户已明确本轮完成P0–P9，P10另定；完整未关闭项和外部验收条件见 `docs/remaining-plan.md`。本机VMware16现已通过IOAPIC、P3/P6四核/TLB、五服务装载、AHCI双启动shell读写/FLUSH及原盘持久化；QEMU AHCI严格模式两启动及同镜像VirtIO电源四启动回归也通过（含正式runner再验共10次实际启动，见docs/vmware-validation.md与docs/ahci.md）。FAT32目录/LFN正式接线完成：全树分配审计、UTF-8路径、创建/读写/追加/截断/删除、实际NVMe FLUSH与同盘双启动通过，见docs/fat32.md；NVMe现已正式接入：QEMU实际写/读/FLUSH、同盘双启动及完整USER映射隔离复验通过；同镜像AHCI两启动和VirtIO电源四启动回归通过，见docs/nvme.md。KVM和真机标准不替换。

@@ -1,0 +1,42 @@
+{
+  "archive_note": "误写不存在的tests.test_service_resources检查名，尚未改文件；保留历史，CX10采用真实存在的service_handoff及新增动态帧读取验证。",
+  "archived": true,
+  "archived_at": "2026-10-20T08:42:38+00:00",
+  "assignment_owner": "codex",
+  "auto_dispatch": false,
+  "auto_verify": false,
+  "candidate": null,
+  "checks": [
+    "module:tests.test_user_address_spaces",
+    "module:tests.test_service_resources"
+  ],
+  "claim_token": null,
+  "claimed_at": null,
+  "claimed_by": null,
+  "completed_at": null,
+  "complexity": "standard",
+  "created_at": "2026-10-20T08:41:24+00:00",
+  "delivery": "codex-works/deliveries/CX9.md",
+  "depends_on": [],
+  "description": "真实QEMU P5装载失败0x04060002；ELF实测shell需551页，三服务共712页+12栈页，超过旧512帧表。把既有memory.enable_arena(16384)在所有P5服务首次装载前启用，GRAPHICS不重复启用；64MiB物理总预算与普通16KiB栈不扩大，不增权限。更新真实P5物理校验读取动态EXTENDED帧表并验证其来源/长度在原arena内，保持所有代码/页表/W^X/guard/IPC/实际FLUSH检查，真实同盘双启动复验。主线既有memory/address和service_resources定向回归。独立审查源码/验收脚本/真实物理证据后方验收。",
+  "document": "codex-works/tasks/CX9-board.md",
+  "historical": false,
+  "id": "codex:CX9",
+  "legacy_hash": "ad7662abaa7d4f6550b4d7dcb896d374db639688c84e2bb84edfde370bb38ffd",
+  "number": "CX9",
+  "owner": "codex",
+  "pause_control": "confirmed",
+  "resume_status": "todo",
+  "rev": 5,
+  "review_note": "",
+  "status": "paused",
+  "title": "[L3] P5服务启用既有64MiB共享帧表并保留物理验收",
+  "updated_at": "2026-10-20T08:42:38+00:00",
+  "verification": null,
+  "write_paths": [
+    "kernel/user/services.dg",
+    "tests/run_services_qemu.py",
+    "docs/l3-p5-memory-profile.md",
+    "codex-works/deliveries/CX9.md"
+  ]
+}

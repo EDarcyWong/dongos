@@ -1,0 +1,5 @@
+{"at":"2026-10-20T12:51:58+00:00","data":{"rev":1,"status":"todo"},"kind":"created","task_id":"codex:CX6"}
+{"at":"2026-10-20T12:51:58+00:00","data":{"claimed_at":"2026-10-20T12:51:58+00:00","claimed_by":"codex-mcp-6d5798b7b4b74b61","completed_at":null,"owner":"codex","resume_status":null,"rev":2,"status":"in_progress"},"kind":"claim","task_id":"codex:CX6"}
+{"at":"2026-10-20T12:56:13+00:00","data":{"claimed_at":"2026-10-20T12:51:58+00:00","claimed_by":"codex-mcp-6d5798b7b4b74b61","completed_at":"2026-10-20T12:56:13+00:00","owner":"codex","resume_status":null,"rev":3,"status":"submitted"},"kind":"submit","task_id":"codex:CX6"}
+{"at":"2026-10-20T13:03:15+00:00","data":{"claimed_at":"2026-10-20T12:51:58+00:00","claimed_by":"codex-mcp-6d5798b7b4b74b61","completed_at":"2026-10-20T12:56:13+00:00","owner":"codex","resume_status":"submitted","rev":4,"status":"paused"},"kind":"pause","task_id":"codex:CX6"}
+{"at":"2026-10-20T13:03:15+00:00","data":{"rev":5,"status":"paused"},"kind":"archive","task_id":"codex:CX6"}

@@ -1,0 +1,68 @@
+{
+  "assignment_owner": null,
+  "auto_dispatch": false,
+  "auto_verify": false,
+  "candidate": null,
+  "checks": [
+    "discover:pool-works/tests:test_l3_method_semantics.py"
+  ],
+  "claim_from_status": "rework",
+  "claim_token": "107e3d67b79d4eb384a236003f70180a",
+  "claimed_at": "2026-10-22T02:24:25+00:00",
+  "claimed_by": "cursor-mcp-3e7917854bd14ac8",
+  "completed_at": "2026-10-22T02:42:19+00:00",
+  "complexity": "standard",
+  "created_at": "2026-10-22T01:02:15+00:00",
+  "delivery": "pool-works/deliveries/L3METHOD1.md",
+  "depends_on": [],
+  "description": "公共任务，供其他负责人在本人客户端手动MCP领取，优先Cursor，不自动启动AI CLI。真实缺口：semantic_types遇names.METHOD即UNSUPPORTED；binding已有METHOD_CANDIDATE。实现与Python seed一致的method声明/receiver类型、显式函数式与receiver调用、参数/返回/unsafe/可见性/同名歧义检查，成功Graph发布真实类型/refs/Info，失败不发布，源节点不可变。限定指针struct接收者与既有标量/指针/切片签名，其它明确失败记录。仅读主线lang/dongc及bootstrap names/expression/frontend；候选semantic_types.dg/binding.dg放pool-works/l3-method/src/bootstrap，测试临时import根覆盖两候选，其余只读主线。本项只闭合方法前端语义，不改lower_program/nasm_program，不代表整程序method完成。真实Dong debug/release与seed比较接受/拒绝，mutable/const receiver、两类调用、跨模块pub/private、同名方法/自由函数、错误数量/类型及unsafe边界；exact/one-short容量、descriptor/input别名、完整guard、源不变，真实错误解析候选负控须被oracle拒绝。交付可复现命令/结果/限制；零skip。先读最新任务全文再claim，只写write_paths，不验收/集成/提交推送/启动OS。",
+  "document": "pool-works/tasks/L3METHOD1-board.md",
+  "historical": false,
+  "id": "pool:L3METHOD1",
+  "integration_note": "按用户明确集成要求，已真实接入code主线：pool-works/l3-method/src/bootstrap两生产文件→lang/bootstrap/semantic_types.dg及binding.dg逐字相同，文档→lang/bootstrap/method-semantics.md并更新semantic_types.md旧范围，永久测试→lang/tests/test_bootstrap_method_semantics.py（主线路径/链接适配、五池one-short、既有语义及完整frontend集成）。原候选5路径均匹配原accepted指纹，原R0/R1审查及正式历史保留。接续codex:L3METHODINT1已独立正式joba30e5602466a47fd9b694f4868143904八项0skip/905.876s/source_stable及源码契约审查通过后integrated rev6。主线完整frontend两模式各27案旧诊断+4案方法、9组每模式522案回归通过；本轮严格Info52次及真实R0负控通过。主线5源文件与新正式指纹一致，lower_program/nasm_program未改，仍明确拒METHOD，因此不代表整程序方法或L3/G5完成。映射与证据codex-works/reviews/2026-10-22-L3METHOD-mainline-integration.md、code/build/test/l3-method-integration/result.json。未启动OS/VM，未提交推送。",
+  "legacy_hash": "f3910c170d5da970fd25f870a1c8cc5c2209a14289ec5ab3ca48cba0d1108911",
+  "number": "L3METHOD1",
+  "owner": "cursor",
+  "rev": 10,
+  "review_note": "R1源码/契约与独立复验通过。已对照原R0隔离源码、原任务书、返修说明、候选两生产文件/文档/永久测试：两类调用精确选择后将真实FUNCTION写到info[call.a]，Type.unit/node定位声明，refs/AST不变；错误参数等失败仍零发布。新增永久测试覆盖callee Info及同名receiver、非receiver参数数量/类型、调用及方法体返回、指针/切片签名。正式job ebc1fdf7a24744858bb7e141809fafe8：6项0skip/709.748s，source_stable/process_stopped/execution_exited全部true，指纹与R1交付一致。另用本轮隔离新编译debug/release对象独立42次源程序检查，校验声明是实际函数AST/符号、名称、node_types、receiver/参数/call返回Info一致，含跨模块首候选private但实际选择另一pub方法；全部五个RuntimeWorkspace池one-short两模式10次均CAPACITY且零发布/guards/只读输入通过，共52检查通过。相同独立观察器链接上轮真实R0对象，两模式均因callee Info缺失退出103，确证可拒原缺陷；R1检查器退出0。证据codex-works/reviews/2026-10-22-L3METHOD1-R1-independent.md、L3METHOD1-r1-review.py及codex-works/build/L3METHOD1-r1-review/summary.json。保留原R0历史，只验收当前struct指针receiver方法前端候选；未改主线、未集成lower/backend，不代表整程序method或L3/G5完成，未运行OS/VM/提交推送。",
+  "status": "integrated",
+  "title": "[L3/G5] 原生前端方法声明及接收者调用语义",
+  "updated_at": "2026-10-22T03:30:06+00:00",
+  "verification": {
+    "checks": [
+      {
+        "cancelled": false,
+        "elapsed_seconds": 709.748,
+        "execution_exited": true,
+        "passed": true,
+        "process_stopped": true,
+        "returncode": 0,
+        "skips": 0,
+        "spec": "discover:pool-works/tests:test_l3_method_semantics.py",
+        "tests": 6,
+        "timed_out": false
+      }
+    ],
+    "execution_exited": true,
+    "fingerprint": {
+      "pool-works/deliveries/L3METHOD1.md": "3d9cc932b05aed94e44907ba3099e40e8f5f72f0d237d7320d8b27b0c929839a",
+      "pool-works/l3-method/docs/method-semantics.md": "14e399d6c4b526f2c4c1aa9103082827a236a44038f202db611d365c1e97fb94",
+      "pool-works/l3-method/src/bootstrap/binding.dg": "3822f0f132d680117ba457fbe046254309b86580ae4c0ad94f572ca4d2c203e1",
+      "pool-works/l3-method/src/bootstrap/semantic_types.dg": "d216531917467c1bd05601625ef18607337061f87649ab6399b5af9fbd5725ef",
+      "pool-works/tests/test_l3_method_semantics.py": "72d1e78cd42e4c2ac0ca16e98aa44c4178ea904400088d6062b9c0e16dc5d3e3"
+    },
+    "finished_at": "2026-10-22T03:01:49+00:00",
+    "job": "ebc1fdf7a24744858bb7e141809fafe8",
+    "passed": true,
+    "process_stopped": true,
+    "source_stable": true,
+    "summary": "定向复验通过，等待源码/契约审查"
+  },
+  "write_paths": [
+    "pool-works/l3-method/src/bootstrap/semantic_types.dg",
+    "pool-works/l3-method/src/bootstrap/binding.dg",
+    "pool-works/l3-method/docs/method-semantics.md",
+    "pool-works/tests/test_l3_method_semantics.py",
+    "pool-works/deliveries/L3METHOD1.md"
+  ]
+}

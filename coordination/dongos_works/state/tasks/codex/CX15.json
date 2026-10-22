@@ -1,0 +1,65 @@
+{
+  "assignment_owner": "codex",
+  "auto_dispatch": false,
+  "auto_verify": false,
+  "candidate": null,
+  "checks": [
+    "module:lang.tests.test_bootstrap_compiler_job"
+  ],
+  "claim_from_status": "todo",
+  "claim_token": "4d0cdee2f7274ce0a345a9ce97747f1f",
+  "claimed_at": "2026-10-20T10:05:52+00:00",
+  "claimed_by": "codex-mcp-d76b66689d824a70",
+  "completed_at": "2026-10-20T10:06:31+00:00",
+  "complexity": "standard",
+  "created_at": "2026-10-20T10:05:51+00:00",
+  "delivery": "codex-works/deliveries/CX15.md",
+  "depends_on": [],
+  "description": "复核发现tools/compiler_job.py虽然有POSIX guarded mmap路径，但Linux -no-pie宿主默认占用0x400000，与待装载静态ELF冲突，且uint64_t在LP64是unsigned long而现有printf用%llu。仅将非Windows宿主测试exe链接到0x10000000并保留-no-pie，C夹具U明确unsigned long long/64bit ABI，不改Dong核心、guest ELF地址、64MiB预算或测试oracle。复用完整双模式双格式固定点定向测试，独立审查。当前Windows能实际复验；无Linux运行环境则明确未实际Linux执行，不编造跨平台通过。",
+  "document": "codex-works/tasks/CX15-board.md",
+  "document_status": "todo",
+  "historical": false,
+  "id": "codex:CX15",
+  "integration_note": "实际主线tools/compiler_job.py、docs/l3-compiler-job-host.md与恢复的原交付已落盘，三文件逐项匹配本轮正式验收指纹；代码原已进入当前4e1fede，保留当前后继启动桥，无旧版本回退。正式当前两模式双格式完整ELF固定点1test零skip通过，登记宿主兼容修复真实集成；不冒作本轮Linux/VM运行。",
+  "legacy_hash": "cff9c314d125752ee03957f14734a791ec7fee6aa93df5e88386981244d6b277",
+  "number": "CX15",
+  "owner": "codex",
+  "rev": 8,
+  "review_note": "已实际审查原契约、64位ULL/printf ABI、Linux非PIE宿主0x10000000段地址及guarded loader，当前工具与G6 f54c35c的LF内容一致。正式隔离8d6893090cd74e3c96a9af844a27a15c：1test/0skip/391.284秒，source_stable/process_stopped/execution_exited均true，当前三声明文件指纹一致；当前debug/release、双格式、完整ELF固定点、32前置原子性、真实语义/容量拒绝及启动桥机器正反例实际通过。本轮Windows运行，不冒作新机Linux/VM执行；原独审和后继G6证据分范围保留。完整依据reviews/2026-10-22-task-recovery/CX15-formal-review.json。",
+  "status": "integrated",
+  "title": "[L3] 修正编译作业宿主验证器的Linux布局与u64格式兼容",
+  "updated_at": "2026-10-22T01:12:41+00:00",
+  "verification": {
+    "checks": [
+      {
+        "cancelled": false,
+        "elapsed_seconds": 391.284,
+        "execution_exited": true,
+        "passed": true,
+        "process_stopped": true,
+        "returncode": 0,
+        "skips": 0,
+        "spec": "module:lang.tests.test_bootstrap_compiler_job",
+        "tests": 1,
+        "timed_out": false
+      }
+    ],
+    "execution_exited": true,
+    "fingerprint": {
+      "codex-works/deliveries/CX15.md": "a7449b4984fdcedb151d44fb8679a73ec4096de671333d9d440548817c9a193a",
+      "docs/l3-compiler-job-host.md": "a0abbdc3b85acc3a84723f8c1511fce243a3b594faf7d67e71e17bf6adf8e4a2",
+      "tools/compiler_job.py": "cd2c27cabfa04f898b6f3ca2e7cf3dc1c4031ae4e166c0d8690d01995cadc0af"
+    },
+    "finished_at": "2026-10-22T01:07:18+00:00",
+    "job": "8d6893090cd74e3c96a9af844a27a15c",
+    "passed": true,
+    "process_stopped": true,
+    "source_stable": true,
+    "summary": "定向复验通过，等待源码/契约审查"
+  },
+  "write_paths": [
+    "tools/compiler_job.py",
+    "docs/l3-compiler-job-host.md",
+    "codex-works/deliveries/CX15.md"
+  ]
+}

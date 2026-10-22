@@ -1,0 +1,1468 @@
+{
+  "updated_at": "2026-10-22T08:52:13+08:00",
+  "project": "dongos",
+  "operation": "read-only audit and display-document refresh",
+  "source_root": "D:\\projects\\projects3\\2026\\dongos\\code",
+  "works_root": "D:\\projects\\projects3\\2026\\dongos\\coordination\\dongos_works",
+  "branch": "main",
+  "head": "4e1fede1cea3f6deeb86ca17561dfc4eb07edac5",
+  "coordinator_snapshot_at": "2026-10-22T00:52:16+00:00",
+  "counts": {
+    "accepted": 19,
+    "integrated": 138,
+    "in_progress": 1,
+    "submitted": 1
+  },
+  "total_active": 159,
+  "historical_accepted": [
+    "claude:C1",
+    "claude:C2",
+    "claude:C3",
+    "claude:C4",
+    "claude:C5",
+    "claude:C6",
+    "deepseek:D1",
+    "deepseek:D10",
+    "deepseek:D11",
+    "deepseek:D12",
+    "deepseek:D13",
+    "deepseek:D2",
+    "deepseek:D3",
+    "deepseek:D4",
+    "deepseek:D5",
+    "deepseek:D6",
+    "deepseek:D7",
+    "deepseek:D8",
+    "deepseek:D9"
+  ],
+  "active_jobs": [],
+  "automation": false,
+  "coordinator_validation_issues": [
+    {
+      "task": "codex:CX10",
+      "message": "任务书丢失"
+    },
+    {
+      "task": "codex:CX12",
+      "message": "任务书丢失"
+    },
+    {
+      "task": "codex:CX13",
+      "message": "任务书丢失"
+    },
+    {
+      "task": "codex:CX14",
+      "message": "任务书丢失"
+    },
+    {
+      "task": "codex:CX15",
+      "message": "任务书丢失"
+    },
+    {
+      "task": "codex:CX7",
+      "message": "任务书丢失"
+    },
+    {
+      "task": "codex:CX8",
+      "message": "任务书丢失"
+    },
+    {
+      "task": "cursor:CR45",
+      "message": "任务书丢失"
+    },
+    {
+      "task": "cursor:CR46",
+      "message": "任务书丢失"
+    },
+    {
+      "task": "cursor:CR47",
+      "message": "任务书丢失"
+    },
+    {
+      "task": "pool:GUEST1",
+      "message": "任务书丢失"
+    },
+    {
+      "task": "pool:GUEST2",
+      "message": "任务书丢失"
+    },
+    {
+      "task": "pool:GUEST3",
+      "message": "任务书丢失"
+    },
+    {
+      "task": "pool:GUEST4",
+      "message": "任务书丢失"
+    },
+    {
+      "task": "pool:GUEST5",
+      "message": "任务书丢失"
+    },
+    {
+      "task": "pool:MCPPOOL1",
+      "message": "任务书丢失"
+    },
+    {
+      "task": "pool:WINVERIFY1",
+      "message": "任务书丢失"
+    }
+  ],
+  "previous_audit": {
+    "path": "coordination/dongos_works/reviews/2026-10-22-final-task-audit.json",
+    "active": 141,
+    "integrated": 122,
+    "historical_accepted": 19
+  },
+  "extra_live_records": [
+    {
+      "id": "codex:CX10",
+      "title": "[L3] P5服务启用既有64MiB共享帧表并保留物理验收",
+      "status": "integrated",
+      "rev": 6,
+      "document": "codex-works/tasks/CX10-board.md",
+      "document_exists": false
+    },
+    {
+      "id": "codex:CX12",
+      "title": "[L3] 原生汇编器使用有界短位移编码以保持2MiB执行上限",
+      "status": "integrated",
+      "rev": 9,
+      "document": "codex-works/tasks/CX12-board.md",
+      "document_exists": false
+    },
+    {
+      "id": "codex:CX13",
+      "title": "[L3] 单56MiB纯Dong自编译作业与客体入口",
+      "status": "integrated",
+      "rev": 6,
+      "document": "codex-works/tasks/CX13-board.md",
+      "document_exists": false
+    },
+    {
+      "id": "codex:CX14",
+      "title": "[L3] 受限客体编译启动与持久化控制服务",
+      "status": "in_progress",
+      "rev": 2,
+      "document": "codex-works/tasks/CX14-board.md",
+      "document_exists": false
+    },
+    {
+      "id": "codex:CX15",
+      "title": "[L3] 修正编译作业宿主验证器的Linux布局与u64格式兼容",
+      "status": "submitted",
+      "rev": 4,
+      "document": "codex-works/tasks/CX15-board.md",
+      "document_exists": false
+    },
+    {
+      "id": "codex:CX6",
+      "title": "[L3] 将有界源码读取器接入已有DongOS文件句柄",
+      "status": "integrated",
+      "rev": 7,
+      "document": "codex-works/tasks/CX6-board.md",
+      "document_exists": true
+    },
+    {
+      "id": "codex:CX7",
+      "title": "[L3] 编译器专用64KiB受保护栈配置与装载入口",
+      "status": "integrated",
+      "rev": 12,
+      "document": "codex-works/tasks/CX7-board.md",
+      "document_exists": false
+    },
+    {
+      "id": "codex:CX8",
+      "title": "[L3] 产物提交状态机接入既有H_WRITE/H_SYNC文件授权",
+      "status": "integrated",
+      "rev": 6,
+      "document": "codex-works/tasks/CX8-board.md",
+      "document_exists": false
+    },
+    {
+      "id": "cursor:CR45",
+      "title": "[L3] 受限文件清单批量装载为原生frontend源码目录",
+      "status": "integrated",
+      "rev": 7,
+      "document": "cursor-works/tasks/CR45-board.md",
+      "document_exists": false
+    },
+    {
+      "id": "cursor:CR46",
+      "title": "[L3] 将原生前端诊断按有界回调发送给既有日志接收者",
+      "status": "integrated",
+      "rev": 7,
+      "document": "cursor-works/tasks/CR46-board.md",
+      "document_exists": false
+    },
+    {
+      "id": "cursor:CR47",
+      "title": "[L3] 测量并降低semantic_types递归路径实际栈峰值",
+      "status": "integrated",
+      "rev": 13,
+      "document": "cursor-works/tasks/CR47-board.md",
+      "document_exists": false
+    },
+    {
+      "id": "pool:GUEST1",
+      "title": "[L3] 客体编译输入的相对路径与根目录边界校验",
+      "status": "integrated",
+      "rev": 9,
+      "document": "pool-works/tasks/GUEST1-board.md",
+      "document_exists": false
+    },
+    {
+      "id": "pool:GUEST2",
+      "title": "[L3] 通过调用者读回调装载有界源码字节",
+      "status": "integrated",
+      "rev": 6,
+      "document": "pool-works/tasks/GUEST2-board.md",
+      "document_exists": false
+    },
+    {
+      "id": "pool:GUEST3",
+      "title": "[L3] 客体编译阶段内存预算与独占复用规划",
+      "status": "integrated",
+      "rev": 9,
+      "document": "pool-works/tasks/GUEST3-board.md",
+      "document_exists": false
+    },
+    {
+      "id": "pool:GUEST4",
+      "title": "[L3] 将现有编译器文本输出接入原生汇编器",
+      "status": "integrated",
+      "rev": 13,
+      "document": "pool-works/tasks/GUEST4-board.md",
+      "document_exists": false
+    },
+    {
+      "id": "pool:GUEST5",
+      "title": "[L3] 编译产物写入与FLUSH确认的有界状态机",
+      "status": "integrated",
+      "rev": 16,
+      "document": "pool-works/tasks/GUEST5-board.md",
+      "document_exists": false
+    },
+    {
+      "id": "pool:MCPPOOL1",
+      "title": "MCP公共任务池适配：DeepSeek、Claude、Cursor自主领取",
+      "status": "integrated",
+      "rev": 8,
+      "document": "pool-works/tasks/MCPPOOL1-board.md",
+      "document_exists": false
+    },
+    {
+      "id": "pool:WINVERIFY1",
+      "title": "修复Windows定向复验正常退出后无法登记完成",
+      "status": "integrated",
+      "rev": 9,
+      "document": "pool-works/tasks/WINVERIFY1-board.md",
+      "document_exists": false
+    }
+  ],
+  "contract_conflicts": [
+    {
+      "id": "codex:CX6",
+      "fields": [
+        "title",
+        "description",
+        "write_paths",
+        "checks",
+        "depends_on"
+      ],
+      "committed_title": "[P0/L3] 修复NASM 3分组帮助的警告能力探测并复核集成入口",
+      "live_title": "[L3] 将有界源码读取器接入已有DongOS文件句柄",
+      "committed_archived": true,
+      "committed_rev": 5,
+      "live_rev": 7
+    }
+  ],
+  "unsettled_live_records": [
+    {
+      "id": "codex:CX14",
+      "title": "[L3] 受限客体编译启动与持久化控制服务",
+      "status": "in_progress",
+      "rev": 2,
+      "claimed_by": "codex-mcp-d76b66689d824a70",
+      "verification_passed": null
+    },
+    {
+      "id": "codex:CX15",
+      "title": "[L3] 修正编译作业宿主验证器的Linux布局与u64格式兼容",
+      "status": "submitted",
+      "rev": 4,
+      "claimed_by": "codex-mcp-d76b66689d824a70",
+      "verification_passed": true
+    }
+  ],
+  "task_states": [
+    {
+      "id": "claude:C1",
+      "owner": "claude",
+      "status": "accepted",
+      "rev": 4,
+      "historical": true
+    },
+    {
+      "id": "claude:C10",
+      "owner": "claude",
+      "status": "integrated",
+      "rev": 8,
+      "historical": false
+    },
+    {
+      "id": "claude:C11",
+      "owner": "claude",
+      "status": "integrated",
+      "rev": 10,
+      "historical": false
+    },
+    {
+      "id": "claude:C12",
+      "owner": "claude",
+      "status": "integrated",
+      "rev": 8,
+      "historical": false
+    },
+    {
+      "id": "claude:C13",
+      "owner": "claude",
+      "status": "integrated",
+      "rev": 10,
+      "historical": false
+    },
+    {
+      "id": "claude:C14",
+      "owner": "claude",
+      "status": "integrated",
+      "rev": 10,
+      "historical": false
+    },
+    {
+      "id": "claude:C15",
+      "owner": "claude",
+      "status": "integrated",
+      "rev": 10,
+      "historical": false
+    },
+    {
+      "id": "claude:C17",
+      "owner": "claude",
+      "status": "integrated",
+      "rev": 10,
+      "historical": false
+    },
+    {
+      "id": "claude:C2",
+      "owner": "claude",
+      "status": "accepted",
+      "rev": 4,
+      "historical": true
+    },
+    {
+      "id": "claude:C22",
+      "owner": "claude",
+      "status": "integrated",
+      "rev": 9,
+      "historical": false
+    },
+    {
+      "id": "claude:C23",
+      "owner": "claude",
+      "status": "integrated",
+      "rev": 9,
+      "historical": false
+    },
+    {
+      "id": "claude:C24",
+      "owner": "claude",
+      "status": "integrated",
+      "rev": 8,
+      "historical": false
+    },
+    {
+      "id": "claude:C25",
+      "owner": "claude",
+      "status": "integrated",
+      "rev": 8,
+      "historical": false
+    },
+    {
+      "id": "claude:C26",
+      "owner": "claude",
+      "status": "integrated",
+      "rev": 8,
+      "historical": false
+    },
+    {
+      "id": "claude:C27",
+      "owner": "claude",
+      "status": "integrated",
+      "rev": 8,
+      "historical": false
+    },
+    {
+      "id": "claude:C28",
+      "owner": "claude",
+      "status": "integrated",
+      "rev": 8,
+      "historical": false
+    },
+    {
+      "id": "claude:C29",
+      "owner": "claude",
+      "status": "integrated",
+      "rev": 15,
+      "historical": false
+    },
+    {
+      "id": "claude:C3",
+      "owner": "claude",
+      "status": "accepted",
+      "rev": 4,
+      "historical": true
+    },
+    {
+      "id": "claude:C30",
+      "owner": "claude",
+      "status": "integrated",
+      "rev": 8,
+      "historical": false
+    },
+    {
+      "id": "claude:C31",
+      "owner": "claude",
+      "status": "integrated",
+      "rev": 12,
+      "historical": false
+    },
+    {
+      "id": "claude:C32",
+      "owner": "claude",
+      "status": "integrated",
+      "rev": 8,
+      "historical": false
+    },
+    {
+      "id": "claude:C33",
+      "owner": "claude",
+      "status": "integrated",
+      "rev": 14,
+      "historical": false
+    },
+    {
+      "id": "claude:C34",
+      "owner": "claude",
+      "status": "integrated",
+      "rev": 12,
+      "historical": false
+    },
+    {
+      "id": "claude:C35",
+      "owner": "claude",
+      "status": "integrated",
+      "rev": 12,
+      "historical": false
+    },
+    {
+      "id": "claude:C36",
+      "owner": "claude",
+      "status": "integrated",
+      "rev": 14,
+      "historical": false
+    },
+    {
+      "id": "claude:C37",
+      "owner": "claude",
+      "status": "integrated",
+      "rev": 16,
+      "historical": false
+    },
+    {
+      "id": "claude:C38",
+      "owner": "claude",
+      "status": "integrated",
+      "rev": 14,
+      "historical": false
+    },
+    {
+      "id": "claude:C39",
+      "owner": "claude",
+      "status": "integrated",
+      "rev": 7,
+      "historical": false
+    },
+    {
+      "id": "claude:C4",
+      "owner": "claude",
+      "status": "accepted",
+      "rev": 4,
+      "historical": true
+    },
+    {
+      "id": "claude:C40",
+      "owner": "claude",
+      "status": "integrated",
+      "rev": 9,
+      "historical": false
+    },
+    {
+      "id": "claude:C41",
+      "owner": "claude",
+      "status": "integrated",
+      "rev": 7,
+      "historical": false
+    },
+    {
+      "id": "claude:C42",
+      "owner": "claude",
+      "status": "integrated",
+      "rev": 7,
+      "historical": false
+    },
+    {
+      "id": "claude:C43",
+      "owner": "claude",
+      "status": "integrated",
+      "rev": 7,
+      "historical": false
+    },
+    {
+      "id": "claude:C44",
+      "owner": "claude",
+      "status": "integrated",
+      "rev": 7,
+      "historical": false
+    },
+    {
+      "id": "claude:C45",
+      "owner": "claude",
+      "status": "integrated",
+      "rev": 7,
+      "historical": false
+    },
+    {
+      "id": "claude:C46",
+      "owner": "claude",
+      "status": "integrated",
+      "rev": 7,
+      "historical": false
+    },
+    {
+      "id": "claude:C47",
+      "owner": "claude",
+      "status": "integrated",
+      "rev": 7,
+      "historical": false
+    },
+    {
+      "id": "claude:C48",
+      "owner": "claude",
+      "status": "integrated",
+      "rev": 13,
+      "historical": false
+    },
+    {
+      "id": "claude:C49",
+      "owner": "claude",
+      "status": "integrated",
+      "rev": 11,
+      "historical": false
+    },
+    {
+      "id": "claude:C5",
+      "owner": "claude",
+      "status": "accepted",
+      "rev": 4,
+      "historical": true
+    },
+    {
+      "id": "claude:C50",
+      "owner": "claude",
+      "status": "integrated",
+      "rev": 11,
+      "historical": false
+    },
+    {
+      "id": "claude:C51",
+      "owner": "claude",
+      "status": "integrated",
+      "rev": 6,
+      "historical": false
+    },
+    {
+      "id": "claude:C52",
+      "owner": "claude",
+      "status": "integrated",
+      "rev": 19,
+      "historical": false
+    },
+    {
+      "id": "claude:C6",
+      "owner": "claude",
+      "status": "accepted",
+      "rev": 4,
+      "historical": true
+    },
+    {
+      "id": "claude:C7",
+      "owner": "claude",
+      "status": "integrated",
+      "rev": 8,
+      "historical": false
+    },
+    {
+      "id": "claude:C8",
+      "owner": "claude",
+      "status": "integrated",
+      "rev": 8,
+      "historical": false
+    },
+    {
+      "id": "claude:C9",
+      "owner": "claude",
+      "status": "integrated",
+      "rev": 8,
+      "historical": false
+    },
+    {
+      "id": "claude:P2EXEC1",
+      "owner": "codex",
+      "status": "integrated",
+      "rev": 18,
+      "historical": false
+    },
+    {
+      "id": "claude:P2WC1",
+      "owner": "codex",
+      "status": "integrated",
+      "rev": 10,
+      "historical": false
+    },
+    {
+      "id": "codex:CX1",
+      "owner": "codex",
+      "status": "integrated",
+      "rev": 7,
+      "historical": false
+    },
+    {
+      "id": "codex:CX10",
+      "owner": "codex",
+      "status": "integrated",
+      "rev": 6,
+      "historical": false
+    },
+    {
+      "id": "codex:CX12",
+      "owner": "codex",
+      "status": "integrated",
+      "rev": 9,
+      "historical": false
+    },
+    {
+      "id": "codex:CX13",
+      "owner": "codex",
+      "status": "integrated",
+      "rev": 6,
+      "historical": false
+    },
+    {
+      "id": "codex:CX14",
+      "owner": "codex",
+      "status": "in_progress",
+      "rev": 2,
+      "historical": false
+    },
+    {
+      "id": "codex:CX15",
+      "owner": "codex",
+      "status": "submitted",
+      "rev": 4,
+      "historical": false
+    },
+    {
+      "id": "codex:CX2",
+      "owner": "codex",
+      "status": "integrated",
+      "rev": 13,
+      "historical": false
+    },
+    {
+      "id": "codex:CX3",
+      "owner": "codex",
+      "status": "integrated",
+      "rev": 7,
+      "historical": false
+    },
+    {
+      "id": "codex:CX4",
+      "owner": "codex",
+      "status": "integrated",
+      "rev": 7,
+      "historical": false
+    },
+    {
+      "id": "codex:CX5",
+      "owner": "codex",
+      "status": "integrated",
+      "rev": 7,
+      "historical": false
+    },
+    {
+      "id": "codex:CX6",
+      "owner": "codex",
+      "status": "integrated",
+      "rev": 7,
+      "historical": false
+    },
+    {
+      "id": "codex:CX7",
+      "owner": "codex",
+      "status": "integrated",
+      "rev": 12,
+      "historical": false
+    },
+    {
+      "id": "codex:CX8",
+      "owner": "codex",
+      "status": "integrated",
+      "rev": 6,
+      "historical": false
+    },
+    {
+      "id": "codex:CXNASM3",
+      "owner": "codex",
+      "status": "integrated",
+      "rev": 6,
+      "historical": false
+    },
+    {
+      "id": "codex:L3HOST13",
+      "owner": "codex",
+      "status": "integrated",
+      "rev": 9,
+      "historical": false
+    },
+    {
+      "id": "codex:L3MAIN12",
+      "owner": "codex",
+      "status": "integrated",
+      "rev": 6,
+      "historical": false
+    },
+    {
+      "id": "codex:L3PTR7",
+      "owner": "codex",
+      "status": "integrated",
+      "rev": 6,
+      "historical": false
+    },
+    {
+      "id": "codex:L3REG11",
+      "owner": "codex",
+      "status": "integrated",
+      "rev": 6,
+      "historical": false
+    },
+    {
+      "id": "codex:L3REG14",
+      "owner": "codex",
+      "status": "integrated",
+      "rev": 9,
+      "historical": false
+    },
+    {
+      "id": "codex:P2ALIAS8",
+      "owner": "codex",
+      "status": "integrated",
+      "rev": 6,
+      "historical": false
+    },
+    {
+      "id": "codex:P2BUILD5",
+      "owner": "codex",
+      "status": "integrated",
+      "rev": 6,
+      "historical": false
+    },
+    {
+      "id": "codex:P2LIVE1",
+      "owner": "codex",
+      "status": "integrated",
+      "rev": 6,
+      "historical": false
+    },
+    {
+      "id": "codex:P2OOM4",
+      "owner": "codex",
+      "status": "integrated",
+      "rev": 9,
+      "historical": false
+    },
+    {
+      "id": "codex:P2SIZE10",
+      "owner": "codex",
+      "status": "integrated",
+      "rev": 9,
+      "historical": false
+    },
+    {
+      "id": "codex:P2SIZE2",
+      "owner": "codex",
+      "status": "integrated",
+      "rev": 6,
+      "historical": false
+    },
+    {
+      "id": "codex:P2SIZE9",
+      "owner": "codex",
+      "status": "integrated",
+      "rev": 6,
+      "historical": false
+    },
+    {
+      "id": "codex:P2SMP3",
+      "owner": "codex",
+      "status": "integrated",
+      "rev": 6,
+      "historical": false
+    },
+    {
+      "id": "codex:P2VIEW6",
+      "owner": "codex",
+      "status": "integrated",
+      "rev": 6,
+      "historical": false
+    },
+    {
+      "id": "codex:P5CTX2",
+      "owner": "codex",
+      "status": "integrated",
+      "rev": 6,
+      "historical": false
+    },
+    {
+      "id": "cursor:CR1",
+      "owner": "cursor",
+      "status": "integrated",
+      "rev": 12,
+      "historical": false
+    },
+    {
+      "id": "cursor:CR10",
+      "owner": "cursor",
+      "status": "integrated",
+      "rev": 8,
+      "historical": false
+    },
+    {
+      "id": "cursor:CR11",
+      "owner": "cursor",
+      "status": "integrated",
+      "rev": 22,
+      "historical": false
+    },
+    {
+      "id": "cursor:CR12",
+      "owner": "cursor",
+      "status": "integrated",
+      "rev": 14,
+      "historical": false
+    },
+    {
+      "id": "cursor:CR13",
+      "owner": "cursor",
+      "status": "integrated",
+      "rev": 17,
+      "historical": false
+    },
+    {
+      "id": "cursor:CR14",
+      "owner": "cursor",
+      "status": "integrated",
+      "rev": 9,
+      "historical": false
+    },
+    {
+      "id": "cursor:CR15",
+      "owner": "cursor",
+      "status": "integrated",
+      "rev": 9,
+      "historical": false
+    },
+    {
+      "id": "cursor:CR16",
+      "owner": "cursor",
+      "status": "integrated",
+      "rev": 16,
+      "historical": false
+    },
+    {
+      "id": "cursor:CR17",
+      "owner": "cursor",
+      "status": "integrated",
+      "rev": 8,
+      "historical": false
+    },
+    {
+      "id": "cursor:CR18",
+      "owner": "cursor",
+      "status": "integrated",
+      "rev": 8,
+      "historical": false
+    },
+    {
+      "id": "cursor:CR19",
+      "owner": "cursor",
+      "status": "integrated",
+      "rev": 8,
+      "historical": false
+    },
+    {
+      "id": "cursor:CR2",
+      "owner": "cursor",
+      "status": "integrated",
+      "rev": 15,
+      "historical": false
+    },
+    {
+      "id": "cursor:CR20",
+      "owner": "cursor",
+      "status": "integrated",
+      "rev": 12,
+      "historical": false
+    },
+    {
+      "id": "cursor:CR21",
+      "owner": "cursor",
+      "status": "integrated",
+      "rev": 15,
+      "historical": false
+    },
+    {
+      "id": "cursor:CR22",
+      "owner": "cursor",
+      "status": "integrated",
+      "rev": 21,
+      "historical": false
+    },
+    {
+      "id": "cursor:CR23",
+      "owner": "cursor",
+      "status": "integrated",
+      "rev": 12,
+      "historical": false
+    },
+    {
+      "id": "cursor:CR24",
+      "owner": "cursor",
+      "status": "integrated",
+      "rev": 15,
+      "historical": false
+    },
+    {
+      "id": "cursor:CR25",
+      "owner": "cursor",
+      "status": "integrated",
+      "rev": 12,
+      "historical": false
+    },
+    {
+      "id": "cursor:CR26",
+      "owner": "cursor",
+      "status": "integrated",
+      "rev": 12,
+      "historical": false
+    },
+    {
+      "id": "cursor:CR27",
+      "owner": "cursor",
+      "status": "integrated",
+      "rev": 12,
+      "historical": false
+    },
+    {
+      "id": "cursor:CR28",
+      "owner": "cursor",
+      "status": "integrated",
+      "rev": 8,
+      "historical": false
+    },
+    {
+      "id": "cursor:CR29",
+      "owner": "cursor",
+      "status": "integrated",
+      "rev": 10,
+      "historical": false
+    },
+    {
+      "id": "cursor:CR3",
+      "owner": "cursor",
+      "status": "integrated",
+      "rev": 8,
+      "historical": false
+    },
+    {
+      "id": "cursor:CR38",
+      "owner": "cursor",
+      "status": "integrated",
+      "rev": 10,
+      "historical": false
+    },
+    {
+      "id": "cursor:CR39",
+      "owner": "cursor",
+      "status": "integrated",
+      "rev": 8,
+      "historical": false
+    },
+    {
+      "id": "cursor:CR4",
+      "owner": "cursor",
+      "status": "integrated",
+      "rev": 8,
+      "historical": false
+    },
+    {
+      "id": "cursor:CR40",
+      "owner": "cursor",
+      "status": "integrated",
+      "rev": 24,
+      "historical": false
+    },
+    {
+      "id": "cursor:CR41",
+      "owner": "cursor",
+      "status": "integrated",
+      "rev": 8,
+      "historical": false
+    },
+    {
+      "id": "cursor:CR42",
+      "owner": "cursor",
+      "status": "integrated",
+      "rev": 8,
+      "historical": false
+    },
+    {
+      "id": "cursor:CR45",
+      "owner": "codex",
+      "status": "integrated",
+      "rev": 7,
+      "historical": false
+    },
+    {
+      "id": "cursor:CR46",
+      "owner": "codex",
+      "status": "integrated",
+      "rev": 7,
+      "historical": false
+    },
+    {
+      "id": "cursor:CR47",
+      "owner": "codex",
+      "status": "integrated",
+      "rev": 13,
+      "historical": false
+    },
+    {
+      "id": "cursor:CR5",
+      "owner": "cursor",
+      "status": "integrated",
+      "rev": 8,
+      "historical": false
+    },
+    {
+      "id": "cursor:CR6",
+      "owner": "cursor",
+      "status": "integrated",
+      "rev": 8,
+      "historical": false
+    },
+    {
+      "id": "cursor:CR7",
+      "owner": "cursor",
+      "status": "integrated",
+      "rev": 8,
+      "historical": false
+    },
+    {
+      "id": "cursor:CR8",
+      "owner": "cursor",
+      "status": "integrated",
+      "rev": 8,
+      "historical": false
+    },
+    {
+      "id": "cursor:CR9",
+      "owner": "cursor",
+      "status": "integrated",
+      "rev": 8,
+      "historical": false
+    },
+    {
+      "id": "cursor:P5CTX1",
+      "owner": "codex",
+      "status": "integrated",
+      "rev": 7,
+      "historical": false
+    },
+    {
+      "id": "deepseek:D1",
+      "owner": "deepseek",
+      "status": "accepted",
+      "rev": 12,
+      "historical": true
+    },
+    {
+      "id": "deepseek:D10",
+      "owner": "deepseek",
+      "status": "accepted",
+      "rev": 7,
+      "historical": true
+    },
+    {
+      "id": "deepseek:D11",
+      "owner": "deepseek",
+      "status": "accepted",
+      "rev": 7,
+      "historical": true
+    },
+    {
+      "id": "deepseek:D12",
+      "owner": "deepseek",
+      "status": "accepted",
+      "rev": 4,
+      "historical": true
+    },
+    {
+      "id": "deepseek:D13",
+      "owner": "deepseek",
+      "status": "accepted",
+      "rev": 4,
+      "historical": true
+    },
+    {
+      "id": "deepseek:D14",
+      "owner": "deepseek",
+      "status": "integrated",
+      "rev": 8,
+      "historical": false
+    },
+    {
+      "id": "deepseek:D15",
+      "owner": "deepseek",
+      "status": "integrated",
+      "rev": 8,
+      "historical": false
+    },
+    {
+      "id": "deepseek:D16",
+      "owner": "deepseek",
+      "status": "integrated",
+      "rev": 13,
+      "historical": false
+    },
+    {
+      "id": "deepseek:D17",
+      "owner": "deepseek",
+      "status": "integrated",
+      "rev": 8,
+      "historical": false
+    },
+    {
+      "id": "deepseek:D18",
+      "owner": "deepseek",
+      "status": "integrated",
+      "rev": 8,
+      "historical": false
+    },
+    {
+      "id": "deepseek:D19",
+      "owner": "deepseek",
+      "status": "integrated",
+      "rev": 13,
+      "historical": false
+    },
+    {
+      "id": "deepseek:D2",
+      "owner": "deepseek",
+      "status": "accepted",
+      "rev": 12,
+      "historical": true
+    },
+    {
+      "id": "deepseek:D20",
+      "owner": "deepseek",
+      "status": "integrated",
+      "rev": 14,
+      "historical": false
+    },
+    {
+      "id": "deepseek:D21",
+      "owner": "deepseek",
+      "status": "integrated",
+      "rev": 12,
+      "historical": false
+    },
+    {
+      "id": "deepseek:D22",
+      "owner": "deepseek",
+      "status": "integrated",
+      "rev": 10,
+      "historical": false
+    },
+    {
+      "id": "deepseek:D23",
+      "owner": "deepseek",
+      "status": "integrated",
+      "rev": 9,
+      "historical": false
+    },
+    {
+      "id": "deepseek:D24",
+      "owner": "deepseek",
+      "status": "integrated",
+      "rev": 6,
+      "historical": false
+    },
+    {
+      "id": "deepseek:D25",
+      "owner": "deepseek",
+      "status": "integrated",
+      "rev": 6,
+      "historical": false
+    },
+    {
+      "id": "deepseek:D27",
+      "owner": "deepseek",
+      "status": "integrated",
+      "rev": 6,
+      "historical": false
+    },
+    {
+      "id": "deepseek:D3",
+      "owner": "deepseek",
+      "status": "accepted",
+      "rev": 12,
+      "historical": true
+    },
+    {
+      "id": "deepseek:D4",
+      "owner": "deepseek",
+      "status": "accepted",
+      "rev": 12,
+      "historical": true
+    },
+    {
+      "id": "deepseek:D5",
+      "owner": "deepseek",
+      "status": "accepted",
+      "rev": 4,
+      "historical": true
+    },
+    {
+      "id": "deepseek:D6",
+      "owner": "deepseek",
+      "status": "accepted",
+      "rev": 4,
+      "historical": true
+    },
+    {
+      "id": "deepseek:D7",
+      "owner": "deepseek",
+      "status": "accepted",
+      "rev": 7,
+      "historical": true
+    },
+    {
+      "id": "deepseek:D8",
+      "owner": "deepseek",
+      "status": "accepted",
+      "rev": 7,
+      "historical": true
+    },
+    {
+      "id": "deepseek:D9",
+      "owner": "deepseek",
+      "status": "accepted",
+      "rev": 7,
+      "historical": true
+    },
+    {
+      "id": "deepseek:L3",
+      "owner": "codex",
+      "status": "integrated",
+      "rev": 13,
+      "historical": false
+    },
+    {
+      "id": "deepseek:L3A",
+      "owner": "codex",
+      "status": "integrated",
+      "rev": 11,
+      "historical": false
+    },
+    {
+      "id": "lmstudio:LM1",
+      "owner": "lmstudio",
+      "status": "integrated",
+      "rev": 10,
+      "historical": false
+    },
+    {
+      "id": "lmstudio:LM2",
+      "owner": "lmstudio",
+      "status": "integrated",
+      "rev": 8,
+      "historical": false
+    },
+    {
+      "id": "lmstudio:LM3",
+      "owner": "lmstudio",
+      "status": "integrated",
+      "rev": 8,
+      "historical": false
+    },
+    {
+      "id": "lmstudio:LM4",
+      "owner": "lmstudio",
+      "status": "integrated",
+      "rev": 8,
+      "historical": false
+    },
+    {
+      "id": "lmstudio:LM5",
+      "owner": "lmstudio",
+      "status": "integrated",
+      "rev": 8,
+      "historical": false
+    },
+    {
+      "id": "lmstudio:LM6",
+      "owner": "lmstudio",
+      "status": "integrated",
+      "rev": 8,
+      "historical": false
+    },
+    {
+      "id": "lmstudio:LM7",
+      "owner": "lmstudio",
+      "status": "integrated",
+      "rev": 8,
+      "historical": false
+    },
+    {
+      "id": "lmstudio:LM8",
+      "owner": "lmstudio",
+      "status": "integrated",
+      "rev": 8,
+      "historical": false
+    },
+    {
+      "id": "pool:GUEST1",
+      "owner": "deepseek",
+      "status": "integrated",
+      "rev": 9,
+      "historical": false
+    },
+    {
+      "id": "pool:GUEST2",
+      "owner": "deepseek",
+      "status": "integrated",
+      "rev": 6,
+      "historical": false
+    },
+    {
+      "id": "pool:GUEST3",
+      "owner": "claude",
+      "status": "integrated",
+      "rev": 9,
+      "historical": false
+    },
+    {
+      "id": "pool:GUEST4",
+      "owner": "codex",
+      "status": "integrated",
+      "rev": 13,
+      "historical": false
+    },
+    {
+      "id": "pool:GUEST5",
+      "owner": "codex",
+      "status": "integrated",
+      "rev": 16,
+      "historical": false
+    },
+    {
+      "id": "pool:MCPPOOL1",
+      "owner": "cursor",
+      "status": "integrated",
+      "rev": 8,
+      "historical": false
+    },
+    {
+      "id": "pool:WINVERIFY1",
+      "owner": "claude",
+      "status": "integrated",
+      "rev": 9,
+      "historical": false
+    }
+  ],
+  "source_audit": {
+    "tracked_non_document_files": 1216,
+    "raw_file_manifest_sha256": "3cd8e09c7fb8afd5d8291c03cb9079dc26b91a75c6cb7916f26544581449c308",
+    "source_tree_changes_before_refresh": [],
+    "bootstrap_dong_modules": 120,
+    "nasm_dong_modules": 66
+  },
+  "state_mutations_requested": [],
+  "new_acceptances": [],
+  "new_integrations": [],
+  "verification_scope": "本轮只核对源码/已有证据、状态和展示文档；历史VM/原生测试不冒作本机重新执行。",
+  "remaining": [
+    "迁移：17条旧任务缺任务书，CX6同号异义；保留现状和历史，逐项恢复契约/隔离来源后再通过协调器处理。",
+    "CX14/CX15旧状态仍在库中；现有源码及G6/L3B后继证据已覆盖实现范围，不能直接据旧状态重复派发或补记验收。",
+    "P2：调度后任意多CR3动态修改、PCID/PGE范围及WC真实硬件性能。",
+    "P5：可信DMA排空、持续排除旧owner、撤映射后全核退休、unpin/free/reuse、设备恢复与陈旧权限负控。",
+    "P6/P7/P8：首代init跨AP观察、当前完整GUI/输入/USB回归、Linux/KVM <=500ms及台式机/笔记本实启。",
+    "P9：签名与安全启动、IOMMU、CET/KASLR、真实syscall/IPC持续24小时fuzz。",
+    "L3/G5：method、enum、error、try、orelse、defer、extern SysV/Win64八类差集；有限runner通过不等于完整语言覆盖。"
+  ],
+  "checks_this_run": {
+    "python_roadmap": {
+      "tests": 10,
+      "passed": 9,
+      "skips": 1,
+      "skip_reason": "File symlinks unavailable on this Windows host",
+      "exit_code": 0
+    },
+    "javascript": {
+      "tests": 17,
+      "passed": 17,
+      "skips": 0,
+      "exit_code": 0,
+      "files": [
+        "client_api.test.js",
+        "console_dom.test.js",
+        "progress.test.js"
+      ]
+    },
+    "roadmap_schema": "passed",
+    "complete_stage_remaining_empty": "passed",
+    "live_json_matches_file": true,
+    "live_markdown_matches_file": true,
+    "task_status_and_rev_unchanged": true,
+    "coordinator_issues_unchanged": 17,
+    "source_raw_manifest_unchanged": true,
+    "new_markdown_links_checked": 22,
+    "broken_new_links": [],
+    "code_changes_are_markdown_only": [
+      "code/PLAN.md",
+      "code/README.md",
+      "code/docs/progress-map.md",
+      "code/docs/remaining-plan.md"
+    ],
+    "diff_check": "passed"
+  }
+}

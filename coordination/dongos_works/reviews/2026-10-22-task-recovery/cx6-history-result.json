@@ -1,0 +1,20 @@
+{
+  "id": "codex:CX6",
+  "rev": 9,
+  "status": "integrated",
+  "identity_resolution": {
+    "manifest": "reviews/2026-10-22-task-recovery/cx6-history-plan.json",
+    "manifest_sha256": "c4de019bd0b0540f95e1ecb6db4f4e2ffafcbe444dc5ac0bdd3f210e93ce3e17",
+    "contract_sha256": "fbb758e7e06dc4acf06b5152136aa369de945de73731f9740775dd599183f7e3",
+    "identity_label": "本地NASM CX6（已归档，正确后继codex:CXNASM3）",
+    "note": "依据固定50ab7cf读取器契约、HEAD原归档NASM契约与两支原事件SHA逐项核对，当前CX6仅为L3读取适配器；另一份本地NASM CX6原已归档，后继为CXNASM3。规范任务书/交付已恢复。精确分离5条NASM旧事件的派生统计，原数据库事件全部保留，未授予新验收或改写原指纹。来源reviews/2026-10-22-task-recovery/cx6-history-plan.json及cx6-identity-resolution.md。",
+    "applied_at": "2026-10-22T01:13:55+00:00",
+    "excluded_event_sha256": [
+      "22bbf7512bbe3708a08ae8795254de3fc3b427b96038e8f83dd59fa164b47813",
+      "a673df788a1fc59625585e31a6d145c5e8fd23c540e97f78ed5a5606b9a91a37",
+      "c526c4948b4abcbb5e250fa38ca09da034ce9bd080b0554364b2ac9aa18a298f",
+      "d5643fdc95eee7fecb41c98752c82d29f8fdbc6c6bb73e7b451a6418df4a1a5c",
+      "ec9f331dfe460fb4608033a001cbc51f0d69016c087be947b7df1e61ab7b4cc6"
+    ]
+  }
+}

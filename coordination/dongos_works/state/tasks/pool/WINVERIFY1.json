@@ -1,0 +1,66 @@
+{
+  "assignment_owner": null,
+  "auto_dispatch": false,
+  "auto_verify": false,
+  "candidate": null,
+  "checks": [
+    "discover:pool-works/tests:test_windows_verification_finish.py"
+  ],
+  "claim_from_status": "rework",
+  "claim_token": "97d006dcdc2e4e77849459ac2cd3624a",
+  "claimed_at": "2026-10-20T05:58:39+00:00",
+  "claimed_by": "manual:claude",
+  "completed_at": "2026-10-20T06:14:02+00:00",
+  "complexity": "standard",
+  "created_at": "2026-10-20T05:01:44+00:00",
+  "delivery": "pool-works/deliveries/WINVERIFY1.md",
+  "depends_on": [],
+  "description": "C52独立复验发现真实阻塞：作业ec1d698d5863424b8f0726a07d659303，6tests/0skip/returncode0/source_stable=true，但runner.run_process在Windows正常退出返回process_stopped=None、execution_exited=True，store.finish因process_stopped不是True将其挂为停止未确认，未保存task.verification。详见reviews/2026-10-20-C52-R1-review.md和-evidence.json。只修复正常完成与进程停止证明之间的契约，不能简单将None改True或弱化暂停/取消保护；Windows领导进程退出不等于所有子进程退出。采用可验证的进程树/Job Object生命周期或同等方案，明确正常完成、残留子进程、暂停、超时、取消、服务重启的边界。测试覆盖Windows真实正常父子进程退出可登记复验、残留子进程不误报停止、取消/暂停等待停止、迟到旧令牌结果不能覆写、非Windows兼容。保存独立测试和证据。正式代码只读，声明的pool-works/win-verify候选按相对路径对应coordination/，pool-works/tests新永久测试自建临时完整测试副本，不能依赖未交付临时文件。禁止改正式服务/生产状态库/index或手填verification，不自动重启服务。不得覆盖Cursor在途MCPPOOL1文件，不修改其候选。由DeepSeek/Claude/Cursor任一自主领取，未指定负责人；提交后由Codex独立复验及实际集成，修复集成后才恢复C52正式验证。",
+  "document": "pool-works/tasks/WINVERIFY1-board.md",
+  "document_status": "todo",
+  "historical": false,
+  "id": "pool:WINVERIFY1",
+  "integration_note": "已完成真实文件集成：候选runner.py复制至coordination/dongos_coordination/runner.py，两者SHA256同为40504e6f0ca2beca2d6e1a08b9c91735d978529854c575f3a4590cc325b08abe；新增coordination/tests/test_windows_verification_finish.py对正式包运行11项零skip回归。原runner备份coordination/.local/WINVERIFY1-integration/runner-before.py。通过正式shutdown接口停止旧服务13684，无活动/排队作业，隐藏启动新服务1388，HTTP/MCP恢复且多项正式复验process_stopped=true正常登记。任务正式11项零skip与文件稳定已验收，不改库/索引、不伪造复验。",
+  "legacy_hash": "9695b41b0b2aee918981eecbb6c7a504f2ab062d65dd4cb503b6e529e8fa77d7",
+  "number": "WINVERIFY1",
+  "owner": "claude",
+  "rev": 10,
+  "review_note": "按用户明确授权Codex接续集成适配。已实际审查WindowsJob的挂起创建→先归入Job→恢复、无breakaway、活动计数为0才确认停止、残留后代终止、无Job保守回退及服务重启停止确认，未把None伪造为True。修复测试正式隔离目录的只读依赖定位、依赖前后SHA守卫和集成后候选相同的误断言。正式隔离作业c0f8c5285d28423e80eafea8e049c648通过11tests/0skip，48.706秒，process_stopped=true/source_stable=true，当前任务文件指纹一致；主线coordination/tests/test_windows_verification_finish.py另11tests/0skip通过44.470秒。确认正常父子退出保存verification，残留/暂停/取消/旧令牌/重启/失效Job保护均真实子进程通过。源码runner已复制到正式包，等待下一步登记实际集成。",
+  "status": "integrated",
+  "title": "修复Windows定向复验正常退出后无法登记完成",
+  "updated_at": "2026-10-22T00:59:08+00:00",
+  "verification": {
+    "checks": [
+      {
+        "cancelled": false,
+        "elapsed_seconds": 48.706,
+        "execution_exited": true,
+        "passed": true,
+        "process_stopped": true,
+        "returncode": 0,
+        "skips": 0,
+        "spec": "discover:pool-works/tests:test_windows_verification_finish.py",
+        "tests": 11,
+        "timed_out": false
+      }
+    ],
+    "execution_exited": true,
+    "fingerprint": {
+      "pool-works/deliveries/WINVERIFY1.md": "32fec1d934155889d1f6013b12b8fe4304410f0f49f991856376191a951c0314",
+      "pool-works/tests/test_windows_verification_finish.py": "6d756663e59ea4cb0a1cfd21b55372cebefc2bb61d7b3da422fc3a37a310fca1",
+      "pool-works/win-verify/dongos_coordination/runner.py": "40504e6f0ca2beca2d6e1a08b9c91735d978529854c575f3a4590cc325b08abe"
+    },
+    "finished_at": "2026-10-20T06:15:12+00:00",
+    "job": "c0f8c5285d28423e80eafea8e049c648",
+    "passed": true,
+    "process_stopped": true,
+    "source_stable": true,
+    "summary": "定向复验通过，等待源码/契约审查"
+  },
+  "write_paths": [
+    "pool-works/win-verify/dongos_coordination/runner.py",
+    "pool-works/win-verify/dongos_coordination/store.py",
+    "pool-works/tests/test_windows_verification_finish.py",
+    "pool-works/deliveries/WINVERIFY1.md"
+  ]
+}

@@ -16,11 +16,11 @@
   ],
   "historical": true,
   "id": "deepseek:D8",
-  "legacy_hash": "58159ea1ec556e02bf0b3499a97eb7d7cc7e4879c43064752df5bd466240fe2b",
+  "legacy_hash": "abc19fb2ab468ea5578ac1dc9a9dc95d9b653e9dec4c6f09a61aaf7a89937cbb",
   "legacy_schema": 2,
   "number": "D8",
   "owner": "deepseek",
-  "rev": 6,
+  "rev": 7,
   "review_note": "",
   "state_reconciliation": {
     "at": "2026-10-19T11:42:09+00:00",
@@ -43,7 +43,7 @@
   },
   "status": "accepted",
   "title": "物理伙伴分配器",
-  "updated_at": "2026-10-19T11:42:10+00:00",
+  "updated_at": "2026-10-20T01:32:43+00:00",
   "verification": null,
   "write_paths": [
     "kernel/mm/phys_buddy.dg",

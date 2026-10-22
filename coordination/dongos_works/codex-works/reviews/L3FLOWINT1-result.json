@@ -1,0 +1,55 @@
+{
+  "job": "f48ec24178864741a9a0b2d09290f546",
+  "permanent_counts": {
+    "method": 10,
+    "defer": 6,
+    "for": 9
+  },
+  "unique_tests": 25,
+  "source_stable": true,
+  "no_implementation_overlay": true,
+  "readonly_backend_unchanged": true,
+  "lower_sha256": "2eb36a91291ce4293e89654a9f2b91e1edf9742e8b87c73624a701dc2e10241e",
+  "good_driver": "D:\\projects\\projects3\\2026\\dongos\\coordination\\dongos_works\\.local\\runs\\f48ec24178864741a9a0b2d09290f546\\workspace\\build\\test\\l3-method-native\\run-da0643ee50ed\\good\\stage-e3c19313\\driver.exe",
+  "good_driver_sha256": "1855375e8ed98f1da58e68b1c2bb0bed018d726ea6b9db438dc0465c1b711ca5",
+  "native_elf_inspection": "L3FLOWINT1-native-elf-inspection.json",
+  "reviews": {
+    "L3METHODLOW1-review": {
+      "summary": "D:\\projects\\projects3\\2026\\dongos\\coordination\\dongos_works\\codex-works\\build\\L3METHODLOW1-review\\run-da0643ee50ed\\summary.json",
+      "sha256": "0d6dfb2abeab24ccb4b3a8776a8db651f3317360ee9de0abd79efa616bfc2990",
+      "observations": 384,
+      "vectors": null,
+      "negatives": 2
+    },
+    "L3DEFER1-review": {
+      "summary": "D:\\projects\\projects3\\2026\\dongos\\coordination\\dongos_works\\codex-works\\build\\L3DEFER1-review\\run-da0643ee50ed\\summary.json",
+      "sha256": "633a9d7d1e1ef7f0ae284db52adfd690d02ea00ff11e745ef70523c0731db23e",
+      "observations": 1280,
+      "vectors": 256,
+      "negatives": 2
+    },
+    "L3FOR1-review": {
+      "summary": "D:\\projects\\projects3\\2026\\dongos\\coordination\\dongos_works\\codex-works\\build\\L3FOR1-review\\run-da0643ee50ed\\summary.json",
+      "sha256": "24067cfabcc36db9a4f7fdd86453f0221671b1e28246846ef6de7fa46fb31fd2",
+      "observations": 512,
+      "vectors": 128,
+      "negatives": 2
+    },
+    "L3CONTROL-mainline-review": {
+      "summary": "D:\\projects\\projects3\\2026\\dongos\\coordination\\dongos_works\\codex-works\\build\\L3CONTROL-mainline-review\\run-da0643ee50ed\\summary.json",
+      "sha256": "ad01b85e3adfa153eb520f50981e07d675b8f1a19cc2d44c9c6eec9152bac244",
+      "observations": null,
+      "vectors": 256,
+      "negatives": 4
+    }
+  },
+  "known_gap_probes": [
+    "enum",
+    "error",
+    "extern-win64",
+    "orelse",
+    "try"
+  ],
+  "new_default_extern_unsafe_rework": "cursor:L3EXTUNSAFE1",
+  "L3_complete": false
+}

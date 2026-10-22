@@ -1,0 +1,70 @@
+{
+  "assignment_owner": "codex",
+  "auto_dispatch": false,
+  "auto_verify": false,
+  "candidate": null,
+  "checks": [
+    "module:tests.test_syscall_corpus"
+  ],
+  "claim_from_status": "todo",
+  "claim_token": "c8594ebfbf6b4bbebbfdb46956e5a89f",
+  "claimed_at": "2026-10-22T02:40:15+00:00",
+  "claimed_by": "codex-mcp-8c76f5a25c8d4b71",
+  "completed_at": "2026-10-22T02:43:57+00:00",
+  "complexity": "standard",
+  "created_at": "2026-10-22T02:40:00+00:00",
+  "delivery": "codex-works/deliveries/P9CORPUSINT1.md",
+  "depends_on": [
+    "pool:P9CORPUS1"
+  ],
+  "description": "接续 accepted pool:P9CORPUS1，不重做已验收生成器。将最终R2候选工具逐字集成到主线 tools/syscall_corpus.py；46项永久测试适配源码根与主线工具路径，保持全部独立ABI/形状oracle、真实CLI/确定性/严格schema/资源限制/不变性检查，移除仅候选布局依赖；docs/syscall-corpus.md及README入口使用code工作目录可复现命令、准确限制。先核验原accepted最新rev/正式指纹，原候选保持不变。检查主线工具与候选SHA完全相同、真实主线46项零skip、generate/verify/minimize及跨进程SHA不变、CI宿主自动发现新模块、源码稳定。只做宿主离线工具集成，不运行OS/VM或真实syscall，不改变kernel/services或Cursor在途方法任务，不宣称P9/24h fuzz完成。按本任务write_paths，交付真实文件映射/命令/测试/限制；独立定向复验并审查后验收，实际文件集成完成后登记两个任务的集成状态，保留全部历史。",
+  "document": "codex-works/tasks/P9CORPUSINT1-board.md",
+  "historical": false,
+  "id": "codex:P9CORPUSINT1",
+  "integration_note": "真实文件集成已完成并与独立正式指纹一致：tools/syscall_corpus.py、tests/test_syscall_corpus.py、docs/syscall-corpus.md及README一行入口已在code主线。工具逐字匹配已验收候选，测试保持46项并使用同树源码，主线及隔离正式46项0skip通过，CLI/SHA和宿主自动发现核验通过。证据codex-works/reviews/2026-10-22-P9CORPUS-integration.md、交付及code/build/test/p9-corpus-integration/summary.json；未提交推送，未运行OS/VM或真实syscall，不代表P9完成。",
+  "legacy_hash": "10c097fa305bb79fc7fda420e50b3a5e4b273e8dd4704432bd2b09156c3d56df",
+  "number": "P9CORPUSINT1",
+  "owner": "codex",
+  "rev": 6,
+  "review_note": "已实际审查来源pool:P9CORPUS1最终R2/原验收指纹及主线差异。tools/syscall_corpus.py逐字匹配已验收候选SHA9ae0b8...46477；46项永久测试只适配同树源码根/工具路径和布局断言，独立ABI/形状oracle及全部严格解析/资源/不变性检查保留。文档及README主线入口已实际接线，无kernel/services或方法任务修改。主线46项0skip/20.887s；隔离正式job08db488c4bf44d86933920b1ad0a41d1为46项0skip/17.054s，source_stable/process_stopped/execution_exited全部true。真实CLI两个seed/count各自生成校验再生成，与原验收SHA逐字一致；减小及原语料不变通过，主线/原候选SHA稳定。CI宿主804项清单含本模块46项且恰分配一次（仅inventory，不冒称全量/远端CI）。具体见codex-works/reviews/2026-10-22-P9CORPUS-integration.md及交付/summary。只验收离线工具主线接入，不代表真实guest/24h/P9完成。",
+  "status": "integrated",
+  "title": "[P9] 已验收语料工具主线接入与永久回归",
+  "updated_at": "2026-10-22T02:46:23+00:00",
+  "verification": {
+    "checks": [
+      {
+        "cancelled": false,
+        "elapsed_seconds": 17.054,
+        "execution_exited": true,
+        "passed": true,
+        "process_stopped": true,
+        "returncode": 0,
+        "skips": 0,
+        "spec": "module:tests.test_syscall_corpus",
+        "tests": 46,
+        "timed_out": false
+      }
+    ],
+    "execution_exited": true,
+    "fingerprint": {
+      "README.md": "61013c6b8fe5ca845778ee10dabd5d14aa2defe4f97b279814e9a82db623fe35",
+      "codex-works/deliveries/P9CORPUSINT1.md": "5ff16ca93ce3d55e6950f7feec6b00917a8aad03db56ba5cbd3a926593ba563a",
+      "docs/syscall-corpus.md": "29bdf71a636e656ecf06763331be21740f749d064907704456f2ed39151b7e99",
+      "tests/test_syscall_corpus.py": "f6b537d965180d39417eac9e5aa37de7e86e2eccc6a74c526c86f85ba413344a",
+      "tools/syscall_corpus.py": "9ae0b8ded7173d17264726f57f860634373532c1a97871154d110d2a5bf46477"
+    },
+    "finished_at": "2026-10-22T02:44:43+00:00",
+    "job": "08db488c4bf44d86933920b1ad0a41d1",
+    "passed": true,
+    "process_stopped": true,
+    "source_stable": true,
+    "summary": "定向复验通过，等待源码/契约审查"
+  },
+  "write_paths": [
+    "tools/syscall_corpus.py",
+    "tests/test_syscall_corpus.py",
+    "docs/syscall-corpus.md",
+    "README.md",
+    "codex-works/deliveries/P9CORPUSINT1.md"
+  ]
+}

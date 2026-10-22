@@ -363,7 +363,7 @@ int main(int argc,char**argv){
    self.command([exe],mode+'-global-supported-observe')
  def test_unsupported_source_fails_closed(self):
   sources={
-   'extern':'module unsupported; extern "sysv64" fn f()u64;',
+   'extern':'module unsupported; extern "win64" fn f()u64;',
   }
   for mode in ('debug','release'):
    for case,text in sources.items():

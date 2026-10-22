@@ -1,0 +1,37 @@
+{
+  "version": 1,
+  "project": "dongos",
+  "task_id": "codex:CX6",
+  "rev": 8,
+  "contract_sha256": "fbb758e7e06dc4acf06b5152136aa369de945de73731f9740775dd599183f7e3",
+  "identity_label": "本地NASM CX6（已归档，正确后继codex:CXNASM3）",
+  "document": {
+    "path": "codex-works/tasks/CX6-board.md",
+    "sha256": "41d0a14bbdab5e8e44f8c74c24262abf394dad0428fc938dba153836096004ca"
+  },
+  "evidence": [
+    {
+      "path": "reviews/2026-10-22-task-recovery/cx6-local-nasm/CX6-board.md",
+      "sha256": "3211306847d07e2b6c620325ca5e5dc5feda7afea1891d31a8dcaa9c42188879"
+    },
+    {
+      "path": "reviews/2026-10-22-task-recovery/cx6-local-nasm/CX6.jsonl",
+      "sha256": "a7fac934d9a4ca487c60256882a2d9081f91d32d3f12cf6042d0a4510689f192"
+    },
+    {
+      "path": "reviews/2026-10-22-task-recovery/cx6-reader-original/CX6.jsonl",
+      "sha256": "6580711066d204b30c5a7f2d91b58dbdffc9975cf106347e035902208a85dfa9"
+    },
+    {
+      "path": "reviews/2026-10-22-task-recovery/cx6-identity-resolution.json",
+      "sha256": "254e5af06e9be9adb1295b4aa7d90108d1064b3ef4a9d2aebf00664eefb78b08"
+    }
+  ],
+  "exclude_events": [
+    "a673df788a1fc59625585e31a6d145c5e8fd23c540e97f78ed5a5606b9a91a37",
+    "c526c4948b4abcbb5e250fa38ca09da034ce9bd080b0554364b2ac9aa18a298f",
+    "d5643fdc95eee7fecb41c98752c82d29f8fdbc6c6bb73e7b451a6418df4a1a5c",
+    "ec9f331dfe460fb4608033a001cbc51f0d69016c087be947b7df1e61ab7b4cc6",
+    "22bbf7512bbe3708a08ae8795254de3fc3b427b96038e8f83dd59fa164b47813"
+  ]
+}

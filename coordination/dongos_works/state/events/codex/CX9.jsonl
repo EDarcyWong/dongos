@@ -1,0 +1,5 @@
+{"at":"2026-10-20T08:41:24+00:00","data":{"rev":1,"status":"todo"},"kind":"created","task_id":"codex:CX9"}
+{"at":"2026-10-20T08:41:24+00:00","data":{"claimed_at":"2026-10-20T08:41:24+00:00","claimed_by":"codex-mcp-d76b66689d824a70","completed_at":null,"owner":"codex","resume_status":null,"rev":2,"status":"in_progress"},"kind":"claim","task_id":"codex:CX9"}
+{"at":"2026-10-20T08:42:18+00:00","data":{"claimed_at":null,"claimed_by":null,"completed_at":null,"owner":"codex","resume_status":null,"rev":3,"status":"todo"},"kind":"release","task_id":"codex:CX9"}
+{"at":"2026-10-20T08:42:38+00:00","data":{"claimed_at":null,"claimed_by":null,"completed_at":null,"owner":"codex","resume_status":"todo","rev":4,"status":"paused"},"kind":"pause","task_id":"codex:CX9"}
+{"at":"2026-10-20T08:42:38+00:00","data":{"rev":5,"status":"paused"},"kind":"archive","task_id":"codex:CX9"}

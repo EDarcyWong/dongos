@@ -1,0 +1,73 @@
+{
+  "assignment_owner": "codex",
+  "auto_dispatch": false,
+  "auto_verify": false,
+  "candidate": null,
+  "checks": [
+    "discover:codex-works/tests:test_g5_tagged_native.py"
+  ],
+  "claim_from_status": "todo",
+  "claim_token": "d67298d906f4472b9f39d9c82ba11c04",
+  "claimed_at": "2026-10-22T06:21:19+00:00",
+  "claimed_by": "codex-mcp-a56c25d7f28e4bc4",
+  "completed_at": "2026-10-22T07:23:39+00:00",
+  "complexity": "standard",
+  "created_at": "2026-10-22T06:21:08+00:00",
+  "delivery": "codex-works/deliveries/G5TAG1.md",
+  "depends_on": [
+    "codex:L3FLOWINT1"
+  ],
+  "description": "用户授权继续补齐G5。独立候选补齐optional/result的表示、隐式包装、null/try/orelse/错误值、enum构造与match，并保持已有方法/defer/for/SysV语义；运行真实Dong frontend→lower→NASM与独立seed/C oracle，debug/release、内存/ABI/控制流/失败原子性及真实编译链接正常运行语义坏体。前端候选以当前主线为基准，和DeepSeek的L3EXTUNSAFE1独立，不改对方文件；后续合并必须保留其已验收修复。只运行定向测试，无OS/VM/commit/push，保留输入/命令/产物SHA和零skip独立复验。此项完成后仍继续Win64、函数指针、内存内建/atomic/asm和全矩阵，不提前宣布G5整体完成。",
+  "document": "codex-works/tasks/G5TAG1-board.md",
+  "historical": false,
+  "id": "codex:G5TAG1",
+  "legacy_hash": "f9237f091ccf87a7120c95147396aed4cd21529b6788ced36e63e915a7fd167c",
+  "number": "G5TAG1",
+  "owner": "codex",
+  "rev": 5,
+  "review_note": "已实际审查4候选生产文件、IR表示/发射验证、源码/类型/初始化流契约和永久测试。optional/result及payload enum使用tag+清零scalar payload，窄负数只写其低位；原始类型/折叠证据保留于Info元数据且Graph只读，包装不靠host AST/IR。try失败构造当前返回类型结果并冻结跨cleanup，orelse EXIT不再产生零槽COPY，enum/match按名义类型和任意variant数检查，known tag/wildcard只合并可达初始化路径，静态48字节/padding与pair整体栈回滚均有独立C oracle。14类非法源在两个模式真实拒绝/不发布，实际翻转optional tag的坏Dong从源码编译/链接/正常返回后被相同seed/good先通过的C值观察拒绝。正式0b88a6b34394403aa5f080cf3117883b=9tests/0skip/747.701s，全通过，source_stable/process_stopped/execution_exited=true，7声明文件指纹已核；测试另冻结初始46项依赖，未让后续坏体构建重置来源。仅验收本组件；更广G5执行/对齐/panic/外部unsafe与组合矩阵另验，尚未主线物理集成。",
+  "status": "accepted",
+  "title": "G5 optional/result/error/enum 全流水线与差分闭环",
+  "updated_at": "2026-10-22T07:55:51+00:00",
+  "verification": {
+    "checks": [
+      {
+        "cancelled": false,
+        "elapsed_seconds": 747.701,
+        "execution_exited": true,
+        "passed": true,
+        "process_stopped": true,
+        "returncode": 0,
+        "skips": 0,
+        "spec": "discover:codex-works/tests:test_g5_tagged_native.py",
+        "tests": 9,
+        "timed_out": false
+      }
+    ],
+    "execution_exited": true,
+    "fingerprint": {
+      "codex-works/deliveries/G5TAG1.md": "0eb515e8980fe82c0c8a9d00226486af03ac614dd8bbdd49e7d97756593155bc",
+      "codex-works/g5-tag/docs/tagged.md": "2795f5dcc2d9fee2239caab27196af4e5731cf651bc4329fd5cf5372a511ba47",
+      "codex-works/g5-tag/src/bootstrap/lower_program.dg": "5afc554fcabae220260d1e8d2f7c551f335afa4423990dd76f4f842875e3717f",
+      "codex-works/g5-tag/src/bootstrap/nasm_program.dg": "89526e56e2ef8dc85ba8b0ac100ad4e0f40eaa7dca7072d820067f77413fb43e",
+      "codex-works/g5-tag/src/bootstrap/program_ir.dg": "8c09e396bd4cf0a6e5ae853f5717cef599c224303b138ddddff6aec1d93ec4e3",
+      "codex-works/g5-tag/src/bootstrap/semantic_types.dg": "f5f335d93e58c8762233d2b388b4c1ec051892774635a344a51a7b79b2e0c2f6",
+      "codex-works/tests/test_g5_tagged_native.py": "e1f9acb0de6c91323f23e0d92b590ad611c700d332d103bae72cf433ea1aaed8"
+    },
+    "finished_at": "2026-10-22T07:40:50+00:00",
+    "job": "0b88a6b34394403aa5f080cf3117883b",
+    "passed": true,
+    "process_stopped": true,
+    "source_stable": true,
+    "summary": "定向复验通过，等待源码/契约审查"
+  },
+  "write_paths": [
+    "codex-works/g5-tag/src/bootstrap/semantic_types.dg",
+    "codex-works/g5-tag/src/bootstrap/program_ir.dg",
+    "codex-works/g5-tag/src/bootstrap/lower_program.dg",
+    "codex-works/g5-tag/src/bootstrap/nasm_program.dg",
+    "codex-works/tests/test_g5_tagged_native.py",
+    "codex-works/g5-tag/docs/tagged.md",
+    "codex-works/deliveries/G5TAG1.md"
+  ]
+}

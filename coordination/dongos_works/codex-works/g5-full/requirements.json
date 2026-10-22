@@ -1,0 +1,248 @@
+{
+  "spec": "lang/spec.md",
+  "modes": [
+    "debug",
+    "release"
+  ],
+  "requirements": [
+    {
+      "id": "integers-casts-checked-wrapping",
+      "tests": [
+        "test_a_scalar_aggregate_global_module_and_runtime_matrix",
+        "test_runtime_guards_exact_panic_kind_line_file_and_no_cleanup"
+      ]
+    },
+    {
+      "id": "raw-pointers-and-function-values",
+      "tests": [
+        "test_callee_once_before_arguments_static_field_and_pair_abi"
+      ]
+    },
+    {
+      "id": "arrays-structs-layout-padding",
+      "tests": [
+        "test_a_scalar_aggregate_global_module_and_runtime_matrix",
+        "test_static_tagged_aggregate_padding_and_array_elements"
+      ]
+    },
+    {
+      "id": "globals-static-address-relocations",
+      "tests": [
+        "test_a_scalar_aggregate_global_module_and_runtime_matrix",
+        "test_d_native_elf_with_real_target_runtime_and_static_pointers",
+        "test_i_static_objects_larger_than_frame_budget"
+      ]
+    },
+    {
+      "id": "modules-name-isolation-private",
+      "tests": [
+        "test_c_module_privacy_diagnostics",
+        "test_cross_module_public_method_and_nominal_alias"
+      ]
+    },
+    {
+      "id": "slices-pair-values-and-abi",
+      "tests": [
+        "test_pointer_alias_const_unsafe_narrow_void_recursive_and_slice_pair",
+        "test_pair_rolls_wholly_to_stack_without_consuming_last_scalar_register"
+      ]
+    },
+    {
+      "id": "optional-result-error",
+      "tests": [
+        "test_optional_result_abi_bytes_and_narrow_payload",
+        "test_match_optional_and_error_payload",
+        "test_h_tagged_pointer_function_bool_and_imported_error_payloads"
+      ]
+    },
+    {
+      "id": "nominal-enums",
+      "tests": [
+        "test_enum_nominal_tag_payload_and_scalar"
+      ]
+    },
+    {
+      "id": "known-tag-flow-and-exhaustiveness",
+      "tests": [
+        "test_known_match_subject_excludes_dead_arms_from_initialization_merge",
+        "test_invalid_tagged_sources_reject_before_publishing"
+      ]
+    },
+    {
+      "id": "method-selection-receiver-order",
+      "tests": [
+        "test_selected_declaration_and_both_call_forms",
+        "test_free_function_and_same_name_methods_do_not_collide",
+        "test_receiver_once_before_nested_arguments_and_stack"
+      ]
+    },
+    {
+      "id": "if-short-circuit-and-loops",
+      "tests": [
+        "test_a_scalar_aggregate_global_module_and_runtime_matrix",
+        "test_nested_break_continue_targets"
+      ]
+    },
+    {
+      "id": "for-range-array-slice",
+      "tests": [
+        "test_range_snapshot_order_zero_reverse_and_u64_edge",
+        "test_array_and_slice_view_observe_original_storage",
+        "test_array_temporary_lifetime_and_aggregate_element_snapshot"
+      ]
+    },
+    {
+      "id": "match-bool-enum-optional-result",
+      "tests": [
+        "test_bool_match_once_exhaustive_and_wildcard_returns",
+        "test_match_optional_and_error_payload",
+        "test_enum_nominal_tag_payload_and_scalar"
+      ]
+    },
+    {
+      "id": "defer-cleanup-control-and-noreturn",
+      "tests": [
+        "test_lexical_reverse_registration_late_reads_and_cleanup_locals",
+        "test_return_scalar_void_pointer_and_pair_survive_cleanup",
+        "test_break_continue_and_nested_loop_exit_scope",
+        "test_defer_after_return_does_not_run",
+        "test_f_noreturn_cleanup_and_conditional_cleanup_flow"
+      ]
+    },
+    {
+      "id": "try-orelse-control-transfer",
+      "tests": [
+        "test_try_defer_orelse_short_circuit_and_exit",
+        "test_for_match_defer_cleanup_composition_and_pair_return"
+      ]
+    },
+    {
+      "id": "sysv-integer-pair-stack-registers",
+      "tests": [
+        "test_a_scalar_aggregate_global_module_and_runtime_matrix",
+        "test_pair_rolls_wholly_to_stack_without_consuming_last_scalar_register"
+      ]
+    },
+    {
+      "id": "win64-shadow-stack-gpr-xmm-df",
+      "tests": [
+        "test_win64_direct_indirect_external_stack_narrow_and_no_args",
+        "test_z_real_missing_xmm_restore_is_rejected_after_normal_execution"
+      ]
+    },
+    {
+      "id": "ffi-link-names-default-unsafe",
+      "tests": [
+        "test_bodyless_method_link_names_and_explicit_definition_alias",
+        "test_g_default_unsafe_survives_combined_frontend_and_function_types"
+      ]
+    },
+    {
+      "id": "volatile-unaligned-all-widths",
+      "tests": [
+        "test_e_memory_all_widths_side_effect_order_and_four_thread_atomic_contention"
+      ]
+    },
+    {
+      "id": "atomic-seqcst-all-operations-contention",
+      "tests": [
+        "test_e_memory_all_widths_side_effect_order_and_four_thread_atomic_contention"
+      ]
+    },
+    {
+      "id": "asm-whitelist-and-fence",
+      "tests": [
+        "test_memory_width_canaries_atomic_old_values_and_asm"
+      ]
+    },
+    {
+      "id": "aligned-frames-and-combined-budget",
+      "tests": [
+        "test_aligned_objects_copy_stack_parameters_and_nested_calls",
+        "test_win64_bridge_and_realigned_sysv_body_share_budget",
+        "test_oversize_combined_frame_rejects_without_output"
+      ]
+    },
+    {
+      "id": "panic-kind-location-path-no-cleanup",
+      "tests": [
+        "test_runtime_guards_exact_panic_kind_line_file_and_no_cleanup",
+        "test_z_wrong_panic_category_mutation_is_rejected"
+      ]
+    },
+    {
+      "id": "diagnostics-failure-atomicity",
+      "tests": [
+        "test_error_number_diagnostic_code_and_source_match_seed",
+        "test_invalid_tagged_sources_reject_before_publishing",
+        "test_c_module_privacy_diagnostics"
+      ]
+    },
+    {
+      "id": "real-mutants-and-provenance",
+      "tests": [
+        "test_z_actual_semantic_mutants_and_native_failure_fallback_reject",
+        "test_real_dong_wrong_optional_tag_is_rejected_after_normal_execution",
+        "test_real_wrong_local_address_is_rejected_after_normal_return"
+      ]
+    },
+    {
+      "id": "all-original-gap-fixtures",
+      "tests": [
+        "test_b_all_previously_missing_language_paths_execute"
+      ]
+    },
+    {
+      "id": "all-permanent-tests",
+      "tests": [
+        "test_a_scalar_aggregate_global_module_and_runtime_matrix",
+        "test_aligned_objects_copy_stack_parameters_and_nested_calls",
+        "test_array_and_slice_view_observe_original_storage",
+        "test_array_temporary_lifetime_and_aggregate_element_snapshot",
+        "test_b_all_previously_missing_language_paths_execute",
+        "test_bodyless_method_link_names_and_explicit_definition_alias",
+        "test_bool_match_once_exhaustive_and_wildcard_returns",
+        "test_break_continue_and_nested_loop_exit_scope",
+        "test_c_module_privacy_diagnostics",
+        "test_callee_once_before_arguments_static_field_and_pair_abi",
+        "test_cross_module_public_method_and_nominal_alias",
+        "test_d_native_elf_with_real_target_runtime_and_static_pointers",
+        "test_defer_after_return_does_not_run",
+        "test_e_memory_all_widths_side_effect_order_and_four_thread_atomic_contention",
+        "test_enum_nominal_tag_payload_and_scalar",
+        "test_error_number_diagnostic_code_and_source_match_seed",
+        "test_f_noreturn_cleanup_and_conditional_cleanup_flow",
+        "test_for_match_defer_cleanup_composition_and_pair_return",
+        "test_free_function_and_same_name_methods_do_not_collide",
+        "test_g_default_unsafe_survives_combined_frontend_and_function_types",
+        "test_invalid_tagged_sources_reject_before_publishing",
+        "test_known_match_subject_excludes_dead_arms_from_initialization_merge",
+        "test_lexical_reverse_registration_late_reads_and_cleanup_locals",
+        "test_match_optional_and_error_payload",
+        "test_memory_width_canaries_atomic_old_values_and_asm",
+        "test_nested_break_continue_targets",
+        "test_optional_result_abi_bytes_and_narrow_payload",
+        "test_oversize_combined_frame_rejects_without_output",
+        "test_pair_rolls_wholly_to_stack_without_consuming_last_scalar_register",
+        "test_pointer_alias_const_unsafe_narrow_void_recursive_and_slice_pair",
+        "test_range_snapshot_order_zero_reverse_and_u64_edge",
+        "test_real_dong_wrong_optional_tag_is_rejected_after_normal_execution",
+        "test_real_wrong_local_address_is_rejected_after_normal_return",
+        "test_receiver_once_before_nested_arguments_and_stack",
+        "test_return_scalar_void_pointer_and_pair_survive_cleanup",
+        "test_runtime_guards_exact_panic_kind_line_file_and_no_cleanup",
+        "test_selected_declaration_and_both_call_forms",
+        "test_static_tagged_aggregate_padding_and_array_elements",
+        "test_tagged_flow_and_enum_remain_executable",
+        "test_try_defer_orelse_short_circuit_and_exit",
+        "test_win64_bridge_and_realigned_sysv_body_share_budget",
+        "test_win64_direct_indirect_external_stack_narrow_and_no_args",
+        "test_z_actual_semantic_mutants_and_native_failure_fallback_reject",
+        "test_z_real_missing_xmm_restore_is_rejected_after_normal_execution",
+        "test_z_wrong_panic_category_mutation_is_rejected",
+        "test_h_tagged_pointer_function_bool_and_imported_error_payloads",
+        "test_i_static_objects_larger_than_frame_budget"
+      ]
+    }
+  ]
+}

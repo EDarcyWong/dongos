@@ -1,0 +1,312 @@
+// Declaration binding over a successfully loaded graph and collected namespace.
+// Type compatibility, constant evaluation, layouts and flow are later stages.
+module bootstrap.binding;
+import bootstrap.modules as modules;
+import bootstrap.names as names;
+import bootstrap.expression as ast;
+import bootstrap.lexer as lex;
+pub const NONE:usize=0xffff_ffff_ffff_ffff;
+pub const OK:u64=0;pub const INVALID:u64=1;pub const CAPACITY:u64=2;pub const UNKNOWN:u64=3;
+pub const PRIVATE:u64=4;pub const KIND:u64=5;pub const DUPLICATE:u64=6;pub const CONTROL:u64=7;
+pub const DEPTH:u64=8;pub const BAD_TREE:u64=9;
+pub const LOCAL:u64=1;pub const GLOBAL:u64=2;pub const BUILTIN_TYPE:u64=3;
+pub const INTRINSIC:u64=4;pub const DEFERRED_MEMBER:u64=5;pub const ENUM_MEMBER:u64=6;
+pub const METHOD_CANDIDATE:u64=7;
+pub struct Ref{pub kind:u64,pub unit:usize,pub target:usize,pub detail:usize}
+pub struct Local{pub unit:usize,pub token:usize,pub declaration:usize,pub scope:usize,pub form:u64}
+pub struct Result{pub code:u64,pub count:usize,pub unit:usize,pub token:usize,pub detail:usize}
+struct Region{p:u64,n:usize}
+struct State{sources:[]const modules.Source,units:[]const modules.Unit,tokens:[]const lex.Token,
+ nodes:[]const ast.Node,symbols:[]const names.Symbol,work:[]Ref,locals:[]Local,
+ unit:usize,scope:usize,local_count:usize,loops:usize,in_function:bool,in_defer:bool,
+ limit:usize,status:u64,error_token:usize,detail:usize}
+fn span(p:u64,n:usize)bool{return n==0||(p!=0&&n<=NONE-p);}
+fn overlap(a:*const Region,b:*const Region)bool{unsafe{return (*a).n!=0&&(*b).n!=0&&(*a).p<(*b).p+(*b).n&&(*b).p<(*a).p+(*a).n;}}
+fn equal(a:[]const u8,b:[]const u8)bool{
+ if a.len!=b.len{return false;}var i:usize=0;while i<a.len{if a[i]!=b[i]{return false;}i+=1;}return true;
+}
+unsafe fn reject(s:*State,code:u64,token:usize,detail:usize)bool{unsafe{
+ if (*s).status==0{(*s).status=code;(*s).error_token=token;(*s).detail=detail;}return false;
+}}
+unsafe fn node(s:*State,id:usize)*const ast.Node{unsafe{return (*s).nodes.ptr+(*s).units[(*s).unit].node_start+id;}}
+unsafe fn text(s:*State,unit:usize,token:usize)[]const u8{unsafe{return names.text((*s).sources,(*s).units,(*s).tokens,unit,token);}}
+unsafe fn put(s:*State,id:usize,kind:u64,unit:usize,target:usize,detail:usize)bool{unsafe{
+ (*s).work[(*s).units[(*s).unit].node_start+id]=Ref{kind:kind,unit:unit,target:target,detail:detail};return true;
+}}
+unsafe fn ref(s:*State,id:usize)*const Ref{unsafe{return (*s).work.ptr+(*s).units[(*s).unit].node_start+id;}}
+unsafe fn enter(s:*State,id:usize,depth:usize)bool{unsafe{
+ if (*s).status!=0{return false;}
+ if id==NONE||id>=(*s).units[(*s).unit].node_count{return reject(s,BAD_TREE,0,id);}
+ if depth>=(*s).limit{return reject(s,DEPTH,(*node(s,id)).token,0);}return true;
+}}
+fn builtin(t:[]const u8)usize{
+ if equal(t,"u8"){return 1;}if equal(t,"u16"){return 2;}if equal(t,"u32"){return 3;}if equal(t,"u64")||equal(t,"usize"){return 4;}
+ if equal(t,"i8"){return 5;}if equal(t,"i16"){return 6;}if equal(t,"i32"){return 7;}if equal(t,"i64")||equal(t,"isize"){return 8;}
+ if equal(t,"bool"){return 9;}if equal(t,"void"){return 10;}if equal(t,"noreturn"){return 11;}return NONE;
+}
+fn intrinsic(t:[]const u8)usize{
+ if equal(t,"wrapping_add"){return 1;}if equal(t,"wrapping_sub"){return 2;}if equal(t,"wrapping_mul"){return 3;}
+ if equal(t,"volatile_load"){return 4;}if equal(t,"volatile_store"){return 5;}if equal(t,"read_unaligned"){return 6;}
+ if equal(t,"write_unaligned"){return 7;}if equal(t,"atomic_load"){return 8;}if equal(t,"atomic_store"){return 9;}
+ if equal(t,"atomic_compare_exchange"){return 10;}if equal(t,"atomic_fetch_add"){return 11;}if equal(t,"compiler_fence"){return 12;}
+ if equal(t,"slice_from_raw_parts"){return 13;}if equal(t,"some"){return 14;}if equal(t,"ok"){return 15;}if equal(t,"err"){return 16;}return NONE;
+}
+unsafe fn local(s:*State,token:usize)usize{unsafe{
+ var i=(*s).local_count;let t=text(s,(*s).unit,token);
+ while i!=0{i-=1;let l=(*s).locals[i];if equal(t,text(s,l.unit,l.token)){return i;}}return NONE;
+}}
+unsafe fn unique(s:*State,token:usize)bool{unsafe{
+ let t=text(s,(*s).unit,token);var i=(*s).local_count;
+ while i!=0{i-=1;let l=(*s).locals[i];if l.scope!=(*s).scope{break;}
+  if equal(t,text(s,l.unit,l.token)){return reject(s,DUPLICATE,token,l.token);}
+ }return true;
+}}
+unsafe fn declare(s:*State,token:usize,id:usize,form:u64)bool{unsafe{
+ if !unique(s,token){return false;}
+ if (*s).local_count==(*s).locals.len{return reject(s,CAPACITY,token,1);}
+ (*s).locals[(*s).local_count]=Local{unit:(*s).unit,token:token,declaration:id,scope:(*s).scope,form:form};
+ (*s).local_count+=1;return true;
+}}
+unsafe fn symbol(s:*State,owner:usize,token:usize,methods:bool)usize{unsafe{
+ let wanted=text(s,(*s).unit,token);var i:usize=0;var method:usize=NONE;
+ while i<(*s).symbols.len{let d=(*s).symbols[i];
+  if d.unit==owner&&equal(wanted,text(s,d.unit,d.name_token)){
+   if d.kind!=names.METHOD{return i;}if methods&&method==NONE{method=i;}
+  }i+=1;
+ }return method;
+}}
+unsafe fn global(s:*State,id:usize,owner:usize,token:usize,methods:bool)bool{unsafe{
+ let found=symbol(s,owner,token,methods);if found==NONE{return reject(s,UNKNOWN,token,0);}
+ // Overloaded methods are only candidates here: semantic_types selects by exact
+ // receiver pointer type and checks that method's pub/private visibility.
+ // Free functions, consts and globals with the same short name still win first.
+ let sym=(*s).symbols[found];if owner!=(*s).unit&&sym.kind!=names.METHOD&&(sym.flags!=1||sym.kind==names.IMPORT){return reject(s,PRIVATE,token,found);}
+ var kind=GLOBAL;if sym.kind==names.METHOD{kind=METHOD_CANDIDATE;}
+ return put(s,id,kind,owner,found,sym.kind);
+}}
+// Type/error paths have at most one import qualifier; no string concatenation.
+unsafe fn path(s:*State,id:usize,depth:usize)bool{unsafe{
+ if !enter(s,id,depth){return false;}let n=*node(s,id);
+ if n.kind==ast.NAME{
+  let b=builtin(text(s,(*s).unit,n.token));if b!=NONE{return put(s,id,BUILTIN_TYPE,(*s).unit,b,0);}
+  return global(s,id,(*s).unit,n.token,false);
+ }
+ if n.kind!=ast.FIELD||n.a==NONE||(*node(s,n.a)).kind!=ast.NAME{return reject(s,KIND,n.token,0);}
+ let first=*node(s,n.a);let index=symbol(s,(*s).unit,first.token,false);
+ if index==NONE{return reject(s,UNKNOWN,first.token,0);}let sym=(*s).symbols[index];
+ if sym.kind!=names.IMPORT{return reject(s,KIND,first.token,index);}
+ put(s,n.a,GLOBAL,(*s).unit,index,names.IMPORT);
+ return global(s,id,sym.target,n.token,false);
+}}
+unsafe fn type_tree(s:*State,id:usize,depth:usize)bool{unsafe{
+ if !enter(s,id,depth){return false;}let n=*node(s,id);
+ if n.kind==ast.TYPE_NAME{
+  if !path(s,n.a,depth+1){return false;}let r=*ref(s,n.a);
+  if r.kind!=BUILTIN_TYPE&&(r.kind!=GLOBAL||(r.detail!=names.STRUCT&&r.detail!=names.ENUM&&r.detail!=names.ALIAS)){
+   return reject(s,KIND,n.token,r.target);
+  }return put(s,id,r.kind,r.unit,r.target,r.detail);
+ }
+ if n.kind==ast.TYPE_POINTER||n.kind==ast.TYPE_SLICE||n.kind==ast.TYPE_OPTIONAL||n.kind==ast.TYPE_ERROR{
+  return type_tree(s,n.a,depth+1);
+ }
+ if n.kind==ast.TYPE_ARRAY{return type_tree(s,n.a,depth+1)&&expression(s,n.b,depth+1,false,false);}
+ if n.kind==ast.TYPE_FUNCTION{
+  var p=n.a;var steps:usize=0;
+  while p!=NONE{if steps>=(*s).units[(*s).unit].node_count{return reject(s,BAD_TREE,n.token,0);}steps+=1;
+   let param=*node(s,p);if param.kind!=ast.PARAMETER{return reject(s,BAD_TREE,param.token,0);}
+   if !type_tree(s,param.a,depth+1){return false;}p=param.next;
+  }return type_tree(s,n.b,depth+1);
+ }return reject(s,BAD_TREE,n.token,n.kind);
+}}
+unsafe fn expressions(s:*State,first:usize,depth:usize)bool{unsafe{
+ var id=first;var steps:usize=0;
+ while id!=NONE{if steps>=(*s).units[(*s).unit].node_count{return reject(s,BAD_TREE,0,0);}steps+=1;
+  if !expression(s,id,depth,false,false){return false;}id=(*node(s,id)).next;
+ }return true;
+}}
+unsafe fn expression(s:*State,id:usize,depth:usize,namespace:bool,callee:bool)bool{unsafe{
+ if !enter(s,id,depth){return false;}let n=*node(s,id);
+ if n.kind==ast.INTEGER||n.kind==ast.BOOLEAN||n.kind==ast.NULL||n.kind==ast.STRING{return true;}
+ if n.kind==ast.NAME{
+  let l=local(s,n.token);if l!=NONE{let v=(*s).locals[l];return put(s,id,LOCAL,v.unit,v.declaration,v.form);}
+  let found=symbol(s,(*s).unit,n.token,callee);
+  if found==NONE&&callee{let b=intrinsic(text(s,(*s).unit,n.token));if b!=NONE{return put(s,id,INTRINSIC,(*s).unit,b,0);}}
+  if !global(s,id,(*s).unit,n.token,callee){return false;}
+  if !namespace&&(*ref(s,id)).detail==names.IMPORT{return reject(s,KIND,n.token,0);}return true;
+ }
+ if n.kind==ast.FIELD{
+  if !expression(s,n.a,depth+1,true,false){return false;}let parent=*ref(s,n.a);
+  if parent.kind==GLOBAL&&parent.detail==names.IMPORT{
+   return global(s,id,(*s).symbols[parent.target].target,n.token,callee);
+  }
+  if parent.kind==GLOBAL&&parent.detail==names.ENUM{
+   let sym=(*s).symbols[parent.target];let u=(*s).units[sym.unit];let e=(*s).nodes[u.node_start+sym.declaration];
+   var v=e.a;var steps:usize=0;
+   while v!=NONE{if steps>=u.node_count{return reject(s,BAD_TREE,n.token,0);}steps+=1;
+    let item=(*s).nodes[u.node_start+v];if item.kind!=ast.VARIANT{return reject(s,BAD_TREE,n.token,0);}
+    if equal(text(s,sym.unit,item.token),text(s,(*s).unit,n.token)){return put(s,id,ENUM_MEMBER,sym.unit,v,parent.target);}v=item.next;
+   }return reject(s,UNKNOWN,n.token,0);
+  }return put(s,id,DEFERRED_MEMBER,(*s).unit,n.a,0);
+ }
+ if n.kind==ast.CALL{return expression(s,n.a,depth+1,false,true)&&expressions(s,n.b,depth+1);}
+ if n.kind==ast.UNARY||n.kind==ast.TRY{return expression(s,n.a,depth+1,false,false);}
+ if n.kind==ast.BINARY||n.kind==ast.ORELSE||n.kind==ast.INDEX||n.kind==ast.REPEAT||n.kind==ast.RANGE{
+  return expression(s,n.a,depth+1,false,false)&&expression(s,n.b,depth+1,false,false);
+ }
+ if n.kind==ast.SLICE{
+  if !expression(s,n.a,depth+1,false,false){return false;}
+  if n.b!=NONE&&!expression(s,n.b,depth+1,false,false){return false;}
+  return n.c==NONE||expression(s,n.c,depth+1,false,false);
+ }
+ if n.kind==ast.ARRAY{return expressions(s,n.a,depth+1);}
+ if n.kind==ast.CAST{return expression(s,n.a,depth+1,false,false)&&type_tree(s,n.b,depth+1);}
+ if n.kind==ast.LAYOUT{return type_tree(s,n.a,depth+1);}
+ if n.kind==ast.ERROR{
+  if !path(s,n.a,depth+1){return false;}let r=*ref(s,n.a);
+  if r.kind!=GLOBAL||r.detail!=names.ERROR{return reject(s,KIND,n.token,r.target);}
+  return put(s,id,r.kind,r.unit,r.target,r.detail);
+ }
+ if n.kind==ast.STRUCT{
+  if !path(s,n.a,depth+1){return false;}let r=*ref(s,n.a);
+  if r.kind!=GLOBAL||(r.detail!=names.STRUCT&&r.detail!=names.ALIAS){return reject(s,KIND,n.token,r.target);}
+  put(s,id,r.kind,r.unit,r.target,r.detail);var field=n.b;var steps:usize=0;
+  while field!=NONE{if steps>=(*s).units[(*s).unit].node_count{return reject(s,BAD_TREE,n.token,0);}steps+=1;
+   let f=*node(s,field);if f.kind!=ast.INITIALIZER{return reject(s,BAD_TREE,f.token,0);}
+   var prior=n.b;var seen:usize=0;while prior!=field{
+    if prior==NONE||seen>=(*s).units[(*s).unit].node_count{return reject(s,BAD_TREE,f.token,0);}seen+=1;
+    let old=*node(s,prior);if equal(text(s,(*s).unit,old.token),text(s,(*s).unit,f.token)){return reject(s,DUPLICATE,f.token,old.token);}prior=old.next;
+   }
+   if !expression(s,f.a,depth+1,false,false){return false;}field=f.next;
+  }return true;
+ }
+ if n.kind==ast.EXIT{
+  if !transfer(s,n.token,n.op){return false;}return n.a==NONE||expression(s,n.a,depth+1,false,false);
+ }return reject(s,BAD_TREE,n.token,n.kind);
+}}
+unsafe fn transfer(s:*State,token:usize,op:u64)bool{unsafe{
+ if !(*s).in_function||(*s).in_defer{return reject(s,CONTROL,token,0);}
+ if op!=281&&(*s).loops==0{return reject(s,CONTROL,token,0);}return true;
+}}
+unsafe fn block(s:*State,id:usize,depth:usize,scoped:bool)bool{unsafe{
+ if !enter(s,id,depth){return false;}let n=*node(s,id);if n.kind!=ast.BLOCK{return reject(s,BAD_TREE,n.token,0);}
+ let saved=(*s).local_count;if scoped{(*s).scope+=1;}var at=n.a;var steps:usize=0;
+ while at!=NONE{if steps>=(*s).units[(*s).unit].node_count{return reject(s,BAD_TREE,n.token,0);}steps+=1;
+  if !statement(s,at,depth+1){return false;}at=(*node(s,at)).next;
+ }if scoped{(*s).scope-=1;(*s).local_count=saved;}return true;
+}}
+unsafe fn statement(s:*State,id:usize,depth:usize)bool{unsafe{
+ if !enter(s,id,depth){return false;}let n=*node(s,id);
+ if n.kind==ast.BLOCK{return block(s,id,depth+1,true);}
+ if n.kind==ast.BINDING{
+  if !unique(s,n.token){return false;}if n.a!=NONE&&!type_tree(s,n.a,depth+1){return false;}
+  if n.b!=NONE&&!expression(s,n.b,depth+1,false,false){return false;}return declare(s,n.token,id,n.op);
+ }
+ if n.kind==ast.RETURN{return transfer(s,n.token,281)&&(n.a==NONE||expression(s,n.a,depth+1,false,false));}
+ if n.kind==ast.BREAK||n.kind==ast.CONTINUE{return transfer(s,n.token,n.kind);}
+ if n.kind==ast.ASSIGN{return expression(s,n.a,depth+1,false,false)&&expression(s,n.b,depth+1,false,false);}
+ if n.kind==ast.EXPRESSION_STATEMENT{return expression(s,n.a,depth+1,false,false);}
+ if n.kind==ast.IF{
+  if !expression(s,n.a,depth+1,false,false)||!block(s,n.b,depth+1,true){return false;}
+  return n.c==NONE||statement(s,n.c,depth+1);
+ }
+ if n.kind==ast.LOOP||n.kind==ast.WHILE||n.kind==ast.FOR{
+  let saved=(*s).local_count;
+  if n.kind==ast.WHILE&&!expression(s,n.a,depth+1,false,false){return false;}
+  if n.kind==ast.FOR{
+   if !expression(s,n.b,depth+1,false,false){return false;}if n.a==NONE||(*node(s,n.a)).kind!=ast.NAME{return reject(s,BAD_TREE,n.token,0);}
+   (*s).scope+=1;if !declare(s,(*node(s,n.a)).token,n.a,261){return false;}
+  }
+  (*s).loops+=1;var body=n.a;if n.kind==ast.WHILE{body=n.b;}else if n.kind==ast.FOR{body=n.c;}
+  if !block(s,body,depth+1,true){return false;}(*s).loops-=1;
+  if n.kind==ast.FOR{(*s).scope-=1;(*s).local_count=saved;}return true;
+ }
+ if n.kind==ast.DEFER{
+  if (*s).in_defer{return reject(s,CONTROL,n.token,0);}(*s).in_defer=true;
+  if !block(s,n.a,depth+1,true){return false;}(*s).in_defer=false;return true;
+ }
+ if n.kind==ast.UNSAFE_BLOCK{return block(s,n.a,depth+1,true);}
+ if n.kind==ast.ASM{return true;}
+ if n.kind==ast.MATCH{
+  if !expression(s,n.a,depth+1,false,false){return false;}var arm=n.b;var steps:usize=0;
+  while arm!=NONE{if steps>=(*s).units[(*s).unit].node_count{return reject(s,BAD_TREE,n.token,0);}steps+=1;
+   let a=*node(s,arm);if a.kind!=ast.ARM||a.a==NONE{return reject(s,BAD_TREE,n.token,0);}let pattern=*node(s,a.a);
+   if pattern.kind!=ast.PATTERN{return reject(s,BAD_TREE,pattern.token,0);}
+   if pattern.a!=NONE{
+    let p=*node(s,pattern.a);let t=text(s,(*s).unit,p.token);
+    if p.kind!=ast.NAME||(!equal(t,"_")&&!equal(t,"some")&&!equal(t,"ok")&&!equal(t,"err")){
+     if !expression(s,pattern.a,depth+1,false,false){return false;}
+    }
+   }
+   let saved=(*s).local_count;(*s).scope+=1;
+   if pattern.b!=NONE{let b=*node(s,pattern.b);if b.kind!=ast.NAME{return reject(s,BAD_TREE,b.token,0);}if !declare(s,b.token,pattern.b,261){return false;}}
+   if !block(s,a.b,depth+1,true){return false;}(*s).scope-=1;(*s).local_count=saved;arm=a.next;
+  }return true;
+ }return reject(s,BAD_TREE,n.token,n.kind);
+}}
+unsafe fn declaration(s:*State,id:usize,depth:usize)bool{unsafe{
+ if !enter(s,id,depth){return false;}let n=*node(s,id);
+ if n.kind==ast.ALIAS_DECL{return type_tree(s,n.a,depth+1);}
+ if n.kind==ast.ERROR_DECL{return expression(s,n.b,depth+1,false,false);}
+ if n.kind==ast.GLOBAL{return type_tree(s,n.a,depth+1)&&expression(s,n.b,depth+1,false,false);}
+ if n.kind==ast.STRUCT_DECL||n.kind==ast.ENUM_DECL{
+  var member=n.a;var steps:usize=0;while member!=NONE{if steps>=(*s).units[(*s).unit].node_count{return reject(s,BAD_TREE,n.token,0);}steps+=1;
+   let m=*node(s,member);if (n.kind==ast.STRUCT_DECL&&m.kind!=ast.FIELD_DECL)||(n.kind==ast.ENUM_DECL&&m.kind!=ast.VARIANT){return reject(s,BAD_TREE,m.token,0);}
+   if m.a!=NONE&&!type_tree(s,m.a,depth+1){return false;}member=m.next;
+  }return true;
+ }
+ if n.kind==ast.FUNCTION{
+  if !type_tree(s,n.b,depth+1){return false;}var p=n.a;var steps:usize=0;
+  while p!=NONE{if steps>=(*s).units[(*s).unit].node_count{return reject(s,BAD_TREE,n.token,0);}steps+=1;
+   let param=*node(s,p);if param.kind!=ast.FUNCTION_PARAMETER{return reject(s,BAD_TREE,param.token,0);}
+   if !type_tree(s,param.a,depth+1){return false;}p=param.next;
+  }
+  if n.c==NONE{return true;}(*s).in_function=true;(*s).local_count=0;(*s).scope=0;p=n.a;steps=0;
+  while p!=NONE{if steps>=(*s).units[(*s).unit].node_count{return reject(s,BAD_TREE,n.token,0);}steps+=1;
+   let param=*node(s,p);if !declare(s,param.token,p,261){return false;}p=param.next;
+  }
+  if !block(s,n.c,depth+1,false){return false;}(*s).in_function=false;(*s).local_count=0;return true;
+ }return reject(s,BAD_TREE,n.token,n.kind);
+}}
+pub unsafe fn check(sources:[]const modules.Source,units:[]const modules.Unit,tokens:[]const lex.Token,
+ nodes:[]const ast.Node,edges:[]const modules.Edge,symbols:[]const names.Symbol,out:[]Ref,work:[]Ref,
+ locals:[]Local,max_depth:usize,result:*Result)u64{unsafe{
+ if result==null||max_depth==0||max_depth>256||sources.len>NONE/sizeof(modules.Source)||units.len>NONE/sizeof(modules.Unit)
+  ||tokens.len>NONE/sizeof(lex.Token)||nodes.len>NONE/sizeof(ast.Node)||edges.len>NONE/sizeof(modules.Edge)
+  ||symbols.len>NONE/sizeof(names.Symbol)||out.len>NONE/sizeof(Ref)||work.len>NONE/sizeof(Ref)||locals.len>NONE/sizeof(Local){return INVALID;}
+ let inputs=[Region{p:sources.ptr as u64,n:sources.len*sizeof(modules.Source)},Region{p:units.ptr as u64,n:units.len*sizeof(modules.Unit)},
+  Region{p:tokens.ptr as u64,n:tokens.len*sizeof(lex.Token)},Region{p:nodes.ptr as u64,n:nodes.len*sizeof(ast.Node)},
+  Region{p:edges.ptr as u64,n:edges.len*sizeof(modules.Edge)},Region{p:symbols.ptr as u64,n:symbols.len*sizeof(names.Symbol)}];
+ let outputs=[Region{p:out.ptr as u64,n:out.len*sizeof(Ref)},Region{p:work.ptr as u64,n:work.len*sizeof(Ref)},
+  Region{p:locals.ptr as u64,n:locals.len*sizeof(Local)},Region{p:result as u64,n:sizeof(Result)}];
+ var i:usize=0;while i<inputs.len{let r=inputs[i];if !span(r.p,r.n)||(r.n!=0&&(r.p&7)!=0){return INVALID;}i+=1;}
+ i=0;while i<outputs.len{let r=outputs[i];if !span(r.p,r.n)||(r.n!=0&&(r.p&7)!=0){return INVALID;}
+  var j:usize=0;while j<inputs.len{if overlap(&r,&inputs[j]){return INVALID;}j+=1;}
+  j=0;while j<i{if overlap(&r,&outputs[j]){return INVALID;}j+=1;}i+=1;
+ }
+ i=0;while i<sources.len{let p=Region{p:sources[i].path.ptr as u64,n:sources[i].path.len};let b=Region{p:sources[i].bytes.ptr as u64,n:sources[i].bytes.len};
+  if !span(p.p,p.n)||!span(b.p,b.n){return INVALID;}var j:usize=0;while j<outputs.len{if overlap(&p,&outputs[j])||overlap(&b,&outputs[j]){return INVALID;}j+=1;}i+=1;
+ }
+ if !names.valid_graph(sources,units,tokens,nodes,edges){*result=Result{code:BAD_TREE,count:0,unit:0,token:0,detail:0};return BAD_TREE;}
+ i=0;while i<symbols.len{let sym=symbols[i];if sym.unit>=units.len||sym.target>=units.len||sym.kind<1||sym.kind>9{
+  *result=Result{code:BAD_TREE,count:0,unit:0,token:0,detail:i};return BAD_TREE;}
+  if sym.declaration>=units[sym.unit].node_count||sym.name_token>=units[sym.unit].token_count{
+   *result=Result{code:BAD_TREE,count:0,unit:0,token:0,detail:i};return BAD_TREE;}i+=1;
+ }
+ if work.len<nodes.len||out.len<nodes.len{*result=Result{code:CAPACITY,count:0,unit:0,token:0,detail:0};return CAPACITY;}
+ i=0;while i<nodes.len{work[i]=Ref{kind:0,unit:0,target:NONE,detail:0};i+=1;}
+ var s=State{sources:sources,units:units,tokens:tokens,nodes:nodes,symbols:symbols,work:work,locals:locals,
+  unit:0,scope:0,local_count:0,loops:0,in_function:false,in_defer:false,limit:max_depth,status:0,error_token:0,detail:0};
+ i=0;while i<units.len&&s.status==0{s.unit=i;let u=units[i];var at=nodes[u.node_start+u.root].b;var steps:usize=0;
+  while at!=NONE&&s.status==0{if steps>=u.node_count{reject(&s,BAD_TREE,0,0);break;}steps+=1;let n=nodes[u.node_start+at];
+   if n.kind==ast.DECLARATION{
+    var a=n.b;var seen:usize=0;while a!=NONE&&s.status==0{if seen>=u.node_count{reject(&s,BAD_TREE,n.token,0);break;}seen+=1;
+     let attr=nodes[u.node_start+a];if attr.kind!=ast.ATTRIBUTE{reject(&s,BAD_TREE,attr.token,0);break;}
+     if attr.op==270&&attr.a!=NONE{expression(&s,attr.a,0,false,false);}a=attr.next;
+    }
+    if s.status==0{declaration(&s,n.a,0);}
+   }else if n.kind!=ast.IMPORT{reject(&s,BAD_TREE,n.token,0);}at=n.next;
+  }i+=1;
+ }
+ var count:usize=0;if s.status==0{count=nodes.len;i=0;while i<count{out[i]=work[i];i+=1;}}
+ *result=Result{code:s.status,count:count,unit:s.unit,token:s.error_token,detail:s.detail};return s.status;
+}}

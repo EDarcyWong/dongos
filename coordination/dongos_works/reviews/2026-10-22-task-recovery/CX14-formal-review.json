@@ -1,0 +1,42 @@
+{
+  "project": "dongos",
+  "task_id": "codex:CX14",
+  "rev_before_acceptance": 5,
+  "source_review": "已实际核对恢复的原任务契约、当前compiler_job/controller/真实syscall gate与测试有效性，并对照原独立生命周期审查及后继G6准确head f54c35c / run39467503226。8个关联实现/工具/契约文件LF等价，实际compiler gate逐字符一致；原G6限定runtime5/49模块真实同盘双启及物理/磁盘独审记录保留。本轮正式隔离d1dd123835f04bedbbd8dfb903054ace：3 tests/0 skip/returncode0，29.210秒，source_stable、process_stopped、execution_exited均true。实际执行启动门、生产start/finish、全内核类型检查、真实坏Dong的拒绝；当前声明文件指纹相符。按用户要求补登记既有受限profile交付，不冒充原worker提交或停止确认，不声称新机重跑VM/旧raw artifact已恢复，不扩大为完整G5/L3完成。证据reviews/2026-10-22-task-recovery/g6-source-binding.json及本目录正式回执。",
+  "verification": {
+    "passed": true,
+    "checks": [
+      {
+        "spec": "module:tests.test_compiler_job_launch",
+        "passed": true,
+        "tests": 3,
+        "skips": 0,
+        "returncode": 0,
+        "cancelled": false,
+        "timed_out": false,
+        "process_stopped": true,
+        "execution_exited": true,
+        "elapsed_seconds": 29.21
+      }
+    ],
+    "process_stopped": true,
+    "execution_exited": true,
+    "source_stable": true,
+    "fingerprint": {
+      "kernel/user/compiler_job.dg": "9b11796e1a219968c203d8e6bb54dcba96415f470a53c68ce08b53ecfa1341f3",
+      "kernel/user/services.dg": "548c6dafa0f2e515bcefeba51ae28c754e68273c979275862c32b60b6a76fa65",
+      "kernel/services_run.asm": "a1d997066a8265a0a5447fa8b3404bb2e40d4b0f903bc7e0217378afb689b7ec",
+      "services/compiler/controller.dg": "d70df25b20368b26ae90f5c19dc1998a4021e22975afd4fd3726329fce719e23",
+      "tools/build.py": "c5b67b1807a7932fac0a3b47d6d61329f9487c6c8fba8b696e3703d90df7c99f",
+      "tests/test_compiler_job_launch.py": "3b573c4255d79835e625da6484a85ea20acd8f41fc796db841ba5a5b4ff60459",
+      "tests/run_compiler_job_qemu.py": "ab7b8d5ab66101b93b6ffb38d3e5cddfbb0e45e5f7c0af5fdfd3e88c2d4d5d04",
+      "docs/l3-guest-compiler.md": "400295f8d05b73b8f04de8315410ef0301235a9672647a06a4d59527eae1d21f",
+      "codex-works/deliveries/CX14.md": "a8e6f0594757230093d4a5ace0acc15d5972d37f338e1406b6bfef6cae554f20"
+    },
+    "summary": "定向复验通过，等待源码/契约审查",
+    "finished_at": "2026-10-22T01:08:08+00:00",
+    "job": "d1dd123835f04bedbbd8dfb903054ace"
+  },
+  "original_worker_impersonated": false,
+  "new_guest_execution": false
+}

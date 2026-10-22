@@ -1,0 +1,68 @@
+{
+  "assignment_owner": "codex",
+  "auto_dispatch": false,
+  "auto_verify": false,
+  "candidate": null,
+  "checks": [
+    "discover:codex-works/tests:test_l3_for_native.py"
+  ],
+  "claim_from_status": "todo",
+  "claim_token": "e680433b230f4b5b8e4bc27745537248",
+  "claimed_at": "2026-10-22T04:52:34+00:00",
+  "claimed_by": "codex-mcp-8c76f5a25c8d4b71",
+  "completed_at": "2026-10-22T04:57:21+00:00",
+  "complexity": "standard",
+  "created_at": "2026-10-22T04:52:32+00:00",
+  "delivery": "codex-works/deliveries/L3FOR1.md",
+  "depends_on": [
+    "codex:L3METHODLOW1"
+  ],
+  "description": "基于已集成L3METHODLOW1主线的独立 lower_program 候选，闭合 range/array/slice for 和 bool match（不纳入仍在复验的L3DEFER1候选）。for范围/源表达式仅求值一次，数组/切片遍历原存储不复制底层，数组临时值必须维持整个循环生命周期；循环变量逐次快照且不可写，支持break/continue与嵌套循环，u64边界不可溢出。bool match单次求值，显式true/false及最后wildcard，支路局部和返回保持语义。复用现有IR/NASM，不改ABI。覆盖真实native/seed/C差分、原工作池容量/别名/源稳定、不可将编译失败当负控的真实错误董变体。仅候选；独立验收后集成任务必须与已验收defer真实合并并补for/match+defer组合后重新复验，不能用此候选覆盖defer实现。",
+  "document": "codex-works/tasks/L3FOR1-board.md",
+  "historical": false,
+  "id": "codex:L3FOR1",
+  "integration_note": "已在codex:L3FLOWINT1 integrated rev12真实生产合并，lower_program2eb36a91291ce429...保留该验收候选实现及另一候选，补for独立清理边界与跨for/match/defer组合，原候选全部4项冻结文件指纹不变。正式f48ec24178864741a9a0b2d09290f546生产永久25项0skip源稳定，实际原生ELF宿主两模式返回69，四组新输入独审和真实坏体值拒绝均通过。详见2026-10-22-L3FLOWINT1-integration.md。仅登记该范围真实集成，完整L3/G5仍未关闭。",
+  "legacy_hash": "562ccdb4cb181bbaf9c33da60c346350c4549c28c7ccdacc46b8b903d0833bcc",
+  "number": "L3FOR1",
+  "owner": "codex",
+  "rev": 6,
+  "review_note": "源码/契约/测试实际审查通过。正式a2641c2d173043b6a9fab6a94a597b88：7项0skip、721.248s、源稳定/执行退出；新源码/C模型64向量x两模式512观察通过，真实错误董两次正常执行退出17精确值拒绝。见codex-works/reviews/2026-10-22-L3FOR1-independent.md。仅验收候选，须L3FLOWINT1真实合并defer并加组合和原生ELF后独立复验，不登记集成。",
+  "status": "integrated",
+  "title": "L3/L3A range/array/slice for 与 bool match 原生降级候选",
+  "updated_at": "2026-10-22T06:10:41+00:00",
+  "verification": {
+    "checks": [
+      {
+        "cancelled": false,
+        "elapsed_seconds": 721.248,
+        "execution_exited": true,
+        "passed": true,
+        "process_stopped": true,
+        "returncode": 0,
+        "skips": 0,
+        "spec": "discover:codex-works/tests:test_l3_for_native.py",
+        "tests": 7,
+        "timed_out": false
+      }
+    ],
+    "execution_exited": true,
+    "fingerprint": {
+      "codex-works/deliveries/L3FOR1.md": "c5a7dd8c59e5a5a85f09a626dd222ac30fc568aac5b69e1b81156fa40f0d7a38",
+      "codex-works/l3-for/docs/for-match-lowering.md": "fa018dcff26b47b2de30c9af74ca9e73a67f34ccaba2435d04d6d7bee98d1000",
+      "codex-works/l3-for/src/bootstrap/lower_program.dg": "e64ff20c02309397c410a3d2a0037b2113b54b52c2c97a86fbbac5edd6565fa0",
+      "codex-works/tests/test_l3_for_native.py": "f7eb1af255153eac6d5abd7da80b2cf4f40d48d6ed7e6100db0084bbfa12ea8a"
+    },
+    "finished_at": "2026-10-22T05:12:42+00:00",
+    "job": "a2641c2d173043b6a9fab6a94a597b88",
+    "passed": true,
+    "process_stopped": true,
+    "source_stable": true,
+    "summary": "定向复验通过，等待源码/契约审查"
+  },
+  "write_paths": [
+    "codex-works/l3-for/src/bootstrap/lower_program.dg",
+    "codex-works/l3-for/docs/for-match-lowering.md",
+    "codex-works/tests/test_l3_for_native.py",
+    "codex-works/deliveries/L3FOR1.md"
+  ]
+}

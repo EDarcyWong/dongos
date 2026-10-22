@@ -1,0 +1,711 @@
+{
+  "project": "dongos",
+  "at": "2026-10-22T08:58:54.271975+08:00",
+  "source_commit": "50ab7cf9cde101691774a8480bdb7fcc07c766be",
+  "restored": [
+    {
+      "path": "codex-works/tasks/CX10-board.md",
+      "git_blob": "e01bbd1893332ad4377b8c7c0182a4eb1374346c",
+      "sha256": "20268615fa5d1f076d5a51b59e62eaeb5be2e8a895d8a888b43472939f463abc",
+      "reason": "original task book",
+      "task": "codex:CX10"
+    },
+    {
+      "path": "codex-works/deliveries/CX10.md",
+      "git_blob": "ada67149bcd70cabd731f08c5e794b85517ebdd1",
+      "sha256": "c1d51f195a6f040721ab1251520ac18b22e11596cf33bda6474ef88af0e5d8f3",
+      "reason": "original delivery",
+      "task": "codex:CX10"
+    },
+    {
+      "path": "codex-works/tasks/CX12-board.md",
+      "git_blob": "d5ae3a06327539469d6eaf019b1f1ae1b11bb1ab",
+      "sha256": "5088740602ef70add1a0612468dbbd4c2e962d5a712dfb11e987eff3c747cb40",
+      "reason": "original task book",
+      "task": "codex:CX12"
+    },
+    {
+      "path": "codex-works/deliveries/CX12.md",
+      "git_blob": "cf6a44828700c8d6c125446419aff743cf580cb9",
+      "sha256": "1ad90d7eca033a8955c6991a006941fc8942bffa03ab41854e1e9a4529e8a6dd",
+      "reason": "original delivery",
+      "task": "codex:CX12"
+    },
+    {
+      "path": "codex-works/tasks/CX13-board.md",
+      "git_blob": "436d72aa19ceec3c606ff0b0183feec10c388e26",
+      "sha256": "7cc273627e53f6ea2972a6a04447055dc8ff0d641fb6c232ef3b323fc404051e",
+      "reason": "original task book",
+      "task": "codex:CX13"
+    },
+    {
+      "path": "codex-works/deliveries/CX13.md",
+      "git_blob": "8e1c0547c6c9f424093a5c5510e09e41dbc2717a",
+      "sha256": "da499eaa4da205259fdbd73a61e7a17258cc91d54cb1072749fab154f2b2eef7",
+      "reason": "original delivery",
+      "task": "codex:CX13"
+    },
+    {
+      "path": "codex-works/tasks/CX14-board.md",
+      "git_blob": "fd84f8983075baea4eb1e6d4c02965583189ad14",
+      "sha256": "7ea053634013ba8f89999f55283f2d78b9d5f2cb0732d6864358689b89d1a004",
+      "reason": "original task book",
+      "task": "codex:CX14"
+    },
+    {
+      "path": "codex-works/tasks/CX15-board.md",
+      "git_blob": "daef3d3d2d730f04d3b8e2508d0b88fa8b93d937",
+      "sha256": "cff9c314d125752ee03957f14734a791ec7fee6aa93df5e88386981244d6b277",
+      "reason": "original task book",
+      "task": "codex:CX15"
+    },
+    {
+      "path": "codex-works/deliveries/CX15.md",
+      "git_blob": "0cf44f8897f512460c0e953a21cb56960aa3e19d",
+      "sha256": "a7449b4984fdcedb151d44fb8679a73ec4096de671333d9d440548817c9a193a",
+      "reason": "original delivery",
+      "task": "codex:CX15"
+    },
+    {
+      "path": "codex-works/tasks/CX6-board.md",
+      "git_blob": "ff251eaca3c5c43662e5a5417f5d1186f48c725a",
+      "sha256": "41d0a14bbdab5e8e44f8c74c24262abf394dad0428fc938dba153836096004ca",
+      "reason": "original task book",
+      "task": "codex:CX6"
+    },
+    {
+      "path": "codex-works/deliveries/CX6.md",
+      "git_blob": "592adc5e3de3c9172132d1cc36b7b28f4f2c314e",
+      "sha256": "2a802f69b857b62cc2abe7fcc2bdcc143968ec053251be98054665743feafe97",
+      "reason": "original delivery",
+      "task": "codex:CX6"
+    },
+    {
+      "path": "codex-works/tasks/CX7-board.md",
+      "git_blob": "348e6186b544ea1a9826369cd2c6733058a65a4c",
+      "sha256": "816b1f0d0a48c405a95013efa71f3a654b533904323fa6e7cb00a267c34e13e1",
+      "reason": "original task book",
+      "task": "codex:CX7"
+    },
+    {
+      "path": "codex-works/deliveries/CX7.md",
+      "git_blob": "9486cc879dcd76443c8fd53c9eeb2f88add1d798",
+      "sha256": "79a07818e57e34f98c61e5d6c0d9f64824314b25d55127d6ffd39f6d920d02b5",
+      "reason": "original delivery",
+      "task": "codex:CX7"
+    },
+    {
+      "path": "codex-works/tasks/CX8-board.md",
+      "git_blob": "755603d01a8bab139ca3fe0aaa7bcdd8fef947c7",
+      "sha256": "4a47f0f2b3d88adfd79f375b015cc3566fa2a17463a77763932bd29e2194ca9f",
+      "reason": "original task book",
+      "task": "codex:CX8"
+    },
+    {
+      "path": "codex-works/deliveries/CX8.md",
+      "git_blob": "ab4e16c63793f07cd8709bd465489cb3a1a9a870",
+      "sha256": "8f6ccc24a36f677110eef134c76ab42d30a8454841cd73aa8e019189c55ff602",
+      "reason": "original delivery",
+      "task": "codex:CX8"
+    },
+    {
+      "path": "cursor-works/tasks/CR45-board.md",
+      "git_blob": "ff675675a43a5253ad495578fb6f075895ca9325",
+      "sha256": "ccbc07d7a793d130f0d723b1d356f11613da5cb258db8036294267513d260de3",
+      "reason": "original task book",
+      "task": "cursor:CR45"
+    },
+    {
+      "path": "cursor-works/deliveries/CR45.md",
+      "git_blob": "603c69d17cc860f2d2567acf5671e0f19859de4b",
+      "sha256": "46779acdff99efa817f529a8c3e32586dca926428adecd41363d55c24fe2b3b0",
+      "reason": "original delivery",
+      "task": "cursor:CR45"
+    },
+    {
+      "path": "cursor-works/tasks/CR46-board.md",
+      "git_blob": "6d29b0841835b323457c0e650c8932d623101b40",
+      "sha256": "ae25c0a5bd3f4ee62b7d2e95cb283ea4801a2e34802d708ea8e31f713478d7f3",
+      "reason": "original task book",
+      "task": "cursor:CR46"
+    },
+    {
+      "path": "cursor-works/deliveries/CR46.md",
+      "git_blob": "1f3561d455e217464486569693a3270368603ca4",
+      "sha256": "54bdd77062ab28ef53c4b10d356da34a5dc4606a5f3cbc13a6dea95068d3b299",
+      "reason": "original delivery",
+      "task": "cursor:CR46"
+    },
+    {
+      "path": "cursor-works/tasks/CR47-board.md",
+      "git_blob": "8d57b640d0e1ec8e47daf3709a344e675f4d4d06",
+      "sha256": "b82a13eed8d1e9ba81c1c7dd4b52a15a69e85f5352dd1e803bb701cf607b1acb",
+      "reason": "original task book",
+      "task": "cursor:CR47"
+    },
+    {
+      "path": "cursor-works/deliveries/CR47.md",
+      "git_blob": "338b67f1bd9ac21ce5a11f5ecda8d6f22ca8060a",
+      "sha256": "b77fb5c0613146d66ad4b20d7037869d25b0c7a3cd0b58e746c1558fb523056a",
+      "reason": "original delivery",
+      "task": "cursor:CR47"
+    },
+    {
+      "path": "pool-works/tasks/GUEST1-board.md",
+      "git_blob": "1f9b1f105c4f7ea6cc759a3d04f0fe79a0a50634",
+      "sha256": "c0dfb5be3e080bd188138ffe0c14d3ba17f41f5fe4d62b50ca3bcddfad404861",
+      "reason": "original task book",
+      "task": "pool:GUEST1"
+    },
+    {
+      "path": "pool-works/deliveries/GUEST1.md",
+      "git_blob": "091e49b0247ee8339a91f4e889262b38cbd02502",
+      "sha256": "a9d603db2570ea0f58b667f4440e8272415942e9ad35ccf6f3737460f9ebd5e1",
+      "reason": "original delivery",
+      "task": "pool:GUEST1"
+    },
+    {
+      "path": "pool-works/tasks/GUEST2-board.md",
+      "git_blob": "c73850ddb717b159fb1d1b24729aba41a8342476",
+      "sha256": "c40d3e47dd5233873a659ec262bcade3181794d851bde5d91e54c89b31b0e1cf",
+      "reason": "original task book",
+      "task": "pool:GUEST2"
+    },
+    {
+      "path": "pool-works/deliveries/GUEST2.md",
+      "git_blob": "8bfe6d1cde4d4e51d16d141fb8e9231b478fff0a",
+      "sha256": "c2a05cb76a7a56fc4715231e826f3fbde1583e42a477f9ed2f423d9a6300aba4",
+      "reason": "original delivery",
+      "task": "pool:GUEST2"
+    },
+    {
+      "path": "pool-works/tasks/GUEST3-board.md",
+      "git_blob": "d673be47f198e3258b2998f3bdc1b3733ba3c074",
+      "sha256": "f5bb59bacfc33223e97e106931a666b02ee3e5ea90056ddbf40d3eb9ced1994b",
+      "reason": "original task book",
+      "task": "pool:GUEST3"
+    },
+    {
+      "path": "pool-works/deliveries/GUEST3.md",
+      "git_blob": "7551dc5ce5c85faab270e46fe0d1aed9688f3a5e",
+      "sha256": "468cdab0e986d97587d0cdf73fea797133a90ab7448c64eb35dac05901e63029",
+      "reason": "original delivery",
+      "task": "pool:GUEST3"
+    },
+    {
+      "path": "pool-works/tasks/GUEST4-board.md",
+      "git_blob": "f9dda0eb21d9bcfe64fe8f14161e6e9489ab0d77",
+      "sha256": "d9395f05ac2ba8af2e01dc14904a2d2a19d6e158463e7bc8d53c13e6afa746f6",
+      "reason": "original task book",
+      "task": "pool:GUEST4"
+    },
+    {
+      "path": "pool-works/deliveries/GUEST4.md",
+      "git_blob": "771ce25dabab6f820c672e4ab96416ad9728da67",
+      "sha256": "ddcfca12271b8d42c2dfb8075d63a574016d2ef2aff95db646bfcf26f7688fc8",
+      "reason": "original delivery",
+      "task": "pool:GUEST4"
+    },
+    {
+      "path": "pool-works/tasks/GUEST5-board.md",
+      "git_blob": "da1d10e85b81236500bb22fb1d68ea3cf6728c6e",
+      "sha256": "def850f5c270099d8eb0f827ed24367bbfc68995a14361a73724fd62c8ef9e31",
+      "reason": "original task book",
+      "task": "pool:GUEST5"
+    },
+    {
+      "path": "pool-works/deliveries/GUEST5.md",
+      "git_blob": "c3a43eae91be920128c8f808d9dffb0b9f82ad75",
+      "sha256": "2ca598f4935290c71398e713d1cc148541428a1fed0d7029d1bc800b9c1d0be5",
+      "reason": "original delivery",
+      "task": "pool:GUEST5"
+    },
+    {
+      "path": "pool-works/tasks/MCPPOOL1-board.md",
+      "git_blob": "64bb8fab8c12084324b27f87c6fb74c686e5ae7c",
+      "sha256": "01be4a09784f8333bb7da343f765689ddc8e6f22b4dd5a08bffb6709a6c16392",
+      "reason": "original task book",
+      "task": "pool:MCPPOOL1"
+    },
+    {
+      "path": "pool-works/deliveries/MCPPOOL1.md",
+      "git_blob": "3e9563b7ee667fd06e531a3c87d997fbccd75306",
+      "sha256": "336cffe5bdd517500f9315fc3a4d68c1122c10ca467a92e2346fc0f5e93f9d62",
+      "reason": "original delivery",
+      "task": "pool:MCPPOOL1"
+    },
+    {
+      "path": "pool-works/tasks/WINVERIFY1-board.md",
+      "git_blob": "786ceaf46a1558bc55739ae79b222b0aca836238",
+      "sha256": "9695b41b0b2aee918981eecbb6c7a504f2ab062d65dd4cb503b6e529e8fa77d7",
+      "reason": "original task book",
+      "task": "pool:WINVERIFY1"
+    },
+    {
+      "path": "pool-works/deliveries/WINVERIFY1.md",
+      "git_blob": "5d9446e3267ad1140a702eb395d921e953b36619",
+      "sha256": "5f5b5f2a1055a9f1b117baf705127e67eece1fb4e499bf6dea9874d88675cd69",
+      "reason": "original delivery",
+      "task": "pool:WINVERIFY1"
+    }
+  ],
+  "existing_preserved": [
+    {
+      "path": "reviews/2026-10-20-independent-io-review.md",
+      "match": "different; current file retained",
+      "current_sha256": "4672a950c67098a7ed75ee7517e937591fb2297cd063949b18138447b5206b34",
+      "original_sha256": "a3374fa75455ded7b5a7f90a100410508790a949d969ee83b673050b8196dce8",
+      "original_archive": "reviews/2026-10-22-task-recovery/different-source-originals/reviews/2026-10-20-independent-io-review.md"
+    },
+    {
+      "path": "reviews/2026-10-20-independent-compiler-stack-review.md",
+      "match": "different; current file retained",
+      "current_sha256": "14d546699127aa255cb3143cde8dc341513b09c02c1ac876a1099719dd96456f",
+      "original_sha256": "c4dafad4f69c24ae836a26cd5f3d73ae67d9b25f3ce72765e1bc989b5234edb7",
+      "original_archive": "reviews/2026-10-22-task-recovery/different-source-originals/reviews/2026-10-20-independent-compiler-stack-review.md"
+    },
+    {
+      "path": "cursor-works/lang/bootstrap/guest_source_catalog.dg",
+      "match": "different; current file retained",
+      "current_sha256": "7ffb8b0a377bc64c51b2846f08fc6e4dbecbe04fdaa84e359f2da18a34bab778",
+      "original_sha256": "d4e6abffdfbfec8b7af7cf669836f160045a6bb11b27a834ef8eb54703377408",
+      "original_archive": "reviews/2026-10-22-task-recovery/different-source-originals/cursor-works/lang/bootstrap/guest_source_catalog.dg"
+    },
+    {
+      "path": "cursor-works/lang/bootstrap/guest_source_catalog.md",
+      "match": "different; current file retained",
+      "current_sha256": "39d3d724ea6b45a17903ad812adf3f2a0fbc3d615fc71b9cf15638e4087f565d",
+      "original_sha256": "9d72013ee78345003fb7a2f450daf60cabe3376c67fb82b2d06ad5a27b2e838f",
+      "original_archive": "reviews/2026-10-22-task-recovery/different-source-originals/cursor-works/lang/bootstrap/guest_source_catalog.md"
+    },
+    {
+      "path": "cursor-works/tests/test_guest_source_catalog.py",
+      "match": "different; current file retained",
+      "current_sha256": "baacca610346159402964ba1870d8559ae33174ad0e08cbbab4213c3b5c150af",
+      "original_sha256": "4c2d29d575370c2e87e62d5519c2f5a6ec6a4b976444813982746b3c6ecc909e",
+      "original_archive": "reviews/2026-10-22-task-recovery/different-source-originals/cursor-works/tests/test_guest_source_catalog.py"
+    },
+    {
+      "path": "reviews/2026-10-20-independent-catalog-sink-review.md",
+      "match": "different; current file retained",
+      "current_sha256": "0edb4d24117a1d564500430351f326711a0b987075965cba44e0f7d55516d59e",
+      "original_sha256": "01320c9c2ba929bca1b3addb843e0afb9a070f4f32c18c82799dba204d7e49df",
+      "original_archive": "reviews/2026-10-22-task-recovery/different-source-originals/reviews/2026-10-20-independent-catalog-sink-review.md"
+    },
+    {
+      "path": "cursor-works/lang/bootstrap/guest_diagnostic_sink.dg",
+      "match": "different; current file retained",
+      "current_sha256": "f958d83310e1fe1ecfdf98bb60c0490c3003298da9ce44408b49add32f2ea53a",
+      "original_sha256": "46c59707abc44dd34cba0885d8f0a438d5c0108c99dc2db104a7ca1d2d864a20",
+      "original_archive": "reviews/2026-10-22-task-recovery/different-source-originals/cursor-works/lang/bootstrap/guest_diagnostic_sink.dg"
+    },
+    {
+      "path": "cursor-works/lang/bootstrap/guest_diagnostic_sink.md",
+      "match": "different; current file retained",
+      "current_sha256": "5fd48a18fed3c78a44bce04a452e2d673b5d85de0369caf20d24d3ce923596a1",
+      "original_sha256": "a5ab8761df2da5dc4c474c580c3cf1d751459c5ca01f3b32a3432a28e49b82e7",
+      "original_archive": "reviews/2026-10-22-task-recovery/different-source-originals/cursor-works/lang/bootstrap/guest_diagnostic_sink.md"
+    },
+    {
+      "path": "cursor-works/tests/test_guest_diagnostic_sink.py",
+      "match": "different; current file retained",
+      "current_sha256": "7b7504ee82c5b61c9b83be4186dc39ef5699b3aabc6222482fac5cf32ddb06ba",
+      "original_sha256": "daebb02001be539e4fe716c72abc46614d9b089328091c49b7e8d119c6ca03b5",
+      "original_archive": "reviews/2026-10-22-task-recovery/different-source-originals/cursor-works/tests/test_guest_diagnostic_sink.py"
+    },
+    {
+      "path": "cursor-works/lang/bootstrap/semantic_types.dg",
+      "match": "different; current file retained",
+      "current_sha256": "e28128c7a6c5c742d1a2caa9bbb4f89e5f83a8c265de151e885b5d65166f5271",
+      "original_sha256": "455e6804435e8047f631fae6b30d38828865ced9ea6c61ee0c16eefd1fb9cfde",
+      "original_archive": "reviews/2026-10-22-task-recovery/different-source-originals/cursor-works/lang/bootstrap/semantic_types.dg"
+    },
+    {
+      "path": "cursor-works/lang/bootstrap/semantic_stack.md",
+      "match": "different; current file retained",
+      "current_sha256": "23769692eb9b123ba26c9f2211db73266760d255a4d84d84d14a4b230379853f",
+      "original_sha256": "eb9fb4f51e8db0891caec25ec1948a9fd9c4da446dfcf5ab79925817167fd4b6",
+      "original_archive": "reviews/2026-10-22-task-recovery/different-source-originals/cursor-works/lang/bootstrap/semantic_stack.md"
+    },
+    {
+      "path": "cursor-works/tests/test_semantic_stack.py",
+      "match": "different; current file retained",
+      "current_sha256": "19a0513edba2fa5738245fceffb3f8aa50c22168a439c369d548c5b40d71f2c7",
+      "original_sha256": "882b8849b0a15211b1d2dc620f1fb4b1ba27cfb3fd6ae0a035a0135859fbc2de",
+      "original_archive": "reviews/2026-10-22-task-recovery/different-source-originals/cursor-works/tests/test_semantic_stack.py"
+    },
+    {
+      "path": "pool-works/lang/bootstrap/guest_source_path.dg",
+      "match": "different; current file retained",
+      "current_sha256": "e335dfc3d924d513068bc89f23edb6894a6fb7ab68e1948012c399565abf6f5d",
+      "original_sha256": "80e046debce67153b7a655f7b7161985c99b9ce6e2cf318f7e3edfc5115044ee",
+      "original_archive": "reviews/2026-10-22-task-recovery/different-source-originals/pool-works/lang/bootstrap/guest_source_path.dg"
+    },
+    {
+      "path": "pool-works/lang/bootstrap/guest_source_path.md",
+      "match": "different; current file retained",
+      "current_sha256": "299c1efd34440fc76d56d4900627cf4e9ebfb799bfed7adb8b841b7b7ce15b78",
+      "original_sha256": "319d28540ecf15a436110ae3860dfdc7cacd67450d8a3180c1e431dff99d171e",
+      "original_archive": "reviews/2026-10-22-task-recovery/different-source-originals/pool-works/lang/bootstrap/guest_source_path.md"
+    },
+    {
+      "path": "pool-works/tests/test_guest_source_path.py",
+      "match": "different; current file retained",
+      "current_sha256": "5a47d424460068efa83e93dbaa1c9649ec9a74550b8ae6c9c205ede2637e0d7f",
+      "original_sha256": "9cdeec44b23c8e5aee199374ca89fbfca770da11a6f50fd3d7e4d72f9403b466",
+      "original_archive": "reviews/2026-10-22-task-recovery/different-source-originals/pool-works/tests/test_guest_source_path.py"
+    },
+    {
+      "path": "pool-works/lang/bootstrap/guest_source_reader.dg",
+      "match": "different; current file retained",
+      "current_sha256": "1be8b093bf1a54e36f2e6f81e288e3e29173b60d5c7544f10c5233516e159498",
+      "original_sha256": "131afe98052cd8c28ffbbb53b3c1ddadccb8f87196b4a4f9f2084240f7c93db4",
+      "original_archive": "reviews/2026-10-22-task-recovery/different-source-originals/pool-works/lang/bootstrap/guest_source_reader.dg"
+    },
+    {
+      "path": "pool-works/lang/bootstrap/guest_source_reader.md",
+      "match": "different; current file retained",
+      "current_sha256": "ec328f097a6dcf261f4d37aafbb77e502e433aeda861f858bb319ac37366b129",
+      "original_sha256": "55a46f3b39f11ee5467a30ae10be3dfa0843bd4fafec544104997f4adb491cc5",
+      "original_archive": "reviews/2026-10-22-task-recovery/different-source-originals/pool-works/lang/bootstrap/guest_source_reader.md"
+    },
+    {
+      "path": "pool-works/tests/test_guest_source_reader.py",
+      "match": "different; current file retained",
+      "current_sha256": "ef269547205d77f7216a1d54027d00a1c8189f516aaa64c76f1a45a655327b5d",
+      "original_sha256": "3b286a2c8823f1212357e50254a81e8a5d3d811c510c152bfb3487b5366bbb6c",
+      "original_archive": "reviews/2026-10-22-task-recovery/different-source-originals/pool-works/tests/test_guest_source_reader.py"
+    },
+    {
+      "path": "pool-works/lang/bootstrap/guest_compile_memory.dg",
+      "match": "different; current file retained",
+      "current_sha256": "f128c44001a15dc4b139d19edc48f8020b77832eb7cd37db7f2c3a89a17853ec",
+      "original_sha256": "0fea3cbb9e30ebbc9a51a0901d7517f47b713bd68380b9124066aaa25036831d",
+      "original_archive": "reviews/2026-10-22-task-recovery/different-source-originals/pool-works/lang/bootstrap/guest_compile_memory.dg"
+    },
+    {
+      "path": "pool-works/lang/bootstrap/guest_compile_memory.md",
+      "match": "different; current file retained",
+      "current_sha256": "a1c1d8900dd2ea674e19ee7b9517962f15b5d18efd318402476902ac3a80d910",
+      "original_sha256": "19d24177b05831071f37726cdec9e152c87cb096341b15c052b0b8d373974bda",
+      "original_archive": "reviews/2026-10-22-task-recovery/different-source-originals/pool-works/lang/bootstrap/guest_compile_memory.md"
+    },
+    {
+      "path": "pool-works/tests/test_guest_compile_memory.py",
+      "match": "different; current file retained",
+      "current_sha256": "a78a843894ab4edbcfeb099891c7074b079725eb4443dd001c9cc8ee81cdb83e",
+      "original_sha256": "61a024f9b031004b2b859eb6ca461dac918116fc17c52bd05d4ba020c6939475",
+      "original_archive": "reviews/2026-10-22-task-recovery/different-source-originals/pool-works/tests/test_guest_compile_memory.py"
+    },
+    {
+      "path": "pool-works/lang/bootstrap/guest_compile_image.dg",
+      "match": "different; current file retained",
+      "current_sha256": "5d69356d09ba92336377888fcdc38becf5eeb83d4940546b76fc37c5796030e7",
+      "original_sha256": "c8df3c83f5053a727f42b70adc24217bede19e73bc79806f9cd2d4049f4c28eb",
+      "original_archive": "reviews/2026-10-22-task-recovery/different-source-originals/pool-works/lang/bootstrap/guest_compile_image.dg"
+    },
+    {
+      "path": "pool-works/lang/bootstrap/guest_compile_image.md",
+      "match": "different; current file retained",
+      "current_sha256": "ad336fc5a8472fe8eff94793d8e1c98d020348fda3df7f517f72468db798f67d",
+      "original_sha256": "52df180449fbb198005c0172aad3fd4d9218ba3baa9bf1e95406f9c9fb0ca682",
+      "original_archive": "reviews/2026-10-22-task-recovery/different-source-originals/pool-works/lang/bootstrap/guest_compile_image.md"
+    },
+    {
+      "path": "pool-works/tests/test_guest_compile_image.py",
+      "match": "different; current file retained",
+      "current_sha256": "841f4200272041fd1e5916fa2f1263266ba9adead61a65152c458008ffb6a3d8",
+      "original_sha256": "552a583143b2aaf693e9462d2eaf4979c65e974e19ccdb5fd92bcb0d9ee06c9b",
+      "original_archive": "reviews/2026-10-22-task-recovery/different-source-originals/pool-works/tests/test_guest_compile_image.py"
+    },
+    {
+      "path": "pool-works/lang/bootstrap/guest_artifact_commit.dg",
+      "match": "different; current file retained",
+      "current_sha256": "4652c4b99df7bb443fe9bc7c96cf18b2720f88f35e203c97ac6064925588aa6e",
+      "original_sha256": "0264475d79e0b38cbef38bfe195c1e1f175ec1d3f95c9840b6181ac1c891dcf8",
+      "original_archive": "reviews/2026-10-22-task-recovery/different-source-originals/pool-works/lang/bootstrap/guest_artifact_commit.dg"
+    },
+    {
+      "path": "pool-works/lang/bootstrap/guest_artifact_commit.md",
+      "match": "different; current file retained",
+      "current_sha256": "46b5be8bb9c3eb98892626cc8c057b03b49d6bf5271ffd11b5555fce7fcbdc5b",
+      "original_sha256": "cf430a4e5e1273d8e383ece9648d10584897fe9fd370724cd22d5080e2cfb342",
+      "original_archive": "reviews/2026-10-22-task-recovery/different-source-originals/pool-works/lang/bootstrap/guest_artifact_commit.md"
+    },
+    {
+      "path": "pool-works/tests/test_guest_artifact_commit.py",
+      "match": "different; current file retained",
+      "current_sha256": "6a1ca77eb4549eddda8649a246e4397df3eca0c38175cd84f05d63941c7a9c28",
+      "original_sha256": "370022da1981e09ef5bdf77ad05a27edd6959e0ec34b35a8e57c4b6c1bff72a6",
+      "original_archive": "reviews/2026-10-22-task-recovery/different-source-originals/pool-works/tests/test_guest_artifact_commit.py"
+    },
+    {
+      "path": "pool-works/mcp-pool/dongos_coordination/mcp_server.py",
+      "match": "different; current file retained",
+      "current_sha256": "5417cb1321b84043a81b93589e1243b591044b93d21ca4169c01c6a5b4ca6a51",
+      "original_sha256": "ee304ba111591fda68937ba4ee2dc163c59d325d9752425e9c56f5179e63316c",
+      "original_archive": "reviews/2026-10-22-task-recovery/different-source-originals/pool-works/mcp-pool/dongos_coordination/mcp_server.py"
+    },
+    {
+      "path": "pool-works/mcp-pool/dongos_coordination/mcp_config.py",
+      "match": "different; current file retained",
+      "current_sha256": "a91518fed911f286db1b92e5087772513a18b0a411fa1f01bae51c5b176b3c8f",
+      "original_sha256": "33f07f9ab903d3f19cd13e7f1a060ef0290ab7acb8c85aa7004cdb1db8824d86",
+      "original_archive": "reviews/2026-10-22-task-recovery/different-source-originals/pool-works/mcp-pool/dongos_coordination/mcp_config.py"
+    },
+    {
+      "path": "pool-works/tests/test_mcp_pool.py",
+      "match": "different; current file retained",
+      "current_sha256": "e488f4aff9a7fb071e1537d22504213f424688b77dfc73efc26589d865e7189d",
+      "original_sha256": "8acd63060666b95ca52956fbafd10bbd1f5c1d9c17098667c79d5029734d5e65",
+      "original_archive": "reviews/2026-10-22-task-recovery/different-source-originals/pool-works/tests/test_mcp_pool.py"
+    },
+    {
+      "path": "pool-works/tests/test_mcp_pool_config.py",
+      "match": "different; current file retained",
+      "current_sha256": "017a28861507cb5cd594dff0c086405113b27da730da203251ddc77fdea3d021",
+      "original_sha256": "8235e24abdd3fc68f8d51689dd8cf996d4cdfcbb827f1a35c24e3459f176d0d4",
+      "original_archive": "reviews/2026-10-22-task-recovery/different-source-originals/pool-works/tests/test_mcp_pool_config.py"
+    },
+    {
+      "path": "pool-works/mcp-pool/dongos_coordination/docs/MCP.md",
+      "match": "different; current file retained",
+      "current_sha256": "32030a82a27295b282bbf6e02156f4cef881ec3d10e98592b90f171b71763c4d",
+      "original_sha256": "cd966edeca07d0b55e707f4be5638d5d7f9c9db09f5697ff15e61f6da1661060",
+      "original_archive": "reviews/2026-10-22-task-recovery/different-source-originals/pool-works/mcp-pool/dongos_coordination/docs/MCP.md"
+    },
+    {
+      "path": "pool-works/mcp-pool/README.md",
+      "match": "different; current file retained",
+      "current_sha256": "f58c9232ede99ff4065229288f4988fd628a927b20c9483c2b1ec9fbbcbbee42",
+      "original_sha256": "4e8ef83e07acbf23633993616c993829bfb3a40e8df541176905a4ba4c26e673",
+      "original_archive": "reviews/2026-10-22-task-recovery/different-source-originals/pool-works/mcp-pool/README.md"
+    },
+    {
+      "path": "pool-works/win-verify/dongos_coordination/runner.py",
+      "match": "different; current file retained",
+      "current_sha256": "4a27a084b57db7864eea77913d918d77f43ec3d7c077470baa994417013fe6e5",
+      "original_sha256": "40504e6f0ca2beca2d6e1a08b9c91735d978529854c575f3a4590cc325b08abe",
+      "original_archive": "reviews/2026-10-22-task-recovery/different-source-originals/pool-works/win-verify/dongos_coordination/runner.py"
+    },
+    {
+      "path": "pool-works/tests/test_windows_verification_finish.py",
+      "match": "different; current file retained",
+      "current_sha256": "beb896f7b0161c9f269014f4c75334cffd644cc94e3a37143cbd367063c4be86",
+      "original_sha256": "6d756663e59ea4cb0a1cfd21b55372cebefc2bb61d7b3da422fc3a37a310fca1",
+      "original_archive": "reviews/2026-10-22-task-recovery/different-source-originals/pool-works/tests/test_windows_verification_finish.py"
+    },
+    {
+      "path": "reviews/2026-10-20-independent-compact-encoder-review.md",
+      "match": "different; current file retained",
+      "current_sha256": "bd514e50a1346de6f37016c73e9d78db361c176118a49845faefdf7bb9459bad",
+      "original_sha256": "9a09eb4c588dea37de77fa6dbe5b235edadd07a6d52cca5912393c2af18eb9f4",
+      "original_archive": "reviews/2026-10-22-task-recovery/different-source-originals/reviews/2026-10-20-independent-compact-encoder-review.md"
+    },
+    {
+      "path": "reviews/2026-10-20-independent-compiler-job-host-review.md",
+      "match": "different; current file retained",
+      "current_sha256": "7aa3618870774831937bdc24468d00d6d3e939a5b613fe3dafa94bfbc5c7b64f",
+      "original_sha256": "4985a12dcb991598bf9bbc87eb3ef26fd267ba164b416fcc9f501a1657485ef7",
+      "original_archive": "reviews/2026-10-22-task-recovery/different-source-originals/reviews/2026-10-20-independent-compiler-job-host-review.md"
+    },
+    {
+      "path": "reviews/2026-10-20-independent-compiler-job-review.md",
+      "match": "different; current file retained",
+      "current_sha256": "48f53d4a1b3bf7da343e55163167f4a97f6e3175e72db394c297407dda0bffee",
+      "original_sha256": "7c4164bd222590a55e264f2017a504c9a2e5821da681ade4aa2ddd4abe4a85c0",
+      "original_archive": "reviews/2026-10-22-task-recovery/different-source-originals/reviews/2026-10-20-independent-compiler-job-review.md"
+    },
+    {
+      "path": "reviews/2026-10-20-independent-compiler-launch-review.md",
+      "match": "different; current file retained",
+      "current_sha256": "adb7f5ca5b3aa4024e9c2875dd98bba7d2bd06486289fd792c7fc50ebecb8bd5",
+      "original_sha256": "2ce4988ac07f48fb795d7e91361f1ab9942d02b52cd329b693904cdde5c3d00f",
+      "original_archive": "reviews/2026-10-22-task-recovery/different-source-originals/reviews/2026-10-20-independent-compiler-launch-review.md"
+    },
+    {
+      "path": "reviews/2026-10-20-independent-p5-arena-review.md",
+      "match": "different; current file retained",
+      "current_sha256": "0d8f061cc788b05140542f88af6e38affbced705107938e7e9494d3d1e86718a",
+      "original_sha256": "05f6220f6449c43b58545a9741a5d877cf350757a1bd7b3472db226cc56028ce",
+      "original_archive": "reviews/2026-10-22-task-recovery/different-source-originals/reviews/2026-10-20-independent-p5-arena-review.md"
+    },
+    {
+      "path": "reviews/2026-10-20-independent-stack-parallel-review.md",
+      "match": "different; current file retained",
+      "current_sha256": "4cd1a0d4bff5652526f8a00668868713545d6dc065f37132df43af72ec13d3fa",
+      "original_sha256": "5720be43bf026b554ab8c35dcb0c0354f4d2eea3bbf892229966f87b1f8a4f36",
+      "original_archive": "reviews/2026-10-22-task-recovery/different-source-originals/reviews/2026-10-20-independent-stack-parallel-review.md"
+    }
+  ],
+  "conflicting_originals_archived": [
+    {
+      "identity": "local NASM CX6 -> codex:CXNASM3",
+      "source_commit": "4e1fede1cea3f6deeb86ca17561dfc4eb07edac5",
+      "source_path": "coordination/dongos_works/codex-works/tasks/CX6-board.md",
+      "archive": "reviews/2026-10-22-task-recovery/cx6-local-nasm/CX6-board.md",
+      "sha256": "3211306847d07e2b6c620325ca5e5dc5feda7afea1891d31a8dcaa9c42188879"
+    },
+    {
+      "identity": "local NASM CX6 -> codex:CXNASM3",
+      "source_commit": "4e1fede1cea3f6deeb86ca17561dfc4eb07edac5",
+      "source_path": "coordination/dongos_works/codex-works/deliveries/CX6.md",
+      "archive": "reviews/2026-10-22-task-recovery/cx6-local-nasm/CX6.md",
+      "sha256": "d174a8c2a6ff0b5167293dce7f23fa644ad7a0f93f33ff2d74b88e2cdfefd148"
+    },
+    {
+      "identity": "local NASM CX6 -> codex:CXNASM3",
+      "source_commit": "4e1fede1cea3f6deeb86ca17561dfc4eb07edac5",
+      "source_path": "coordination/dongos_works/state/events/codex/CX6.jsonl",
+      "archive": "reviews/2026-10-22-task-recovery/cx6-local-nasm/CX6.jsonl",
+      "sha256": "a7fac934d9a4ca487c60256882a2d9081f91d32d3f12cf6042d0a4510689f192"
+    }
+  ],
+  "task_contracts": [
+    {
+      "id": "codex:CX10",
+      "live_rev": 6,
+      "source_rev": 6,
+      "status": "integrated",
+      "contract_fields_match": true,
+      "original_document_legacy_hash_matches": true
+    },
+    {
+      "id": "codex:CX12",
+      "live_rev": 9,
+      "source_rev": 9,
+      "status": "integrated",
+      "contract_fields_match": true,
+      "original_document_legacy_hash_matches": true
+    },
+    {
+      "id": "codex:CX13",
+      "live_rev": 6,
+      "source_rev": 6,
+      "status": "integrated",
+      "contract_fields_match": true,
+      "original_document_legacy_hash_matches": true
+    },
+    {
+      "id": "codex:CX14",
+      "live_rev": 2,
+      "source_rev": 2,
+      "status": "in_progress",
+      "contract_fields_match": true,
+      "original_document_legacy_hash_matches": true
+    },
+    {
+      "id": "codex:CX15",
+      "live_rev": 4,
+      "source_rev": 4,
+      "status": "submitted",
+      "contract_fields_match": true,
+      "original_document_legacy_hash_matches": true
+    },
+    {
+      "id": "codex:CX6",
+      "live_rev": 7,
+      "source_rev": 6,
+      "status": "integrated",
+      "contract_fields_match": true,
+      "original_document_legacy_hash_matches": true
+    },
+    {
+      "id": "codex:CX7",
+      "live_rev": 12,
+      "source_rev": 12,
+      "status": "integrated",
+      "contract_fields_match": true,
+      "original_document_legacy_hash_matches": true
+    },
+    {
+      "id": "codex:CX8",
+      "live_rev": 6,
+      "source_rev": 6,
+      "status": "integrated",
+      "contract_fields_match": true,
+      "original_document_legacy_hash_matches": true
+    },
+    {
+      "id": "cursor:CR45",
+      "live_rev": 7,
+      "source_rev": 7,
+      "status": "integrated",
+      "contract_fields_match": true,
+      "original_document_legacy_hash_matches": true
+    },
+    {
+      "id": "cursor:CR46",
+      "live_rev": 7,
+      "source_rev": 7,
+      "status": "integrated",
+      "contract_fields_match": true,
+      "original_document_legacy_hash_matches": true
+    },
+    {
+      "id": "cursor:CR47",
+      "live_rev": 13,
+      "source_rev": 13,
+      "status": "integrated",
+      "contract_fields_match": true,
+      "original_document_legacy_hash_matches": true
+    },
+    {
+      "id": "pool:GUEST1",
+      "live_rev": 9,
+      "source_rev": 9,
+      "status": "integrated",
+      "contract_fields_match": true,
+      "original_document_legacy_hash_matches": true
+    },
+    {
+      "id": "pool:GUEST2",
+      "live_rev": 6,
+      "source_rev": 6,
+      "status": "integrated",
+      "contract_fields_match": true,
+      "original_document_legacy_hash_matches": true
+    },
+    {
+      "id": "pool:GUEST3",
+      "live_rev": 9,
+      "source_rev": 9,
+      "status": "integrated",
+      "contract_fields_match": true,
+      "original_document_legacy_hash_matches": true
+    },
+    {
+      "id": "pool:GUEST4",
+      "live_rev": 13,
+      "source_rev": 13,
+      "status": "integrated",
+      "contract_fields_match": true,
+      "original_document_legacy_hash_matches": true
+    },
+    {
+      "id": "pool:GUEST5",
+      "live_rev": 16,
+      "source_rev": 16,
+      "status": "integrated",
+      "contract_fields_match": true,
+      "original_document_legacy_hash_matches": true
+    },
+    {
+      "id": "pool:MCPPOOL1",
+      "live_rev": 8,
+      "source_rev": 8,
+      "status": "integrated",
+      "contract_fields_match": true,
+      "original_document_legacy_hash_matches": true
+    },
+    {
+      "id": "pool:WINVERIFY1",
+      "live_rev": 9,
+      "source_rev": 9,
+      "status": "integrated",
+      "contract_fields_match": true,
+      "original_document_legacy_hash_matches": true
+    }
+  ],
+  "status_mutations": []
+}

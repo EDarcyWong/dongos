@@ -1,5 +1,9 @@
 # L2 / L3 实施与验收记录
 
+2026-10-22 控制流接续（L3FLOWINT1）：已验收的普通 defer 与 range/array/slice for、bool match 在生产 lower_program 真实合并，for 保存/恢复独立清理边界，跨 match arm 的退出不会清外层注册。永久主线方法10项、defer6项、for9项及原生ELF宿主执行由独立集成门禁执行复验；原候选、交付和历史证据保留，实际结果以协调器原任务及独审为准。G5 保留原八探针并新增四控制流探针，方法/defer/SysV/for三类/bool-match七条路径必须实际原生执行；原enum/error/try/orelse/Win64及函数指针、内存内建、asm、完整诊断/ABI和更广defer形式仍未闭合，不关闭整体L3/L3A/G5，不外推历史G4/G6到新源码。
+
+2026-10-22 语言线增量：`L3METHOD1` R1 前端已集成；`L3METHODLOW1` 将结构体指针方法体和 `get(p)` / `p.get()` 两种调用接入真实整程序 lower/NASM 路径。方法调用读取语义选中的 FUNCTION 声明，接收者单次顺序求值，符号区分模块、名义接收者和同名自由函数。永久测试 `lang.tests.test_l3_method_native` 同时覆盖 seed 差分、真实坏 Dong 负控及既有全局/聚合/SysV 回归，独立复验及指纹记录见协调器原任务。G5 的 method 与显式 SysV 夹具要求原生执行通过；enum/error/try/orelse/defer/Win64 仍保留为缺口，完整语言/ABI/诊断门禁继续 partial。已有 G4/G6 记录保持其原源码与 profile 范围。
+
 最新接续（2026-10-21）：G6代码合并/同步检查点19e1a19（PR#11于2026-10-21 02:20:34合并、2026-10-21 02:21:50本地快进同步），完整SHA `19e1a1982de0d7ebc57eea0b851d968e01b40e07`。G6在现有runtime5/compiler_job隔离profile及49模块自编译闭包内通过真实同盘双启及两份独审；L3C该范围complete，整体L3/L3A因G5仍partial。详见[执行/合并报告](../../coordination/dongos_works/reviews/2026-10-21-g6-ci-execution.md)及[整体任务图](../../coordination/dongos_works/progress-map.md)。该SHA是代码检查点，后续文档提交可推进HEAD。
 
 ## L3 完成路径与当前门禁（2026-10-21）
@@ -13,7 +17,7 @@
 | G2 原生前端入口 | 源码目录由 Dong 连续执行 modules.load → names.collect → binding.check → analyze_program；有界调用方内存，成功图可供后端使用，诊断准确定位源码/行列 | 主线宿主 frontend/diagnostics/CLI 已接通；PR8 已有 GUEST1/2、CR45/46、CX6 的客体输入、目录、诊断与真实 H_READ 适配，并保存独审和正式复验。实现已随PR#8合入并同步本机；异机任务记录仍单独保留，不自动导入当前调度库 |
 | G3 通用源码到后端 | 同一成功语义图降为类型化 IR，再由 Dong 生成完整 NASM；未支持语法失败，不借宿主生成 IR/汇编正文 | 主线 compiler_driver 已接通 program_ir → lower_program → nasm_program；PR8 的 GUEST4、CX12、CX13 又接通原生汇编器和完整单 arena 编译作业，已有独审、正式复验及分支集成历史。当前为显式语言子集，未关闭 G5 |
 | G4 宿主编译器固定点 | seed 编译董编译器得 stage1；stage1 再编译自身得 stage2，再生成下一代；同源、同选项、规范路径下规定 NASM/布局/清单逐字一致，并运行生成的编译器与差分语言测试 | 主线已有 clean-debug/packed-debug 宿主固定点记录；PR8 的 CX13 保存两种 seed 模式下原生 ELF 固定点、独审与正式通过记录，历史四份 ELF 均为 1,892,632 字节且逐字一致；新27字节入口桥在50ab7cf的Linux CI中复验，两seed模式四份ELF均1,892,648字节且逐字一致（SHA256 e7f2424dc2010cf5b66e32c14faafec87f1f0f76051c04bd4e9eee050d34c9f2）。CX15 最终宿主修正也已正式复验通过，状态仍 submitted 待登记。恢复原证据与任务历史，不因本机缺 build 回执退回未实现；更广语言差分仍归 G5 |
-| G5 完整语言覆盖 | 对既有活动编译器支持的语言、ABI、诊断、检查模式逐项有可执行差分证据；首个能自编译的子集不能代替完整功能 | 未完成；lower_program 明确拒绝可变全局、方法、错误/枚举声明、外部声明及未支持构造；try/orelse、defer lowering、原子/asm、完整 ABI 与诊断等仍需逐项差分验证。部分静态 struct/array 已支持，完整聚合覆盖另验 |
+| G5 完整语言覆盖 | 对既有活动编译器支持的语言、ABI、诊断、检查模式逐项有可执行差分证据；首个能自编译的子集不能代替完整功能 | 未完成；受限可变全局、结构体指针方法、scalar/pointer SysV 外部声明/定义、普通defer、for和bool match已有增量接线与定向测试；错误/枚举声明、try/orelse、函数指针、内存内建/原子/asm、Win64、完整 ABI/诊断及更广defer仍需逐项差分验证。部分静态 struct/array 已支持，完整聚合覆盖另验 |
 | G6 DongOS 自编译 | 从 FAT32 读取真实源码，客体生成并 FLUSH 新 ELF，运行下一阶段，独立比较规定产物，同盘重启后核对持久结果 | 已通过，仅限现有runtime5/compiler_job隔离profile及49模块自编译闭包：run39467503226 attempt1真实两启，完整SEED/STAGE1/STAGE2各1,892,648字节且与宿主逐字一致；Git/source/fixture绑定、物理隔离、FLUSH、128页表退休和持久性均经双独审。PR#11已合并/同步为代码检查点19e1a19，G5仍未完成；旧run-cc7、首轮超时及第二轮解析失败保留历史 |
 
 G4 的固定点是同一 Dong 编译器不同代之间的规定产物一致，不要求两个结构不同的 Python/Dong 后端未经规范就输出相同汇编文本。Python seed 与 Dong 后端的语言行为一致仍须单独差分验证。客体 NASM 文本一致是有用的中间证据，不能代替 G6 的 ELF、执行、FLUSH 和重启门禁。
@@ -39,7 +43,7 @@ PR8 保存的原任务完成历史快照如下；状态指原开发机/分支归
 ### 当前实证约束
 
 - 旧 semantic_types 闭包的 13 模块、224 函数是此前范围；主线早期记录扩展为 49 模块编译器闭包，PR8 的 CX13 又覆盖完整编译作业闭包。binding.check 的 SysV 参数展开为 20 字，modules.load/analyze_program 为 18 字，analyze 为 17 字；当前 nasm_program 已使用无 16 字固定上限的 `sysv_integer_args.plan` 与调用方工作区，不能把旧整函数组合限制套到通用后端。
-- lower_program/nasm_program 已支持受限结构体/数组构造及复制、重复数组、切片/字符串、只读静态 scalar/struct/array 和地址重定位。聚合局部对齐仍限 16，未支持的静态初始化明确拒绝；可变全局、方法、错误/枚举、外部声明及其他完整语言缺口仍按 G5 保留，不能把能自编译的闭包当作全语言覆盖。
+- lower_program/nasm_program 已支持受限结构体/数组构造及复制、重复数组、切片/字符串、只读静态 scalar/struct/array 和地址重定位；后续增量补齐受限可变全局、结构体指针方法、scalar/pointer SysV 外部声明/定义、普通defer、for及bool match。聚合局部对齐仍限 16，未支持的静态初始化明确拒绝；错误/枚举、try/orelse、函数指针、内存内建/asm、Win64及其它完整语言/ABI/诊断缺口仍按 G5 保留，不能把能自编译的闭包当作全语言覆盖。
 - lower_program 按生命周期复用临时槽，nasm_program 把函数帧与 outgoing 区合计限制在 4080 字节内。主线早期 16 KiB 栈失败记录仍是当时事实；PR8 已通过 CX7 的 64 KiB 专用栈和 CR47 优化处理该开发缺口，CX13 的 seed/native 全流水线均在受保护 64 KiB 栈及单 56 MiB arena 内执行通过。其记录的 frontend/retained/backend 字节分别为 57,144,296 / 27,228,976 / 20,702,968，按阶段独占复用，不能相加当作同时峰值。
 - 动态 EXEC 文件上限仍为 **2 MiB**（`services/lib/process_abi.dg:MAX_EXEC_IMAGE`）；下文 256 KiB 是历史快照。本地主线普通用户栈仍为 4 页（16 KiB），PR8 的 `memory.stage_compiler`/`stage_compiler_random` 固定使用 16 页（64 KiB）及双 guard，普通路径不变。CX10 启用既有 16384 帧（64 MiB）用户配额，专用栈也计入其中；本轮两启已实际核验16栈页、14336 arena页与源码/ELF/元数据物理不重叠，每启633份live转储独审通过。
 - 普通 EXEC 的 FS_RIGHTS=395 仍仅 STAT/READ/LIST/DUP/OPEN。PR8 已用显式 P5 compiler profile 解决专用启动和输出接线：controller slot0 使用已有文件根授权，core slot3 无文件、进程、电源 handle，借入源码只读 NX，执行期间 controller 阻塞；core 仅允许退出 syscall 255。`compiler_artifact` 使用已授权 token 发 H_WRITE/H_SYNC，不能再把“普通 EXEC 只读”误写成该专用实现不存在。

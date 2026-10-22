@@ -1,0 +1,33 @@
+{
+  "project": "dongos",
+  "resolved_live_identity": {
+    "id": "codex:CX6",
+    "meaning": "[L3] 将有界源码读取器接入已有DongOS文件句柄",
+    "source_commit": "50ab7cf9cde101691774a8480bdb7fcc07c766be",
+    "source_paths": [
+      "services/lib/compiler_source.dg",
+      "lang/tests/test_guest_files_reader.py"
+    ],
+    "book": "codex-works/tasks/CX6-board.md",
+    "delivery": "codex-works/deliveries/CX6.md",
+    "original_events": "reviews/2026-10-22-task-recovery/cx6-reader-original/CX6.jsonl"
+  },
+  "separate_local_nasm_identity": {
+    "archived_local_label": "CX6-NASM-20261020",
+    "meaning": "[P0/L3] 修复NASM 3分组帮助的警告能力探测并复核集成入口",
+    "actual_successor_task": "codex:CXNASM3",
+    "original_source": "4e1fede:coordination/dongos_works/state/tasks/codex/CX6.json",
+    "archive_directory": "reviews/2026-10-22-task-recovery/cx6-local-nasm",
+    "original_state": "paused and archived; never independently accepted as reader CX6"
+  },
+  "event_policy": "保留数据库全部旧事件，不删除或合成历史；两条同号来源的原支事件另行逐字存档，依照源提交/契约/路径解释。原NASM维护的真实验收以CXNASM3为准。",
+  "restored_books_match_live_contract": true,
+  "current_reader_and_nasm_tests": {
+    "command": "python -m unittest -v lang.tests.test_guest_files_reader lang.tests.test_nasm_compatibility",
+    "tests": 11,
+    "skips": 0,
+    "exit_code": 0,
+    "elapsed_seconds": 15.131,
+    "interpretation": "源码读取器与NASM能力探测分别运行，通过不互相冒充；未修改原验收指纹或重复验收历史组件。"
+  }
+}

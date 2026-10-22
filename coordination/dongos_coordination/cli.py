@@ -20,6 +20,12 @@ def main(argv=None):
         commands.add_parser(command)
     timing = commands.add_parser('timing', help='只读查询完整任务时间线及每轮办理/返修时长')
     timing.add_argument('task_id', help='完整任务编号，如claude:C43')
+    identity = commands.add_parser('resolve-identity', help='按绑定原文/事件SHA的审查清单分离同号异义历史，不删除事件或授予验收')
+    identity.add_argument('task_id')
+    identity.add_argument('--rev', required=True, type=int)
+    identity.add_argument('--manifest', required=True)
+    identity.add_argument('--sha256', required=True)
+    identity.add_argument('--note', required=True)
     for name, help_text in (
             ('recover-state', '按逐项审查证据恢复空库历史状态，默认仅预览'),
             ('reconcile-state', '按逐项审查证据协调落后状态库并保留历史，默认仅预览')):
@@ -79,7 +85,13 @@ def main(argv=None):
         print(json.dumps(result, ensure_ascii=False, indent=2))
         return 0
     store = registry.store(args.project) if args.command not in ('serve', 'stop') else None
-    if args.command == 'timing':
+    if args.command == 'resolve-identity':
+        if not any(arg == '--project' or arg.startswith('--project=') for arg in (sys.argv[1:] if argv is None else argv)):
+            parser.error('resolve-identity需要显式--project')
+        result = store.change(args.task_id, args.rev, 'resolve_identity', args.note,
+                              dict(project=args.project, manifest=args.manifest, sha256=args.sha256))
+        store.export()
+    elif args.command == 'timing':
         task = store.get(args.task_id)
         result = dict(project=args.project, task_id=task['id'], rev=task['rev'],
                       status=task['status'], timing=store.timing(task))

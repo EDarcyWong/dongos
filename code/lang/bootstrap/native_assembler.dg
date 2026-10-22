@@ -16,10 +16,10 @@ fn equal(a:[]const u8,b:[]const u8)bool{if a.len!=b.len{return false;}var i:usiz
 unsafe fn fail(s:*State,status:u64,detail:u64)bool{unsafe{if (*s).status==0{(*s).status=status;(*s).detail=detail;}return false;}}
 fn space(b:u8)bool{return b==32||b==9||b==13;}
 fn namechar(b:u8)bool{return (b>=65&&b<=90)||(b>=97&&b<=122)||(b>=48&&b<=57)||b==95||b==46;}
-fn identifier(name:[]const u8)bool{return name.len!=0&&((name[0]>=65&&name[0]<=90)||(name[0]>=97&&name[0]<=122)||name[0]==95);}
+fn identifier(name:[]const u8)bool{var first:usize=0;if name.len!=0&&name[0]==36{first=1;}return first<name.len&&((name[first]>=65&&name[first]<=90)||(name[first]>=97&&name[first]<=122)||name[first]==95);}
 unsafe fn skip(s:*State)void{unsafe{while (*s).at<(*s).end&&space((*s).source[(*s).at]){(*s).at+=1;}}}
 unsafe fn view(s:*const State,start:usize,length:usize)[]const u8{unsafe{return slice_from_raw_parts((*s).source.ptr+start,length);}}
-unsafe fn word(s:*State)[]const u8{unsafe{skip(s);let first=(*s).at;while (*s).at<(*s).end&&namechar((*s).source[(*s).at]){(*s).at+=1;}return view(s,first,(*s).at-first);}}
+unsafe fn word(s:*State)[]const u8{unsafe{skip(s);let first=(*s).at;if (*s).at<(*s).end&&(*s).source[(*s).at]==36{(*s).at+=1;}while (*s).at<(*s).end&&namechar((*s).source[(*s).at]){(*s).at+=1;}return view(s,first,(*s).at-first);}}
 unsafe fn token(s:*State,b:u8)bool{unsafe{skip(s);if (*s).at<(*s).end&&(*s).source[(*s).at]==b{(*s).at+=1;return true;}return false;}}
 unsafe fn end(s:*State)bool{unsafe{skip(s);return (*s).at==(*s).end;}}
 unsafe fn number(s:*State,out:*u64)bool{unsafe{
@@ -41,13 +41,15 @@ fn register(name:[]const u8,out:*Operand)bool{unsafe{
 unsafe fn hash(s:*const State,start:usize,length:usize)u64{unsafe{var h:u64=14695981039346656037;var i:usize=0;while i<length{h=wrapping_mul(h^((*s).source[start+i]as u64),1099511628211);i+=1;}return h;}}
 unsafe fn lookup(s:*State,start:usize,length:usize,insert:bool)usize{unsafe{
  if !identifier(view(s,start,length)){fail(s,SYNTAX,56);return NONE;}
- if length==0||(*(*s).w).table.len==0{fail(s,CAPACITY,3);return NONE;}var at=(hash(s,start,length)%(*(*s).w).table.len)as usize;var probes:usize=0;
+ // NASM's leading $ escapes a keyword; it is not part of symbol identity.
+ var first=start;var count=length;if (*s).source[first]==36{first+=1;count-=1;}
+ if (*(*s).w).table.len==0{fail(s,CAPACITY,3);return NONE;}var at=(hash(s,first,count)%(*(*s).w).table.len)as usize;var probes:usize=0;
  while probes<(*(*s).w).table.len{let index=(*(*s).w).table[at];if index==NONE{
    if !insert{return NONE;}if (*s).label_count==(*(*s).w).labels.len{fail(s,CAPACITY,4);return NONE;}
    let id=(*s).label_count;var offset=(*s).text;if (*s).section==2||(*s).section==3{offset=(*s).data;}
-   (*(*s).w).labels[id]=Label{start:start,length:length,section:(*s).section,offset:offset};(*(*s).w).table[at]=id;(*s).label_count+=1;return id;
+   (*(*s).w).labels[id]=Label{start:first,length:count,section:(*s).section,offset:offset};(*(*s).w).table[at]=id;(*s).label_count+=1;return id;
   }
-  let label=(*(*s).w).labels[index];if equal(view(s,start,length),view(s,label.start,label.length)){if insert{fail(s,SYMBOL,5);return NONE;}return index;}
+  let label=(*(*s).w).labels[index];if equal(view(s,first,count),view(s,label.start,label.length)){if insert{fail(s,SYMBOL,5);return NONE;}return index;}
   at+=1;if at==(*(*s).w).table.len{at=0;}probes+=1;
  }if insert{fail(s,CAPACITY,6);}return NONE;
 }}

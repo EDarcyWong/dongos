@@ -1,0 +1,53 @@
+{
+  "cancelled_job": "b8a7b10b53094f238ae8d9667c0773e5",
+  "cancelled_source_stable": true,
+  "process_stopped": true,
+  "execution_exited": true,
+  "cancelled_checks": [
+    {
+      "spec": "discover:codex-works/tests:test_l3_control_integration.py",
+      "passed": false,
+      "tests": 0,
+      "skips": 0,
+      "returncode": 1,
+      "cancelled": true,
+      "timed_out": false,
+      "process_stopped": true,
+      "execution_exited": true,
+      "elapsed_seconds": 130.475
+    }
+  ],
+  "changed_only": [
+    "codex-works/tests/test_l3_control_integration.py",
+    "codex-works/deliveries/L3FLOWINT1.md"
+  ],
+  "source_implementation_unchanged": true,
+  "new_job": "f48ec24178864741a9a0b2d09290f546",
+  "new_fingerprint": {
+    "lang/bootstrap/lower_program.dg": "2eb36a91291ce4293e89654a9f2b91e1edf9742e8b87c73624a701dc2e10241e",
+    "lang/bootstrap/lower_program.md": "650abe4e1c1f21122bdb631ed60f6f974e032d3ae53f03f2aeac7cb774ca61d9",
+    "lang/bootstrap/nasm_program.md": "f9cfb6b837919d85191b80f94d058ddfe9a8fe414f06c608b4cb876fe67cadf8",
+    "lang/bootstrap/semantic_types.md": "737adae019695bfbbc1ffd787734801e65fcc2a964f1bf0724375ba11262882a",
+    "lang/bootstrap/defer-lowering.md": "88c37edcb76276225bff3a404b57569a3bc9400a6fa13d9f069e8345b264bd9b",
+    "lang/bootstrap/for-match-lowering.md": "0435e8b466d7c35e0b85686b426bf7fa758a76eef49bb7804ece4aade3a4cead",
+    "lang/tests/test_l3_defer_native.py": "e06c9a97c910f08678b2f31dabdd4cfaa508bb0cf64535d217c357372bf3be11",
+    "lang/tests/test_l3_for_native.py": "edffac6f4589b826764478f3366c842003364907dc6cfbc8c91834f01d4ae18e",
+    "lang/tests/test_l3_method_native.py": "f1dd0a955edfb007094ba23c9f1dc21d1c00fb9d076a0f462ab376ef730056e7",
+    "tools/g5_differential.py": "4e2c362213187373518aa8ed704419071a8626a2e1edbfb2895b9aa420500108",
+    "docs/language-l2-l3.md": "f8628089264ca52a5352647d3e7fcaefed32a6982d4b3ba003332b351b9a9124",
+    "codex-works/tests/test_l3_control_integration.py": "808cbb5990947b7b6af67972528b5a2a99b147f0a37287a555feb5fdb193d27b",
+    "codex-works/deliveries/L3FLOWINT1.md": "722c4c2ed52221a8f7371267a41681bb1a7a94425eb186a2ed34c6e26d411908"
+  },
+  "directory_ids": 25,
+  "id_length": 8,
+  "long_exe_probe": {
+    "length": 296,
+    "compile": 0,
+    "execute_error": "WinError206"
+  },
+  "short_exe_probe": {
+    "length": 211,
+    "compile": 0,
+    "execute": 0
+  }
+}

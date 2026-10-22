@@ -1,5 +1,13 @@
 # DongOS 项目任务
 
+本轮17份缺失任务书、CX6同号异义和CX14/CX15旧状态均已处理完成。CX14 integrated rev7，CX15 integrated rev8；CX6 integrated rev9，已恢复读取器契约，分离5条原NASM事件，耗时恢复为1轮/265秒，原始事件全部保留。协调器issues=0；核对时间2026-10-22T09:18:41+08:00。
+
+当前MCP快照共164项活动任务：19 accepted、140 integrated、3 submitted、1 in_progress、1 rework。本轮同时观测到其它客户端新增5项并行任务，其状态按实时MCP继续变化，本轮没有接管或改动它们。
+
+原文/验收/身份及复验结果见[恢复报告](reviews/2026-10-22-task-recovery/README.md)、[完成回执](reviews/2026-10-22-task-recovery/completion.json)和[整体任务图](progress-map.md)。
+
+以下保留原有记录；其中日期、任务数量、机器路径和“当前/下一步”均属于各自历史检查点，最新状态以上述记录及协调器为准。
+
 2026-10-21 最新接续：G6代码合并/同步检查点19e1a19（PR#11于2026-10-21 02:20:34合并、2026-10-21 02:21:50本地快进同步），完整SHA `19e1a1982de0d7ebc57eea0b851d968e01b40e07`。G6已完成真实同盘双启和完整artifact双独审，L3C仅现有runtime5/compiler_job隔离profile及49模块自编译闭包complete；L3/L3A仍因G5 partial。准确候选常规20/20及P5/输入已通过；合并后自动push检查在2026-10-20T18:20:41Z快照为39473893535 in_progress；39473893647 in_progress；与已通过的准确候选/同内容树检查分开，不冒称新push全绿，也不为重复CI阻塞此次集成。P5CTX1由另一线程本地integrated rev7，未提交实现不计入G6 CI；当前122活动任务（103 integrated、19 accepted），16归档，共138，异机161条不导入。原失败/历史保留，Claude的P2工作不变。见[公开执行报告](reviews/2026-10-21-g6-ci-execution.md)及[整体任务图](progress-map.md)。该SHA标识代码合并/同步检查点，后续文档提交可推进HEAD；下段为PR8同步历史快照。
 
 2026-10-20 合并接续：PR#8已合入main `244b18c`，本地代码已同步，现有UI修改及任务记录已保全。当前调度库保持121活动任务、16归档；异机161条历史记录保留在固定Git提交、恢复台账及本地备份中，尚未导入本机调度库。CX6/CR43同号异义，C52/CR40也有独立历史，不按较高rev覆盖或混合事件。详见[整体任务图](progress-map.md)及[合并与本地同步报告](reviews/2026-10-20-pr8-merged-local-sync.md)。

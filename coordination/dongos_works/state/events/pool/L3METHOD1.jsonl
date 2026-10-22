@@ -1,0 +1,16 @@
+{"at":"2026-10-22T01:02:15+00:00","data":{"rev":1,"status":"todo"},"kind":"created","task_id":"pool:L3METHOD1"}
+{"at":"2026-10-22T01:10:00+00:00","data":{"claimed_at":"2026-10-22T01:10:00+00:00","claimed_by":"cursor-mcp-3e7917854bd14ac8","completed_at":null,"owner":"cursor","resume_status":null,"rev":2,"status":"in_progress"},"kind":"claim","task_id":"pool:L3METHOD1"}
+{"at":"2026-10-22T01:55:47+00:00","data":{"claimed_at":"2026-10-22T01:10:00+00:00","claimed_by":"cursor-mcp-3e7917854bd14ac8","completed_at":"2026-10-22T01:55:47+00:00","owner":"cursor","resume_status":null,"rev":3,"status":"submitted"},"kind":"submit","task_id":"pool:L3METHOD1"}
+{"at":"2026-10-22T02:08:27+00:00","data":{"job":"1158f00b230f4c3b96ce0c0daadf9d14","kind":"verify","provider":"python"},"kind":"queued","task_id":"pool:L3METHOD1"}
+{"at":"2026-10-22T02:08:28+00:00","data":{"job":"1158f00b230f4c3b96ce0c0daadf9d14"},"kind":"verification_started","task_id":"pool:L3METHOD1"}
+{"at":"2026-10-22T02:19:25+00:00","data":{"rev":4,"status":"submitted"},"kind":"verified","task_id":"pool:L3METHOD1"}
+{"at":"2026-10-22T02:19:25+00:00","data":{"job":"1158f00b230f4c3b96ce0c0daadf9d14","status":"completed"},"kind":"job_finished","task_id":"pool:L3METHOD1"}
+{"at":"2026-10-22T02:19:52+00:00","data":{"rev":5,"status":"rework"},"kind":"rework","task_id":"pool:L3METHOD1"}
+{"at":"2026-10-22T02:24:25+00:00","data":{"claimed_at":"2026-10-22T02:24:25+00:00","claimed_by":"cursor-mcp-3e7917854bd14ac8","completed_at":null,"owner":"cursor","resume_status":null,"rev":6,"status":"in_progress"},"kind":"claim","task_id":"pool:L3METHOD1"}
+{"at":"2026-10-22T02:42:19+00:00","data":{"claimed_at":"2026-10-22T02:24:25+00:00","claimed_by":"cursor-mcp-3e7917854bd14ac8","completed_at":"2026-10-22T02:42:19+00:00","owner":"cursor","resume_status":null,"rev":7,"status":"submitted"},"kind":"submit","task_id":"pool:L3METHOD1"}
+{"at":"2026-10-22T02:49:33+00:00","data":{"job":"ebc1fdf7a24744858bb7e141809fafe8","kind":"verify","provider":"python"},"kind":"queued","task_id":"pool:L3METHOD1"}
+{"at":"2026-10-22T02:49:33+00:00","data":{"job":"ebc1fdf7a24744858bb7e141809fafe8"},"kind":"verification_started","task_id":"pool:L3METHOD1"}
+{"at":"2026-10-22T03:01:49+00:00","data":{"rev":8,"status":"submitted"},"kind":"verified","task_id":"pool:L3METHOD1"}
+{"at":"2026-10-22T03:01:49+00:00","data":{"job":"ebc1fdf7a24744858bb7e141809fafe8","status":"completed"},"kind":"job_finished","task_id":"pool:L3METHOD1"}
+{"at":"2026-10-22T03:02:41+00:00","data":{"rev":9,"status":"accepted"},"kind":"accept","task_id":"pool:L3METHOD1"}
+{"at":"2026-10-22T03:30:06+00:00","data":{"rev":10,"status":"integrated"},"kind":"integrate","task_id":"pool:L3METHOD1"}

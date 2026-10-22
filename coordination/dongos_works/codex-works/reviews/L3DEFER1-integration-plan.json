@@ -1,0 +1,15 @@
+{
+  "production_before": "89692f186ecb639603a2c7f6497bb00c0c1eb15fd34f70fc6a92e49089c126d8",
+  "candidate": "7fd2be1484427e7db468aba123eb3d205d586b72db633b793290c4ef8ae12c04",
+  "readonly_nasm": "26076b3cc250ff61826776a7598342f347683e37627ca63318933337c3ef0349",
+  "method_job": "058669dd13d2447c888d7e9c5f2d2f20",
+  "defer_job": "34796e6c021a43ad8827cb076ce0371a",
+  "integration_performed": false,
+  "requires": [
+    "method accepted/integrated",
+    "defer independently accepted",
+    "actual source exact-copy",
+    "mainline permanent tests and independent review"
+  ],
+  "diff_lines": 98
+}

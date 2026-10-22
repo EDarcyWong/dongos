@@ -83,16 +83,45 @@ unsafe fn typed_save(s:*State,t:usize,off:usize)bool{unsafe{
  if words==NONE{(*s).status=UNSUPPORTED;return false;}
  if !slotstore(s,0,off){return false;}if words==2{return slotstore(s,2,off-8);}return true;
 }}
+// Link names have already passed the syntax check for ASCII identifiers.
+// Only bodyless declarations use them as their primary symbol; definitions
+// keep their module identity and publish an optional linker alias separately.
+unsafe fn link_name(s:*State,index:usize)bool{unsafe{
+ let g=(*(*s).p).graph;let sy=(*g).symbols[index];let u=(*g).units[sy.unit];var i:usize=0;
+ while i<u.node_count{let n=(*g).nodes[u.node_start+i];if n.kind==ast.DECLARATION&&n.a==sy.declaration{
+  var a=n.b;while a!=NONE{let attr=(*g).nodes[u.node_start+a];var value:usize=NONE;
+   if attr.op==271{value=attr.a;}else if attr.op==267{value=attr.b;}
+   if value!=NONE{let v=(*g).nodes[u.node_start+value];let token=(*g).tokens[u.token_start+v.token];
+    return put(s,"$")&&put(s,slice_from_raw_parts((*g).strings.ptr+u.string_start+token.value_start,token.value_length));}
+   a=attr.next;
+  }
+ }i+=1;}
+ return put(s,"$")&&put(s,names.text((*g).sources,(*g).units,(*g).tokens,sy.unit,sy.name_token));
+}}
 // Names are derived from the checked source catalog, never from host-created
 // labels. Each module path is canonical and its declaration has matched it.
+fn hex_digit(n:u8)u8{if n<10{return 48+n;}return 87+n;}
 unsafe fn symbol(s:*State,index:usize)bool{unsafe{
  let g=(*(*s).p).graph;if index>=(*g).symbols.len{(*s).status=INVALID;return false;}let sy=(*g).symbols[index];
+ if (sy.kind==names.FUNCTION||sy.kind==names.METHOD)&&(*g).nodes[(*g).units[sy.unit].node_start+sy.declaration].c==NONE{return link_name(s,index);}
  let path=(*g).sources[(*g).units[sy.unit].source_index].path;
  if path.len<4||path.len-3>256{(*s).status=UNSUPPORTED;return false;}
  var name:[256]u8=[0;256];var i:usize=0;while i<path.len-3{var b=path[i];if b==47{b=46;}name[i]=b;i+=1;}
  let item=names.text((*g).sources,(*g).units,(*g).tokens,sy.unit,sy.name_token);
  var n:usize=0;let status=symbols.encode(slice_from_raw_parts(&name[0],path.len-3),item,(*(*s).w).piece,&n);
- return piece(s,status,n);
+ if !piece(s,status,n){return false;}
+ if sy.kind==names.METHOD{
+  let ft=(*g).node_types[(*g).units[sy.unit].node_start+sy.declaration];let t=(*g).types[ft];
+  let receiver=(*g).types[(*g).fields[t.first].typ];let nominal=(*g).types[receiver.element];
+  let decl=(*g).nodes[(*g).units[nominal.unit].node_start+nominal.node];
+  let name=names.text((*g).sources,(*g).units,(*g).tokens,nominal.unit,decl.token);
+  // Ordinary symbols end in hex item bytes. This non-hex separator and the
+  // nominal receiver name distinguish methods from free functions and peers.
+  put(s,"_t");i=0;while i<name.len{let b=name[i];let pair=[hex_digit(b/16),hex_digit(b%16)];
+   put(s,slice_from_raw_parts(&pair[0],2));i+=1;
+  }
+ }
+ return (*s).status==0;
 }}
 fn reg(index:usize)u64{if index==0{return 7;}if index==1{return 6;}if index==2{return 2;}if index==3{return 1;}return index+4;}
 unsafe fn plan(s:*State,first:usize,count:usize,result:*abi.Result)bool{unsafe{
@@ -276,8 +305,8 @@ unsafe fn static_constants(s:*State)bool{unsafe{let g=(*(*s).p).graph;var i:usiz
  if !static_value(s,sy.unit,value_node,t,0){return false;}
  }i+=1;}return true;}}
 unsafe fn export_aliases(s:*State,index:usize)bool{unsafe{let g=(*(*s).p).graph;let sy=(*g).symbols[index];let u=(*g).units[sy.unit];var i:usize=0;
- while i<u.node_count{let n=(*g).nodes[u.node_start+i];if n.kind==ast.DECLARATION&&n.a==sy.declaration{var a=n.b;while a!=NONE{let attr=(*g).nodes[u.node_start+a];if attr.op==271{let value=(*g).nodes[u.node_start+attr.a];let token=(*g).tokens[u.token_start+value.token];let name=slice_from_raw_parts((*g).strings.ptr+u.string_start+token.value_start,token.value_length);
- put(s,"global ");put(s,name);put(s,"\n");put(s,name);put(s,":\n");}a=attr.next;}}i+=1;}return (*s).status==0;
+ while i<u.node_count{let n=(*g).nodes[u.node_start+i];if n.kind==ast.DECLARATION&&n.a==sy.declaration{var a=n.b;while a!=NONE{let attr=(*g).nodes[u.node_start+a];var v:usize=NONE;if attr.op==271{v=attr.a;}else if attr.op==267{v=attr.b;}if v!=NONE{let value=(*g).nodes[u.node_start+v];let token=(*g).tokens[u.token_start+value.token];let name=slice_from_raw_parts((*g).strings.ptr+u.string_start+token.value_start,token.value_length);
+ put(s,"global $");put(s,name);put(s,"\n$");put(s,name);put(s,":\n");}a=attr.next;}}i+=1;}return (*s).status==0;
 }}
 unsafe fn aggregate_copy(s:*State,x:*const ir.Instruction)bool{unsafe{
  let op=(*x).operation;
@@ -407,6 +436,11 @@ pub unsafe fn emit(p:*const ir.Program,w:*const Workspace,out:[]u8,written:*usiz
  if (*w).piece.len<1024{return CAPACITY;}
  var s=State{p:p,w:w,at:0,status:0,frame_bytes:0,trap:0,next_block:(*p).block_count};
  put(&s,"bits 64\ndefault rel\nsection .text\n");var i:usize=0;
+ let g=(*p).graph;while i<(*g).symbols.len&&s.status==0{let sy=(*g).symbols[i];
+  if (sy.kind==names.FUNCTION||sy.kind==names.METHOD)&&(*g).nodes[(*g).units[sy.unit].node_start+sy.declaration].c==NONE{
+   put(&s,"extern ");symbol(&s,i);put(&s,"\n");
+  }i+=1;
+ }i=0;
  while i<(*p).functions.len&&s.status==0{let f=(*p).functions[i];s.frame_bytes=f.frame_bytes;s.trap=f.trap_block;
   export_aliases(&s,f.symbol);put(&s,"global ");symbol(&s,f.symbol);put(&s,"\n");symbol(&s,f.symbol);put(&s,":\n");
   var n:usize=0;let status=frame.prologue(f.frame_bytes,0,(*w).piece,&n);piece(&s,status,n);incoming(&s,&f);

@@ -1,0 +1,66 @@
+{
+  "assignment_owner": null,
+  "auto_dispatch": false,
+  "auto_verify": false,
+  "candidate": null,
+  "checks": [
+    "discover:pool-works/tests:test_syscall_corpus.py"
+  ],
+  "claim_from_status": "rework",
+  "claim_token": "eca6793409eb4f4684c1beec15fe5cb4",
+  "claimed_at": "2026-10-22T01:34:59+00:00",
+  "claimed_by": "deepseek-mcp-802902233bc54373",
+  "completed_at": "2026-10-22T01:39:52+00:00",
+  "complexity": "standard",
+  "created_at": "2026-10-22T01:02:16+00:00",
+  "delivery": "pool-works/deliveries/P9CORPUS1.md",
+  "depends_on": [],
+  "description": "公共任务，供其他负责人手动worker MCP领取，优先Cursor；不自动启动AI CLI。P9尚缺真实syscall/IPC持续fuzz，现有固定回归/设备模型不覆盖。先交付纯Python确定性输入生成器与严格重放解析器，仅读kernel用户syscall dispatch、kernel/ipc、services/lib与ABI定义，记录准确syscall号/寄存器/消息布局来源。覆盖未知syscall、0/边界/非canonical/溢出指针长度、IPC无效/陈旧句柄及消息字段边界；不执行宿主命令或真实系统调用，不写硬件。版本化JSONL含seed/case index/操作/u64原始寄存器/oracle类别/来源ABI摘要；固定seed/count跨机器逐字一致，整数不经float。严格拒绝坏schema、重复字段、超大/越界输入；有限减小器只生成同操作重放候选，不声称保持故障。模块CLI生成/验证/候选最小化。两个seed多个count、实际CLI生成->验证->再生成SHA一致、独立ABI边界oracle、资源上限、原语料不变测试零skip。只做语料工具，真实guest入口/24小时运行另立任务，不改kernel，不宣称P9完成。只写write_paths；交付实际命令/结果/ABI来源/限制，不验收集成/提交推送/运行VM。",
+  "document": "pool-works/tasks/P9CORPUS1-board.md",
+  "historical": false,
+  "id": "pool:P9CORPUS1",
+  "integration_note": "原accepted最终候选已真实推广到code主线：pool-works/p9-corpus/tools/syscall_corpus.py→tools/syscall_corpus.py逐字相同（SHA9ae0b8ded7173d17264726f57f860634373532c1a97871154d110d2a5bf46477）；永久46项测试→tests/test_syscall_corpus.py仅适配源码根/工具路径及布局断言；docs→docs/syscall-corpus.md，README入口已接线。接续codex:P9CORPUSINT1已按正式job08db488c4bf44d86933920b1ad0a41d1独立46项0skip/source_stable复验、源码/契约审查后integrated rev6；本机46项、两个seed真实CLI逐字/SHA、有限减小及输入稳定、CI宿主发现核验全部通过。原候选4文件与accepted指纹保持不变，原失败/返修/误判补正历史保留。审查及实际映射见codex-works/reviews/2026-10-22-P9CORPUS-integration.md及P9CORPUSINT1交付。仅登记离线语料组件的主线集成，未运行guest/真实syscall/24h，不代表整个P9完成，未提交推送。",
+  "legacy_hash": "ca0fdcfe307d2aaad1b9bc675eb2f55ee5d95d16b39bd2c628d1d8ae60915157",
+  "number": "P9CORPUS1",
+  "owner": "deepseek",
+  "rev": 12,
+  "review_note": "已实际审查P9CORPUS1工具/说明/永久测试及services.dg、memory.dg、handles.dg与ABI定义。R0的错误CALL成功推断、未知号与rax不一致、bool/float版本及先无限读取问题已由原负责人R1修正；CALL按权限/peer→响应检查→请求检查顺序列出明确前提，形状通过为accepted_shape、不冒称成功；zero-log成功仅既定ready用户环境。R2仅修正测试在正式平铺快照的根目录检测，先使用副本lang/kernel，不借原项目或跳过ABI检查。Syscall/寄存器/消息u64字符串无float；确定性生成/验证/有限同操作减小器、严格schema/重复字段/范围/版本、深度和有界读取均经实际源码审查，减小不声称保持故障。独立本机原39/返修45测试均0skip；最终隔离joba6d0d017760e412aa43a08b5cbdf798c正式46tests/0skip/source_stable/process_stopped全通过，含真实CLI重放/SHA、ABI源码漂移、矛盾前提和原具体负例。先前JSON崩溃误判已在交付审查补正中明确撤回，未作为拒验依据；历史失败/返修保留。只验收当前pool候选语料组件，不代表真实syscall/guest执行、24小时fuzz或P9完成；尚未推广到主线工具入口，不登记integrated。",
+  "status": "integrated",
+  "title": "[P9] syscall与IPC结构化fuzz的确定性语料及重放格式",
+  "updated_at": "2026-10-22T02:46:42+00:00",
+  "verification": {
+    "checks": [
+      {
+        "cancelled": false,
+        "elapsed_seconds": 24.22,
+        "execution_exited": true,
+        "passed": true,
+        "process_stopped": true,
+        "returncode": 0,
+        "skips": 0,
+        "spec": "discover:pool-works/tests:test_syscall_corpus.py",
+        "tests": 46,
+        "timed_out": false
+      }
+    ],
+    "execution_exited": true,
+    "fingerprint": {
+      "pool-works/deliveries/P9CORPUS1.md": "2e1c2e1ed6ec5cda3b5527e62b0695006d998ad8cba2867bb2c5f20d32d04915",
+      "pool-works/p9-corpus/docs/corpus.md": "bebf47d621fe18de0e9fde977396a2ff1590481a419009473adbc5b3f0973cdd",
+      "pool-works/p9-corpus/tools/syscall_corpus.py": "9ae0b8ded7173d17264726f57f860634373532c1a97871154d110d2a5bf46477",
+      "pool-works/tests/test_syscall_corpus.py": "c5ea89ee8d21298c9440a91814b720bca03e33aff345c000a7afb117c1ffc3c6"
+    },
+    "finished_at": "2026-10-22T01:52:58+00:00",
+    "job": "a6d0d017760e412aa43a08b5cbdf798c",
+    "passed": true,
+    "process_stopped": true,
+    "source_stable": true,
+    "summary": "定向复验通过，等待源码/契约审查"
+  },
+  "write_paths": [
+    "pool-works/p9-corpus/tools/syscall_corpus.py",
+    "pool-works/tests/test_syscall_corpus.py",
+    "pool-works/p9-corpus/docs/corpus.md",
+    "pool-works/deliveries/P9CORPUS1.md"
+  ]
+}

@@ -15,3 +15,4 @@
 {"at":"2026-10-19T14:05:23+00:00","data":{"job":"563c3a6bab364e49b5d794a4511832d6","status":"completed"},"kind":"job_finished","task_id":"claude:C50"}
 {"at":"2026-10-19T14:06:33+00:00","data":{"rev":10,"status":"accepted"},"kind":"accept","task_id":"claude:C50"}
 {"at":"2026-10-20T13:12:18+00:00","data":{"rev":11,"status":"integrated"},"kind":"integrate","task_id":"claude:C50"}
+{"at":"2026-10-19T08:32:41+00:00","data":{"rev":1,"status":"todo"},"kind":"created","task_id":"claude:C50"}

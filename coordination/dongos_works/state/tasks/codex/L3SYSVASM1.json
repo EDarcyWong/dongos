@@ -1,0 +1,66 @@
+{
+  "assignment_owner": "codex",
+  "auto_dispatch": false,
+  "auto_verify": false,
+  "candidate": null,
+  "checks": [
+    "module:lang.tests.test_l3_escaped_symbols"
+  ],
+  "claim_from_status": "todo",
+  "claim_token": "371dbb9e12e645458576e2c378111d66",
+  "claimed_at": "2026-10-22T01:08:57+00:00",
+  "claimed_by": "codex-mcp-8c76f5a25c8d4b71",
+  "completed_at": "2026-10-22T01:15:42+00:00",
+  "complexity": "standard",
+  "created_at": "2026-10-22T01:08:54+00:00",
+  "delivery": "codex-works/deliveries/L3SYSVASM1.md",
+  "depends_on": [],
+  "description": "codex:L3SYSV1为extern/export的合法ASCII链接名统一输出NASM $转义，原生汇编器旧word/identifier尚不接受。补齐原生汇编器$identifier解析/符号查找归一化，使普通/转义拼写指向同一标签、全局声明和重定位/直接call正确，不把$rax当寄存器，不允许重复符号或未定义符号，不增加外部链接能力。普通现有导出名继续可用。新增小型真实Dong assembler桥，debug/release输出ELF，宿主按PT_LOAD映射执行，独立常量oracle检验返回42；验证escaped/plain混用、call/rel/dq、保留原始源、guard/失败输出原子性及重复/坏符号拒绝；不运行OS/VM。仅write_paths，不修改native compiler桥或语义ABI，不提交推送。",
+  "document": "codex-works/tasks/L3SYSVASM1-board.md",
+  "historical": false,
+  "id": "codex:L3SYSVASM1",
+  "integration_note": "实际改动已落入主线code/lang/bootstrap/native_assembler.dg及说明/永久测试，保留原有受限方言和既有ELF ABI；主目录声明文件逐项与独立复验指纹相同。完成真实文件集成后登记，未提交/推送或运行OS/VM。",
+  "legacy_hash": "16587bd6991dc34cd20a942b83f728e463ddf1f8cc08bcbd443f30f642401f85",
+  "number": "L3SYSVASM1",
+  "owner": "codex",
+  "rev": 6,
+  "review_note": "实际审查native_assembler的word/identifier/lookup改动：仅允许单个$前缀，先验证再归一化，转义/普通名称统一哈希与重复检测；$rax保留符号身份，寄存器与原方言解析不变，未增加外部链接。审查四项永久测试：真实冻结Dong组件双模式构建、双对象格式、PT_LOAD按RX/RW映射实际返回42、独立绝对dq地址核验及RIP/call混用、exact/one-short和失败全输出/guard/源不变。独立隔离job327d56bd08f74da2b1ce65c864d45b3a正式4tests/0skip/source_stable/process_stopped全通过。另实际Dong后端alias模块→原生ELF→204两模式已执行。验收仅本符号转义范围，不宣称完整ABI/G5或客体验收。",
+  "status": "integrated",
+  "title": "[L3A] 原生汇编器接续SysV链接名的NASM符号转义",
+  "updated_at": "2026-10-22T01:29:21+00:00",
+  "verification": {
+    "checks": [
+      {
+        "cancelled": false,
+        "elapsed_seconds": 18.538,
+        "execution_exited": true,
+        "passed": true,
+        "process_stopped": true,
+        "returncode": 0,
+        "skips": 0,
+        "spec": "module:lang.tests.test_l3_escaped_symbols",
+        "tests": 4,
+        "timed_out": false
+      }
+    ],
+    "execution_exited": true,
+    "fingerprint": {
+      "codex-works/deliveries/L3SYSVASM1.md": "e8eaf8132f1ee1cb6484b20920cb28b48c996919621be1ff422e7ee80846deb1",
+      "lang/bootstrap/native_assembler.dg": "2a4855f8e2bc933a5fb145c90299deb446ec4939ef389774bcd9c7b59255b37a",
+      "lang/bootstrap/native_assembler.md": "f9522c60dcd496e56f41cbdd511d351fc342afad9b49df94dafc9ef401831b2d",
+      "lang/tests/test_l3_escaped_symbols.py": "2c13171b9a291aeedfa6709f9318f8d022ce0f9e6eb20ca434939e74cb99a466"
+    },
+    "finished_at": "2026-10-22T01:27:40+00:00",
+    "job": "327d56bd08f74da2b1ce65c864d45b3a",
+    "passed": true,
+    "process_stopped": true,
+    "source_stable": true,
+    "summary": "定向复验通过，等待源码/契约审查"
+  },
+  "write_paths": [
+    "lang/bootstrap/native_assembler.dg",
+    "lang/bootstrap/native_assembler.md",
+    "lang/tests/test_l3_escaped_symbols.py",
+    "codex-works/deliveries/L3SYSVASM1.md"
+  ]
+}

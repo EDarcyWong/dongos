@@ -1,0 +1,76 @@
+{
+  "assignment_owner": "codex",
+  "auto_dispatch": false,
+  "auto_verify": false,
+  "candidate": null,
+  "checks": [
+    "module:lang.tests.test_l3_sysv_native",
+    "module:lang.tests.test_g5_runner_entry"
+  ],
+  "claim_from_status": "todo",
+  "claim_token": null,
+  "claimed_at": "2026-10-22T01:06:45+00:00",
+  "claimed_by": null,
+  "completed_at": "2026-10-22T01:15:41+00:00",
+  "complexity": "standard",
+  "created_at": "2026-10-22T01:06:42+00:00",
+  "delivery": "codex-works/deliveries/L3SYSVREG1.md",
+  "depends_on": [],
+  "description": "接续codex:L3SYSV1，已有test_bootstrap_native_compiler.test_unsupported_source_fails_closed仍用extern sysv64声明作为唯一不支持负例，已被本轮新增能力覆盖。将此负例切换为仍未支持的extern win64，保持失败码、诊断、输出不变断言；真实SysV成功路径由L3SYSV1新测试覆盖。只修改这项永久测试与本交付，不改变其它测试。使用L3SYSV1实际原生编译器桥从相同bad模块源执行旧负例debug/release，独立定向完整复验见L3SYSV1；不以仅源文字检查代替执行。未执行完整旧模块须如实报告，既有宿主平台限制不改。零skip，不提交/推送。",
+  "document": "codex-works/tasks/L3SYSVREG1-board.md",
+  "historical": false,
+  "id": "codex:L3SYSVREG1",
+  "integration_note": "该一行永久测试更新已实际落入code/lang/tests/test_bootstrap_native_compiler.py正式路径，交付和主目录文件指纹匹配独立验收实物，配套L3SYSV1/native assembler均已本地集成。文件修改完成后登记，未提交或推送。",
+  "legacy_hash": "a2c17b68f1e5f311d4e2ad7b8ee7107e24c3c68b699cf60b2b468ed5ca7bf6a3",
+  "number": "L3SYSVREG1",
+  "owner": "codex",
+  "pause_note": "停止正在复验旧版共享测试夹具的作业；L3SYSV1正式发现legacy模块源路径不匹配，先修正夹具再从新快照复验，避免明知失效仍重复执行。由协调器管理进程树实际退出后再恢复。",
+  "rev": 9,
+  "review_note": "实际源码审查仅一行预期变更：把旧SysV无体声明的UNSUPPORTED负例替换为仍未实现的Win64无体声明，原returncode=11、lower status=3和输出不变断言均保留，其余旧测试不改。新SysV成功/链接/数值负控与两模式legacy精确源文本已在永久L3SYSV1中实际执行，最终catalog路径与module unsupported一致，不弱化失败断言。正式隔离job37fe41cd83da4f65b012becf37fadac9：7+2=9tests/0skip/source_stable/process_stopped全通过；完整旧Linux专用模块未冒作执行。只验收本旧预期更新，生产支持范围按已integrated的L3SYSV1。",
+  "status": "integrated",
+  "title": "[L3A] 同步SysV支持后的既有负例预期",
+  "updated_at": "2026-10-22T01:52:55+00:00",
+  "verification": {
+    "checks": [
+      {
+        "cancelled": false,
+        "elapsed_seconds": 687.906,
+        "execution_exited": true,
+        "passed": true,
+        "process_stopped": true,
+        "returncode": 0,
+        "skips": 0,
+        "spec": "module:lang.tests.test_l3_sysv_native",
+        "tests": 7,
+        "timed_out": false
+      },
+      {
+        "cancelled": false,
+        "elapsed_seconds": 3.678,
+        "execution_exited": true,
+        "passed": true,
+        "process_stopped": true,
+        "returncode": 0,
+        "skips": 0,
+        "spec": "module:lang.tests.test_g5_runner_entry",
+        "tests": 2,
+        "timed_out": false
+      }
+    ],
+    "execution_exited": true,
+    "fingerprint": {
+      "codex-works/deliveries/L3SYSVREG1.md": "ce414fc73a6bda8a31df9a7b749f658a953671fba3446478a3a5ac15ec9d6725",
+      "lang/tests/test_bootstrap_native_compiler.py": "7d9893fcb52be77f858167db086026b2d0325249df94ee9460b1f605e3999e13"
+    },
+    "finished_at": "2026-10-22T01:52:10+00:00",
+    "job": "37fe41cd83da4f65b012becf37fadac9",
+    "passed": true,
+    "process_stopped": true,
+    "source_stable": true,
+    "summary": "定向复验通过，等待源码/契约审查"
+  },
+  "write_paths": [
+    "lang/tests/test_bootstrap_native_compiler.py",
+    "codex-works/deliveries/L3SYSVREG1.md"
+  ]
+}

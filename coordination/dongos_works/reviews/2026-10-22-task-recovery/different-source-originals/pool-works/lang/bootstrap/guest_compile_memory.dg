@@ -1,0 +1,156 @@
+// Guest compile memory planner: a pure, allocation-free calculation that lays
+// out caller-measured compiler regions inside one arena and checks the result
+// against an explicit memory budget and a separate stack budget.
+//
+// Each Region has a byte size, a power-of-two alignment and an inclusive live
+// interval [first_phase,last_phase] over the caller's numbered phases (for
+// example 0 frontend, 1 retained graph, 2 backend, 3 assembly). Two regions
+// whose live intervals intersect are "coexisting" and never share an address.
+// Regions with disjoint intervals may reuse the same bytes ("exclusive reuse").
+// Reuse is only sound if the caller has released every pointer/slice into the
+// earlier region before the later phase starts; this planner cannot see
+// aliases, never moves a graph and does not compact anything. A region that is
+// still read later (graph, source catalog) must be given a live interval that
+// covers those later phases.
+//
+// Placement is deterministic first fit in input order: region i takes the
+// lowest offset aligned to its alignment that does not intersect any earlier
+// coexisting region. Offsets are relative to an arena base that the caller
+// must align to Result.arena_alignment (the largest region alignment).
+//
+// Statuses, in priority order:
+//   INVALID  descriptor, alias, count, phase or alignment error; writes nothing.
+//   CAPACITY valid input but out has fewer entries than regions; writes nothing.
+//   BUDGET   resident_bytes + arena_size exceeds memory_budget, or an address
+//            calculation exceeded usize; writes nothing.
+//   STACK    memory fits but stack_required exceeds stack_limit; writes nothing.
+//   OK       out[0..regions.len] and *result are written; out tail untouched.
+// Every non-OK return leaves out and *result byte-for-byte unchanged; the
+// diagnostics (arena, peak, shortfall, overflow bits) exist only for OK plans.
+// The stack is budgeted separately because the guest user stack is not part of
+// the managed arena. This module never enlarges a stack or a memory limit and
+// a passing plan does not show that the compiler can run in the guest.
+// No allocation, no global mutable state, no OS calls.
+module bootstrap.guest_compile_memory;
+pub const OK:u64=0;pub const INVALID:u64=1;pub const CAPACITY:u64=2;
+pub const BUDGET:u64=3;pub const STACK:u64=4;
+pub const MAX_PHASES:usize=64;pub const MAX_REGIONS:usize=64;
+// Result.overflow bits: a quantity exceeded usize and is reported saturated.
+pub const OVERFLOW_ARENA:u64=1;   // a placement end or its alignment wrapped
+pub const OVERFLOW_SUM:u64=2;     // sum of all region sizes (informational)
+pub const OVERFLOW_PEAK:u64=4;    // live bytes of one phase (informational)
+pub const OVERFLOW_MEMORY:u64=8;  // resident_bytes + arena_size
+pub struct Region{pub size:usize,pub alignment:usize,pub first_phase:usize,pub last_phase:usize}
+pub struct Budget{pub phase_count:usize,pub resident_bytes:usize,pub memory_budget:usize,
+ pub stack_required:usize,pub stack_limit:usize}
+pub struct Placement{pub offset:usize,pub end:usize}
+pub struct Result{pub status:u64,pub arena_size:usize,pub arena_alignment:usize,pub peak_live:usize,
+ pub peak_phase:usize,pub sum_regions:usize,pub memory_required:usize,pub stack_short:usize,pub overflow:u64}
+const MAX:u64=0xffff_ffff_ffff_ffff;
+const REGION_BYTES:u64=32;const PLACEMENT_BYTES:u64=16;const BUDGET_BYTES:u64=40;const RESULT_BYTES:u64=72;
+fn span(p:u64,n:u64)bool{return n==0||(p!=0&&n<=MAX-p);}
+fn overlap(a:u64,n:u64,b:u64,m:u64)bool{return n!=0&&m!=0&&a<b+m&&b<a+n;}
+fn power_of_two(a:usize)bool{return a!=0&&(a&(a-1))==0;}
+fn coexist(regions:[]const Region,i:usize,j:usize)bool{
+ return regions[i].first_phase<=regions[j].last_phase&&regions[j].first_phase<=regions[i].last_phase;
+}
+fn saturating_add(a:usize,b:usize)usize{if b>MAX-a{return MAX;}return a+b;}
+// Every region must have a power-of-two alignment and a non-empty live
+// interval inside the declared phases. Sizes are unrestricted (0 is allowed).
+fn regions_ok(regions:[]const Region,phases:usize)bool{
+ var i:usize=0;
+ while i<regions.len{
+  let r=regions[i];
+  if !power_of_two(r.alignment){return false;}
+  if r.first_phase>r.last_phase||r.last_phase>=phases{return false;}
+  i+=1;
+ }
+ return true;
+}
+// First fit for region i against regions 0..i-1 already placed at offsets[].
+// Returns false when an aligned start or an end would exceed usize. Each retry
+// starts at or after the end of a coexisting region it collided with, which can
+// never collide again, so there are at most i retries.
+fn place(regions:[]const Region,offsets:*[64]usize,i:usize)bool{unsafe{
+ let r=regions[i];let mask=MAX^(r.alignment-1);
+ var candidate:usize=0;var tries:usize=0;
+ while tries<=i{
+  if candidate>MAX-(r.alignment-1){return false;}
+  let start=(candidate+(r.alignment-1))&mask;
+  if r.size>MAX-start{return false;}
+  var hit:usize=MAX;var j:usize=0;
+  while j<i&&hit==MAX{
+   if coexist(regions,i,j)&&overlap(start,r.size,(*offsets)[j],regions[j].size){hit=j;}
+   j+=1;
+  }
+  if hit==MAX{(*offsets)[i]=start;return true;}
+  candidate=(*offsets)[hit]+regions[hit].size;
+  tries+=1;
+ }
+ return false;
+}}
+// Raw (unaligned) bytes live during one phase, saturated at usize.
+fn live_bytes(regions:[]const Region,phase:usize,overflow:*u64)usize{unsafe{
+ var total:usize=0;var i:usize=0;
+ while i<regions.len{
+  let r=regions[i];
+  if r.first_phase<=phase&&phase<=r.last_phase{
+   if r.size>MAX-total{*overflow=*overflow|OVERFLOW_PEAK;total=MAX;}else{total+=r.size;}
+  }
+  i+=1;
+ }
+ return total;
+}}
+pub unsafe fn plan(budget:*const Budget,regions:[]const Region,out:[]Placement,result:*Result)u64{unsafe{
+ // Descriptors: counts before multiplication, then spans, alignment, aliases.
+ if result==null||budget==null{return INVALID;}
+ let rp=result as u64;let bp=budget as u64;
+ if (rp&7)!=0||!span(rp,RESULT_BYTES){return INVALID;}
+ if (bp&7)!=0||!span(bp,BUDGET_BYTES){return INVALID;}
+ if regions.len>MAX_REGIONS{return INVALID;}
+ if out.len>MAX/PLACEMENT_BYTES{return INVALID;}
+ let gp=regions.ptr as u64;let gn=regions.len*REGION_BYTES;
+ let op=out.ptr as u64;let on=out.len*PLACEMENT_BYTES;
+ if !span(gp,gn)||(gn!=0&&(gp&7)!=0){return INVALID;}
+ if !span(op,on)||(on!=0&&(op&7)!=0){return INVALID;}
+ if overlap(rp,RESULT_BYTES,bp,BUDGET_BYTES)||overlap(rp,RESULT_BYTES,gp,gn)||overlap(rp,RESULT_BYTES,op,on){return INVALID;}
+ if overlap(op,on,bp,BUDGET_BYTES)||overlap(op,on,gp,gn){return INVALID;}
+ let b=*budget;
+ if b.phase_count==0||b.phase_count>MAX_PHASES{return INVALID;}
+ if !regions_ok(regions,b.phase_count){return INVALID;}
+ if out.len<regions.len{return CAPACITY;}
+ // Placement into a bounded local table (64*8 bytes); out is not touched yet.
+ var offsets:[64]usize=[0;64];
+ var overflow:u64=0;var arena:usize=0;var widest:usize=1;var sum:usize=0;
+ var i:usize=0;
+ while i<regions.len{
+  let r=regions[i];
+  if r.alignment>widest{widest=r.alignment;}
+  if r.size>MAX-sum{overflow=overflow|OVERFLOW_SUM;sum=MAX;}else{sum+=r.size;}
+  if (overflow&OVERFLOW_ARENA)==0{
+   if place(regions,&offsets,i){
+    let end=offsets[i]+r.size;if end>arena{arena=end;}
+   }else{overflow=overflow|OVERFLOW_ARENA;arena=MAX;}
+  }
+  i+=1;
+ }
+ var peak:usize=0;var peak_phase:usize=0;var p:usize=0;
+ while p<b.phase_count{
+  let live=live_bytes(regions,p,&overflow);
+  if live>peak{peak=live;peak_phase=p;}
+  p+=1;
+ }
+ var memory:usize=MAX;
+ if (overflow&OVERFLOW_ARENA)!=0||arena>MAX-b.resident_bytes{overflow=overflow|OVERFLOW_MEMORY;}
+ else{memory=b.resident_bytes+arena;}
+ var short:usize=0;if b.stack_required>b.stack_limit{short=b.stack_required-b.stack_limit;}
+ var status:u64=OK;
+ if (overflow&OVERFLOW_MEMORY)!=0||memory>b.memory_budget{status=BUDGET;}
+ else if short!=0{status=STACK;}
+ if status!=OK{return status;}
+ *result=Result{status:status,arena_size:arena,arena_alignment:widest,peak_live:peak,peak_phase:peak_phase,
+  sum_regions:sum,memory_required:memory,stack_short:short,overflow:overflow};
+ i=0;
+ while i<regions.len{out[i]=Placement{offset:offsets[i],end:offsets[i]+regions[i].size};i+=1;}
+ return OK;
+}}

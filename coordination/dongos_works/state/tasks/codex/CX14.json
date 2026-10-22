@@ -1,0 +1,77 @@
+{
+  "assignment_owner": "codex",
+  "auto_dispatch": false,
+  "auto_verify": false,
+  "candidate": null,
+  "checks": [
+    "module:tests.test_compiler_job_launch"
+  ],
+  "claim_from_status": "todo",
+  "claim_token": "412058971cba4ad9aab02a0c645515e8",
+  "claimed_at": "2026-10-20T09:26:40+00:00",
+  "claimed_by": "codex-mcp-d76b66689d824a70",
+  "completed_at": "2026-10-22T01:01:52+00:00",
+  "complexity": "standard",
+  "created_at": "2026-10-20T09:26:40+00:00",
+  "delivery": "codex-works/deliveries/CX14.md",
+  "depends_on": [],
+  "description": "接通CX13纯编译核心真实DongOS启动。新增仅显式P5编译profile启用的job启动通道，普通/桌面默认不变：controller slot0只读blob/已验证ELF请求，独占slot3/64KiB保护栈/56MiBarena，共计既有16384 USER帧。内核快照ELF并限制映射范围，不允许请求栈大小/arena大小/权限；controller阻塞，源码借页只读，core只允许退出255，没有FS/进程/电源handle。返回时校验Result并有界拷贝产物后销毁job。控制服务通过实际H_READ读取磁盘源blob和可选stage1，通过既有H_WRITE/H_SYNC写stage产物；重启后加载同盘stage1编译并精确比较，不提交推送。增加显式build选项、永久受限请求/返回检查负控、真实QEMU两启物理/磁盘/源稳定证据和独立审查。尚未测试不得声明完成L3。",
+  "document": "codex-works/tasks/CX14-board.md",
+  "document_status": "todo",
+  "historical": false,
+  "id": "codex:CX14",
+  "integration_note": "实际主线kernel/user/compiler_job.dg、services/compiler/controller.dg、services gate/ASM/build/runner/契约与迁移交付全部已落盘，逐项与本轮9项正式验收指纹一致；当前实现已随4e1fede存在，补建交付只登记本轮事实，没有覆盖现有实现。正式3tests零skip及原G6限定profile后继证据已审查，登记真实既有文件集成；新机未运行VM，完整G5与其它阶段待办保持。",
+  "legacy_hash": "7ea053634013ba8f89999f55283f2d78b9d5f2cb0732d6864358689b89d1a004",
+  "number": "CX14",
+  "owner": "codex",
+  "rev": 7,
+  "review_note": "已实际审查当前compiler_job/controller/syscall gate、恢复的原契约与有效负控，关联8文件与G6 f54c35c的LF内容一致，真实compiler gate逐字符一致。正式隔离d1dd123835f04bedbbd8dfb903054ace：3tests/0skip/29.210秒，source_stable/process_stopped/execution_exited均true，当前9声明文件指纹相符。原独立生命周期审查与后继G6 run39467503226限定runtime5/49模块真实同盘双启/完整ELF及物理独审相互补足；本轮只做新宿主复验，不宣称新机重跑VM或raw产物已迁移。按用户授权补记既有受限profile交付，不扩大为完整G5。完整依据reviews/2026-10-22-task-recovery/CX14-formal-review.json。",
+  "status": "integrated",
+  "title": "[L3] 受限客体编译启动与持久化控制服务",
+  "updated_at": "2026-10-22T01:12:39+00:00",
+  "verification": {
+    "checks": [
+      {
+        "cancelled": false,
+        "elapsed_seconds": 29.21,
+        "execution_exited": true,
+        "passed": true,
+        "process_stopped": true,
+        "returncode": 0,
+        "skips": 0,
+        "spec": "module:tests.test_compiler_job_launch",
+        "tests": 3,
+        "timed_out": false
+      }
+    ],
+    "execution_exited": true,
+    "fingerprint": {
+      "codex-works/deliveries/CX14.md": "a8e6f0594757230093d4a5ace0acc15d5972d37f338e1406b6bfef6cae554f20",
+      "docs/l3-guest-compiler.md": "400295f8d05b73b8f04de8315410ef0301235a9672647a06a4d59527eae1d21f",
+      "kernel/services_run.asm": "a1d997066a8265a0a5447fa8b3404bb2e40d4b0f903bc7e0217378afb689b7ec",
+      "kernel/user/compiler_job.dg": "9b11796e1a219968c203d8e6bb54dcba96415f470a53c68ce08b53ecfa1341f3",
+      "kernel/user/services.dg": "548c6dafa0f2e515bcefeba51ae28c754e68273c979275862c32b60b6a76fa65",
+      "services/compiler/controller.dg": "d70df25b20368b26ae90f5c19dc1998a4021e22975afd4fd3726329fce719e23",
+      "tests/run_compiler_job_qemu.py": "ab7b8d5ab66101b93b6ffb38d3e5cddfbb0e45e5f7c0af5fdfd3e88c2d4d5d04",
+      "tests/test_compiler_job_launch.py": "3b573c4255d79835e625da6484a85ea20acd8f41fc796db841ba5a5b4ff60459",
+      "tools/build.py": "c5b67b1807a7932fac0a3b47d6d61329f9487c6c8fba8b696e3703d90df7c99f"
+    },
+    "finished_at": "2026-10-22T01:08:08+00:00",
+    "job": "d1dd123835f04bedbbd8dfb903054ace",
+    "passed": true,
+    "process_stopped": true,
+    "source_stable": true,
+    "summary": "定向复验通过，等待源码/契约审查"
+  },
+  "write_paths": [
+    "kernel/user/compiler_job.dg",
+    "kernel/user/services.dg",
+    "kernel/services_run.asm",
+    "services/compiler/controller.dg",
+    "tools/build.py",
+    "tests/test_compiler_job_launch.py",
+    "tests/run_compiler_job_qemu.py",
+    "docs/l3-guest-compiler.md",
+    "codex-works/deliveries/CX14.md"
+  ]
+}

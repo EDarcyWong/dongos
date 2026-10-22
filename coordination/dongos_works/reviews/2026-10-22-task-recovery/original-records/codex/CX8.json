@@ -1,0 +1,73 @@
+{
+  "source_commit": "50ab7cf9cde101691774a8480bdb7fcc07c766be",
+  "source_path": "coordination/dongos_works/state/tasks/codex/CX8.json",
+  "git_blob": "8158480f18a79b84b44fadb014335e02e196f1ce",
+  "raw_sha256": "8e7877de31fc08898db8d672cd11f4581fbb64d6aa42a7c8da0be720a84554e8",
+  "record": {
+    "assignment_owner": "codex",
+    "auto_dispatch": false,
+    "auto_verify": false,
+    "candidate": null,
+    "checks": [
+      "module:lang.tests.test_guest_files_commit"
+    ],
+    "claim_from_status": "todo",
+    "claimed_at": "2026-10-20T08:15:48+00:00",
+    "claimed_by": "codex-mcp-d76b66689d824a70",
+    "completed_at": "2026-10-20T08:19:33+00:00",
+    "complexity": "standard",
+    "created_at": "2026-10-20T08:15:48+00:00",
+    "delivery": "codex-works/deliveries/CX8.md",
+    "depends_on": [
+      "pool:GUEST5"
+    ],
+    "description": "完成GUEST5真实文件客户端适配：一次性提交既有可写token，不open/create/root/close、不请求权限、不启动下一stage或关机；限制产物2MiB，分块<=61440，真实files.write和files.sync，短写精确offset、zero有界、所有错误保留原u64、超长回报拒绝、完整后且仅一次FLUSH成功才durable。全Session/channel/产物/State/error输出别名预检失败无写。测试debug/release双格式真实Dong组件+files客户端、观察syscall、失败/负控；仅host协议执行不冒充真实客体磁盘/重启。",
+    "document": "codex-works/tasks/CX8-board.md",
+    "historical": false,
+    "id": "codex:CX8",
+    "integration_note": "任务直接在授权code/services/lib/compiler_artifact.dg、lang/tests/test_guest_files_commit.py、docs/l3-guest-artifact-integration.md真实实施，非只存在works候选。主线实测1test/0skip/38.282s与正式隔离49.85s全部通过，生产SHA3caa1ed8099e09c710de734cc483a7737f32c393d16bf40b0be7cb7b18ce39ab与验收指纹一致。登记真实主线集成；无额外句柄/路径/权限/进程/关机能力。",
+    "legacy_hash": "8afd66d75a129936c91cf92a050686ff8de3ac7db84f45afda6ff8caf4b087fc",
+    "number": "CX8",
+    "owner": "codex",
+    "rev": 6,
+    "review_note": "独立review_io完成源码/契约/永久测试读审并追加两模式各16边界序列+10结构预检，原生全exit0，含全局stall7/8、transport高位u64、H_SYNC版本错、2MiB/61440边界与wrap/align/尾部别名。独立报告reviews/2026-10-20-independent-io-review.md，独立code/build/test/independent-io/files-commit/evidence.json。正式a7c058... 1test/0skip/49.85s/source_stable/已停止退出，当前四文件指纹一致，准予适配组件验收，非真实客体FLUSH或完整L3。",
+    "status": "integrated",
+    "title": "[L3] 产物提交状态机接入既有H_WRITE/H_SYNC文件授权",
+    "updated_at": "2026-10-20T08:30:00+00:00",
+    "verification": {
+      "checks": [
+        {
+          "cancelled": false,
+          "elapsed_seconds": 49.85,
+          "execution_exited": true,
+          "passed": true,
+          "process_stopped": true,
+          "returncode": 0,
+          "skips": 0,
+          "spec": "module:lang.tests.test_guest_files_commit",
+          "tests": 1,
+          "timed_out": false
+        }
+      ],
+      "execution_exited": true,
+      "fingerprint": {
+        "codex-works/deliveries/CX8.md": "047888bdfe6dd698526ff5db4b3d242c6628463030858c79da35fbd320c4d878",
+        "docs/l3-guest-artifact-integration.md": "dc6706224d6dab61795334e51ecd474c995fd45668f450d3ed7a94565bb92abd",
+        "lang/tests/test_guest_files_commit.py": "418b3356083c803a138f3d312afb26d28aee4207ad340e7028263434f8609a90",
+        "services/lib/compiler_artifact.dg": "3caa1ed8099e09c710de734cc483a7737f32c393d16bf40b0be7cb7b18ce39ab"
+      },
+      "finished_at": "2026-10-20T08:27:57+00:00",
+      "job": "a7c05835ce2b49c4a49f9e4a12aa94ca",
+      "passed": true,
+      "process_stopped": true,
+      "source_stable": true,
+      "summary": "定向复验通过，等待源码/契约审查"
+    },
+    "write_paths": [
+      "services/lib/compiler_artifact.dg",
+      "lang/tests/test_guest_files_commit.py",
+      "docs/l3-guest-artifact-integration.md",
+      "codex-works/deliveries/CX8.md"
+    ]
+  }
+}

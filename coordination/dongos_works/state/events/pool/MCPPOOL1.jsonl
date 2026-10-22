@@ -1,0 +1,15 @@
+{"at":"2026-10-20T04:37:26+00:00","data":{"rev":1,"status":"todo"},"kind":"created","task_id":"pool:MCPPOOL1"}
+{"at":"2026-10-20T04:43:36+00:00","data":{"claimed_at":"2026-10-20T04:43:36+00:00","claimed_by":"cursor-mcp-415ed5783a554f4e","completed_at":null,"owner":"cursor","resume_status":null,"rev":2,"status":"in_progress"},"kind":"claim","task_id":"pool:MCPPOOL1"}
+{"at":"2026-10-20T04:59:42+00:00","data":{"claimed_at":"2026-10-20T04:43:36+00:00","claimed_by":"cursor-mcp-415ed5783a554f4e","completed_at":"2026-10-20T04:59:42+00:00","owner":"cursor","resume_status":null,"rev":3,"status":"submitted"},"kind":"submit","task_id":"pool:MCPPOOL1"}
+{"at":"2026-10-20T05:57:47+00:00","data":{"job":"479960364fdc48d3ab902665df99e715","kind":"verify","provider":"python"},"kind":"queued","task_id":"pool:MCPPOOL1"}
+{"at":"2026-10-20T06:01:51+00:00","data":{"job":"479960364fdc48d3ab902665df99e715"},"kind":"verification_started","task_id":"pool:MCPPOOL1"}
+{"at":"2026-10-20T06:02:03+00:00","data":{"rev":4,"status":"rework"},"kind":"verified","task_id":"pool:MCPPOOL1"}
+{"at":"2026-10-20T06:02:03+00:00","data":{"job":"479960364fdc48d3ab902665df99e715","status":"failed"},"kind":"job_finished","task_id":"pool:MCPPOOL1"}
+{"at":"2026-10-20T06:03:14+00:00","data":{"claimed_at":"2026-10-20T04:43:36+00:00","claimed_by":"cursor-mcp-415ed5783a554f4e","completed_at":"2026-10-20T06:03:14+00:00","owner":"cursor","resume_status":null,"rev":5,"status":"submitted"},"kind":"submit","task_id":"pool:MCPPOOL1"}
+{"at":"2026-10-20T06:03:18+00:00","data":{"job":"46bf8df03c054df1a168546082a90e48","kind":"verify","provider":"python"},"kind":"queued","task_id":"pool:MCPPOOL1"}
+{"at":"2026-10-20T06:06:19+00:00","data":{"job":"46bf8df03c054df1a168546082a90e48"},"kind":"verification_started","task_id":"pool:MCPPOOL1"}
+{"at":"2026-10-20T06:07:18+00:00","data":{"rev":6,"status":"submitted"},"kind":"verified","task_id":"pool:MCPPOOL1"}
+{"at":"2026-10-20T06:07:18+00:00","data":{"job":"46bf8df03c054df1a168546082a90e48","status":"completed"},"kind":"job_finished","task_id":"pool:MCPPOOL1"}
+{"at":"2026-10-20T06:08:22+00:00","data":{"rev":7,"status":"accepted"},"kind":"accept","task_id":"pool:MCPPOOL1"}
+{"at":"2026-10-20T07:34:44+00:00","data":{"rev":8,"status":"integrated"},"kind":"integrate","task_id":"pool:MCPPOOL1"}
+{"at":"2026-10-22T00:59:08+00:00","data":{"rev":9,"status":"integrated"},"kind":"document_changed","task_id":"pool:MCPPOOL1"}

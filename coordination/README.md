@@ -1,5 +1,11 @@
 # 本地协作控制台
 
+本轮17份缺失任务书、CX6同号异义和CX14/CX15旧状态均已处理完成。CX14 integrated rev7，CX15 integrated rev8；CX6 integrated rev9，已恢复读取器契约，分离5条原NASM事件，耗时恢复为1轮/265秒，原始事件全部保留。协调器issues=0；核对时间2026-10-22T09:18:41+08:00。
+
+完整依据见[恢复报告](dongos_works/reviews/2026-10-22-task-recovery/README.md)与[整体任务图](dongos_works/progress-map.md)。同号事件分离使用下述证据绑定resolve-identity命令，不删除原事件或直接授予验收。
+
+以下保留原有记录；其中日期、任务数量、机器路径和“当前/下一步”均属于各自历史检查点，最新状态以上述记录及协调器为准。
+
 工作区根下 `code/` 保留原 DongOS 项目（包括构建产物）；`coordination/` 是独立的 Web、状态库及调度项目。Python 3.12+，标准库实现，不需要安装 npm/pip 依赖。原编译/测试命令在 `code/` 中执行。
 
 在工作区根运行：
@@ -44,6 +50,16 @@ git commit -m "tasks: sync state"
 - `candidate`（隔离副本的作业编号）和作业记录只在产生它们的机器上有意义；其它机器看到该任务仍是正确的状态，但不能在本机复验那个候选副本。
 - `dongos_works/index.json` 现在只是派生的汇总导出（每次状态变化仍会重写，带 `generated_at`）。它不是权威，也不参与合并；合并冲突时任选一方即可，下次导出会重写。
   只有旧版仅含 `index.json` 而没有 `state/` 的仓库，空库启动仍会要求按原流程 `recover-state`，不会静默重新导入。
+
+## 同号异义历史的身份校正
+
+原任务书、交付及两支原事件先按固定 Git 来源分别保全；不能按较高 rev 或事件 union 把两个契约混为一个任务。协调者可使用证据绑定的命令：
+
+```powershell
+python coordinate.py --project <项目编号> resolve-identity <任务编号> --rev <最新rev> --manifest reviews/<清单>.json --sha256 <清单SHA256> --note "原文核对结论"
+```
+
+清单需要 version=1、显式项目/任务/rev、当前契约摘要、规范任务书 SHA、至少两项原文 SHA 证据及准确的异义事件 SHA。该操作按 CAS 校验并追加审查记录，保留数据库全部原始事件及原验收；只将已确认属于另一身份的事件从本任务时间线和耗时中分开。`get_task.timing.identity_resolution` 保留分离的原事件和清单入口，状态快照携带同样的身份依据，不授予新验收或集成。服务代码升级后需在无活动作业时重启以更新 HTTP/MCP 派生统计。
 
 ## AI任务接口
 

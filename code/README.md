@@ -1,5 +1,13 @@
 # DongOS
 
+本轮17份缺失任务书、CX6同号异义和CX14/CX15旧状态均已处理完成。CX14 integrated rev7，CX15 integrated rev8；CX6 integrated rev9，已恢复读取器契约，分离5条原NASM事件，耗时恢复为1轮/265秒，原始事件全部保留。协调器issues=0；核对时间2026-10-22T09:18:41+08:00。
+
+当前MCP快照共164项活动任务：19 accepted、140 integrated、3 submitted、1 in_progress、1 rework。本轮同时观测到其它客户端新增5项并行任务，其状态按实时MCP继续变化，本轮没有接管或改动它们。
+
+当前阶段范围见[整体任务图](../coordination/dongos_works/progress-map.md)和[剩余清单](docs/remaining-plan.md)。P2 EXEC/WC与有限G5已集成，完整G5、P5安全恢复和硬件/外部验收继续推进。
+
+以下保留原有记录；其中日期、任务数量、机器路径和“当前/下一步”均属于各自历史检查点，最新状态以上述记录及协调器为准。
+
 DongOS 是一个面向 x86-64 PC 的操作系统项目，目标是安全、快速启动和图形桌面。采用 UEFI 引导与微内核架构，主体使用自研语言 Dong（编译为 NASM 汇编），少量底层入口手写汇编。
 
 当前开发优先级（2026-10-18）：推进L3自举。L2循环与普通指针内存优化已通过固定五项性能门槛，真实GDB源码调试已复验。L3已接入原生运行时类型与流程语义子集；443项语言回归通过、0skip，源码hash稳定。Claude C1～C6及DeepSeek D1～D13已独立验收，Cursor CR1字节常量任务已发布。完整标签/方法/错误码语义、目标I/O、后端/CLI及真正自举仍待完成；范围及证据见[语言线记录](docs/language-l2-l3.md)。
@@ -34,6 +42,7 @@ Display版本3通过只读128B描述符共享当前指标；五个真实字号�
 - `tests/test_memory_integration.py`：内存图→buddy→离线页表的独立宿主模型，资源与生命周期见 `docs/memory-integration.md`
 - `tools/gen_offsets.py`：从 Dong 布局 JSON 生成 NASM 结构体，BootInfo 不再手写偏移
 - `tools/build.py`：跨平台构建、运行、调试与依赖检查入口
+- `tools/syscall_corpus.py`：P9 syscall/IPC 离线语料生成、严格校验及有限减小；用法见 [语料格式](docs/syscall-corpus.md)
 - `tests/run_qemu.py`：无界面 QEMU 启动验收；`tests/run_cpu_qemu.py`：独立 CPU 异常注入验收
 - `tests/run_memory_qemu.py`：15项串行门禁，核对真实资源、激活/活动修改读回及静态与预热后的权限故障
 - `tests/run_hardening_qemu.py`：五种CPU能力组合的独立门禁，已接入P1完整test入口

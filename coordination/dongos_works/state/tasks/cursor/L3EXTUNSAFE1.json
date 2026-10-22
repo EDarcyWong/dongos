@@ -1,0 +1,77 @@
+{
+  "assignment_history": [
+    {
+      "at": "2026-10-22T06:16:37+00:00",
+      "from_owner": "cursor",
+      "note": "用户在本会话明确指示将返修任务L3EXTUNSAFE1改派给DeepSeek执行；原负责人Cursor手动客户端尚未领取，任务未开始。按用户授权转派，保留任务编号与历史。",
+      "previous_claimed_by": null,
+      "to_owner": "deepseek"
+    }
+  ],
+  "assignment_owner": "deepseek",
+  "auto_dispatch": false,
+  "auto_verify": false,
+  "candidate": null,
+  "checks": [
+    "discover:cursor-works/tests:test_l3_extern_unsafe.py"
+  ],
+  "claim_from_status": "todo",
+  "claim_token": "42ef870b63dd46399b8c7f6923bf398c",
+  "claimed_at": "2026-10-22T06:16:42+00:00",
+  "claimed_by": "deepseek-mcp-802902233bc54373",
+  "completed_at": "2026-10-22T07:17:20+00:00",
+  "complexity": "standard",
+  "created_at": "2026-10-22T06:04:09+00:00",
+  "delivery": "cursor-works/deliveries/L3EXTUNSAFE1.md",
+  "depends_on": [
+    "pool:L3METHOD1",
+    "codex:L3SYSV1"
+  ],
+  "description": "原前端负责人返修独立候选，不改已验收pool:L3METHOD1快照或生产冻结文件。真实差异见codex-works/reviews/2026-10-22-L3-extern-default-unsafe.md及build/L3-extern-unsafe-review/summary.json：extern sysv64 fn host()u64; pub fn f(){return host();}、无体extern方法p.get()在安全上下文中seed拒绝unsafe而原生两模式均接受；包unsafe对照均接受。semantic_types.top_function对无体外部声明应保留ABI位并体现默认unsafe，普通/方法两种调用及函数类型不能丢约束，bodyful SysV定义的既有默认语义不得误改。覆盖默认/显式unsafe、普通/方法/两写法、导入/同名候选、链接名与函数指针精确类型；保留已选callee Info.unit/node、其它已有方法/运行期/完整frontend回归。真实13模块或完整原生入口从源码构建，独立seed/C观察Type.flags和拒绝状态；失败Graph空发布，容量/别名/guard/readonly/输入稳定零skip；真实移除默认unsafe的坏Dong先编译链接执行再由oracle拒绝。仅候选提交，Codex独立复验后另行集成；Cursor保持手动，不自动启动CLI，不自行验收/集成、OS/VM或提交推送。",
+  "document": "cursor-works/tasks/L3EXTUNSAFE1-board.md",
+  "historical": false,
+  "id": "cursor:L3EXTUNSAFE1",
+  "legacy_hash": "8d92f9290e9c6cdd62761b32d5f94bda4cad8de1dda66d7e79e916c43e9eacd6",
+  "number": "L3EXTUNSAFE1",
+  "owner": "deepseek",
+  "rev": 6,
+  "review_note": "已实际读原任务/交付，逐字diff候选semantic_types与冻结主线，唯一生产差异为top_function构造Type前对n.c==NONE置flags|=2（4行含说明）；方法/自由函数共用此路，既有Win64位保留，bodyful默认安全和TYPE_FUNCTION语法不改。实际审查测试：13真实bootstrap闭包debug/release生成原生前端；独立seed接受/拒绝矩阵、导入、12组flags、选中callee Info.unit/node与同名receiver、容量0、guard/readonly/空Graph/unchecked=0；真正移除hunk的坏Dong完成编译/链接/执行后在同源unsafe状态oracle前被拒，非构建失败冒负控。正式作业4b0201fb098d427f8c7e6f0915c61d95为7tests/0skip/363.010s，全通过，process_stopped/execution_exited/source_stable=true且四文件指纹已核。只验收默认unsafe修复，尚未物理集成；将并入G5最终候选并复验，不宣称完整G5。",
+  "status": "accepted",
+  "title": "L3/G5返修：无体 extern 普通函数与方法漏默认 unsafe",
+  "updated_at": "2026-10-22T07:33:08+00:00",
+  "verification": {
+    "checks": [
+      {
+        "cancelled": false,
+        "elapsed_seconds": 363.01,
+        "execution_exited": true,
+        "passed": true,
+        "process_stopped": true,
+        "returncode": 0,
+        "skips": 0,
+        "spec": "discover:cursor-works/tests:test_l3_extern_unsafe.py",
+        "tests": 7,
+        "timed_out": false
+      }
+    ],
+    "execution_exited": true,
+    "fingerprint": {
+      "cursor-works/deliveries/L3EXTUNSAFE1.md": "3aaf517aaef028a66dc6454c9119500c7f5096497ca33025c8b5491905305e21",
+      "cursor-works/l3-extern-unsafe/docs/default-extern-unsafe.md": "8255dd0bb7eaff8c693b9bee3a7c8552f7d542f850ec2ade525cb64524e3d2b3",
+      "cursor-works/l3-extern-unsafe/src/bootstrap/semantic_types.dg": "43cd83f5d44fa817d1226fc9d7209186da6aa181312868c03ef3fbf258f6afff",
+      "cursor-works/tests/test_l3_extern_unsafe.py": "e1d92e44c5832f93a4c6c28ebf651bacda54b8f0fbe88bfbda028ae90d5bf8b9"
+    },
+    "finished_at": "2026-10-22T07:27:57+00:00",
+    "job": "4b0201fb098d427f8c7e6f0915c61d95",
+    "passed": true,
+    "process_stopped": true,
+    "source_stable": true,
+    "summary": "定向复验通过，等待源码/契约审查"
+  },
+  "write_paths": [
+    "cursor-works/l3-extern-unsafe/src/bootstrap/semantic_types.dg",
+    "cursor-works/tests/test_l3_extern_unsafe.py",
+    "cursor-works/l3-extern-unsafe/docs/default-extern-unsafe.md",
+    "cursor-works/deliveries/L3EXTUNSAFE1.md"
+  ]
+}

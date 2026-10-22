@@ -65,7 +65,9 @@ RuntimeWorkspace { info:[]Info, initialized:[]u8, snapshots:[]u8,
 
 `match`支持bool、optional的null/some及result的ok/err，检查正确payload类型、是否需要绑定、重复/不可达模式与穷尽性。err绑定为u64，!void的ok无payload。各可达分支的确定初始化取交集，已知不可变const标签过滤不可能出口；payload绑定只进入所在分支。复用现有Info/TAG与快照工作区，ABI不变。此处仅类型和流程检查，不生成match代码。
 
-仍未完成：方法接收者与错误码专项、枚举构造/成员及枚举match、some/ok/err等尚未落实语言契约的带标签构造调用、完整聚合常量求值与所有常量长度传播（含全局静态切片物化）、defer清理lowering。方法/error声明即使未被使用也明确UNSUPPORTED；带载荷枚举禁止直接相等比较。**这仍是受限语义子集，不是完整编译器或L3验收。** 目标I/O、后端/CLI、stage1/stage2及真正DongOS自编译仍待完成。
+方法前端已接入：struct指针接收者的声明、函数式与接收者调用、精确mutable/const类型、同模块所有权、同名/字段冲突、pub/private及unsafe边界均检查。选中方法的FUNCTION类型写入 `info[call.a]`，通过 `Type.unit/node` 定位声明；refs保留候选组，AST不改写。参数/返回允许既有标量、指针和切片签名；枚举或非指针接收者明确拒绝。详见[方法语义](method-semantics.md)，永久回归入口为 `python -m unittest lang.tests.test_bootstrap_method_semantics -v`。
+
+仍未完成：错误码专项、枚举构造/成员及枚举match、some/ok/err等尚未落实语言契约的带标签构造调用、完整聚合常量求值与所有常量长度传播（含全局静态切片物化）、终止型defer等完整seed覆盖。error声明即使未被使用也明确UNSUPPORTED；带载荷枚举禁止直接相等比较。后续lower_program已将结构体指针方法、普通defer、for及bool match接入整程序代码生成；本模块仍只产生语义/流程输出，optional/result/enum match及错误传播代码生成另行补齐。详见[清理降级](defer-lowering.md)、[for/match](for-match-lowering.md)及[方法](method-semantics.md)。**这仍是受限语义子集，不是完整编译器或L3/G5验收。**
 
 运行时定向测试：`python -m unittest lang.tests.test_bootstrap_semantic_runtime -v`。实际模块加载/名称/绑定后由Dong原生检查，宿主编译器独立核对可接受性；两模式、双格式组装，输入及描述符真实只读页，29池双端guard与20类INVALID预检。删除真实类型拒绝及把分支交集改为并集的董副本必须完成编译、链接、执行，再被状态断言拒绝。
 

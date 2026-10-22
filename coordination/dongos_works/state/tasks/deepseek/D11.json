@@ -16,11 +16,11 @@
   ],
   "historical": true,
   "id": "deepseek:D11",
-  "legacy_hash": "a219597b8907e1457e5d1397452b0a3eb6e25ac43b0f8ed6812826bdc1f07d74",
+  "legacy_hash": "d1e4541332353208317f512c8a4661122bd9c469dd4ecbc4c0421e2388bcf24c",
   "legacy_schema": 2,
   "number": "D11",
   "owner": "deepseek",
-  "rev": 6,
+  "rev": 7,
   "review_note": "",
   "state_reconciliation": {
     "at": "2026-10-19T11:42:09+00:00",
@@ -43,7 +43,7 @@
   },
   "status": "accepted",
   "title": "位集合",
-  "updated_at": "2026-10-19T11:42:10+00:00",
+  "updated_at": "2026-10-20T01:32:42+00:00",
   "verification": null,
   "write_paths": [
     "lang/std/core/bitset.dg",

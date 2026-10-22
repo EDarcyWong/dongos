@@ -567,6 +567,35 @@ document.addEventListener('keydown',e=>{
   if(e.key==='Escape'&&!modal&&$('detail-dialog').open){e.preventDefault();closeDetail();return;}
   if(e.key==='/'&&!modal&&!typing&&!e.ctrlKey&&!e.metaKey){e.preventDefault();go('tasks');$('search').focus();}
 });
+// ---- Appearance ----------------------------------------------------------
+const THEME_KEY='coordination-theme';
+let currentTheme='light';
+function applyTheme(theme){
+  const dark=theme==='dark';currentTheme=dark?'dark':'light';
+  document.documentElement?.setAttribute?.('data-theme',currentTheme);
+  const toggle=$('theme-toggle');
+  if(!toggle)return;
+  toggle.setAttribute('aria-pressed',String(dark));
+  toggle.setAttribute('aria-label',dark?'切换到浅色模式':'切换到深色模式');
+  toggle.title=dark?'切换到浅色模式':'切换到深色模式';
+  const icon=toggle.querySelector('.theme-icon');if(icon)icon.textContent=dark?'☀':'☾';
+}
+function initTheme(){
+  let stored=null;try{stored=localStorage.getItem(THEME_KEY);}catch{}
+  const media=window.matchMedia?window.matchMedia('(prefers-color-scheme: dark)'):null;
+  applyTheme(stored==='dark'||stored==='light'?stored:media?.matches?'dark':'light');
+  const toggle=$('theme-toggle');
+  if(toggle)toggle.addEventListener('click',()=>{
+    const next=currentTheme==='dark'?'light':'dark';
+    applyTheme(next);
+    try{localStorage.setItem(THEME_KEY,next);}catch{}
+  });
+  if(media?.addEventListener)media.addEventListener('change',event=>{
+    let choice=null;try{choice=localStorage.getItem(THEME_KEY);}catch{}
+    if(choice!=='dark'&&choice!=='light')applyTheme(event.matches?'dark':'light');
+  });
+}
+initTheme();
 async function boot(){go(location.hash.slice(1),{push:false});try{const session=await api('/api/session');csrf=session.csrf;setProjects(session.projects);go(location.hash.slice(1),{push:false});await refresh();setInterval(()=>{if(!busy)refresh();},2000);}catch(e){notice(e.message);}}boot();
 
 function setProjects(items,preferred){projectList=items;const existing=preferred||projectId||localStorage.getItem('coordination-project');projectId=items.some(p=>p.id===existing)?existing:(items[0]?.id||'');const select=$('project-select');select.replaceChildren();for(const p of items){const option=node('option','',p.name);option.value=p.id;select.append(option);}if(!items.length)select.append(node('option','','请新增项目'));select.value=projectId;const project=items.find(p=>p.id===projectId);$('project-location').textContent=project?project.works_root:'每个项目的任务、测试、交付和日志集中保存';$('project-location').title=project?.works_root||'';$('new-task').disabled=!projectId;localStorage.setItem('coordination-project',projectId);}

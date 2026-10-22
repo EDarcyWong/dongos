@@ -1,0 +1,47 @@
+{
+  "source": "HEAD:state/tasks/codex/CX6.json",
+  "raw_sha256": "8c742a5afaca427758ca2265e1e1b1258299549a99c2306ce17c464ef6e197e5",
+  "record": {
+    "archive_note": "本轮NASM3兼容维护错用了异机既有CX6编号；原CX6为PR8有界源码读取接线integrated rev6。本地临时实现/报告/10项实际测试完整保留，另以唯一编号CXNASM3登记，禁止将两项任务混成同一历史。归档前API备份reviews/2026-10-20-local-number-collision-backup.json。",
+    "archived": true,
+    "archived_at": "2026-10-20T13:03:15+00:00",
+    "assignment_owner": "codex",
+    "auto_dispatch": false,
+    "auto_verify": false,
+    "candidate": null,
+    "checks": [
+      "module:lang.tests.test_nasm_compatibility"
+    ],
+    "claim_from_status": "todo",
+    "claimed_at": "2026-10-20T12:51:58+00:00",
+    "claimed_by": "codex-mcp-6d5798b7b4b74b61",
+    "completed_at": "2026-10-20T12:56:13+00:00",
+    "complexity": "standard",
+    "created_at": "2026-10-20T12:51:58+00:00",
+    "delivery": "codex-works/deliveries/CX6.md",
+    "depends_on": [
+      "codex:CX1",
+      "codex:CX3"
+    ],
+    "description": "所属阶段：P0工具链维护，关联L3整函数主线复验。源码核对发现lang/tests/test_dongc.py:nasm_flags只读取nasm -h；本机NASM3.02把reloc-rel-dword及reloc-abs-qword放在-h -w分组帮助中，主线C52测试在setUpClass组装时因合法RIP相对重定位被-Werror拒绝，0tests（build/test/bootstrap-nasm-u64-module/run-d0a567604d4b）。这是CX1能力探测在新帮助格式下的后继兼容修复，不重做已验收组件。仅改声明文件：按实际帮助格式探测两个完整警告名，兼容旧NASM不支持-h -w或未知参数的情况，保留-Wall/-Werror及其它警告；不得按版本硬猜、不无条件关闭未知警告、不吞真实探测失败。测试覆盖旧平铺帮助、新分组帮助、名字前缀误匹配、两个警告独立、真实失败传播，以及本机NASM合法RIP/绝对64位重定位实际组装与其它警告仍为错误。只跑定向兼容测试，不跑OS/VM。交付后须独立复验。",
+    "document": "codex-works/tasks/CX6-board.md",
+    "historical": false,
+    "id": "codex:CX6",
+    "legacy_hash": "3cfcef59e2acc66d2986951b38e548bbcfa78c49f977abdbb9b46ae7594ca6e4",
+    "number": "CX6",
+    "owner": "codex",
+    "pause_control": "confirmed",
+    "resume_status": "submitted",
+    "rev": 5,
+    "review_note": "",
+    "status": "paused",
+    "title": "[P0/L3] 修复NASM 3分组帮助的警告能力探测并复核集成入口",
+    "updated_at": "2026-10-20T13:03:15+00:00",
+    "verification": null,
+    "write_paths": [
+      "lang/tests/test_dongc.py",
+      "lang/tests/test_nasm_compatibility.py",
+      "codex-works/deliveries/CX6.md"
+    ]
+  }
+}

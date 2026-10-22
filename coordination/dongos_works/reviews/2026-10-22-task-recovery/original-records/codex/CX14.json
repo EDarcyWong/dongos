@@ -1,0 +1,47 @@
+{
+  "source_commit": "50ab7cf9cde101691774a8480bdb7fcc07c766be",
+  "source_path": "coordination/dongos_works/state/tasks/codex/CX14.json",
+  "git_blob": "814872393128d95f7dff5f383c8b6988a54626f9",
+  "raw_sha256": "f233e64c8e7ba695b5e87f694a61000650c6e94020cb14b2096c8e499593378a",
+  "record": {
+    "assignment_owner": "codex",
+    "auto_dispatch": false,
+    "auto_verify": false,
+    "candidate": null,
+    "checks": [
+      "module:tests.test_compiler_job_launch"
+    ],
+    "claim_from_status": "todo",
+    "claimed_at": "2026-10-20T09:26:40+00:00",
+    "claimed_by": "codex-mcp-d76b66689d824a70",
+    "completed_at": null,
+    "complexity": "standard",
+    "created_at": "2026-10-20T09:26:40+00:00",
+    "delivery": "codex-works/deliveries/CX14.md",
+    "depends_on": [],
+    "description": "接通CX13纯编译核心真实DongOS启动。新增仅显式P5编译profile启用的job启动通道，普通/桌面默认不变：controller slot0只读blob/已验证ELF请求，独占slot3/64KiB保护栈/56MiBarena，共计既有16384 USER帧。内核快照ELF并限制映射范围，不允许请求栈大小/arena大小/权限；controller阻塞，源码借页只读，core只允许退出255，没有FS/进程/电源handle。返回时校验Result并有界拷贝产物后销毁job。控制服务通过实际H_READ读取磁盘源blob和可选stage1，通过既有H_WRITE/H_SYNC写stage产物；重启后加载同盘stage1编译并精确比较，不提交推送。增加显式build选项、永久受限请求/返回检查负控、真实QEMU两启物理/磁盘/源稳定证据和独立审查。尚未测试不得声明完成L3。",
+    "document": "codex-works/tasks/CX14-board.md",
+    "historical": false,
+    "id": "codex:CX14",
+    "legacy_hash": "5f9f3ae4783ac1d594440ba6e263562d075e4774bdaa159a48d693ce44f84b79",
+    "number": "CX14",
+    "owner": "codex",
+    "rev": 2,
+    "review_note": "",
+    "status": "in_progress",
+    "title": "[L3] 受限客体编译启动与持久化控制服务",
+    "updated_at": "2026-10-20T09:26:40+00:00",
+    "verification": null,
+    "write_paths": [
+      "kernel/user/compiler_job.dg",
+      "kernel/user/services.dg",
+      "kernel/services_run.asm",
+      "services/compiler/controller.dg",
+      "tools/build.py",
+      "tests/test_compiler_job_launch.py",
+      "tests/run_compiler_job_qemu.py",
+      "docs/l3-guest-compiler.md",
+      "codex-works/deliveries/CX14.md"
+    ]
+  }
+}

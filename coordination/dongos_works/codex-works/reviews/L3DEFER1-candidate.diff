@@ -1,0 +1,98 @@
+--- production/lower_program.dg
++++ candidate/lower_program.dg
+@@ -13,7 +13,7 @@
+ struct Region{p:u64,n:usize}
+ struct State{g:*const frontend.Graph,w:*const ir.Workspace,status:u64,unit:usize,error_node:usize,detail:u64,
+  functions:usize,code:usize,args:usize,blocks:usize,cursor:usize,maximum:usize,locals:usize,
+- returns:usize,mode:u64,break_block:usize,continue_block:usize}
++ returns:usize,mode:u64,break_block:usize,continue_block:usize,cleanup_head:usize,loop_cleanup:usize}
+ fn span(p:u64,n:usize)bool{return n==0||(p!=0&&n<=NONE-p);}
+ fn overlap(a:u64,n:usize,b:u64,m:usize)bool{return n!=0&&m!=0&&a<b+m&&b<a+n;}
+ unsafe fn fail(s:*State,code:u64,id:usize,detail:u64)usize{unsafe{
+@@ -61,7 +61,7 @@
+   if steps>=(*(*s).g).nodes.len{return false;}steps+=1;
+   if !collect_locals(s,p,depth+1){return false;}p=(*node(s,p)).next;}return true;
+  }
+- if n.kind==ast.UNSAFE_BLOCK||n.kind==ast.LOOP{return collect_locals(s,n.a,depth+1);}
++ if n.kind==ast.UNSAFE_BLOCK||n.kind==ast.LOOP||n.kind==ast.DEFER{return collect_locals(s,n.a,depth+1);}
+  if n.kind==ast.IF||n.kind==ast.WHILE{
+   if !collect_locals(s,n.b,depth+1){return false;}
+   if n.c!=NONE{return collect_locals(s,n.c,depth+1);}return true;
+@@ -203,12 +203,27 @@
+  if op==525{return 1071;}if op==526{return 1061;}if op==527{return 1062;}
+  if op==528{return 1148;}if op==529{return 1118;}if op==512{return 520;}if op==513{return 521;}return NONE;
+ }
++// A DEFER node's unused node_slots cell links to the previous registration.
++// This is compiler scratch, not a mutation of the checked Graph or runtime IR.
++// The frontend forbids nested defer/control transfer inside cleanup bodies.
++unsafe fn cleanups(s:*State,stop:usize,depth:usize)bool{unsafe{
++ var p=(*s).cleanup_head;var steps:usize=0;
++ while p!=stop&&(*s).status==0{
++  if p==NONE||steps>=(*(*s).g).nodes.len{fail(s,BAD_GRAPH,p,72);return false;}steps+=1;
++  if !enter(s,p,depth){return false;}let n=*node(s,p);
++  if n.kind!=ast.DEFER{fail(s,BAD_GRAPH,p,73);return false;}
++  let next=(*(*s).w).node_slots[gid(s,p)];
++  if !statement(s,n.a,depth+1){return false;}p=next;
++ }return (*s).status==0;
++}}
+ unsafe fn statement(s:*State,id:usize,depth:usize)bool{unsafe{
+  if !enter(s,id,depth){return false;}let n=*node(s,id);(*s).cursor=(*s).locals;
+- if n.kind==ast.BLOCK{var p=n.a;var steps:usize=0;while p!=NONE{
++ if n.kind==ast.BLOCK{let scope=(*s).cleanup_head;var p=n.a;var steps:usize=0;while p!=NONE{
+   if steps>=(*(*s).g).nodes.len{fail(s,BAD_GRAPH,id,70);return false;}steps+=1;
+   if !statement(s,p,depth+1){return false;}p=(*node(s,p)).next;}
++  cleanups(s,scope,depth+1);(*s).cleanup_head=scope;
+  }else if n.kind==ast.UNSAFE_BLOCK{statement(s,n.a,depth+1);}
++ else if n.kind==ast.DEFER{(*(*s).w).node_slots[gid(s,id)]=(*s).cleanup_head;(*s).cleanup_head=id;}
+  else if n.kind==ast.BINDING{if n.b!=NONE{let v=expression(s,n.b,depth+1);let g=gid(s,id);emit(s,ir.COPY,(*(*s).g).node_types[g],(*(*s).w).node_slots[g],v,0,0,0,id);}}
+  else if n.kind==ast.ASSIGN{
+   let p=address(s,n.a,depth+1);let t=typ(s,n.a);var old:usize=0;
+@@ -217,21 +232,25 @@
+   if n.op!=1085{let out=slot(s,t,id);emit(s,ir.BINARY,t,out,old,value,binary_assignment(n.op),0,id);value=out;}
+   emit(s,ir.STORE,t,0,p,value,0,0,id);
+  }else if n.kind==ast.RETURN{
+-  var value:usize=0;if n.a!=NONE{value=expression(s,n.a,depth+1);}emit(s,ir.RETURN,(*s).returns,0,value,0,0,0,id);
++  var value:usize=0;if n.a!=NONE{value=expression(s,n.a,depth+1);}
++  // Cleanup calls may overwrite all caller-saved registers and their own
++  // temporaries. Reserve the complete evaluated return snapshot until RET.
++  let locals=(*s).locals;(*s).locals=(*s).cursor;cleanups(s,NONE,depth+1);(*s).locals=locals;
++  emit(s,ir.RETURN,(*s).returns,0,value,0,0,0,id);
+  }else if n.kind==ast.EXPRESSION_STATEMENT{expression(s,n.a,depth+1);}
+  else if n.kind==ast.IF{
+   let yes=block(s);let no=block(s);let end=block(s);let cond=expression(s,n.a,depth+1);
+   emit(s,ir.BRANCH,8,0,cond,0,yes,no,id);label(s,yes,id);statement(s,n.b,depth+1);jump(s,end,id);
+   label(s,no,id);if n.c!=NONE{statement(s,n.c,depth+1);}label(s,end,id);
+  }else if n.kind==ast.WHILE||n.kind==ast.LOOP{
+-  let start=block(s);let body=block(s);let end=block(s);let previous_break=(*s).break_block;let previous_continue=(*s).continue_block;
+-  (*s).break_block=end;(*s).continue_block=start;label(s,start,id);
++  let start=block(s);let body=block(s);let end=block(s);let previous_break=(*s).break_block;let previous_continue=(*s).continue_block;let previous_cleanup=(*s).loop_cleanup;
++  (*s).break_block=end;(*s).continue_block=start;(*s).loop_cleanup=(*s).cleanup_head;label(s,start,id);
+   if n.kind==ast.WHILE{let cond=expression(s,n.a,depth+1);emit(s,ir.BRANCH,8,0,cond,0,body,end,id);}else{jump(s,body,id);}
+   label(s,body,id);if n.kind==ast.WHILE{statement(s,n.b,depth+1);}else{statement(s,n.a,depth+1);}
+-  jump(s,start,id);label(s,end,id);(*s).break_block=previous_break;(*s).continue_block=previous_continue;
++  jump(s,start,id);label(s,end,id);(*s).break_block=previous_break;(*s).continue_block=previous_continue;(*s).loop_cleanup=previous_cleanup;
+  }else if n.kind==ast.BREAK||n.kind==ast.CONTINUE{
+   var target=(*s).break_block;if n.kind==ast.CONTINUE{target=(*s).continue_block;}
+-  if target==NONE{fail(s,BAD_GRAPH,id,71);return false;}jump(s,target,id);
++  if target==NONE{fail(s,BAD_GRAPH,id,71);return false;}cleanups(s,(*s).loop_cleanup,depth+1);jump(s,target,id);
+  }else{fail(s,UNSUPPORTED,id,n.kind);}
+  (*s).cursor=(*s).locals;return (*s).status==0;
+ }}
+@@ -263,7 +282,7 @@
+  let empty=ir.Program{graph:null,functions:slice_from_raw_parts(null as *const ir.Function,0),
+   instructions:slice_from_raw_parts(null as *const ir.Instruction,0),arguments:slice_from_raw_parts(null as *const ir.Argument,0),block_count:0,mode:mode};
+  var s=State{g:g,w:w,status:0,unit:0,error_node:0,detail:0,functions:0,code:0,args:0,blocks:0,
+-  cursor:0,maximum:0,locals:0,returns:sem.VOID,mode:mode,break_block:NONE,continue_block:NONE};
++  cursor:0,maximum:0,locals:0,returns:sem.VOID,mode:mode,break_block:NONE,continue_block:NONE,cleanup_head:NONE,loop_cleanup:NONE};
+  if (*g).units.len==0||(*g).refs.len!=(*g).nodes.len||(*g).info.len!=(*g).nodes.len||(*g).node_types.len!=(*g).nodes.len
+   ||(*g).values.len!=(*g).nodes.len||(*g).value_states.len!=(*g).nodes.len||(*g).layouts.len!=(*g).types.len
+   ||!names.valid_graph((*g).sources,(*g).units,(*g).tokens,(*g).nodes,(*g).edges){s.status=BAD_GRAPH;}
+@@ -285,7 +304,7 @@
+    else if n.c==NONE{ /* An external declaration owns no code or frame. */ }
+    else if s.functions==(*w).functions.len{fail(&s,CAPACITY,sy.declaration,4);}
+    else{
+-    s.cursor=0;s.maximum=0;s.locals=0;s.returns=t.element;s.break_block=NONE;s.continue_block=NONE;
++    s.cursor=0;s.maximum=0;s.locals=0;s.returns=t.element;s.break_block=NONE;s.continue_block=NONE;s.cleanup_head=NONE;s.loop_cleanup=NONE;
+     let first=s.code;let parameter_first=s.args;var p=n.a;var count:usize=0;
+     while p!=NONE&&s.status==0{
+      if s.args==(*w).arguments.len{fail(&s,CAPACITY,p,2);break;}

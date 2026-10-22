@@ -1,0 +1,68 @@
+{
+  "project": "dongos",
+  "source_head": "4e1fede1cea3f6deeb86ca17561dfc4eb07edac5",
+  "original_g6_commit": "f54c35cd80343c6841b687294f4a95496cbad69f",
+  "files": [
+    {
+      "path": "kernel/user/compiler_job.dg",
+      "git_sha256": "6b01604c594015d15d878250ff200d4089e79ba5814ef6246bfecc527d13d824",
+      "current_raw_sha256": "9b11796e1a219968c203d8e6bb54dcba96415f470a53c68ce08b53ecfa1341f3",
+      "lf_equivalent": true
+    },
+    {
+      "path": "kernel/services_run.asm",
+      "git_sha256": "4cb2de9664b5e8b9a440c70865d31203e2b0c118a8d3cd6eb199b3701f7b6b15",
+      "current_raw_sha256": "a1d997066a8265a0a5447fa8b3404bb2e40d4b0f903bc7e0217378afb689b7ec",
+      "lf_equivalent": true
+    },
+    {
+      "path": "services/compiler/controller.dg",
+      "git_sha256": "666d1e33d6451bf6566ed06c87fd7693cd4a35027b2b8ff91469af683a1aebef",
+      "current_raw_sha256": "d70df25b20368b26ae90f5c19dc1998a4021e22975afd4fd3726329fce719e23",
+      "lf_equivalent": true
+    },
+    {
+      "path": "tests/test_compiler_job_launch.py",
+      "git_sha256": "5f7381dcf6609af98bbd02490a0c3d888aeca31a76c3bc80e151ff3fb2805fae",
+      "current_raw_sha256": "3b573c4255d79835e625da6484a85ea20acd8f41fc796db841ba5a5b4ff60459",
+      "lf_equivalent": true
+    },
+    {
+      "path": "tests/run_compiler_job_qemu.py",
+      "git_sha256": "6680736c0f44b877fbaae718f435578ce1b18218a2bab6deecbb173f696efc3e",
+      "current_raw_sha256": "ab7b8d5ab66101b93b6ffb38d3e5cddfbb0e45e5f7c0af5fdfd3e88c2d4d5d04",
+      "lf_equivalent": true
+    },
+    {
+      "path": "docs/l3-guest-compiler.md",
+      "git_sha256": "a2348866bccd2c0a8ddca85c09b155227160b7984dd5696361302ddcefb18281",
+      "current_raw_sha256": "400295f8d05b73b8f04de8315410ef0301235a9672647a06a4d59527eae1d21f",
+      "lf_equivalent": true
+    },
+    {
+      "path": "tools/compiler_job.py",
+      "git_sha256": "116035cee991b5e9d2f8fe71dd5d58ed49d3a927125ebce2d1437fa3e34a7c76",
+      "current_raw_sha256": "cd2c27cabfa04f898b6f3ca2e7cf3dc1c4031ae4e166c0d8690d01995cadc0af",
+      "lf_equivalent": true
+    },
+    {
+      "path": "docs/l3-compiler-job-host.md",
+      "git_sha256": "c18891fc8adee492e7db0270048d94b88df4c88e2637df49051d3d47c04cdd6a",
+      "current_raw_sha256": "a0abbdc3b85acc3a84723f8c1511fce243a3b594faf7d67e71e17bf6adf8e4a2",
+      "lf_equivalent": true
+    }
+  ],
+  "compiler_syscall_gate": {
+    "path": "kernel/user/services.dg",
+    "unchanged": true,
+    "sha256": "6da249a9b642f644154be122727a335560ed77c1bed49ad5b2ea03755716eb0f"
+  },
+  "g6_original_run": "39467503226",
+  "g6_original_artifact": "12285254639",
+  "g6_original_record": "reviews/2026-10-21-g6-ci-execution.json",
+  "original_raw_artifact_available_on_new_machine": false,
+  "original_guest_execution_repeated_this_run": false,
+  "new_verification_jobs": {
+    "codex:CX15": "8d6893090cd74e3c96a9af844a27a15c"
+  }
+}

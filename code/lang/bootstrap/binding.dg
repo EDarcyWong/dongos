@@ -77,8 +77,9 @@ unsafe fn symbol(s:*State,owner:usize,token:usize,methods:bool)usize{unsafe{
 }}
 unsafe fn global(s:*State,id:usize,owner:usize,token:usize,methods:bool)bool{unsafe{
  let found=symbol(s,owner,token,methods);if found==NONE{return reject(s,UNKNOWN,token,0);}
- // Overloaded methods are only candidates here: visibility depends on the
- // receiver-selected method and is checked by the later typed stage.
+ // Overloaded methods are only candidates here: semantic_types selects by exact
+ // receiver pointer type and checks that method's pub/private visibility.
+ // Free functions, consts and globals with the same short name still win first.
  let sym=(*s).symbols[found];if owner!=(*s).unit&&sym.kind!=names.METHOD&&(sym.flags!=1||sym.kind==names.IMPORT){return reject(s,PRIVATE,token,found);}
  var kind=GLOBAL;if sym.kind==names.METHOD{kind=METHOD_CANDIDATE;}
  return put(s,id,kind,owner,found,sym.kind);

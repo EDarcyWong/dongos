@@ -1,5 +1,13 @@
 # 剩余计划、依赖与可并行边界
 
+本轮17份缺失任务书、CX6同号异义和CX14/CX15旧状态均已处理完成。CX14 integrated rev7，CX15 integrated rev8；CX6 integrated rev9，已恢复读取器契约，分离5条原NASM事件，耗时恢复为1轮/265秒，原始事件全部保留。协调器issues=0；核对时间2026-10-22T09:18:41+08:00。
+
+当前剩余集中在P2调度后多CR3/PCID/PGE与WC真实性能、P5可信DMA排空/全别名退休/回收复用/设备恢复、完整G5差集、P6/P7/P8回归和KVM/真机门禁，以及P9安全加固。旧迁移17条问题和CX14/CX15已从当前待办中关闭。
+
+其它客户端正在推进SysV/方法/P9候选，具体状态以MCP为准；未经独立验收的源码不提前记作阶段完成。见[最新整体任务图](../../coordination/dongos_works/progress-map.md)和[恢复回执](../../coordination/dongos_works/reviews/2026-10-22-task-recovery/completion.json)。
+
+以下保留原有记录；其中日期、任务数量、机器路径和“当前/下一步”均属于各自历史检查点，最新状态以上述记录及协调器为准。
+
 2026-10-21 P2 接续：P2SIZE2/P2SMP3 均已正式独立验收并本地 integrated rev6。
 大页机制、AP 前临时生命周期，以及 AP 在线/调度前共享内核根的完整同步事务
 与最终封存持有视图均已闭合；正常 1/4 核、唯一漏 AP 调用实际负控、完整 raw

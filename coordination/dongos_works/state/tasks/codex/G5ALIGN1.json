@@ -1,0 +1,73 @@
+{
+  "assignment_owner": "codex",
+  "auto_dispatch": false,
+  "auto_verify": false,
+  "candidate": null,
+  "checks": [
+    "discover:codex-works/tests:test_g5_alignment_native.py"
+  ],
+  "claim_from_status": "todo",
+  "claim_token": "0a646d895c9748dfa7b741ab46fd567e",
+  "claimed_at": "2026-10-22T06:54:26+00:00",
+  "claimed_by": "codex-mcp-a56c25d7f28e4bc4",
+  "completed_at": "2026-10-22T07:23:40+00:00",
+  "complexity": "standard",
+  "created_at": "2026-10-22T06:54:26+00:00",
+  "delivery": "codex-works/deliveries/G5ALIGN1.md",
+  "depends_on": [
+    "codex:L3FLOWINT1"
+  ],
+  "description": "用户授权的G5完整语言范围要求支持种子既有align(32..1024等)局部对象。独立候选接续G5TAG1/G5EXEC1：显式IR帧对齐元数据保持公开IR描述符大小，RBP保留栈参数，R12对齐帧基址并保存恢复，精确对象地址/复制/嵌套调用/普通与Win64桥组合栈预算<=4096，真实seed/Dong/C差分、独立坏体、容量/别名/失败原子性和源码稳定零skip。候选结果合并前需同步所有在途修复。无OS/VM/CLI/提交推送，正式独立复验后才验收并真实集成，整体G5最终矩阵仍另验。",
+  "document": "codex-works/tasks/G5ALIGN1-board.md",
+  "historical": false,
+  "id": "codex:G5ALIGN1",
+  "legacy_hash": "64d15e62a81e7de26bc0a29c75ce73379b7422e342b1930e8eb3b048361f4de6",
+  "number": "G5ALIGN1",
+  "owner": "codex",
+  "rev": 5,
+  "review_note": "已审查候选4模块和帧/IR公开契约及永久测试。FRAME_ALIGNMENT新增操作保持Function/Instruction等描述符尺寸；lower按实际布局对齐并记录最大alignment，emit以RBP锚定incoming栈参数、保存R12并用其读写所有局部槽/地址/tagged payload/atomic desired等，所有返回恢复R12/RSP/DF；Win64外层wrapper和body/outgoing/最坏对齐损耗共计4096门禁。正式63906891bcf24084b1d507255e372f82为4tests/0skip/586.430s，source_stable/process_stopped/execution_exited全部true，7声明文件指纹已核，测试独立初始47项闭包冻结。64/1024真实地址/复制/栈参/嵌套调用、Win64组合执行及超大帧真实FRAME原子拒绝通过；真实Dong局部地址+8坏体成功构建链接正常返回后被同输入seed/good先通过的独立C地址oracle拒绝。候选含已审查known-match flow修复；仅验收本组件，未物理主线集成，完整G5组合另验。",
+  "status": "accepted",
+  "title": "G5 高对齐局部对象及真实组合栈预算",
+  "updated_at": "2026-10-22T07:57:55+00:00",
+  "verification": {
+    "checks": [
+      {
+        "cancelled": false,
+        "elapsed_seconds": 586.43,
+        "execution_exited": true,
+        "passed": true,
+        "process_stopped": true,
+        "returncode": 0,
+        "skips": 0,
+        "spec": "discover:codex-works/tests:test_g5_alignment_native.py",
+        "tests": 4,
+        "timed_out": false
+      }
+    ],
+    "execution_exited": true,
+    "fingerprint": {
+      "codex-works/deliveries/G5ALIGN1.md": "c6b695091a629c04f76764e512d574a7800761ac7263e4eee7008cffc74db6a7",
+      "codex-works/g5-align/docs/alignment.md": "b55149cdffed55f68bee31cc4f03fe8b65f62155caeb826c047fda9f768f331e",
+      "codex-works/g5-align/src/bootstrap/lower_program.dg": "35b9f347d508497a6d08c27704d85880e718093688bd0b6632f2f2f0363f8144",
+      "codex-works/g5-align/src/bootstrap/nasm_program.dg": "412ea0318cd87b5e9c2009afc08c2ff1e6cb4fba372c3f89332e975f66a63122",
+      "codex-works/g5-align/src/bootstrap/program_ir.dg": "62d2bdf143f60ba176cd30fb4bb875e519d8f6add0e34fe5115f885fdacaac29",
+      "codex-works/g5-align/src/bootstrap/semantic_types.dg": "5c49b2593861a3af07e7556afa02fb877131b0323217a7cb33726a16f53dd4c5",
+      "codex-works/tests/test_g5_alignment_native.py": "3eb0e80752136754e41097b74e8fd7416daaa13bf822a7534505459045cdc655"
+    },
+    "finished_at": "2026-10-22T07:51:14+00:00",
+    "job": "63906891bcf24084b1d507255e372f82",
+    "passed": true,
+    "process_stopped": true,
+    "source_stable": true,
+    "summary": "定向复验通过，等待源码/契约审查"
+  },
+  "write_paths": [
+    "codex-works/g5-align/src/bootstrap/semantic_types.dg",
+    "codex-works/g5-align/src/bootstrap/program_ir.dg",
+    "codex-works/g5-align/src/bootstrap/lower_program.dg",
+    "codex-works/g5-align/src/bootstrap/nasm_program.dg",
+    "codex-works/tests/test_g5_alignment_native.py",
+    "codex-works/g5-align/docs/alignment.md",
+    "codex-works/deliveries/G5ALIGN1.md"
+  ]
+}

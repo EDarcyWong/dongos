@@ -1,0 +1,85 @@
+{
+  "assignment_owner": "codex",
+  "auto_dispatch": false,
+  "auto_verify": false,
+  "candidate": null,
+  "checks": [
+    "module:lang.tests.test_l3_sysv_native",
+    "module:lang.tests.test_g5_runner_entry"
+  ],
+  "claim_from_status": "rework",
+  "claim_token": "84d74d96cd034645befd4f07867c3210",
+  "claimed_at": "2026-10-22T01:26:55+00:00",
+  "claimed_by": "codex-mcp-8c76f5a25c8d4b71",
+  "completed_at": "2026-10-22T01:28:10+00:00",
+  "complexity": "standard",
+  "created_at": "2026-10-22T01:02:15+00:00",
+  "delivery": "codex-works/deliveries/L3SYSV1.md",
+  "depends_on": [],
+  "description": "Codex本轮执行L3A/G5真实差集。当前semantic_types已验证extern sysv64签名，但lower_program统一拒绝ATTRIBUTE267/无函数体。实现显式SysV定义按既有SysV发射；无体声明不生成桩，调用使用真实ASCII链接名（默认声明名、extern别名或export名），发射extern，保持内部模块符号及export别名。Win64仍明确UNSUPPORTED，不静默按SysV。只支持前端已有scalar/pointer签名，不改semantic_types/program_ir ABI，不以Python构造目标IR；native_assembler未解析外部链接可继续拒绝，本项不等于完整外部ABI或客体链接器。同步G5对新支持显式SysV定义作真实执行观察，其余缺口仍保留。debug/release、elf64/win64汇编及真实机器码数值/7+参数/窄值/指针副作用/跨模块同名隔离/别名验真；失败输出不变，容量/别名/guard/输入稳定及真实坏Dong数值负控。仅write_paths，不提交推送；正式复验零skip。",
+  "document": "codex-works/tasks/L3SYSV1-board.md",
+  "historical": false,
+  "id": "codex:L3SYSV1",
+  "integration_note": "真实实现已落入主线code/lang/bootstrap/lower_program.dg与nasm_program.dg，配套说明、永久测试和G5工具亦已在正式路径；mainline指纹逐项匹配独立复验实物。原生符号转义配套已integrated rev6并有真实ELF执行证据，旧负例预期更新由独立L3SYSVREG1接续登记。文件集成完成后才登记此状态，未提交/推送或运行OS/VM。",
+  "legacy_hash": "2448bcbc1c9ed5c1a10b4757e0ab983284db357bea79cd5832ff797f0295322c",
+  "number": "L3SYSV1",
+  "owner": "codex",
+  "rev": 9,
+  "review_note": "实际审查lower_program、nasm_program及任务契约：显式SysV沿用已验证整数/指针ABI，无体声明不产生函数/栈帧/桩，真实链接名来自已检查ASCII标识符；定义保持canonical模块身份并发布同地址别名。Win64仍按语义ABI标志失败；不支持的声明/签名不发布输出。新symbol扫描只读取Graph/字符串，原stage后统一发布保持失败原子性，program_ir/public ABI未变。审查永久测试为真实Dong frontend→lower→NASM→elf64/win64对象，实际C链接/八参数/窄值/指针/跨模块、NASM关键字别名及错误链接目标数值负控；最终原生汇编器生成ELF实际执行204，两模式通过。R1只修正legacy fixture的module/catalog路径，不放宽拒绝断言，保留原正式失败。独立隔离job58ff43b65b52429aac5ebf00113e792a：7+2=9tests、0skip、source_stable/process_stopped全通过，native符号配套L3SYSVASM1已正式4项通过并集成。另复用已冻结且两受改模块SHA相同的编译器复查G5八类fixture：两次SysV成功、其余7类14次均有源位置拒绝，见code/build/test/l3-gaps-recheck/run-b6ad4d950d43/matrix/gap-recheck.json；非完整G5矩阵。只验收既有scalar/pointer外部声明/显式SysV定义及链接别名，不扩大为Win64、函数指针/foreign data、未解析extern的native ELF链接或整个L3/L3A。",
+  "status": "integrated",
+  "title": "[L3A/G5] 原生后端显式SysV定义、外部声明与链接别名",
+  "updated_at": "2026-10-22T01:41:03+00:00",
+  "verification": {
+    "checks": [
+      {
+        "cancelled": false,
+        "elapsed_seconds": 597.21,
+        "execution_exited": true,
+        "passed": true,
+        "process_stopped": true,
+        "returncode": 0,
+        "skips": 0,
+        "spec": "module:lang.tests.test_l3_sysv_native",
+        "tests": 7,
+        "timed_out": false
+      },
+      {
+        "cancelled": false,
+        "elapsed_seconds": 3.292,
+        "execution_exited": true,
+        "passed": true,
+        "process_stopped": true,
+        "returncode": 0,
+        "skips": 0,
+        "spec": "module:lang.tests.test_g5_runner_entry",
+        "tests": 2,
+        "timed_out": false
+      }
+    ],
+    "execution_exited": true,
+    "fingerprint": {
+      "codex-works/deliveries/L3SYSV1.md": "1f9aaa448b52a81fa3286f2f06d9d250bab9985a5e23ab73437c12d571c7f967",
+      "lang/bootstrap/lower_program.dg": "5a3d56612028057d1cc464d242b6ccaa616e93f212b87436253ce84af9e5ace0",
+      "lang/bootstrap/lower_program.md": "c16a26d1de83756469e0b430cf4703bb143e756552effb87d430d37f2910069e",
+      "lang/bootstrap/nasm_program.dg": "19b58b7e807f23a6593292edc01012fc356b27ab492712bfdde64a1529ea95be",
+      "lang/bootstrap/nasm_program.md": "c12331934d8f0ffcaf26686c80548a4bd03b51b5d387972e8a65f8c95b474594",
+      "lang/tests/test_l3_sysv_native.py": "e7641d01a80faf09357a2a8737f134d5a59f58c609272c11c558db36f6ab51e1",
+      "tools/g5_differential.py": "fa04e6c762691c515d56571d9d0641ddda6818665abed16bc04d3b4caaad0823"
+    },
+    "finished_at": "2026-10-22T01:40:14+00:00",
+    "job": "58ff43b65b52429aac5ebf00113e792a",
+    "passed": true,
+    "process_stopped": true,
+    "source_stable": true,
+    "summary": "定向复验通过，等待源码/契约审查"
+  },
+  "write_paths": [
+    "lang/bootstrap/lower_program.dg",
+    "lang/bootstrap/nasm_program.dg",
+    "lang/bootstrap/lower_program.md",
+    "lang/bootstrap/nasm_program.md",
+    "lang/tests/test_l3_sysv_native.py",
+    "tools/g5_differential.py",
+    "codex-works/deliveries/L3SYSV1.md"
+  ]
+}

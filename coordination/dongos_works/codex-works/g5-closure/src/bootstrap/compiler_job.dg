@@ -1,0 +1,96 @@
+// Pure consuming compiler pipeline. All live input is outside the one arena.
+module bootstrap.compiler_job;
+import bootstrap.frontend as front;
+import bootstrap.modules as modules;
+import bootstrap.graph_compact as compact;
+import bootstrap.compiler_driver as driver;
+import bootstrap.native_assembler as nasm;
+const M:usize=1048576;
+const MAX:usize=0xffff_ffff_ffff_ffff;
+pub struct Result{pub status:u64,pub stage:u64,pub code:u64,pub detail:u64,pub written:usize,pub offset:usize,pub frontend:usize,pub retained:usize,pub backend:usize}
+fn span(p:u64,n:usize)bool{return p!=0&&n<=MAX-p;}
+fn overlap(a:u64,an:usize,b:u64,bn:usize)bool{return a<b+bn&&b<a+an;}
+unsafe fn word(b:[]const u8,at:usize)u64{unsafe{
+ var v:u64=0;var i:usize=0;while i<8{v|=(b[at+i]as u64)<<(i*8);i+=1;}return v;
+}}
+unsafe fn publish(r:*Result,status:u64,stage:u64,code:u64,detail:u64,written:usize,offset:usize,f:usize,g:usize,b:usize)u64{unsafe{
+ *r=Result{status:status,stage:stage,code:code,detail:detail,written:written,offset:offset,frontend:f,retained:g,backend:b};return status;
+}}
+// Invalid descriptors/catalog leave Result and arena unchanged. Once validated,
+// this is a consuming operation: all arena aliases from earlier phases die.
+export("dong_compile_job") pub unsafe fn run(blob:[]const u8,catalog:*modules.Source,arena:[]u8,r:*Result)u64{unsafe{
+ if blob.len<16||blob.len>512*1024||arena.len!=56*M||r==null
+  ||(r as u64&7)!=0||(arena.ptr as u64&7)!=0||(catalog as u64&7)!=0
+  ||!span(blob.ptr as u64,blob.len)||!span(arena.ptr as u64,arena.len)||!span(r as u64,sizeof(Result))
+  ||overlap(blob.ptr as u64,blob.len,arena.ptr as u64,arena.len)
+  ||overlap(blob.ptr as u64,blob.len,r as u64,sizeof(Result))
+  ||overlap(arena.ptr as u64,arena.len,r as u64,sizeof(Result))
+  ||!span(catalog as u64,64*sizeof(modules.Source))
+  ||overlap(catalog as u64,64*sizeof(modules.Source),blob.ptr as u64,blob.len)
+  ||overlap(catalog as u64,64*sizeof(modules.Source),arena.ptr as u64,arena.len)
+  ||overlap(catalog as u64,64*sizeof(modules.Source),r as u64,sizeof(Result)){return 1;}
+ let count=word(blob,0)as usize;let entry=word(blob,8)as usize;
+ if count==0||count>64||entry>=count{return 1;}
+ var at:usize=16;var i:usize=0;
+ while i<count{
+  if at>blob.len||blob.len-at<24{return 1;}
+  let root=word(blob,at);let pn=word(blob,at+8)as usize;let bn=word(blob,at+16)as usize;at+=24;
+  if root>1||pn==0||pn>4096||pn>blob.len-at{return 1;}
+  at+=pn;if bn>blob.len-at{return 1;}at+=bn;i+=1;
+ }
+ if at!=blob.len{return 1;}
+ at=16;i=0;while i<count{
+  let root=word(blob,at);let pn=word(blob,at+8)as usize;let bn=word(blob,at+16)as usize;at+=24;
+  let p=blob[at..at+pn];at+=pn;
+  *(catalog+i)=modules.Source{root:root,path:p,bytes:blob[at..at+bn]};at+=bn;i+=1;
+ }
+ let opts=front.Options{entry:entry,roots:2,max_depth:128};
+ // The complete compiler currently has 177359 tokens and 115973 AST nodes.
+ // Rebalance the existing 56 MiB arena instead of increasing its contract.
+ let limits=front.Limits{tokens:190000,nodes:118000,strings:262144,edges:8192,types:2048,fields:4096,limbs:65536,text:4096,math_limbs:256,math_work:4096};
+ var fb:[sizeof(front.Result)]u8=[0;sizeof(front.Result)];let fr=(&fb[0])as *front.Result;
+ let status=front.check(&opts,slice_from_raw_parts(catalog as *const modules.Source,count),&limits,arena,fr);
+ if status!=0{return publish(r,3,0,status,(*fr).code,0,0,(*fr).used,0,0);}
+ var cr=compact.Result{old_bytes:0,retained_bytes:0,reclaimed_bytes:0};
+ let consumed=compact.compact(&(*fr).graph,&cr);
+ if consumed!=0{return publish(r,3,1,consumed,0,0,0,(*fr).used,0,0);}
+ // The complete closure uses 582 functions, 124589 instructions, 13479
+ // arguments and 9020936 NASM bytes. Size each pool with headroom inside the
+ // same 56 MiB contract; the output and emitter scratch are distinct regions.
+ let end=47*M+256*1024;if cr.retained_bytes>=end{return publish(r,2,2,0,0,0,0,(*fr).used,cr.retained_bytes,0);}
+ let el=driver.Limits{functions:640,instructions:126000,arguments:14000,text:9150000,piece:2048,parameters:256,locations:512};
+ var er=driver.Result{status:0,stage:0,code:0,unit:0,node:0,detail:0,used:0,written:0};
+ let emitted=driver.compile(&(*fr).graph,&el,1,arena[cr.retained_bytes..end],arena[end..56*M],&er);
+ if emitted!=0{return publish(r,3,2,emitted,er.detail,0,0,(*fr).used,cr.retained_bytes,er.used);}
+ // SYSRET uses RCX for RIP. Trusted startup preserves argument four in R10.
+ // The entry bridge restores the SysV argument before calling the pure job.
+ let bridge="\nsection .text\ndong_compiler_entry:\nsub rsp, 8\nmov rcx, r10\ncall dong_compile_job\nmov rdi, rax\nmov eax, 255\nsyscall\nud2\n";
+ // Supply the target's nonreturning panic runtime only when code generation
+ // declares it external. An explicitly defined target runtime keeps ownership.
+ let declaration="extern $__dong_panic\n";var needs_panic=false;var scan:usize=0;
+ while scan+declaration.len<=er.written{var same=true;var j:usize=0;
+  while j<declaration.len{if arena[end+scan+j]!=declaration[j]{same=false;break;}j+=1;}
+  if same{needs_panic=true;break;}scan+=1;
+ }
+ let runtime="\nsection .text\nglobal $__dong_panic\n$__dong_panic:\nmov edi, 127\nmov eax, 255\nsyscall\nud2\n";
+ var runtime_bytes:usize=0;if needs_panic{runtime_bytes=runtime.len;}
+ let extra=bridge.len+runtime_bytes;
+ let output_capacity=56*M-end;
+ if er.written>output_capacity||extra>output_capacity-er.written{return publish(r,2,3,0,0,0,0,(*fr).used,cr.retained_bytes,er.used);}
+ // Metadata is terminal in the accepted assembler dialect. Insert the bridge
+ // before that exact trailer, preserving the established assembler contract.
+ let tail="%ifidn __OUTPUT_FORMAT__,elf64\nsection .note.GNU-stack noalloc noexec nowrite progbits\n%endif\n";
+ if er.written<tail.len{return publish(r,3,3,1,0,0,0,(*fr).used,cr.retained_bytes,er.used);}
+ let insert=er.written-tail.len;i=0;while i<tail.len{
+  if arena[end+insert+i]!=tail[i]{return publish(r,3,3,1,0,0,0,(*fr).used,cr.retained_bytes,er.used);}i+=1;
+ }
+ i=0;while i<bridge.len{arena[end+insert+i]=bridge[i];i+=1;}
+ i=0;while i<runtime_bytes{arena[end+insert+bridge.len+i]=runtime[i];i+=1;}
+ i=0;while i<tail.len{arena[end+insert+extra+i]=tail[i];i+=1;}
+ let assembly=slice_from_raw_parts((arena.ptr+end)as *const u8,er.written+extra);
+ let w=nasm.Workspace{labels:slice_from_raw_parts(arena.ptr as *nasm.Label,65536),table:slice_from_raw_parts((arena.ptr+2*M)as *usize,131072),text:arena[3*M..7*M],data:arena[7*M..8*M]};
+ var ar=nasm.Result{status:0,line:0,detail:0,text_bytes:0,data_bytes:0,labels:0,written:0};
+ let assembled=nasm.assemble(assembly,"dong_compiler_entry",&w,arena[8*M..10*M],&ar);
+ if assembled!=0{return publish(r,3,3,assembled,ar.line,0,0,(*fr).used,cr.retained_bytes,er.used);}
+ return publish(r,0,3,0,0,ar.written,8*M,(*fr).used,cr.retained_bytes,er.used);
+}}

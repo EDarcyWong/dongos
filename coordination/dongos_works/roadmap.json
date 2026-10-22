@@ -1,10 +1,10 @@
 {
   "version": 1,
   "title": "DongOS 整体任务图",
-  "updated_at": "2026-10-22T03:39:40+08:00",
-  "scope": "P0–P9、L0–L3；含主线源码、当前本地调度与异机历史档案；P10另定",
-  "summary": "依据主线源码、正式协调记录及异机档案维护整体图；代码集成、任务验收与阶段门禁分别记录。",
-  "focus": "本轮所有已发布的非历史任务均已测试、独立验收并真实本地集成：MCP当前141条活动记录=122 integrated+19 historical accepted，非历史未完成0，活动作业0。P2真实1/4CPU及两唯一硬件坏体/桌面P5/raw回放已通过；有限G5正式4项0skip/155源稳定且原字节主线集成；Linux发布15项0skip/1335源稳定，Windows桥与零资源旧harness双宿主门禁均通过。完整语言8类真实差集等后续阶段范围保留，不能把有限任务完成冒作整个OS/G5完成。按用户授权不建PR，完整源码/测试/证据与任务图已准备主分支发布；此为提交前快照，实际推送/关机回执保存在本地coordination/dongos_works/.local/publication/。",
+  "updated_at": "2026-10-22T09:18:41+08:00",
+  "scope": "P0–P9、L0–L3：按当前源码、协调器实际状态和既有验收证据核对；P10另定",
+  "summary": "源码基线4e1fede及后续并行工作以当前任务实际范围核对。17份原任务书和CX6规范契约恢复，两个旧任务已通过本轮正式复验并完成验收/集成登记；阶段结论与任务数量继续分开。",
+  "focus": "本轮17份缺失任务书、CX6同号异义和CX14/CX15旧状态均已处理完成。CX14 integrated rev7，CX15 integrated rev8；CX6 integrated rev9，已恢复读取器契约，分离5条原NASM事件，耗时恢复为1轮/265秒，原始事件全部保留。协调器issues=0；核对时间2026-10-22T09:18:41+08:00。当前MCP快照共164项活动任务：19 accepted、140 integrated、3 submitted、1 in_progress、1 rework。本轮同时观测到其它客户端新增5项并行任务，其状态按实时MCP继续变化，本轮没有接管或改动它们。完整G5、P5安全恢复及P2/P6/P7/P8/P9原阶段门禁继续保留。",
   "tracks": [
     {
       "id": "system",
@@ -51,7 +51,7 @@
             "PR#8已合入主线并同步本地：2MiB live映射/拆分/合并与页表退休回收，含512项转换、PAT位重映射和既有真实双CPU探针记录",
             "PR#8已合入跨地址空间物理别名W^X规划，以及PAT/MTRR有效类型、别名冲突检查、WC编码与缓存迁移",
             "P2LIVE1本地integrated rev6：保持Context/Stats ABI的active大页map/split/merge已接正常私有根，在AP启动前由BSP完成真实buddy order9租约、512页首末读写、替换/拒合并/恢复/合并/完整失效与精确回收，最终恢复4KiB树和账本",
-            "18项不同宿主测试通过，正式12项0skip/source_stable；最终1/4核正常客体、真实漏挂拆分表负控及完整release runtime7四核桌面/P5CTX2正常控制回归通过，原始归档独立复算；kernel.bin=2096720B，原2MiB窗口余432B；本地未提交实现，不计作既有GitHub CI覆盖",
+            "18项不同宿主测试通过，正式12项0skip/source_stable；最终1/4核正常客体、真实漏挂拆分表负控及完整release runtime7四核桌面/P5CTX2正常控制回归通过，原始归档独立复算；kernel.bin=2096720B，原2MiB窗口余432B；该项原验收时为本地实现；当前已随4e1fede提交，本轮未重查远端CI",
             "P2SIZE2 integrated rev6：保留默认编译输出与2MiB装载ABI，kernel函数节+链接GC释放106496B，完整release四核桌面通过。",
             "P2SMP3 integrated rev6：AP在线/调度前固定共享内核根完成实际大页同步事务，全部临时表回收后永久持有512页WB/RW/NX视图并封存；正式5项零skip、source_stable，真实单/四核及唯一漏AP调用负控和独立完整raw replay通过。",
             "P2SMP3验收时正常release runtime7的316输入与当时主目录SHA一致，kernel.bin=2006608B，余90544B；四核本轮524广播/1572 AP ACK，P5正常两观察回归通过；不计入既有GitHub CI。",
@@ -60,7 +60,8 @@
             "P2VIEW6 integrated rev6：真实Space私有池只读inspect接口，3项正式零skip且ABI不变。",
             "P2WC1组件 integrated rev10：Codex重写真实全别名撤映射→全读者屏障/精确回收→缓存/PAT同步→WC重映射→第二屏障；正式1test/0skip及主目录复测，debug/release 64场景/389963 raw检查、4真坏体正常返回精确拒绝。",
             "P2EXEC1组件 integrated rev18：Codex重写真实完整根池闭包扫描、实际撤权/本地与AP广播/授权及PUBLISH全读者可见；正式1test/0skip、主目录1test/0skip，3真坏Dong正常返回精确拒绝，含实际中途页表错误/硬件ACK失败保留持有。",
-            "P2ALIAS8 integrated6：正式7项0skip，真实最新正常1/4CPU、唯一漏AP失效/漏PAT写入负控、四核桌面/P5和完整raw复算全部通过，主目录/真实编译源指纹一致。"
+            "P2ALIAS8 integrated6：正式7项0skip，真实最新正常1/4CPU、唯一漏AP失效/漏PAT写入负控、四核桌面/P5和完整raw复算全部通过，主目录/真实编译源指纹一致。",
+            "当前4e1fede已包含P2EXEC1 rev18、P2WC1 rev10、P2ALIAS8 rev6及预算优化；最新既有release runtime7为1994448B，2MiB窗口余102704B。早期432B/90544B余量均为各自历史版本。"
           ],
           "remaining": [
             "P2SMP3只覆盖调度前固定共享内核根并永久封存；任意调度后多用户CR3动态修改及PCID/PGE启用范围继续另验。",
@@ -97,7 +98,12 @@
             "code/docs/cache-alias-owner.md",
             "code/docs/exec-alias-owner.md",
             "coordination/dongos_works/reviews/2026-10-22-P2WC1-main-file-integration.json",
-            "coordination/dongos_works/reviews/2026-10-22-P2EXEC1-main-files.json"
+            "coordination/dongos_works/reviews/2026-10-22-P2EXEC1-main-files.json",
+            "code/docs/p2-alias-consumers.md",
+            "code/docs/p2-kernel-budget-o1.md",
+            "code/docs/p2-kernel-storage-profile.md",
+            "coordination/dongos_works/reviews/2026-10-22-P2ALIAS8-main-files.json",
+            "coordination/dongos_works/reviews/2026-10-22-P2SIZE9-P2SIZE10-build.json"
           ]
         },
         {
@@ -138,11 +144,11 @@
             "PR5已合入：恢复账本stop→quiesce→retire→reclaim→read→新代际发布，以及分配前PINNED/整块DMA归属记录；最新交接保存专项原生与完整CI通过记录",
             "PR#7已合入GitHub主线：可信现代VirtIO停止后复位并持有DMA，专项/完整CI通过，含真实TCG control/fault；PR8历史同步检查点244b18c已包含",
             "PR#10已正常合入GitHub主线（merge d7468a1）：普通USER分享拒绝完整DMA分配块别名；PR#8合并及本地同步后仍原样保留",
-            "P5CTX1由另一线程完成真实本地文件集成并登记integrated rev7：可信精确身份、完整DmaLease快照与退休观察已接入services/device_host；代码为本地未提交修改，不冒作本轮GitHub CI覆盖",
+            "P5CTX1由另一线程完成真实本地文件集成并登记integrated rev7：可信精确身份、完整DmaLease快照与退休观察已接入services/device_host；当前源码已随4e1fede提交；历史G6 CI不自动覆盖后续P5实现",
             "P5CTX2本地integrated rev6：真实4核TCG正常/UD2故障两组各两次稳定观察，完整424B DmaContext与Device/DmaLease/Binding对照真实Catalog、账本、ECAM硬件；21项正式host零skip及独立raw/portable replay通过，P5CTX1生产源码保持不变；原租约held=1、drain=UNKNOWN"
           ],
           "remaining": [
-            "P5CTX1/P5CTX2已本地实际集成并分别登记rev7/rev6，尚未提交或推送；独立源码、宿主和真实客体核验不替代DMA安全回收闭环",
+            "P5CTX1/P5CTX2已实际集成并随4e1fede进入当前源码；独立源码、宿主和真实客体核验不替代DMA安全回收闭环",
             "可信outstanding DMA排空、持续旧owner排除、全别名撤映射后的全核TLB退休、unpin/free/reuse及恢复发布仍需真实闭环；现有ACK位于撤映射前，不算撤映射后退休证明",
             "同boot设备重授权/驱动重启及旧句柄/旧DMA/旧IRQ负控与持久化回归；reset-hold和两次稳定持有观察不能充作drain或安全回收",
             "分配错误、partial mapping、physical=0客体注入未执行，相关证据仍限P5CTX1原生测试；不重复开发已完成的账本/日志/精确身份/别名拒绝/reset-hold"
@@ -313,12 +319,12 @@
           "done": [
             "主线120个bootstrap Dong模块、66个nasm_组件；原生前端/诊断、通用IR/lowering/NASM、原生汇编器与宿主CLI已经接线",
             "10个整函数组件已在主线文件集成并有5组真实组合测试；本轮逐项核对既有验收指纹、主线路径与有效负控",
-            "PR8保留161条异机原任务档案：109 integrated、27 accepted、23 paused、CX14 in_progress、CX15 submitted；其源码已合入，档案保留在Git、ZIP及恢复台账，不导入本机当前122项活跃调度",
+            "PR8保留161条异机原任务档案：109 integrated、27 accepted、23 paused、CX14 in_progress、CX15 submitted；其源码已合入，档案保留在Git、ZIP及恢复台账，不导入当时本机122项活跃调度",
             "L3A输入/输出/64KiB栈/56MiB流水线和L3B完整ELF固定点已完成开发并进入主线，本地源码可见，原独审及正式复验记录保留",
             "本机C52经新正式job c00f7299f5fb453a9d16d91ab5164d79完成6项零skip独立复验，accepted rev13→integrated rev14；主线组件早随PR8集成，本轮正常补记正式结果，不覆盖旧失败和时间线",
             "现有runtime5/compiler_job隔离profile及49模块自编译闭包已完成真实G6验收并随PR#11合并/同步；G6 run39467503226 attempt1在准确headf54c35c通过真实同盘两启（304.834秒、307.193秒）；SEED/STAGE1/STAGE2各1892648字节且逐字等于宿主ELF，SHA256 e7f2424dc2010cf5b66e32c14faafec87f1f0f76051c04bd4e9eee050d34c9f2",
-            "L3PTR7 integrated6、有限全局量L3A正式10项0skip且主目录10项0skip，真实集成11；L3差分runner在途并保留完整语言缺口。",
-            "有限L3差分runner正式4项0skip/155源稳定，完整真实矩阵/负控与原生ELF通过，integrated13；主线入口integrated6、跨宿主桥integrated9、零资源旧测试器integrated9。"
+            "有限L3差分runner正式4项0skip/155源稳定，完整真实矩阵/负控与原生ELF通过，integrated13；主线入口integrated6、跨宿主桥integrated9、零资源旧测试器integrated9。",
+            "可变全局量、静态取址、有限差分runner、GLOBAL/.data主线接线、跨宿主桥及零参数容量均已在4e1fede；本轮核对实际文件和已有复验报告，未重跑完整固定点。"
           ],
           "remaining": [
             "已实际证实的完整语言差集：method、enum、error、try、orelse、defer、extern SysV/Win64；有限runner已验收集成，完整G5继续partial。"
@@ -341,10 +347,14 @@
             "coordination/dongos_works/reviews/2026-10-21-g6-ci-execution.json",
             "https://github.com/EDarcyWong/dongos/pull/11",
             "https://github.com/EDarcyWong/dongos/actions/runs/39467503226",
-            "https://github.com/EDarcyWong/dongos/commit/19e1a1982de0d7ebc57eea0b851d968e01b40e07"
+            "https://github.com/EDarcyWong/dongos/commit/19e1a1982de0d7ebc57eea0b851d968e01b40e07",
+            "code/docs/g5-differential.md",
+            "code/tools/g5_differential.py",
+            "coordination/dongos_works/reviews/2026-10-22-L3-formal-matrix.json",
+            "coordination/dongos_works/reviews/2026-10-22-final-validation.json"
           ],
           "scope_notes": [
-            "异机CX14/CX15原状态仅作档案，不重新导入或冒作当前待办；原49模块G6 profile已双启验收，完整语言覆盖属于后续阶段。"
+            "CX14/CX15迁移旧记录已通过当前正式宿主复验并依原契约/后继证据验收集成，分别rev7/rev8；完整G5差集及客体profile边界保持。"
           ]
         },
         {
@@ -356,7 +366,8 @@
             "主线已包含GUEST1～5、CR45/46及CX6/8的既有实现：有界路径/目录/源码读取、诊断、原生汇编输入、真实H_READ/H_WRITE/H_SYNC文件适配；原任务完成历史单独留档",
             "主线已包含CX7的64KiB双guard编译器栈、CX10的既有64MiB帧池及CR47语义栈优化；旧16KiB开发阻塞已解决，原独审及正式复验记录保留",
             "主线CX13 compiler_job在单56MiB arena内完成前端/压缩/后端/原生汇编与ELF输出，无宿主IR/汇编正文替代；27字节启动桥已修复并通过机器正反例",
-            "既有输入/输出/专用栈/纯编译流水线已在G6真实同盘两启验证，但仅限现有49模块profile"
+            "既有输入/输出/专用栈/纯编译流水线已在G6真实同盘两启验证，但仅限现有49模块profile",
+            "有限可变全局量与GLOBAL/.data已接入实际原生编译/汇编产物；L3A任务integrated rev11、L3REG11 rev6、L3HOST13/L3REG14 rev9；完整语言范围仍受八类G5差集限制。"
           ],
           "remaining": [
             "完整语言、ABI与诊断覆盖仍属G5；现有runtime5/49模块profile的持久产物验收已见L3C，不因此关闭完整后端覆盖"
@@ -378,7 +389,11 @@
             "coordination/dongos_works/reviews/2026-10-21-g6-ci-execution.json",
             "https://github.com/EDarcyWong/dongos/pull/11",
             "https://github.com/EDarcyWong/dongos/actions/runs/39467503226",
-            "https://github.com/EDarcyWong/dongos/commit/19e1a1982de0d7ebc57eea0b851d968e01b40e07"
+            "https://github.com/EDarcyWong/dongos/commit/19e1a1982de0d7ebc57eea0b851d968e01b40e07",
+            "code/docs/l3a-mainline-compatibility.md",
+            "code/docs/l3-host-portability.md",
+            "code/docs/native-zero-argument-capacity.md",
+            "coordination/dongos_works/reviews/2026-10-22-final-validation.json"
           ]
         },
         {
@@ -417,8 +432,7 @@
             "coordination/dongos_works/reviews/2026-10-21-roadmap-completion-check.json"
           ],
           "scope_notes": [
-            "验收范围为宿主有界自编译固定点；现有profile的客体固定点已由L3C验收，完整语言差分覆盖确实未完成，保留L3/G5阶段待办。",
-            "CX15原异机任务身份继续保留在历史档案，不作为L3B当前待办，也不据此把整体L3标为完成。"
+            "既有宿主有界固定点证据保留；CX15已补齐本轮正式两模式/双格式完整固定点复验并集成rev8，不再列为旧提交待审。完整语言差分仍归L3/G5。"
           ]
         },
         {
@@ -426,7 +440,7 @@
           "title": "DongOS内自编译（runtime5/49模块profile）",
           "status": "complete",
           "done": [
-            "主线已包含CX14的P5隔离编译slot3、受限启动门、只读源码借页、core退出权限与controller真实文件持久化接线；原异机任务在途记录仅留档",
+            "主线已包含CX14的P5隔离编译slot3、受限启动门、只读源码借页、core退出权限与controller真实文件持久化接线；原异机在途记录本轮已补交付、正式宿主复验并集成rev7",
             "真实VM已经运行，run-cc7b089dc2b4保留明确失败：SYSRET消耗RCX导致第4参数arena错误；不是从未运行",
             "内核R10传参及27字节桥RCX←R10、host decoder已修复并进入主线，本地可见；宿主实际机器桥正反例通过；新真实双启结果按后续CI记录验收",
             "PR#11已实际安装专用G6 workflow于独立分支，固定head/tree并重建完整fixture和runtime5/compiler_job内核；每次保留原始成功/失败证据",
@@ -655,7 +669,7 @@
           "done": [
             "原任务编号cursor:P5CTX1保留，另一线程经正常授权转交Codex；正式隔离job5ed94c53b4b84458a0a53b052c63b8c9通过1test/0skip、8.281秒，source_stable/process_stopped/execution_exited均true",
             "正式源码/契约独审后accepted rev6→integrated rev7；两个完整生产模块、三个测试及文档已实际复制到code/，86模块debug/release闭包编译和相关21项本地测试结果见原集成报告",
-            "本次fresh MCP核对仍为integrated rev7；原实现、历史及未提交修改保留，后续真实客体持有上下文核验由P5CTX2闭合，不扩称DMA回收"
+            "本轮MCP核对仍为integrated rev7；原实现及历史保留，源码已随4e1fede进入当前检出，后续真实客体持有上下文核验由P5CTX2闭合，不扩称DMA回收"
           ],
           "remaining": [],
           "evidence": [
@@ -669,8 +683,7 @@
             "coordination/dongos_works/reviews/2026-10-21-roadmap-completion-check.json"
           ],
           "scope_notes": [
-            "本任务精确持有上下文已验收并本地集成；按用户约定未提交或推送，不计入旧G6准确head的GitHub CI范围。",
-            "RESET_CONFIRMED与DMA drain UNKNOWN保持分开；后续真实客体核验已由P5CTX2完成，安全排空/退休/回收与驱动恢复确实未完成，保留在P5阶段待办。"
+            "本任务精确持有上下文已验收并真实集成，当前代码已随4e1fede提交；后续P5实现不自动计入旧G6准确head的GitHub CI范围。"
           ]
         },
         {
@@ -680,7 +693,7 @@
           "done": [
             "正式job b15f655e12ea439bbe3af0aef39cf8be，12+9=21 tests、0skip、source_stable；独立审查通过，accepted rev5→integrated rev6",
             "完整runtime7正常/故障镜像各自构建通过，真实4CPU TCG control/fault分别40.015/43.109秒；各两次稳定raw观察、完整ELF/布局/源码/磁盘/清理证据及portable replay通过",
-            "实际主文件逐SHA匹配正式与客体来源；P5CTX1生产源码保留，未建PR、提交或推送"
+            "原验收时实际主文件逐SHA匹配正式与客体来源，P5CTX1生产源码保持；当前实现已随4e1fede提交，本轮没有重新运行原客体"
           ],
           "remaining": [],
           "evidence": [
@@ -994,42 +1007,43 @@
           "scope_notes": [
             "仅修测试器资源边界，非零容量负控及生产DG不变。"
           ]
+        },
+        {
+          "id": "RECOVERY22",
+          "title": "新开发机原任务恢复、身份分离与旧状态收尾",
+          "status": "complete",
+          "done": [
+            "固定Git 50ab7cf原文恢复17份缺失任务书及CX6正确契约，共18份任务书、35个原交付等关联文件；18项契约字段逐项匹配。",
+            "原18份任务记录、17项通过的历史独立复验及16项原集成事实已审计；所有历史指纹路径都有实物，换行与真实后继内容分别保留。",
+            "CX6读取器契约恢复；原NASM CX6任务书/交付/状态/事件独立保全，正式后继仍CXNASM3。证据绑定CLI分离5条NASM事件的派生统计，原事件不删，当前1轮/265秒。",
+            "读取器与NASM兼容的11项本机检查全部零skip通过；身份校正6项、既有时间5项和状态同步7项检查均通过。",
+            "CX14：正式d1dd123835f04bedbbd8dfb903054ace共3项零skip、source_stable/退出/停止均true，结合原准确head的G6限定profile双启及独审回执，正常验收rev6→真实主线集成rev7。",
+            "CX15：正式8d6893090cd74e3c96a9af844a27a15c共1项零skip/391.284秒、当前两模式双格式完整ELF固定点通过，source_stable/退出/停止均true，验收rev7→真实主线集成rev8。",
+            "协调器校验问题由17降为0，两个本轮旧状态均已收尾；其它客户端新任务独立保留。"
+          ],
+          "remaining": [],
+          "evidence": [
+            "coordination/dongos_works/reviews/2026-10-22-task-recovery/README.md",
+            "coordination/dongos_works/reviews/2026-10-22-task-recovery/restoration-manifest.json",
+            "coordination/dongos_works/reviews/2026-10-22-task-recovery/cx6-history-result.json",
+            "coordination/dongos_works/reviews/2026-10-22-task-recovery/completion.json"
+          ],
+          "scope_notes": [
+            "本项完成范围是原文/身份/旧状态修复；原G6 raw artifact未迁移，本轮没有重新启动VM，历史客体验收继续绑定原head/profile。",
+            "不关闭完整G5、P5 DMA回收、硬件和外部环境门禁；其它客户端并行任务以实时MCP为准。"
+          ]
         }
       ]
     }
   ],
   "notes": [
-    "图更新于2026-10-21 21:07:26 Asia/Shanghai；最新本地HEAD28fae186eade64aac9eec17fcc2fb30913b948f6。G6代码检查点19e1a19及其GitHub/CI内容保留原历史范围，本轮未重新查询远端。",
-    "PR#7/#10/#8均已合入并完成本地同步；PR#3独立暂缓。P5完整恢复验收不是PR8代码合并的前置，原DMA guard、hold和reset契约全部保留。",
-    "23:13合并同步冻结报告保留56个dirty文件、533项任务相关文件SHA和DB四表逻辑未变的当时证据；该报告不改。后续C52/CXNASM3新正式复验及正常验收/集成、新增P5CTX1正常产生新记录，不再宣称当前DB未变；91项异机live路径仍隔离。",
-    "开发已完成、主线已集成、阶段验收是三个不同事实。本机没有任务书或ignored build回执，不能据此判未实现；源码、git状态快照、正式verification与独立报告构成异机恢复依据。",
-    "PR8的161条异机任务（含23条paused）保留Git、ZIP与恢复台账，不导入本机live状态；旧快照相对原主线新增27项只作来源对照，不当新待办或当前任务数。",
-    "原pool:P2ALIAS1/P2HUGE1/P2PAT1已取消归档；P2扩展后来直接在PR8开发，不恢复这些旧派单凑数量。",
-    "发现异机codex:CX6/ cursor:CR43与本轮临时新任务同号异义。临时记录已经官方pause/archive并备份，NASM维护改独立编号CXNASM3；不让higher-rev同步规则混合不同契约。",
-    "WINVERIFY1执行器早已随PR8同步；C52本轮新正式复验6 tests/0 skip、149.843秒通过，source_stable/process_stopped/execution_exited均true，正常accepted rev13→integrated rev14。旧submitted/None及中断记录保留在原时间线，不覆盖回填。",
-    "当前MCP只读快照：非归档124项，integrated=105、accepted=19，todo/in_progress/submitted/rework/paused均0；归档总数本轮未复核。异机161条仍未导入，任务数不代表系统阶段完成百分比。",
-    "P5CTX1保持integrated rev7；P5CTX2与P2LIVE1均integrated rev6。本地实现及验证不计作旧G6 GitHub CI覆盖，P5与P2仍partial。",
-    "P6首代DAG真实结构观察失败与KVM前置权限失败保留；它们不否定已接线的scheduler/init实现。P7/P8新版GUI/USB回归及外部真机门槛继续保留。",
-    "绿色L3B为有界宿主固定点；L3C的现有runtime5/compiler_job隔离profile及49模块自编译闭包已完成真实两启及持久产物验收。整体L3/L3A仍因G5完整语言覆盖保持partial。",
-    "GitHub集成状态与阶段验收分开：本轮G6以真实两启、原始磁盘/物理转储及双独审通过，不仅依据CI绿色；P5/P2/G5不由该结论关闭。",
-    "本机Windows完整固定点两次均在seed执行前因固定ELF地址占位而失败，未计通过；临时链接尝试撤回，完整固定点由准确head的Linux CI及源码绑定回执证明。",
-    "PR8合并前准确head三组CI均通过；main244b18c的完整CI39444684378 attempt2已20/20 success，原apt源403失败保留。PR11各候选head和各次实际G6结果单列，不跨head沿用绿色。",
-    "23:13同步验证的149项Python回归81.274秒、11项UI JS及14项桥/NASM/启动宿主检查17.529秒保持原范围。本轮C52与CXNASM3另有正式隔离复验和正常新rev集成；该02:26历史快照当时为122项，当前统计见最新MCP记录，不替代G6客体双启。",
-    "CXNASM3新正式复验10 tests/0 skip、2.859秒通过，source_stable/process_stopped/execution_exited均true，经独审accepted rev5→integrated rev6；独立身份与异机CX6及旧临时记录分开。",
-    "G6 run39467503226 attempt1在准确headf54c35c通过真实同盘两启（304.834秒、307.193秒）；SEED/STAGE1/STAGE2各1892648字节且逐字等于宿主ELF，SHA256 e7f2424dc2010cf5b66e32c14faafec87f1f0f76051c04bd4e9eee050d34c9f2；432项源码与453项冻结输入按Git原始字节核验；两次共1810份物理转储经两位独审，64KiB栈/双guard、56MiB arena、只读源码借页、W^X和无能力隔离通过；每启128页退休表清零、core/借页撤销、controller恢复及真实FLUSH均通过。首两轮失败仍在公开执行报告中，不覆盖历史。",
-    "旧P5/G6下一步报告与静态提案保留为历史；当前G6实施、真实失败、修复及各head CI以2026-10-21-g6-ci-execution.md为准，不能继续把提案未运行写为当前状态。",
-    "M7/M8等历史环节中的“当前main/HEAD244b18c”属于PR8原检查点；最新G6代码合并/同步检查点以顶部及M11为准。后续文档提交可推进HEAD，不改变已验收的f54c35c代码/tree证据。",
-    "准确候选常规CI39467503240为20/20 success：712宿主测试0skip、931语言测试1项既有DONG_ASSEMBLER_FULL_INPUT条件skip、9组真实boot；P5 39467503250与输入39467503280通过。实际PR测试merge b905c1e、f54c35c与代码merge19e1a19同tree 394874cfe8ec7e4b0b4a9c857535781f88a957c6",
-    "合并后自动push检查在2026-10-20T18:20:41Z快照为39473893535 in_progress；39473893647 in_progress；与已通过的准确候选/同内容树检查分开，不冒称新push全绿，也不为重复CI阻塞此次集成。",
-    "历史02:26快照：P5CTX1 integrated rev7、122活跃=103 integrated+19 accepted，16归档/总138；该统计不再代表当前，原G6提交/CI范围保持不变。",
-    "P2LIVE1完整release runtime7构建及真实桌面回归通过，先前超7760B/3664B失败与无manifest首轮拒绝保留；原装载2MiB ABI不变，余432B。P2大页正常根BSP生命周期不再列为未接线。",
-    "P5CTX2正式21项零skip、真实control/fault两观察和独立完整离线复验已通过；reset confirmed/drain UNKNOWN继续分开，不证明DMA排空、unpin/free/reuse或驱动恢复。",
-    "本轮任务图仅更新本地已核事实、证据入口及当前统计；不修改协调器状态/数据库/派生index，不创建PR、提交或推送。来源见coordination/dongos_works/reviews/2026-10-21-roadmap-local-update.json。",
-    "展示语义修正：已验收节点的remaining仅表示本项真实待办，必须为空；验收范围与后续阶段归属单列scope_notes。P5CTX1/P5CTX2/P2LIVE1/L3B/M7/M10共6处已复核，P2/P5/L3等阶段真实待办与partial状态保持。",
-    "实质核实已完成：P5正常/故障与P2单/四核实际原始归档本轮重新完整离线复算通过；DMA drain仍UNKNOWN、PINNED租约仍持有，P2活动路径仍BSP/WB-only，lower_program仍拒绝部分完整语言构造。这些后续工作确实未完成，继续保留P5/P2/L3-G5阶段待办，详见2026-10-21-roadmap-completion-check.md/json及MCP原任务范围快照。",
-    "本轮P2SMP3已正式独立复验并本地集成rev6；原BSP/WB-only核实描述保留为历史，最新共享根封存持有范围以P2/P2SMP3为准。新派Claude与DeepSeek任务均按MCP真实状态展示，不能提前标验收通过。",
-    "P2OOM4完成受控碎片OOM实机分支，原待补描述由本快照取代。P2EXEC1修日期后未修原契约阻塞，已详细R1；领取或脚本退出0不算验收。",
-    "P2BUILD5接续正式构建4行修复；旧NASM2与新NASM3 kernel SHA不同但大小一致，保留原始反汇编和实际新镜像客体证据。P2SIZE2旧tools/build指纹为历史版本，新合法接续由P2BUILD5登记。",
-    "2026-10-22最终本轮：显式MCP查全部141活动记录，122已本地集成，19 accepted逐项get_task均historical=true且不伪造新验收；非历史未完0/运行作业0。所有complete节点remaining=[]，真实阶段差集保留。用户授权直接提交GitHub main并核对后关机，禁止新建PR。"
+    "本轮17份缺失任务书、CX6同号异义和CX14/CX15旧状态均已处理完成。CX14 integrated rev7，CX15 integrated rev8；CX6 integrated rev9，已恢复读取器契约，分离5条原NASM事件，耗时恢复为1轮/265秒，原始事件全部保留。协调器issues=0；核对时间2026-10-22T09:18:41+08:00。",
+    "当前MCP快照共164项活动任务：19 accepted、140 integrated、3 submitted、1 in_progress、1 rework。本轮同时观测到其它客户端新增5项并行任务，其状态按实时MCP继续变化，本轮没有接管或改动它们。",
+    "原文按固定Git blob恢复，旧任务书中的待领取是原发布快照，实时状态以协调器为准；没有手改DB/index或用自述代替验收。",
+    "CX6同号历史通过规范契约、两支原文归档和精确事件SHA校正；原事件均保留，get_task.timing.identity_resolution保存分离依据。",
+    "本轮实际执行CX14三项、CX15一项正式隔离复验及11项身份关联测试，均零skip；G6真实VM结果沿用原准确head的已审回执，不声称本轮新机重跑。",
+    "新机缺ignored build/raw产物不等于源码缺失；原验收指纹保持原字节含义，LF/CRLF等价另标，真实后继修改不冒作原源码。",
+    "完整G5及P5安全回收/恢复等阶段待办继续有效；并行新任务提交、在途或源文件变化不自动等同验收。",
+    "本轮仅处理迁移记录、身份分离和旧状态收尾；协调器已在无活动作业时安全重载，自动化保持关闭，未提交、推送或关机。"
   ]
 }

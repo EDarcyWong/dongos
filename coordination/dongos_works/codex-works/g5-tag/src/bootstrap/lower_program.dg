@@ -1,0 +1,425 @@
+// Native checked graph -> reusable typed slot IR. This is the production
+// lowering path for the supported subset, never a host-created IR adapter.
+module bootstrap.lower_program;
+import bootstrap.frontend as frontend;
+import bootstrap.program_ir as ir;
+import bootstrap.expression as ast;
+import bootstrap.semantic_types as sem;
+import bootstrap.binding as binding;
+import bootstrap.names as names;
+pub const OK:u64=0;pub const INVALID:u64=1;pub const CAPACITY:u64=2;
+pub const UNSUPPORTED:u64=3;pub const FRAME:u64=4;pub const BAD_GRAPH:u64=5;
+const NONE:usize=0xffff_ffff_ffff_ffff;
+// Info.flags PLACE is bit 0 in the checked semantic Graph contract.
+const PLACE:u64=1;
+struct Region{p:u64,n:usize}
+struct State{g:*const frontend.Graph,w:*const ir.Workspace,status:u64,unit:usize,error_node:usize,detail:u64,
+ functions:usize,code:usize,args:usize,blocks:usize,cursor:usize,maximum:usize,locals:usize,
+ returns:usize,mode:u64,break_block:usize,continue_block:usize,cleanup_head:usize,loop_cleanup:usize}
+fn span(p:u64,n:usize)bool{return n==0||(p!=0&&n<=NONE-p);}
+fn overlap(a:u64,n:usize,b:u64,m:usize)bool{return n!=0&&m!=0&&a<b+m&&b<a+n;}
+unsafe fn fail(s:*State,code:u64,id:usize,detail:u64)usize{unsafe{
+ if (*s).status==0{(*s).status=code;(*s).error_node=id;(*s).detail=detail;}return NONE;
+}}
+unsafe fn gid(s:*const State,id:usize)usize{unsafe{return (*(*s).g).units[(*s).unit].node_start+id;}}
+unsafe fn node(s:*const State,id:usize)*const ast.Node{unsafe{return (*(*s).g).nodes.ptr+gid(s,id);}}
+unsafe fn typ(s:*const State,id:usize)usize{unsafe{return (*(*s).g).info[gid(s,id)].typ;}}
+unsafe fn text(s:*const State,id:usize)[]const u8{unsafe{
+ return names.text((*(*s).g).sources,(*(*s).g).units,(*(*s).g).tokens,(*s).unit,(*node(s,id)).token);
+}}
+fn equal(a:[]const u8,b:[]const u8)bool{
+ if a.len!=b.len{return false;}var i:usize=0;while i<a.len{if a[i]!=b[i]{return false;}i+=1;}return true;
+}
+unsafe fn enter(s:*State,id:usize,depth:usize)bool{unsafe{
+ if (*s).status!=0{return false;}
+ if depth>=256{fail(s,BAD_GRAPH,id,1);return false;}
+ if id>=(*(*s).g).units[(*s).unit].node_count{fail(s,BAD_GRAPH,id,2);return false;}return true;
+}}
+unsafe fn emit(s:*State,operation:u64,t:usize,d:usize,a:usize,b:usize,value:u64,extra:u64,id:usize)bool{unsafe{
+ if (*s).status!=0{return false;}if (*s).code==(*(*s).w).instructions.len{fail(s,CAPACITY,id,1);return false;}
+ (*(*s).w).instructions[(*s).code]=ir.Instruction{operation:operation,typ:t,destination:d,a:a,b:b,value:value,extra:extra,unit:(*s).unit,node:id};
+ (*s).code+=1;return true;
+}}
+unsafe fn block(s:*State)usize{unsafe{let b=(*s).blocks;(*s).blocks+=1;return b;}}
+unsafe fn label(s:*State,b:usize,id:usize)void{unsafe{emit(s,ir.LABEL,sem.VOID,0,0,0,b,0,id);}}
+unsafe fn jump(s:*State,b:usize,id:usize)void{unsafe{emit(s,ir.JUMP,sem.VOID,0,0,0,b,0,id);}}
+unsafe fn slot(s:*State,t:usize,id:usize)usize{unsafe{
+ let words=ir.words((*s).g,t);if words==NONE{ return fail(s,UNSUPPORTED,id,t);}
+ if words==0{return 0;}let n=words*8;
+ if ir.aggregate((*s).g,t){let a=(*(*s).g).layouts[t].alignment;if a>16{return fail(s,UNSUPPORTED,id,a);}(*s).cursor=((*s).cursor+n+a-1)/a*a-n;}
+ if n>4080||(*s).cursor>4080-n{return fail(s,FRAME,id,(*s).cursor+n);}
+ (*s).cursor+=n;if (*s).cursor>(*s).maximum{(*s).maximum=(*s).cursor;}return (*s).cursor;
+}}
+unsafe fn bind(s:*State,id:usize)bool{unsafe{
+ let g=gid(s,id);let t=(*(*s).g).node_types[g];let off=slot(s,t,id);if (*s).status!=0{return false;}
+ (*(*s).w).node_slots[g]=off;return true;
+}}
+// Allocate persistent locals before emitting any temporary, including locals
+// in branches that will not execute. Temporary offsets never alias them.
+unsafe fn collect_locals(s:*State,id:usize,depth:usize)bool{unsafe{
+ if !enter(s,id,depth){return false;}let n=*node(s,id);
+ if n.kind==ast.BINDING{return bind(s,id);}
+ if n.kind==ast.BLOCK{var p=n.a;var steps:usize=0;while p!=NONE{
+  if steps>=(*(*s).g).nodes.len{return false;}steps+=1;
+  if !collect_locals(s,p,depth+1){return false;}p=(*node(s,p)).next;}return true;
+ }
+ if n.kind==ast.UNSAFE_BLOCK||n.kind==ast.LOOP||n.kind==ast.DEFER{return collect_locals(s,n.a,depth+1);}
+ if n.kind==ast.FOR{
+  if !bind(s,n.a){return false;}let control=slot(s,3,id);slot(s,3,id);slot(s,3,id);
+  if (*s).status!=0{return false;}(*(*s).w).node_slots[gid(s,id)]=control;
+  return collect_locals(s,n.c,depth+1);
+ }
+ if n.kind==ast.MATCH{
+  var arm=n.b;var steps:usize=0;while arm!=NONE{
+   if steps>=(*(*s).g).nodes.len{fail(s,BAD_GRAPH,id,74);return false;}steps+=1;
+   let a=*node(s,arm);let p=*node(s,a.a);if p.b!=NONE&&!bind(s,p.b){return false;}
+   if !collect_locals(s,a.b,depth+1){return false;}arm=a.next;
+  }return true;
+ }
+ if n.kind==ast.IF||n.kind==ast.WHILE{
+  if !collect_locals(s,n.b,depth+1){return false;}
+  if n.c!=NONE{return collect_locals(s,n.c,depth+1);}return true;
+ }
+ if n.kind==ast.RETURN||n.kind==ast.ASSIGN||n.kind==ast.EXPRESSION_STATEMENT||n.kind==ast.BREAK||n.kind==ast.CONTINUE{return true;}
+ fail(s,UNSUPPORTED,id,n.kind);return false;
+}}
+unsafe fn constant(s:*State,id:usize,destination:usize,t:usize)bool{unsafe{
+ let g=gid(s,id);if (*(*s).g).value_states[g]!=2&&((*(*s).g).info[g].flags&256)==0{return false;}let v=(*(*s).g).values[g];
+ if v.used>2||v.first>(*(*s).g).limbs.len||v.used>(*(*s).g).limbs.len-v.first{fail(s,UNSUPPORTED,id,30);return false;}
+ var value:u64=0;if v.used>0{value=(*(*s).g).limbs[v.first]as u64;}
+ if v.used>1{value|=((*(*s).g).limbs[v.first+1]as u64)<<32;}
+ if v.negative{value=wrapping_sub(0 as u64,value);}
+ emit(s,ir.CONSTANT,t,destination,0,0,value,0,id);return true;
+}}
+unsafe fn address(s:*State,id:usize,depth:usize)usize{unsafe{
+ if !enter(s,id,depth){return NONE;}let n=*node(s,id);let out=slot(s,3,id);let after=(*s).cursor;
+ if n.kind==ast.NAME||(n.kind==ast.FIELD&&(*(*s).g).refs[gid(s,id)].kind==binding.GLOBAL){
+  let r=(*(*s).g).refs[gid(s,id)];if r.kind==binding.GLOBAL&&((*(*s).g).symbols[r.target].kind==names.CONST||(*(*s).g).symbols[r.target].kind==names.GLOBAL){emit(s,ir.STATIC_ADDRESS,3,out,0,0,r.target,0,id);(*s).cursor=after;return out;}
+  if r.kind!=binding.LOCAL{return fail(s,UNSUPPORTED,id,40);}
+  let g=(*(*s).g).units[r.unit].node_start+r.target;let off=(*(*s).w).node_slots[g];
+  if off==NONE{return fail(s,BAD_GRAPH,id,41);}emit(s,ir.ADDRESS,3,out,off,0,0,0,id);
+ }else if n.kind==ast.UNARY&&n.op==1066{
+  let pointer=expression(s,n.a,depth+1);emit(s,ir.COPY,3,out,pointer,0,0,0,id);
+ }else if n.kind==ast.FIELD{
+  let bt=typ(s,n.a);if bt>=(*(*s).g).types.len{return fail(s,UNSUPPORTED,id,42);}let t=(*(*s).g).types[bt];
+  if t.kind!=sem.STRUCT{return fail(s,UNSUPPORTED,id,43);}let base=address(s,n.a,depth+1);
+  let name=text(s,id);var i:usize=0;var found=false;
+  while i<t.length{let f=(*(*s).g).fields[t.first+i];let u=(*(*s).g).units[f.unit];let field_node=(*(*s).g).nodes[u.node_start+f.node];
+   let key=names.text((*(*s).g).sources,(*(*s).g).units,(*(*s).g).tokens,f.unit,field_node.token);
+   if equal(name,key){emit(s,ir.OFFSET,3,out,base,0,(*(*s).g).field_offsets[t.first+i],0,id);found=true;break;}i+=1;
+  }if !found{return fail(s,BAD_GRAPH,id,44);}
+ }else if n.kind==ast.INDEX{
+  let bt=typ(s,n.a);if bt>=(*(*s).g).types.len{return fail(s,UNSUPPORTED,id,45);}let t=(*(*s).g).types[bt];
+  if t.kind!=sem.SLICE&&t.kind!=sem.POINTER&&t.kind!=sem.ARRAY{return fail(s,UNSUPPORTED,id,46);}
+  var base:usize=0;var bound:usize=0;if t.kind==sem.ARRAY{base=address(s,n.a,depth+1);bound=slot(s,3,id);emit(s,ir.CONSTANT,3,bound,0,0,t.count,0,id);}else{base=expression(s,n.a,depth+1);if t.kind==sem.SLICE{bound=base-8;}}let index=expression(s,n.b,depth+1);
+  let stride=(*(*s).g).layouts[t.element].size;emit(s,ir.INDEX,3,out,base,index,stride,bound,id);
+ }else{return fail(s,UNSUPPORTED,id,n.kind);}
+ (*s).cursor=after;return out;
+}}
+// Binding keeps a method candidate group immutable. Only semantic callee Info
+// identifies the selected declaration; its FUNCTION identity is not structural.
+unsafe fn method_target(s:*State,callee:usize,id:usize)usize{unsafe{
+ let g=(*s).g;let ft=typ(s,callee);
+ if ft>=(*g).types.len{return fail(s,BAD_GRAPH,id,62);}let t=(*g).types[ft];
+ if t.kind!=sem.FUNCTION{return fail(s,BAD_GRAPH,id,63);}
+ var i:usize=0;while i<(*g).symbols.len{let sy=(*g).symbols[i];
+  if sy.kind==names.METHOD&&sy.unit==t.unit&&sy.declaration==t.node{return i;}i+=1;
+ }return fail(s,BAD_GRAPH,id,64);
+}}
+unsafe fn expression(s:*State,id:usize,depth:usize)usize{unsafe{
+ if !enter(s,id,depth){return NONE;}let n=*node(s,id);let t=typ(s,id);
+ let info=(*(*s).g).info[gid(s,id)];
+ if (info.flags&576)!=0{
+  let out=slot(s,t,id);let after=(*s).cursor;
+  if (info.flags&512)!=0{let tag=expression_raw(s,id,depth+1,0xffff_ffff_ffff_fffb);emit(s,ir.TAGGED,t,out,tag,0,0,3,id);}
+  else if n.kind==ast.NULL{emit(s,ir.TAGGED,t,out,0,0,0,NONE,id);}
+  else{let original=((info.flags>>32)as usize)-1;let value=expression_raw(s,id,depth+1,original);emit(s,ir.TAGGED,t,out,0,value,info.length,original,id);}
+  (*s).cursor=after;return out;
+ }
+ return expression_raw(s,id,depth,t);
+}}
+unsafe fn expression_raw(s:*State,id:usize,depth:usize,t:usize)usize{unsafe{
+ if !enter(s,id,depth){return NONE;}let n=*node(s,id);
+ let out=slot(s,t,id);if (*s).status!=0{return NONE;}let after=(*s).cursor;
+ if !ir.aggregate((*s).g,t)&&constant(s,id,out,t){(*s).cursor=after;return out;}
+ if n.kind==ast.ERROR{
+  let r=(*(*s).g).refs[gid(s,id)];let sy=(*(*s).g).symbols[r.target];let g=(*(*s).g).units[sy.unit].node_start+sy.declaration;
+  let v=(*(*s).g).values[g];let value=(*(*s).g).limbs[v.first]as u64;emit(s,ir.CONSTANT,t,out,0,0,value,0,id);
+ }else if n.kind==ast.FIELD&&(*(*s).g).refs[gid(s,id)].kind==binding.ENUM_MEMBER{emit(s,ir.TAGGED,t,out,0,0,(*(*s).g).info[gid(s,id)].length,NONE,id);}
+ else if n.kind==ast.TRY||n.kind==ast.ORELSE{
+  let value=expression(s,n.a,depth+1);let yes=block(s);let no=block(s);let end=block(s);
+  if n.kind==ast.TRY{emit(s,ir.BRANCH,8,0,value,0,no,yes,id);}else{emit(s,ir.BRANCH,8,0,value,0,yes,no,id);}
+  label(s,yes,id);if ir.words((*s).g,t)!=0{emit(s,ir.COPY,t,out,value-8,0,0,0,id);}jump(s,end,id);label(s,no,id);
+  if n.kind==ast.TRY{
+   let result=slot(s,(*s).returns,id);emit(s,ir.TAGGED,(*s).returns,result,value,0,0,NONE,id);
+   let locals=(*s).locals;(*s).locals=(*s).cursor;cleanups(s,NONE,depth+1);(*s).locals=locals;
+   emit(s,ir.RETURN,(*s).returns,0,result,0,0,0,id);
+  }else{let fallback=expression(s,n.b,depth+1);if ir.words((*s).g,t)!=0&&typ(s,n.b)!=sem.NORETURN{emit(s,ir.COPY,t,out,fallback,0,0,0,id);}}
+  label(s,end,id);
+ }else if n.kind==ast.EXIT{
+  if n.op==281{return_value(s,n.a,id,depth+1);}
+  else{var target=(*s).break_block;if n.op==280{target=(*s).continue_block;}cleanups(s,(*s).loop_cleanup,depth+1);jump(s,target,id);}
+ }else if n.kind==ast.STRING{emit(s,ir.STRING,t,out,0,0,0,0,id);}
+ else if n.kind==ast.STRUCT||n.kind==ast.ARRAY||n.kind==ast.REPEAT{
+  emit(s,ir.ZERO,t,out,0,0,0,0,id);let base=slot(s,3,id);emit(s,ir.ADDRESS,3,base,out,0,0,0,id);let stable=(*s).cursor;
+  let ty=(*(*s).g).types[t];var p=n.a;if n.kind==ast.STRUCT{p=n.b;}var index:usize=0;var repeated:usize=NONE;
+  if n.kind==ast.REPEAT{repeated=expression(s,n.a,depth+1);}
+  let saved=(*s).cursor;while p!=NONE&&(*s).status==0{var value_node=p;var offset:usize=0;
+   if n.kind==ast.STRUCT{value_node=(*node(s,p)).a;let key=text(s,p);var f:usize=0;var found=false;
+    while f<ty.length{let field=(*(*s).g).fields[ty.first+f];let un=(*(*s).g).units[field.unit];let fnod=(*(*s).g).nodes[un.node_start+field.node];
+     if equal(key,names.text((*(*s).g).sources,(*(*s).g).units,(*(*s).g).tokens,field.unit,fnod.token)){offset=(*(*s).g).field_offsets[ty.first+f];found=true;break;}f+=1;}if !found{return fail(s,BAD_GRAPH,id,90);}
+   }else{offset=index*(*(*s).g).layouts[ty.element].size;}
+   var v=repeated;if v==NONE{v=expression(s,value_node,depth+1);}let ptr=slot(s,3,id);emit(s,ir.OFFSET,3,ptr,base,0,offset,0,id);emit(s,ir.STORE,typ(s,value_node),0,ptr,v,0,0,id);
+   index+=1;if n.kind==ast.REPEAT{if index>=ty.count{break;}(*s).cursor=saved;}else{p=(*node(s,p)).next;(*s).cursor=stable;}
+  }
+ }else if n.kind==ast.NULL{emit(s,ir.CONSTANT,t,out,0,0,0,0,id);}
+ else if n.kind==ast.NAME||(n.kind==ast.FIELD&&(*(*s).g).refs[gid(s,id)].kind==binding.GLOBAL){
+  let r=(*(*s).g).refs[gid(s,id)];if r.kind==binding.LOCAL{
+   let index=(*(*s).g).units[r.unit].node_start+r.target;let off=(*(*s).w).node_slots[index];
+   if off==NONE{return fail(s,BAD_GRAPH,id,50);}emit(s,ir.COPY,t,out,off,0,0,0,id);
+  }else if r.kind==binding.GLOBAL&&((*(*s).g).symbols[r.target].kind==names.CONST||(*(*s).g).symbols[r.target].kind==names.GLOBAL){let p=address(s,id,depth+1);emit(s,ir.LOAD,t,out,p,0,0,0,id);}
+  else{return fail(s,UNSUPPORTED,id,51);}
+ }else if n.kind==ast.FIELD{
+  let bt=typ(s,n.a);let base_type=(*(*s).g).types[bt];
+  if base_type.kind==sem.ARRAY&&equal(text(s,id),"len"){emit(s,ir.CONSTANT,t,out,0,0,base_type.count,0,id);}
+  else if base_type.kind==sem.SLICE{
+   let base=expression(s,n.a,depth+1);let key=text(s,id);var off=base;
+   if equal(key,"len"){off=base-8;}else if !equal(key,"ptr"){return fail(s,UNSUPPORTED,id,52);}
+   emit(s,ir.COPY,t,out,off,0,0,0,id);
+  }else{let p=address(s,id,depth+1);emit(s,ir.LOAD,t,out,p,0,0,0,id);}
+ }else if n.kind==ast.SLICE{
+  let bt=(*(*s).g).types[typ(s,n.a)];var base:usize=0;var length:usize=0;
+  if bt.kind==sem.ARRAY{base=address(s,n.a,depth+1);length=slot(s,3,id);emit(s,ir.CONSTANT,3,length,0,0,bt.count,0,id);}
+  else{base=expression(s,n.a,depth+1);length=base-8;}
+  var lo:usize=0;var hi=length;if n.b==NONE{lo=slot(s,3,id);emit(s,ir.CONSTANT,3,lo,0,0,0,0,id);}else{lo=expression(s,n.b,depth+1);}
+  if n.c!=NONE{hi=expression(s,n.c,depth+1);}emit(s,ir.SUBSLICE,t,out,base,lo,hi,length,id);
+ }else if n.kind==ast.INDEX{let p=address(s,id,depth+1);emit(s,ir.LOAD,t,out,p,0,0,0,id);}
+ else if n.kind==ast.CAST{let v=expression(s,n.a,depth+1);emit(s,ir.CAST,t,out,v,0,0,0,id);}
+ else if n.kind==ast.UNARY{
+  if n.op==1062{let p=address(s,n.a,depth+1);emit(s,ir.COPY,t,out,p,0,0,0,id);}
+  else{let v=expression(s,n.a,depth+1);
+   if n.op==1066{emit(s,ir.LOAD,t,out,v,0,0,0,id);}
+   else if n.op==1057||n.op==1069||n.op==1150{emit(s,ir.UNARY,typ(s,n.a),out,v,0,n.op,0,id);}
+   else{return fail(s,UNSUPPORTED,id,n.op);}
+  }
+ }else if n.kind==ast.BINARY{
+  let left=expression(s,n.a,depth+1);
+  if n.op==518||n.op==519{
+   let rhs=block(s);let end=block(s);emit(s,ir.COPY,t,out,left,0,0,0,id);
+   var yes=rhs;var no=end;if n.op==519{yes=end;no=rhs;}
+   emit(s,ir.BRANCH,8,0,left,0,yes,no,id);label(s,rhs,id);
+   (*s).cursor=after;let right=expression(s,n.b,depth+1);emit(s,ir.COPY,t,out,right,0,0,0,id);label(s,end,id);
+  }else{
+   let right=expression(s,n.b,depth+1);emit(s,ir.BINARY,typ(s,n.a),out,left,right,n.op,0,id);
+  }
+ }else if n.kind==ast.CALL{
+  let r=(*(*s).g).refs[gid(s,n.a)];
+  if r.kind==binding.ENUM_MEMBER{
+   var value:usize=0;var payload:usize=NONE;if n.b!=NONE{value=expression(s,n.b,depth+1);payload=typ(s,n.b);}
+   emit(s,ir.TAGGED,t,out,0,value,(*(*s).g).info[gid(s,id)].length,payload,id);
+  }else if r.kind==binding.INTRINSIC&&r.target==13{let a=expression(s,n.b,depth+1);let b=expression(s,(*node(s,n.b)).next,depth+1);emit(s,ir.PAIR,t,out,a,b,0,0,id);}
+  else if r.kind==binding.INTRINSIC&&r.target>=1&&r.target<=3{
+   let left=expression(s,n.b,depth+1);let second=(*node(s,n.b)).next;let right=expression(s,second,depth+1);
+   var op:u64=1067;if r.target==2{op=1069;}else if r.target==3{op=1066;}
+   emit(s,ir.BINARY,t,out,left,right,op,1,id);
+  }else{
+   var target=r.target;var receiver:usize=NONE;
+   if r.kind==binding.METHOD_CANDIDATE||r.kind==binding.DEFERRED_MEMBER{
+    target=method_target(s,n.a,id);if (*s).status!=0{return NONE;}
+    if r.kind==binding.DEFERRED_MEMBER{let field=*node(s,n.a);
+     if field.kind!=ast.FIELD{return fail(s,BAD_GRAPH,id,65);}receiver=field.a;
+    }
+   }else if r.kind!=binding.GLOBAL||(*(*s).g).symbols[r.target].kind!=names.FUNCTION{return fail(s,UNSUPPORTED,id,60);}
+   let first=(*s).args;var count:usize=0;var p=n.b;if receiver!=NONE{count=1;}
+   while p!=NONE{if count>=(*(*s).g).nodes.len{return fail(s,BAD_GRAPH,id,61);}count+=1;p=(*node(s,p)).next;}
+   if count>(*(*s).w).arguments.len-first{return fail(s,CAPACITY,id,2);}(*s).args+=count;
+   p=n.b;var i:usize=0;
+   if receiver!=NONE{let value=expression(s,receiver,depth+1);
+    (*(*s).w).arguments[first]=ir.Argument{typ:typ(s,receiver),offset:value};i=1;
+   }
+   while p!=NONE{let value=expression(s,p,depth+1);
+    (*(*s).w).arguments[first+i]=ir.Argument{typ:typ(s,p),offset:value};i+=1;p=(*node(s,p)).next;
+   }emit(s,ir.CALL,t,out,first,count,target,0,id);
+  }
+ }else{return fail(s,UNSUPPORTED,id,n.kind);}
+ (*s).cursor=after;return out;
+}}
+unsafe fn binary_assignment(op:u64)u64{
+ if op==522{return 1067;}if op==523{return 1069;}if op==524{return 1066;}
+ if op==525{return 1071;}if op==526{return 1061;}if op==527{return 1062;}
+ if op==528{return 1148;}if op==529{return 1118;}if op==512{return 520;}if op==513{return 521;}return NONE;
+}
+// A DEFER node's unused node_slots cell links to the previous registration.
+// This is compiler scratch, not a mutation of the checked Graph or runtime IR.
+// The frontend forbids nested defer/control transfer inside cleanup bodies.
+unsafe fn cleanups(s:*State,stop:usize,depth:usize)bool{unsafe{
+ var p=(*s).cleanup_head;var steps:usize=0;
+ while p!=stop&&(*s).status==0{
+  if p==NONE||steps>=(*(*s).g).nodes.len{fail(s,BAD_GRAPH,p,72);return false;}steps+=1;
+  if !enter(s,p,depth){return false;}let n=*node(s,p);
+  if n.kind!=ast.DEFER{fail(s,BAD_GRAPH,p,73);return false;}
+  let next=(*(*s).w).node_slots[gid(s,p)];
+  if !statement(s,n.a,depth+1){return false;}p=next;
+ }return (*s).status==0;
+}}
+unsafe fn return_value(s:*State,child:usize,id:usize,depth:usize)bool{unsafe{
+ var value:usize=0;if child!=NONE{value=expression(s,child,depth+1);}
+ else if ir.words((*s).g,(*s).returns)!=0{value=slot(s,(*s).returns,id);emit(s,ir.TAGGED,(*s).returns,value,0,0,0,NONE,id);}
+ let locals=(*s).locals;(*s).locals=(*s).cursor;cleanups(s,NONE,depth+1);(*s).locals=locals;
+ return emit(s,ir.RETURN,(*s).returns,0,value,0,0,0,id);
+}}
+unsafe fn for_statement(s:*State,id:usize,depth:usize)bool{unsafe{
+ let n=*node(s,id);let source=*node(s,n.b);let control=(*(*s).w).node_slots[gid(s,id)];
+ let base=control;let limit=control+8;let index=control+16;let locals=(*s).locals;
+ let range=source.kind==ast.RANGE;var element:usize=3;
+ if range{
+  let lo=expression(s,source.a,depth+1);emit(s,ir.COPY,3,index,lo,0,0,0,id);
+  let hi=expression(s,source.b,depth+1);emit(s,ir.COPY,3,limit,hi,0,0,0,id);
+ }else{
+  let t=(*(*s).g).types[typ(s,n.b)];element=t.element;
+  if t.kind==sem.ARRAY{
+   var pointer:usize=0;
+   if ((*(*s).g).info[gid(s,n.b)].flags&PLACE)!=0{pointer=address(s,n.b,depth+1);}
+   else{let value=expression(s,n.b,depth+1);(*s).locals=(*s).cursor;
+    pointer=slot(s,3,id);emit(s,ir.ADDRESS,3,pointer,value,0,0,0,id);
+   }
+   emit(s,ir.COPY,3,base,pointer,0,0,0,id);emit(s,ir.CONSTANT,3,limit,0,0,t.count,0,id);
+  }else if t.kind==sem.SLICE{
+   let value=expression(s,n.b,depth+1);emit(s,ir.COPY,3,base,value,0,0,0,id);emit(s,ir.COPY,3,limit,value-8,0,0,0,id);
+  }else{fail(s,UNSUPPORTED,id,75);return false;}
+  emit(s,ir.CONSTANT,3,index,0,0,0,0,id);
+ }
+ let start=block(s);let body=block(s);let update=block(s);let end=block(s);
+ let previous_break=(*s).break_block;let previous_continue=(*s).continue_block;let previous_cleanup=(*s).loop_cleanup;
+ (*s).break_block=end;(*s).continue_block=update;(*s).loop_cleanup=(*s).cleanup_head;
+ label(s,start,id);(*s).cursor=(*s).locals;let condition=slot(s,8,id);
+ emit(s,ir.BINARY,3,condition,index,limit,1084,0,id);emit(s,ir.BRANCH,8,0,condition,0,body,end,id);label(s,body,id);
+ let binding=(*(*s).w).node_slots[gid(s,n.a)];
+ if range{emit(s,ir.COPY,3,binding,index,0,0,0,id);}
+ else{let pointer=slot(s,3,id);emit(s,ir.INDEX,3,pointer,base,index,(*(*s).g).layouts[element].size,limit,id);emit(s,ir.LOAD,element,binding,pointer,0,0,0,id);}
+ statement(s,n.c,depth+1);label(s,update,id);(*s).cursor=(*s).locals;
+ let one=slot(s,3,id);emit(s,ir.CONSTANT,3,one,0,0,1,0,id);emit(s,ir.BINARY,3,index,index,one,1067,0,id);
+ jump(s,start,id);label(s,end,id);(*s).break_block=previous_break;(*s).continue_block=previous_continue;(*s).loop_cleanup=previous_cleanup;(*s).locals=locals;
+ return (*s).status==0;
+}}
+unsafe fn match_statement(s:*State,id:usize,depth:usize)bool{unsafe{
+ let n=*node(s,id);let value=expression(s,n.a,depth+1);let locals=(*s).locals;(*s).locals=(*s).cursor;
+ let end=block(s);var arm=n.b;while arm!=NONE&&(*s).status==0{
+  let a=*node(s,arm);let pattern=*node(s,a.a);let body=block(s);let next=block(s);
+  let key=(*(*s).g).info[gid(s,a.a)].length;
+  let subject=typ(s,n.a);var result=false;if subject<(*(*s).g).types.len{result=(*(*s).g).types[subject].kind==sem.RESULT;}
+  if key==NONE{jump(s,body,id);}
+  else if result{if key==0{emit(s,ir.BRANCH,8,0,value,0,next,body,id);}else{emit(s,ir.BRANCH,8,0,value,0,body,next,id);}}
+  else{let expected=slot(s,3,id);let condition=slot(s,8,id);emit(s,ir.CONSTANT,3,expected,0,0,key,0,id);
+   emit(s,ir.BINARY,3,condition,value,expected,514,0,id);emit(s,ir.BRANCH,8,0,condition,0,body,next,id);}
+  label(s,body,id);if pattern.b!=NONE{let off=(*(*s).w).node_slots[gid(s,pattern.b)];var payload=value-8;if result&&key==1{payload=value;}
+   emit(s,ir.COPY,(*(*s).g).node_types[gid(s,pattern.b)],off,payload,0,0,0,id);}
+  statement(s,a.b,depth+1);jump(s,end,id);label(s,next,id);arm=a.next;
+ }
+ label(s,end,id);(*s).locals=locals;return (*s).status==0;
+}}
+unsafe fn statement(s:*State,id:usize,depth:usize)bool{unsafe{
+ if !enter(s,id,depth){return false;}let n=*node(s,id);(*s).cursor=(*s).locals;
+ if n.kind==ast.BLOCK{let scope=(*s).cleanup_head;var p=n.a;var steps:usize=0;while p!=NONE{
+  if steps>=(*(*s).g).nodes.len{fail(s,BAD_GRAPH,id,70);return false;}steps+=1;
+  if !statement(s,p,depth+1){return false;}p=(*node(s,p)).next;}
+  cleanups(s,scope,depth+1);(*s).cleanup_head=scope;
+ }else if n.kind==ast.UNSAFE_BLOCK{statement(s,n.a,depth+1);}
+ else if n.kind==ast.DEFER{(*(*s).w).node_slots[gid(s,id)]=(*s).cleanup_head;(*s).cleanup_head=id;}
+ else if n.kind==ast.BINDING{if n.b!=NONE{let v=expression(s,n.b,depth+1);let g=gid(s,id);emit(s,ir.COPY,(*(*s).g).node_types[g],(*(*s).w).node_slots[g],v,0,0,0,id);}}
+ else if n.kind==ast.ASSIGN{
+  let p=address(s,n.a,depth+1);let t=typ(s,n.a);var old:usize=0;
+  if n.op!=1085{old=slot(s,t,id);emit(s,ir.LOAD,t,old,p,0,0,0,id);}
+  var value=expression(s,n.b,depth+1);
+  if n.op!=1085{let out=slot(s,t,id);emit(s,ir.BINARY,t,out,old,value,binary_assignment(n.op),0,id);value=out;}
+  emit(s,ir.STORE,t,0,p,value,0,0,id);
+ }else if n.kind==ast.RETURN{return_value(s,n.a,id,depth+1);
+ }else if n.kind==ast.EXPRESSION_STATEMENT{expression(s,n.a,depth+1);}
+ else if n.kind==ast.FOR{for_statement(s,id,depth+1);}
+ else if n.kind==ast.MATCH{match_statement(s,id,depth+1);}
+ else if n.kind==ast.IF{
+  let yes=block(s);let no=block(s);let end=block(s);let cond=expression(s,n.a,depth+1);
+  emit(s,ir.BRANCH,8,0,cond,0,yes,no,id);label(s,yes,id);statement(s,n.b,depth+1);jump(s,end,id);
+  label(s,no,id);if n.c!=NONE{statement(s,n.c,depth+1);}label(s,end,id);
+ }else if n.kind==ast.WHILE||n.kind==ast.LOOP{
+  let start=block(s);let body=block(s);let end=block(s);let previous_break=(*s).break_block;let previous_continue=(*s).continue_block;let previous_cleanup=(*s).loop_cleanup;
+  (*s).break_block=end;(*s).continue_block=start;(*s).loop_cleanup=(*s).cleanup_head;label(s,start,id);
+  if n.kind==ast.WHILE{let cond=expression(s,n.a,depth+1);emit(s,ir.BRANCH,8,0,cond,0,body,end,id);}else{jump(s,body,id);}
+  label(s,body,id);if n.kind==ast.WHILE{statement(s,n.b,depth+1);}else{statement(s,n.a,depth+1);}
+  jump(s,start,id);label(s,end,id);(*s).break_block=previous_break;(*s).continue_block=previous_continue;(*s).loop_cleanup=previous_cleanup;
+ }else if n.kind==ast.BREAK||n.kind==ast.CONTINUE{
+  var target=(*s).break_block;if n.kind==ast.CONTINUE{target=(*s).continue_block;}
+  if target==NONE{fail(s,BAD_GRAPH,id,71);return false;}cleanups(s,(*s).loop_cleanup,depth+1);jump(s,target,id);
+ }else{fail(s,UNSUPPORTED,id,n.kind);}
+ (*s).cursor=(*s).locals;return (*s).status==0;
+}}
+unsafe fn descriptors(g:*const frontend.Graph,w:*const ir.Workspace,r:*ir.Result)bool{unsafe{
+ if g==null||w==null||r==null||(g as u64&7)!=0||(w as u64&7)!=0||(r as u64&7)!=0
+  ||!span(g as u64,sizeof(frontend.Graph))||!span(w as u64,sizeof(ir.Workspace))||!span(r as u64,sizeof(ir.Result)){return false;}
+ if (*g).sources.len>NONE/40||(*w).functions.len>NONE/sizeof(ir.Function)||(*w).instructions.len>NONE/sizeof(ir.Instruction)
+  ||(*w).arguments.len>NONE/sizeof(ir.Argument)||(*w).node_slots.len>NONE/8{return false;}
+ let inputs=[Region{p:g as u64,n:sizeof(frontend.Graph)},Region{p:w as u64,n:sizeof(ir.Workspace)},
+  Region{p:(*g).arena.ptr as u64,n:(*g).arena.len},Region{p:(*g).sources.ptr as u64,n:(*g).sources.len*40}];
+ let outputs=[Region{p:(*w).functions.ptr as u64,n:(*w).functions.len*sizeof(ir.Function)},
+  Region{p:(*w).instructions.ptr as u64,n:(*w).instructions.len*sizeof(ir.Instruction)},
+  Region{p:(*w).arguments.ptr as u64,n:(*w).arguments.len*sizeof(ir.Argument)},
+  Region{p:(*w).node_slots.ptr as u64,n:(*w).node_slots.len*8},Region{p:r as u64,n:sizeof(ir.Result)}];
+ var i:usize=0;while i<inputs.len{if !span(inputs[i].p,inputs[i].n){return false;}i+=1;}
+ i=0;while i<outputs.len{let o=outputs[i];if !span(o.p,o.n)||(o.n!=0&&(o.p&7)!=0){return false;}
+  var j:usize=0;while j<inputs.len{if overlap(o.p,o.n,inputs[j].p,inputs[j].n){return false;}j+=1;}
+  j=0;while j<i{if overlap(o.p,o.n,outputs[j].p,outputs[j].n){return false;}j+=1;}i+=1;
+ }
+ i=0;while i<(*g).sources.len{let src=(*g).sources[i];if !span(src.path.ptr as u64,src.path.len)||!span(src.bytes.ptr as u64,src.bytes.len){return false;}
+  var j:usize=0;while j<outputs.len{let o=outputs[j];if overlap(o.p,o.n,src.path.ptr as u64,src.path.len)||overlap(o.p,o.n,src.bytes.ptr as u64,src.bytes.len){return false;}j+=1;}i+=1;
+ }return true;
+}}
+// The graph must be a still-live successful frontend.Graph. Its published
+// slices are immutable and all native pools belong to Graph.arena. The caller
+// owns four lowering pools; they are scratch until Result.program publishes.
+pub unsafe fn lower(g:*const frontend.Graph,w:*const ir.Workspace,mode:u64,r:*ir.Result)u64{unsafe{
+ if !descriptors(g,w,r)||mode>1{return INVALID;}
+ let empty=ir.Program{graph:null,functions:slice_from_raw_parts(null as *const ir.Function,0),
+  instructions:slice_from_raw_parts(null as *const ir.Instruction,0),arguments:slice_from_raw_parts(null as *const ir.Argument,0),block_count:0,mode:mode};
+ var s=State{g:g,w:w,status:0,unit:0,error_node:0,detail:0,functions:0,code:0,args:0,blocks:0,
+  cursor:0,maximum:0,locals:0,returns:sem.VOID,mode:mode,break_block:NONE,continue_block:NONE,cleanup_head:NONE,loop_cleanup:NONE};
+ if (*g).units.len==0||(*g).refs.len!=(*g).nodes.len||(*g).info.len!=(*g).nodes.len||(*g).node_types.len!=(*g).nodes.len
+  ||(*g).values.len!=(*g).nodes.len||(*g).value_states.len!=(*g).nodes.len||(*g).layouts.len!=(*g).types.len
+  ||!names.valid_graph((*g).sources,(*g).units,(*g).tokens,(*g).nodes,(*g).edges){s.status=BAD_GRAPH;}
+ if s.status==0&&(*w).node_slots.len<(*g).nodes.len{s.status=CAPACITY;s.detail=3;}
+ if s.status==0{var j:usize=0;while j<(*g).nodes.len{(*w).node_slots[j]=NONE;j+=1;}}
+ var i:usize=0;while i<(*g).symbols.len&&s.status==0{let sy=(*g).symbols[i];s.unit=sy.unit;
+  if sy.kind==names.GLOBAL{
+   let t=(*g).node_types[(*g).units[sy.unit].node_start+sy.declaration];
+   if ir.words(g,t)==NONE{fail(&s,UNSUPPORTED,sy.declaration,83);}
+  }else if sy.kind==names.ERROR||sy.kind==names.ENUM{ /* Semantic declarations own no code. */ }
+  else if sy.kind==names.CONST{
+   let t=(*g).node_types[(*g).units[sy.unit].node_start+sy.declaration];
+   if ir.words(g,t)==NONE{fail(&s,UNSUPPORTED,sy.declaration,80);}
+  }else if sy.kind==names.FUNCTION||sy.kind==names.METHOD{
+   let n=*node(&s,sy.declaration);let t=(*g).types[(*g).node_types[gid(&s,sy.declaration)]];
+   // Explicit sysv64 has the same checked signature and calling convention as
+   // an ordinary Dong function. Win64 must never inherit that convention.
+   if (t.flags&1)!=0||ir.words(g,t.element)==NONE{fail(&s,UNSUPPORTED,sy.declaration,81);}
+   else if n.c==NONE{ /* An external declaration owns no code or frame. */ }
+   else if s.functions==(*w).functions.len{fail(&s,CAPACITY,sy.declaration,4);}
+   else{
+    s.cursor=0;s.maximum=0;s.locals=0;s.returns=t.element;s.break_block=NONE;s.continue_block=NONE;s.cleanup_head=NONE;s.loop_cleanup=NONE;
+    let first=s.code;let parameter_first=s.args;var p=n.a;var count:usize=0;
+    while p!=NONE&&s.status==0{
+     if s.args==(*w).arguments.len{fail(&s,CAPACITY,p,2);break;}
+     if !bind(&s,p){break;}let gindex=gid(&s,p);
+     (*w).arguments[s.args]=ir.Argument{typ:(*g).node_types[gindex],offset:(*w).node_slots[gindex]};s.args+=1;count+=1;p=(*node(&s,p)).next;
+    }
+    if s.status==0{collect_locals(&s,n.c,0);s.locals=s.cursor;}
+    let trap=block(&s);if s.status==0{statement(&s,n.c,0);}
+    if s.status==0{if t.element==sem.VOID{emit(&s,ir.RETURN,sem.VOID,0,0,0,0,0,sy.declaration);}
+     (*w).functions[s.functions]=ir.Function{symbol:i,first:first,count:s.code-first,parameter_first:parameter_first,
+      parameter_count:count,frame_bytes:(s.maximum+15)/16*16,returns:t.element,trap_block:trap};s.functions+=1;
+    }
+   }
+  }i+=1;
+ }
+ var program=empty;if s.status==0{program=ir.Program{graph:g,functions:slice_from_raw_parts((*w).functions.ptr,s.functions),
+  instructions:slice_from_raw_parts((*w).instructions.ptr,s.code),arguments:slice_from_raw_parts((*w).arguments.ptr,s.args),block_count:s.blocks,mode:mode};}
+ *r=ir.Result{status:s.status,unit:s.unit,node:s.error_node,detail:s.detail,program:program};return s.status;
+}}

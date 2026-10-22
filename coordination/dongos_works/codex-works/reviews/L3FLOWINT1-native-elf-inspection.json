@@ -1,0 +1,64 @@
+{
+  "producer_lower_sha256": "2eb36a91291ce4293e89654a9f2b91e1edf9742e8b87c73624a701dc2e10241e",
+  "actual_native_elfs": [
+    {
+      "file": "D:\\projects\\projects3\\2026\\dongos\\coordination\\dongos_works\\.local\\runs\\f48ec24178864741a9a0b2d09290f546\\workspace\\build\\test\\l3-method-native\\run-da0643ee50ed\\good-control-native-elf-0\\module.native.elf",
+      "bytes": 8200,
+      "entry": 4198876,
+      "sha256": "d48c92d8103e3baca1905f5b06c0ec00ca88ba369c0867718e74276c90197aef",
+      "headers": [
+        [
+          1,
+          5,
+          0,
+          4194304,
+          4194304,
+          4721,
+          4721,
+          4096
+        ],
+        [
+          1,
+          6,
+          8192,
+          4202496,
+          4202496,
+          8,
+          8,
+          4096
+        ]
+      ],
+      "wx_separate": true
+    },
+    {
+      "file": "D:\\projects\\projects3\\2026\\dongos\\coordination\\dongos_works\\.local\\runs\\f48ec24178864741a9a0b2d09290f546\\workspace\\build\\test\\l3-method-native\\run-da0643ee50ed\\good-control-native-elf-1\\module.native.elf",
+      "bytes": 8200,
+      "entry": 4198864,
+      "sha256": "d194571efddc1035aa02bad6b2feee4665113917e45d732cc057d4cb6eb8e0f6",
+      "headers": [
+        [
+          1,
+          5,
+          0,
+          4194304,
+          4194304,
+          4689,
+          4689,
+          4096
+        ],
+        [
+          1,
+          6,
+          8192,
+          4202496,
+          4202496,
+          8,
+          8,
+          4096
+        ]
+      ],
+      "wx_separate": true
+    }
+  ],
+  "guest_G6_rerun": false
+}

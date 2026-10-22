@@ -1,0 +1,69 @@
+{
+  "assignment_owner": "codex",
+  "auto_dispatch": false,
+  "auto_verify": false,
+  "candidate": null,
+  "checks": [
+    "module:lang.tests.test_bootstrap_compiler_job"
+  ],
+  "claim_from_status": "todo",
+  "claim_token": "bf495ba086c54dd99da9d441c654ea8a",
+  "claimed_at": "2026-10-20T09:16:31+00:00",
+  "claimed_by": "codex-mcp-d76b66689d824a70",
+  "completed_at": "2026-10-20T09:45:21+00:00",
+  "complexity": "standard",
+  "created_at": "2026-10-20T09:16:30+00:00",
+  "delivery": "codex-works/deliveries/CX13.md",
+  "depends_on": [],
+  "description": "把已验证build-only原型实现为主线纯Dong有界编译作业，不引入closed-driver或DCE；用现有compiler_driver/native_assembler compact。入口接受连续只读源blob（count,entry及各root/pathlen/byteslen/path/bytes）、56MiBarena与Result，完整溢出/区域重叠/输入预检；无文件/系统调用权限。解析Source后check→consume compact→lower/NASM→消费重用同arena assembler输出，容量不扩大。输出ELF内固定dong_compiler_entry薄桥调用dong_compile_job并通过既有255退出ABI，供后续受限启动。双模式/双对象格式、前置失败不写、有效/坏语义/容量真实运行；全闭包主机保护arena/64KiB栈生成ELF两stage精确固定点且≤2MiB，不能冒称客体完成。独立审查及零skip复验后集成，不提交推送。",
+  "document": "codex-works/tasks/CX13-board.md",
+  "document_status": "todo",
+  "historical": false,
+  "id": "codex:CX13",
+  "integration_note": "声明主线文件已实际落盘并与正式指纹逐项一致。主线run3383先前1test0skip406.892s，最终新增容量由独立执行与正式387.803s通过；完整两模式双格式seed/native字节固定点已实测。纯编译作业真实集成，VM启动链由CX14继续，未冒充完整L3完成。",
+  "legacy_hash": "7cc273627e53f6ea2972a6a04447055dc8ff0d641fb6c232ef3b323fc404051e",
+  "number": "CX13",
+  "owner": "codex",
+  "rev": 7,
+  "review_note": "完整源码/四区借用与consuming布局/固定24B入口/host ELF loader和测试有效性已审查；独立review_io66额外原子拒绝、真实小ELF返回37、1101函数backend容量、debug/release全闭包guarded固定点与生产kernel ELF四产物均通过，旧P1/P2已修复并闭环，最终文档新增容量断言只读复核认可。正式4c4df8复验最终版1test0skip387.803s源稳定/进程停止，包含新增实际容量；ELF1892632B全部字节一致。组件验收，不宣称VM成功。",
+  "status": "integrated",
+  "title": "[L3] 单56MiB纯Dong自编译作业与客体入口",
+  "updated_at": "2026-10-22T00:59:01+00:00",
+  "verification": {
+    "checks": [
+      {
+        "cancelled": false,
+        "elapsed_seconds": 387.803,
+        "execution_exited": true,
+        "passed": true,
+        "process_stopped": true,
+        "returncode": 0,
+        "skips": 0,
+        "spec": "module:lang.tests.test_bootstrap_compiler_job",
+        "tests": 1,
+        "timed_out": false
+      }
+    ],
+    "execution_exited": true,
+    "fingerprint": {
+      "codex-works/deliveries/CX13.md": "049481e1e16b4be1187e523ce8b077bc131f4e0f201a3eadc64d9d48206e9f57",
+      "docs/l3-compiler-job.md": "183f78bf8aa71e6dd082961fed3543d4369887c1452d430f31c4f930aaed806b",
+      "lang/bootstrap/compiler_job.dg": "c071546dcad196024fc9cfd4ac2b9843f9540bda5540c2dc74a39ee763fe0e84",
+      "lang/tests/test_bootstrap_compiler_job.py": "b3e5874a8756cdf75a96b215b516ceab15e91e85f48a0c8e6471a61fad355925",
+      "tools/compiler_job.py": "63a2e2f3a3a3672e5b36fd26c90eaf225e304b5f7e3bdbad87f91900380712f9"
+    },
+    "finished_at": "2026-10-20T09:52:07+00:00",
+    "job": "4c4df8a5ffe64234a8c5a5146684c82a",
+    "passed": true,
+    "process_stopped": true,
+    "source_stable": true,
+    "summary": "定向复验通过，等待源码/契约审查"
+  },
+  "write_paths": [
+    "lang/bootstrap/compiler_job.dg",
+    "lang/tests/test_bootstrap_compiler_job.py",
+    "tools/compiler_job.py",
+    "docs/l3-compiler-job.md",
+    "codex-works/deliveries/CX13.md"
+  ]
+}

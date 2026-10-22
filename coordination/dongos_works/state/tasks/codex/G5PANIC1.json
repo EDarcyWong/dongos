@@ -1,0 +1,75 @@
+{
+  "assignment_owner": "codex",
+  "auto_dispatch": false,
+  "auto_verify": false,
+  "candidate": null,
+  "checks": [
+    "discover:codex-works/tests:test_g5_panic_native.py"
+  ],
+  "claim_from_status": "todo",
+  "claim_token": "13103962c2734d7283f5df2b04fa4a1c",
+  "claimed_at": "2026-10-22T07:12:07+00:00",
+  "claimed_by": "codex-mcp-a56c25d7f28e4bc4",
+  "completed_at": "2026-10-22T07:40:55+00:00",
+  "complexity": "standard",
+  "created_at": "2026-10-22T07:12:06+00:00",
+  "delivery": "codex-works/deliveries/G5PANIC1.md",
+  "depends_on": [
+    "codex:L3FLOWINT1"
+  ],
+  "description": "继续用户授权G5完整覆盖。独立候选接续G5ALIGN1开发快照，修复原生guard统一UD2导致缺失目标提供的__dong_panic(kind,line,file,len)调用契约：边界1/算术2/除零3/移位4/有符号除法5、确切源码路径/行号、debug/release与wrapping，panic不执行defer，错误原子输出；保存来源与真实ELF/COFF/执行。补新error声明范围和重复编号的正式frontend_diagnostics类别，与seed对照。真实seed和Dong独立C panic观察器及正常成功对照、语义坏Dong类型负控；零skip源稳定官方复验后才验收集成。内置ELF汇编器对未解析panic/runtime符号必须显式失败，完整ELF测试提供真正目标panic实现，不借seedfallback。无OS/VM/CLI/commit/push；此项后仍需全矩阵和闭包回归，不能预先宣告整体G5。",
+  "document": "codex-works/tasks/G5PANIC1-board.md",
+  "historical": false,
+  "id": "codex:G5PANIC1",
+  "legacy_hash": "fd7fc3274910edba4e940c98f5bdbc3a845ada2700d3ba646ebc52c2347171eb",
+  "number": "G5PANIC1",
+  "owner": "codex",
+  "rev": 5,
+  "review_note": "已实际审查panic_for逐站点kind/原Token行号/Source.path、正常路径跳转保持寄存器和flags、目标__dong_panic声明/定义及返回兜底UD2；审查语义error编号范围/重复与正式E0302/E0602映射。测试确由源码重建frontend/lower/nasm并在debug/release执行真实独立C panic观察器，精确检查kind,line,file,trace且panic不清理defer；错误类别真实坏编译器被同源seed/C oracle识别，失败输出不变。官方作业4821a5587b7d44589a098dca990e007f通过3 tests、0 skip，784.012秒，source_stable/process_stopped/execution_exited均true。仅验收本组件；整体G5待最终组合、闭包和真实主线集成。",
+  "status": "accepted",
+  "title": "G5 panic ABI、种类/路径/行号与前端诊断对齐",
+  "updated_at": "2026-10-22T08:26:54+00:00",
+  "verification": {
+    "checks": [
+      {
+        "cancelled": false,
+        "elapsed_seconds": 784.012,
+        "execution_exited": true,
+        "passed": true,
+        "process_stopped": true,
+        "returncode": 0,
+        "skips": 0,
+        "spec": "discover:codex-works/tests:test_g5_panic_native.py",
+        "tests": 3,
+        "timed_out": false
+      }
+    ],
+    "execution_exited": true,
+    "fingerprint": {
+      "codex-works/deliveries/G5PANIC1.md": "6f1b85daf04297932eaf503f78b95bbba2b440c6726fa10c843c8c65e95b1783",
+      "codex-works/g5-panic/docs/panic.md": "fff71cbcc0e25e9d7def4cf309f6b12327dbbf88418d8e7f6b9a3e621b79e770",
+      "codex-works/g5-panic/src/bootstrap/frontend_diagnostics.dg": "0d53ca25a6cb3e70db55ab9f90f0b0db071c6208887b58ceb19b23a2e7251fb7",
+      "codex-works/g5-panic/src/bootstrap/lower_program.dg": "35b9f347d508497a6d08c27704d85880e718093688bd0b6632f2f2f0363f8144",
+      "codex-works/g5-panic/src/bootstrap/nasm_program.dg": "469bb11b0f8be4722d4139582b770858f9de795471d82e7457648e3045b6bfb5",
+      "codex-works/g5-panic/src/bootstrap/program_ir.dg": "62d2bdf143f60ba176cd30fb4bb875e519d8f6add0e34fe5115f885fdacaac29",
+      "codex-works/g5-panic/src/bootstrap/semantic_types.dg": "6b2f32b8fd6e1f2ad31e79e192f4db7aaa48ffa0813223fe969417f20380b8af",
+      "codex-works/tests/test_g5_panic_native.py": "0b4df27d843f3a287c732d2ddfc252092bcc1ea535f45a0f7919e9587f22b0ff"
+    },
+    "finished_at": "2026-10-22T08:04:38+00:00",
+    "job": "4821a5587b7d44589a098dca990e007f",
+    "passed": true,
+    "process_stopped": true,
+    "source_stable": true,
+    "summary": "定向复验通过，等待源码/契约审查"
+  },
+  "write_paths": [
+    "codex-works/g5-panic/src/bootstrap/semantic_types.dg",
+    "codex-works/g5-panic/src/bootstrap/program_ir.dg",
+    "codex-works/g5-panic/src/bootstrap/lower_program.dg",
+    "codex-works/g5-panic/src/bootstrap/nasm_program.dg",
+    "codex-works/g5-panic/src/bootstrap/frontend_diagnostics.dg",
+    "codex-works/tests/test_g5_panic_native.py",
+    "codex-works/g5-panic/docs/panic.md",
+    "codex-works/deliveries/G5PANIC1.md"
+  ]
+}

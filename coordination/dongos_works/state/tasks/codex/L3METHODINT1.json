@@ -1,0 +1,72 @@
+{
+  "assignment_owner": "codex",
+  "auto_dispatch": false,
+  "auto_verify": false,
+  "candidate": null,
+  "checks": [
+    "module:lang.tests.test_bootstrap_method_semantics"
+  ],
+  "claim_from_status": "todo",
+  "claim_token": "dd476300adac45efb543cc3d749824ea",
+  "claimed_at": "2026-10-22T03:07:50+00:00",
+  "claimed_by": "codex-mcp-8c76f5a25c8d4b71",
+  "completed_at": "2026-10-22T03:12:32+00:00",
+  "complexity": "standard",
+  "created_at": "2026-10-22T03:07:37+00:00",
+  "delivery": "codex-works/deliveries/L3METHODINT1.md",
+  "depends_on": [
+    "pool:L3METHOD1"
+  ],
+  "description": "按用户明确集成要求，将pool:L3METHOD1 accepted rev9的两份生产候选逐字接入主线；先核对最新rev及正式受审指纹，无冲突才修改。永久迁入6项真实Dong方法测试，适配主线根/构建产物路径与本机链接，保留真实坏体/Graph Info/seed对照/guards/输入不变并补全5池one-short。复用同一新编译原生语义对象执行既有非mutant运行时类型/流程/切片/内存intrinsics/tagged回归；另外真实重建完整frontend入口执行既有pipeline/diagnostics与两类方法成功、错误参数和私有方法拒绝、arena/graph不变检查。文档接入并更正旧的method一律UNSUPPORTED描述，清楚限定仅前端，不修改lower_program/nasm_program或宣称整程序method/G5完成。原候选5文件保留且匹配accepted指纹；主线两个生产文件与候选SHA相同，独立定向复验零skip/source_stable并审查后验收/集成，实际文件接入完成后登记原任务集成。只写声明文件，不提交推送或运行OS/VM；完整交付映射/实际测试/限制。",
+  "document": "codex-works/tasks/L3METHODINT1-board.md",
+  "historical": false,
+  "id": "codex:L3METHODINT1",
+  "integration_note": "主线真实接入已完成：lang/bootstrap/semantic_types.dg与binding.dg逐字来自原accepted候选，lang/bootstrap/method-semantics.md及semantic_types.md说明与lang/tests/test_bootstrap_method_semantics.py永久8项已在code树。正式独立joba30e5602466a47fd9b694f4868143904八项0skip/source_stable及源码/契约审查通过；完整frontend两模式31案、9组每模式522案、独立严格Info52检查及真实R0负控通过。主线5源文件匹配正式指纹，原候选5路径及两个后端未改变。实际映射/指纹/结果见codex-works/reviews/2026-10-22-L3METHOD-mainline-integration.md与code/build/test/l3-method-integration/result.json。仅前端集成，方法lowering/代码生成仍未接线；未运行OS/VM、提交推送。",
+  "legacy_hash": "e9a3c79cd8528949ab196026ebf92aa04ff55dfe30c77b41e4e17cbf7b8d8ab4",
+  "number": "L3METHODINT1",
+  "owner": "codex",
+  "rev": 6,
+  "review_note": "已实际审查原pool:L3METHOD1 accepted rev9指纹、主线两生产文件/文档/永久测试及完整frontend契约。semantic_types.dg和binding.dg逐字等于已验收候选；原候选5路径未变；lower_program/nasm_program与接入前SHA相同，METHOD后端仍明确UNSUPPORTED，G5 known_gaps判定未被错误关闭。永久迁入原6项方法测试，改用同树主线快照/路径/链接，补齐五池one-short，并增加既有9组运行时回归及完整frontend接线检查。正式joba30e5602466a47fd9b694f4868143904为8项0skip/905.876s，source_stable/process_stopped/execution_exited全部true。新编译主线语义对象执行每模式522案(共1044)既有回归；完整frontend两模式各27案旧pipeline/诊断+4案方法成功/拒绝，Graph/只读页/arena重用及预算通过。另本轮主线新对象严格Info/声明/签名/五池52次追加检查通过、两个真实旧R0负控被拒；CI语言973项清单含新8项恰分配一次(仅inventory)。最终重核主线5源文件、原候选5路径及两个后端SHA均与受审/基线一致。证据codex-works/reviews/2026-10-22-L3METHOD-mainline-integration.md及code/build/test/l3-method-integration/result.json、正式两个summary。仅验收方法前端主线集成，不代表整程序method/L3/G5完成；未运行OS/VM/提交推送。",
+  "status": "integrated",
+  "title": "[L3/G5] 已验收方法前端语义主线集成",
+  "updated_at": "2026-10-22T03:29:48+00:00",
+  "verification": {
+    "checks": [
+      {
+        "cancelled": false,
+        "elapsed_seconds": 905.876,
+        "execution_exited": true,
+        "passed": true,
+        "process_stopped": true,
+        "returncode": 0,
+        "skips": 0,
+        "spec": "module:lang.tests.test_bootstrap_method_semantics",
+        "tests": 8,
+        "timed_out": false
+      }
+    ],
+    "execution_exited": true,
+    "fingerprint": {
+      "codex-works/deliveries/L3METHODINT1.md": "ea9ab36df78a77d7e596945b4544256f2cd7eaad2f309318bd5d008324d6621d",
+      "lang/bootstrap/binding.dg": "3822f0f132d680117ba457fbe046254309b86580ae4c0ad94f572ca4d2c203e1",
+      "lang/bootstrap/method-semantics.md": "43edfac5eb2fb68d14f86744adab6f99ee923d070c7af6e430770ca3da06ea44",
+      "lang/bootstrap/semantic_types.dg": "d216531917467c1bd05601625ef18607337061f87649ab6399b5af9fbd5725ef",
+      "lang/bootstrap/semantic_types.md": "c3b24d982e7f90dbeae5b0dc8054067eb83dc0cf7a60f319bfd6610d34ff6790",
+      "lang/tests/test_bootstrap_method_semantics.py": "3e151b562dbf67c97531ac3998c6a6f3d89f435e8d2cd89b9cf9105d5ee88bc9"
+    },
+    "finished_at": "2026-10-22T03:28:02+00:00",
+    "job": "a30e5602466a47fd9b694f4868143904",
+    "passed": true,
+    "process_stopped": true,
+    "source_stable": true,
+    "summary": "定向复验通过，等待源码/契约审查"
+  },
+  "write_paths": [
+    "lang/bootstrap/semantic_types.dg",
+    "lang/bootstrap/binding.dg",
+    "lang/bootstrap/semantic_types.md",
+    "lang/bootstrap/method-semantics.md",
+    "lang/tests/test_bootstrap_method_semantics.py",
+    "codex-works/deliveries/L3METHODINT1.md"
+  ]
+}

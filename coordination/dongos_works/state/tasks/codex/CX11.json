@@ -1,0 +1,43 @@
+{
+  "archive_note": "未实施即归档不适用本机的旧测试规格；CX12使用新增跨平台永久测试，直接执行真实nativeassembler和compact编码，禁止以skip通过。",
+  "archived": true,
+  "archived_at": "2026-10-20T09:01:09+00:00",
+  "assignment_owner": "codex",
+  "auto_dispatch": false,
+  "auto_verify": false,
+  "candidate": null,
+  "checks": [
+    "module:lang.tests.test_bootstrap_x86_compact",
+    "module:lang.tests.test_bootstrap_native_assembler"
+  ],
+  "claim_token": null,
+  "claimed_at": null,
+  "claimed_by": null,
+  "completed_at": null,
+  "complexity": "standard",
+  "created_at": "2026-10-20T09:00:32+00:00",
+  "delivery": "codex-works/deliveries/CX11.md",
+  "depends_on": [],
+  "description": "当前56MiB单arena/64KiB guarded栈原生自编译闭包已双stage ELF一致，但release ELF2142264字节略超既有2MiB EXEC上限；closed-call过滤后仍2121768。保持执行文件上限和64MiB不扩大。为x86_encode新增显式encode_compact API：base非RIP内存0/有符号disp8/disp32最短有效形式，RBP/R13零位移必须disp8零，RSP/R12需SIB，RIP始终disp32；现有encode字节契约完全不变。native_assembler内部采用compact，两遍长度稳定，禁止rel32隐式缩短/地址截断。永久NASM独立字节oracle与debug/release双格式，边界、输入/输出canary、原始encode兼容、实际坏RBP/位移截断负控和真实nativeassembler执行。独立审查+正式稳定复验；闭包大小与固定点另记真实证据，不宣称guest完成。",
+  "document": "codex-works/tasks/CX11-board.md",
+  "historical": false,
+  "id": "codex:CX11",
+  "legacy_hash": "3938b2c7dc31161c2382573ceba744c3b1a92f9f72682910c6d00b4207de907c",
+  "number": "CX11",
+  "owner": "codex",
+  "pause_control": "confirmed",
+  "resume_status": "todo",
+  "rev": 5,
+  "review_note": "",
+  "status": "paused",
+  "title": "[L3] 原生汇编器使用有界短位移编码以保持2MiB执行上限",
+  "updated_at": "2026-10-20T09:01:09+00:00",
+  "verification": null,
+  "write_paths": [
+    "lang/bootstrap/x86_encode.dg",
+    "lang/bootstrap/native_assembler.dg",
+    "lang/tests/test_bootstrap_x86_compact.py",
+    "docs/l3-compact-x86.md",
+    "codex-works/deliveries/CX11.md"
+  ]
+}

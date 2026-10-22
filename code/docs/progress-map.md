@@ -1,5 +1,13 @@
 # DongOS 整体任务图
 
+本轮17份缺失任务书、CX6同号异义和CX14/CX15旧状态均已处理完成。CX14 integrated rev7，CX15 integrated rev8；CX6 integrated rev9，已恢复读取器契约，分离5条原NASM事件，耗时恢复为1轮/265秒，原始事件全部保留。协调器issues=0；核对时间2026-10-22T09:18:41+08:00。
+
+当前MCP快照共164项活动任务：19 accepted、140 integrated、3 submitted、1 in_progress、1 rework。本轮同时观测到其它客户端新增5项并行任务，其状态按实时MCP继续变化，本轮没有接管或改动它们。
+
+完整阶段表及证据见[整体任务图](../../coordination/dongos_works/progress-map.md)与[恢复报告](../../coordination/dongos_works/reviews/2026-10-22-task-recovery/README.md)。
+
+以下保留原有记录；其中日期、任务数量、机器路径和“当前/下一步”均属于各自历史检查点，最新状态以上述记录及协调器为准。
+
 最新接续（2026-10-21T23:25:35+08:00）：P2BUILD5已独立验收并本地集成rev6：正式16项零skip/source_stable；补齐正式构建NASM分组帮助探测，真实NASM2/3兼容测试通过。NASM3完整release runtime7构建、实际1/4核共享大页与四核桌面/P5两观察、独立raw replay均通过。正常kernel2006608B/余90544B；316inputs匹配主目录。与旧NASM2非逐字一致，19ASM源相同，编码/对齐差异已审查并保留双份证据。MCP快照132项=109 integrated+19 accepted+3 in_progress+1 todo。Claude EXEC in_progress rev10（R1返修），WC in_progress rev2；DeepSeek L3A在途rev2，L3待依赖验收。P2 EXEC/WC消费者、任意调度后多CR3及WC真实性能仍未关闭。不提交/推送/建PR。 见[整体任务图](../../coordination/dongos_works/progress-map.md)和[P2BUILD5集成回执](../../coordination/dongos_works/reviews/2026-10-21-P2BUILD5-integration.json)。
 
 2026-10-21 02:26 历史G6检查点（由顶部本地快照接续）：原main合并/同步检查点19e1a19及准确候选真实双启证据保留；GitHub新push状态本轮未重新查询，不能将旧in_progress快照当作当前状态。详见[G6执行/合并报告](../../coordination/dongos_works/reviews/2026-10-21-g6-ci-execution.md)。

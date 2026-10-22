@@ -1,5 +1,54 @@
 # DongOS 整体任务图
 
+## 新开发机恢复与收尾（2026-10-22T09:18:41+08:00）
+
+本轮17份缺失任务书、CX6同号异义和CX14/CX15旧状态均已处理完成。CX14 integrated rev7，CX15 integrated rev8；CX6 integrated rev9，已恢复读取器契约，分离5条原NASM事件，耗时恢复为1轮/265秒，原始事件全部保留。协调器issues=0；核对时间2026-10-22T09:18:41+08:00。
+
+当前MCP快照共164项活动任务：19 accepted、140 integrated、3 submitted、1 in_progress、1 rework。本轮同时观测到其它客户端新增5项并行任务，其状态按实时MCP继续变化，本轮没有接管或改动它们。
+
+| 本轮处理项 | 结果 |
+| --- | --- |
+| 原缺失17份任务书 | 全部按固定Git原文恢复，并核对契约/原交付/历史验收指纹；issues=0 |
+| CX6同号异义 | 读取器规范契约恢复；旧NASM单独归档且后继CXNASM3不变；5条旧NASM事件从派生统计分开，原事件保留 |
+| CX14旧在途 | 正式3项零skip及原G6限定profile证据审核通过，integrated rev7 |
+| CX15旧提交 | 正式1项零skip完整固定点/391.284秒通过，integrated rev8 |
+
+逐文件来源、正式job/指纹、身份分离和最终状态见[恢复报告](reviews/2026-10-22-task-recovery/README.md)及[完成回执](reviews/2026-10-22-task-recovery/completion.json)。本轮未重启OS/VM，原G6客体验收继续绑定原head及49模块profile。
+
+```mermaid
+flowchart LR
+  A["固定Git原文及现有代码"] --> B["17份任务书恢复：零校验问题"]
+  A --> C["CX6读取器 / CXNASM3身份分离：原事件保留"]
+  A --> D["CX14 / CX15正式复验后分别验收、集成"]
+  D --> E["整体阶段继续：完整G5 / P5安全恢复 / 硬件与外部验收"]
+```
+
+| 阶段 | 当前结论 | 真实剩余范围 |
+| --- | --- | --- |
+| P0 工具链与构建环境 | 已通过既有验收 | 本项既定范围无待办 |
+| P1 UEFI 引导器 | 已通过既有验收 | 本项既定范围无待办 |
+| P2 CPU 与内存 | 部分完成 | P2SMP3只覆盖调度前固定共享内核根并永久封存；任意调度后多用户CR3动态修改及PCID/PGE启用范围继续另验。；受控真实碎片order9 OOM已由P2OOM4完成；任意固件碎片拓扑不作穷尽保证。TCG不证明WC真实性能；最新正常装载余量102704B，后续增长继续复核。 |
+| P3 中断与抢占线程 | 已通过既有验收 | 本项既定范围无待办 |
+| P4 用户态与 IPC | 已通过既有验收 | 本项既定范围无待办 |
+| P5 基础服务 | 部分完成 | P5CTX1/P5CTX2已实际集成并随4e1fede进入当前源码；独立源码、宿主和真实客体核验不替代DMA安全回收闭环；可信outstanding DMA排空、持续旧owner排除、全别名撤映射后的全核TLB退休、unpin/free/reuse及恢复发布仍需真实闭环；现有ACK位于撤映射前，不算撤映射后退休证明；同boot设备重授权/驱动重启及旧句柄/旧DMA/旧IRQ负控与持久化回归；reset-hold和两次稳定持有观察不能充作drain或安全回收；分配错误、partial mapping、physical=0客体注入未执行，相关证据仍限P5CTX1原生测试；不重复开发已完成的账本/日志/精确身份/别名拒绝/reset-hold |
+| P6 多核与快速启动 | 部分完成 | PR#3 head288d65c的focused39425166102失败：首代AP/STARTING观察窗口未捕获，KVM权限探测因sudo需密码失败；合并独立暂缓，不重写已接线scheduler/init，也不记为KVM性能超时；新正常镜像GUI/键鼠/USB回归和实验验证工具差集集成；合法Linux/KVM环境下loader→interactive shell≤500ms；设备权限前置失败尚无成功性能结果 |
+| P7 图形桌面 | 部分完成 | 当前R6完整GUI及输入回归；输入修正已有原生、输入/USB专项及常规boot记录；新正常镜像的完整GUI/键鼠回归仍待关闭 |
+| P8 USB 与真机 | 部分完成 | 至少一台台式机和一台笔记本实际启动验收；物理设备、Hub与热插拔等范围另验；当前新镜像USB集成回归待关闭 |
+| P9 安全加固 | 尚未完成 | 自有密钥签名、OVMF与真机安全启动；IOMMU限制驱动DMA；CET影子栈/间接跳转检查与内核基址随机化；系统调用/IPC模糊测试及原阶段24小时门槛 |
+| L0 语言规格 | 已通过既有验收 | 本项既定范围无待办 |
+| L1 编译器与基础库 | 已通过既有验收 | 本项既定范围无待办 |
+| L2 优化与源码调试 | 已通过既有验收 | 本项既定范围无待办 |
+| L3 Dong 编译器自举 | 部分完成 | 已实际证实的完整语言差集：method、enum、error、try、orelse、defer、extern SysV/Win64；有限runner已验收集成，完整G5继续partial。 |
+| L3A 完整后端与命令行 | 部分完成 | 完整语言、ABI与诊断覆盖仍属G5；现有runtime5/49模块profile的持久产物验收已见L3C，不因此关闭完整后端覆盖 |
+| L3B 宿主有界自编译固定点（已进入主线） | 已通过既有验收 | 本项既定范围无待办 |
+| L3C DongOS内自编译（runtime5/49模块profile） | 已通过既有验收 | 本项既定范围无待办 |
+
+源码基线4e1fede的P2 EXEC/WC实际消费者、预算优化及有限G5已经集成；并行新增的SysV/方法/P9候选以其各自实时任务及独立验收为准。本轮修复旧任务记录不覆盖其它负责人源码或状态。
+
+## 以下为原有历史快照
+
+以下保留原有记录；其中日期、任务数量、机器路径和“当前/下一步”均属于各自历史检查点，最新状态以上述记录及协调器为准。
+
 证据快照：2026-10-21T23:25:35+08:00。P2BUILD5已独立验收并本地集成rev6：正式16项零skip/source_stable；补齐正式构建NASM分组帮助探测，真实NASM2/3兼容测试通过。NASM3完整release runtime7构建、实际1/4核共享大页与四核桌面/P5两观察、独立raw replay均通过。正常kernel2006608B/余90544B；316inputs匹配主目录。与旧NASM2非逐字一致，19ASM源相同，编码/对齐差异已审查并保留双份证据。MCP快照132项=109 integrated+19 accepted+3 in_progress+1 todo。Claude EXEC in_progress rev10（R1返修），WC in_progress rev2；DeepSeek L3A在途rev2，L3待依赖验收。P2 EXEC/WC消费者、任意调度后多CR3及WC真实性能仍未关闭。不提交/推送/建PR。 见[MCP快照](reviews/2026-10-21-P2BUILD5-roadmap-snapshot.json)与[集成回执](reviews/2026-10-21-P2BUILD5-integration.json)。
 
 **G6代码已合并并保全同步，限定profile验收完成。** [公开执行/合并报告](reviews/2026-10-21-g6-ci-execution.md)及[JSON](reviews/2026-10-21-g6-ci-execution.json)保留两轮失败、第三轮成功及原始证据。M7/M8等历史环节中的“当前main/HEAD244b18c”属于PR8原检查点；最新G6代码合并/同步检查点以顶部及M11为准。后续文档提交可推进HEAD，不改变已验收的f54c35c代码/tree证据。

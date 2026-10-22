@@ -1,5 +1,11 @@
 # DongOS 客户端分工（2026-10-18）
 
+本轮17份缺失任务书、CX6同号异义和CX14/CX15旧状态均已处理完成。CX14 integrated rev7，CX15 integrated rev8；CX6 integrated rev9，已恢复读取器契约，分离5条原NASM事件，耗时恢复为1轮/265秒，原始事件全部保留。协调器issues=0；核对时间2026-10-22T09:18:41+08:00。
+
+本次恢复收尾没有新派单或接管其它客户端的新任务。已恢复组件及CX14/CX15不重复派发；后续继续按真实G5/P5/硬件差集及用户最新分工授权执行。其它客户端新增队列以MCP最新rev为准。来源见[恢复报告](reviews/2026-10-22-task-recovery/README.md)。
+
+以下保留原有记录；其中日期、任务数量、机器路径和“当前/下一步”均属于各自历史检查点，最新状态以上述记录及协调器为准。
+
 2026-10-21 用户明确要求给 Claude 分配任务：已通过协调器发布 [claude:P2EXEC1](claude-works/tasks/P2EXEC1-board.md)（动态执行别名真实降权、同步与授权事务）和 [claude:P2WC1](claude-works/tasks/P2WC1-board.md)（图形缓存类型撤映射、同步与 WC 重映射事务），发布时均 todo rev1。原 Claude 队列无未结在途；本次明确授权覆盖旧额度不足期间暂停新增偏好。两项实际执行既有 planner 和 live 页表 API，仅本人 works 各六文件，彼此及 Codex P2SMP3、DeepSeek L3/L3A 无写路径重叠；不重做纯规划器。本人客户端 worker MCP 手动领取/提交，无 AI CLI 自动启动、不建 PR。正常消费者 hook、硬件回调、实际客体正反例及最终复验/验收/本地集成由 Codex 接续；组件提交不代表整个 P2、动态 EXEC 或图形 WC 已完成，也不替代 WC 真实硬件性能验收。见 [完整任务和回执](reviews/2026-10-21-Claude-P2EXEC1-P2WC1-allocation.json)。
 
 2026-10-21 用户明确要求让 DeepSeek 做 L3 和 L3A：已通过协调器发布 [deepseek:L3A](deepseek-works/tasks/L3A-board.md)（原生整程序可变全局量及真实产物闭环）和 [deepseek:L3](deepseek-works/tasks/L3-board.md)（语言/ABI 整程序差分执行与真实缺口回归），发布时均 todo rev1、尚未领取。先执行 L3A，其五项既有依赖已 integrated；L3 等待 L3A 独立验收后领取。两项只写本人 works，保留既有读取/栈/49 模块固定点成果，不重复派发，不代表整体 L3/L3A/G5 完成。方法、枚举、错误传播、defer、完整外部 ABI 等差集继续保留；本批先闭合全局量及差分框架。由 DeepSeek 本人客户端 worker MCP 手动领取/提交，未启动模型或 AI CLI；Codex 负责独立复验、验收及真实本地集成，全程不建 PR。Codex 的 P2SMP3 继续在途，两项路径与其无重叠。完整任务与发布回执见 [派单证据](reviews/2026-10-21-DeepSeek-L3-L3A-allocation.json)。本次明确授权覆盖旧的 DeepSeek 暂停新增偏好，其它队列保持原约定。

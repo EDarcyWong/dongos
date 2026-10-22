@@ -103,6 +103,10 @@ int main(void){
 
 GAPS={
  'method':('module gap;struct S{x:u64}fn(self:*S)get()u64{unsafe{return (*self).x;}}pub fn f()u64{var s=S{x:7};return get(&s);}',7,'scalar'),
+ 'for-range':('module gap;pub fn f()u64{var n:u64=1;for i in 1..4{n+=i;}return n;}',7,'scalar'),
+ 'for-array':('module gap;pub fn f()u64{let a:[3]u64=[1,2,4];var n:u64=0;for x in a{n+=x;}return n;}',7,'scalar'),
+ 'for-slice':('module gap;pub fn f()u64{let a:[3]u64=[1,2,4];var n:u64=0;for x in a[..]{n+=x;}return n;}',7,'scalar'),
+ 'bool-match':('module gap;pub fn f()u64{let p:bool=true;match p{true=>{return 7;},false=>{return 0;},}}',7,'scalar'),
  'enum':('module gap;enum E{A,B(u64)}pub fn f()u64{let x=E.B(7);match x{E.A=>{return 0;},E.B(n)=>{return n;},}}',7,'scalar'),
  'error':('module gap;error Bad=7;pub fn f()!u64{return error.Bad;}',7,'error'),
  'try':('module gap;fn g()!u64{return 7;}pub fn f()!u64{return try g();}',7,'result'),
@@ -282,6 +286,13 @@ void __attribute__((sysv_abi)) __dong_panic(uint32_t kind,uint32_t line,const vo
             for mode in ('debug','release'):
                 seed=self.observe(self.seed(directory,mode),obs,name+'-seed-'+mode)
                 asm,p=self.dong(directory,mode)
+                if name in ('method','defer','extern-sysv','for-range','for-array','for-slice','bool-match'):
+                    require(p.returncode==0,name+' supported path regressed; no seed fallback')
+                    target=self.observe(asm,obs,name+'-dong-'+mode)
+                    target.update(compiler_path='dong-frontend-lower-nasm',driver_sha256=sha(self.g.drivers['good']))
+                    require((seed['stdout'],seed['returncode'])==(target['stdout'],target['returncode']),name+' differential mismatch')
+                    self.cases.append(dict(name=name,mode=mode,status='supported-pass',seed=seed,native=target))
+                    continue
                 require(p.returncode in (10,11,12),'known gap changed status; review scope explicitly')
                 require(asm.read_bytes()==b'unchanged','failed native output was published')
                 status=re.search(r'(frontend|lower|emit) status=(\d+)([^\n]*)',p.stderr)
@@ -346,7 +357,7 @@ void __attribute__((sysv_abi)) __dong_panic(uint32_t kind,uint32_t line,const vo
         self.g.tearDownClass()
         after=self.assert_inputs()
         compiler=dict(path=str(self.g.drivers['good']),sha256=sha(self.g.drivers['good']),provenance=self.g.provenance,bootstrap_commands=self.g.records)
-        result=dict(runner_scope_passed=True,scope_complete=False,remaining=sorted(GAPS),supported_pass=self.cases,runtime_checks=self.runtime,diagnostic_pass=self.diagnostic_cases,known_gap=self.gaps,negative_controls=self.negatives,failure=[],skip=[],native_container=self.container,source_before=self.inputs,source_after=after,source_stable=True,environment=self.environment,compiler=compiler,commands=self.records)
+        result=dict(runner_scope_passed=True,scope_complete=False,remaining=sorted({case['name'] for case in self.gaps}),supported_pass=self.cases,runtime_checks=self.runtime,diagnostic_pass=self.diagnostic_cases,known_gap=self.gaps,negative_controls=self.negatives,failure=[],skip=[],native_container=self.container,source_before=self.inputs,source_after=after,source_stable=True,environment=self.environment,compiler=compiler,commands=self.records)
         write(self.work/'coverage.json',result);return result
 
     def run(self):

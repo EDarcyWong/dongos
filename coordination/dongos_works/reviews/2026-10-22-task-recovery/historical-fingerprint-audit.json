@@ -1,0 +1,1050 @@
+{
+  "project": "dongos",
+  "tasks": [
+    {
+      "id": "codex:CX10",
+      "source_rev": 6,
+      "source_status": "integrated",
+      "source_commit": "50ab7cf9cde101691774a8480bdb7fcc07c766be",
+      "source_git_blob": "1d80748f8e89d47e1d8bdd2f37fb608917b46573",
+      "original_review_note": "独立review_stack重放真实两启各241原始物理chunk完整verify及175编译输入/179源码SHA，实际磁盘两FAT/clean/精确payload；两个原始单字节坏体被准确拒绝。最终7tests0skip独立28.726s，正式7167三模块共10tests0skip稳定通过。已审查P5trace窄限定、64MiB原额度及动态表PTE来源，功能正确性压力范围明确。",
+      "original_integration_note": "声明主线文件均已真实落盘，逐项匹配正式最终指纹；主线执行与独立审查证据如验收note。组件集成完成，不将其等同完整L3客体自举。",
+      "historical_verification_passed": true,
+      "historical_source_stable": true,
+      "historical_checks": [
+        {
+          "cancelled": false,
+          "elapsed_seconds": 15.088,
+          "execution_exited": true,
+          "passed": true,
+          "process_stopped": true,
+          "returncode": 0,
+          "skips": 0,
+          "spec": "module:tests.test_services_frame_reader",
+          "tests": 7,
+          "timed_out": false
+        },
+        {
+          "cancelled": false,
+          "elapsed_seconds": 18.365,
+          "execution_exited": true,
+          "passed": true,
+          "process_stopped": true,
+          "returncode": 0,
+          "skips": 0,
+          "spec": "module:tests.test_user_address_spaces",
+          "tests": 1,
+          "timed_out": false
+        },
+        {
+          "cancelled": false,
+          "elapsed_seconds": 33.527,
+          "execution_exited": true,
+          "passed": true,
+          "process_stopped": true,
+          "returncode": 0,
+          "skips": 0,
+          "spec": "module:tests.test_service_handoff",
+          "tests": 2,
+          "timed_out": false
+        }
+      ],
+      "fingerprint_audit": [
+        {
+          "path": "codex-works/deliveries/CX10.md",
+          "historical_sha256": "dfcebb3ccc22b440cbbad212e8fdc3fac1cccae8d24901decf705fc93643651d",
+          "exists": true,
+          "current_raw_sha256": "c1d51f195a6f040721ab1251520ac18b22e11596cf33bda6474ef88af0e5d8f3",
+          "comparison": "crlf-normalized"
+        },
+        {
+          "path": "docs/l3-p5-memory-profile.md",
+          "historical_sha256": "9397c4ccc45785085d02b642cf796bc3c0ec1a5d2448899ff1cbb539074d8275",
+          "exists": true,
+          "current_raw_sha256": "4a7b4ef172bf250639e4c44e9d92ebad49e4d99f95f315695948e53bdbcc9231",
+          "comparison": "lf-normalized"
+        },
+        {
+          "path": "kernel/user/services.dg",
+          "historical_sha256": "8e5f632b847aacc13b468619111369ab3f67ce86f8893c5a68e166c63380bcf5",
+          "exists": true,
+          "current_raw_sha256": "548c6dafa0f2e515bcefeba51ae28c754e68273c979275862c32b60b6a76fa65",
+          "comparison": "successor-content"
+        },
+        {
+          "path": "tests/run_services_qemu.py",
+          "historical_sha256": "a1f24281bc9e3f0534f8f465e79aaf515120e8c7c73a31f5bf3407c7076bfca1",
+          "exists": true,
+          "current_raw_sha256": "a1f24281bc9e3f0534f8f465e79aaf515120e8c7c73a31f5bf3407c7076bfca1",
+          "comparison": "exact"
+        },
+        {
+          "path": "tests/test_services_frame_reader.py",
+          "historical_sha256": "44a389cd8fcd0df9446e20d1e2f8c07c9b064006a57b57e85baf847f517a9a4e",
+          "exists": true,
+          "current_raw_sha256": "44a389cd8fcd0df9446e20d1e2f8c07c9b064006a57b57e85baf847f517a9a4e",
+          "comparison": "exact"
+        }
+      ],
+      "new_acceptance_granted_by_this_audit": false
+    },
+    {
+      "id": "codex:CX12",
+      "source_rev": 9,
+      "source_status": "integrated",
+      "source_commit": "50ab7cf9cde101691774a8480bdb7fcc07c766be",
+      "source_git_blob": "0529697113a5fa79de1421ef0deffc04a52b7674",
+      "original_review_note": "独立review_io两模式各7532独立NASM向量、576真实机器执行、6越界拒绝均通过；已核对两遍长度/RIP/SIB/低位移逻辑，生产无阻断。Windows夹具binary修正后正式f4a7复验1test0skip62.293s源码稳定，主线实际ELF执行及坏体通过。",
+      "original_integration_note": "声明主线文件均已真实落盘，逐项匹配正式最终指纹；主线执行与独立审查证据如验收note。组件集成完成，不将其等同完整L3客体自举。",
+      "historical_verification_passed": true,
+      "historical_source_stable": true,
+      "historical_checks": [
+        {
+          "cancelled": false,
+          "elapsed_seconds": 62.293,
+          "execution_exited": true,
+          "passed": true,
+          "process_stopped": true,
+          "returncode": 0,
+          "skips": 0,
+          "spec": "module:lang.tests.test_bootstrap_x86_compact",
+          "tests": 1,
+          "timed_out": false
+        }
+      ],
+      "fingerprint_audit": [
+        {
+          "path": "codex-works/deliveries/CX12.md",
+          "historical_sha256": "87f4fd7b2f642bd649ad958b037cd9bc3ffdb6b56656d225263b070a16d2c3b9",
+          "exists": true,
+          "current_raw_sha256": "1ad90d7eca033a8955c6991a006941fc8942bffa03ab41854e1e9a4529e8a6dd",
+          "comparison": "crlf-normalized"
+        },
+        {
+          "path": "docs/l3-compact-x86.md",
+          "historical_sha256": "517e103568816214da72e08bb55b061c57dca6cda75c46249099c19ee2f18098",
+          "exists": true,
+          "current_raw_sha256": "1af06e10375485bfb2bab1680994523b62fb2c126144086406a7b954aa83e96b",
+          "comparison": "lf-normalized"
+        },
+        {
+          "path": "lang/bootstrap/native_assembler.dg",
+          "historical_sha256": "27b02c24876b632d624f30633fe1b40a111da536011f01b7d18325d6d434f3f9",
+          "exists": true,
+          "current_raw_sha256": "fb1cea1338a34527e3070e2f457405e124ba7d1fa0e33dcadc3870359cd8c173",
+          "comparison": "successor-content"
+        },
+        {
+          "path": "lang/bootstrap/x86_encode.dg",
+          "historical_sha256": "afbabaa0d11f865be62b01d118a8cc81fc79baed42eb525e7497c15dd1fd4575",
+          "exists": true,
+          "current_raw_sha256": "afbabaa0d11f865be62b01d118a8cc81fc79baed42eb525e7497c15dd1fd4575",
+          "comparison": "exact"
+        },
+        {
+          "path": "lang/tests/test_bootstrap_x86_compact.py",
+          "historical_sha256": "676394808353ea89f4cdf274efdf0bf950a364b9751e1941b5979c9e98329fbf",
+          "exists": true,
+          "current_raw_sha256": "a13f0ac263adf06157c5c7efb7a39772225358279a8646507ebd227b4671e242",
+          "comparison": "lf-normalized"
+        }
+      ],
+      "new_acceptance_granted_by_this_audit": false
+    },
+    {
+      "id": "codex:CX13",
+      "source_rev": 6,
+      "source_status": "integrated",
+      "source_commit": "50ab7cf9cde101691774a8480bdb7fcc07c766be",
+      "source_git_blob": "79e4d36c5afe1da3efdd9e5784cc3ebd0ed7eaa7",
+      "original_review_note": "完整源码/四区借用与consuming布局/固定24B入口/host ELF loader和测试有效性已审查；独立review_io66额外原子拒绝、真实小ELF返回37、1101函数backend容量、debug/release全闭包guarded固定点与生产kernel ELF四产物均通过，旧P1/P2已修复并闭环，最终文档新增容量断言只读复核认可。正式4c4df8复验最终版1test0skip387.803s源稳定/进程停止，包含新增实际容量；ELF1892632B全部字节一致。组件验收，不宣称VM成功。",
+      "original_integration_note": "声明主线文件已实际落盘并与正式指纹逐项一致。主线run3383先前1test0skip406.892s，最终新增容量由独立执行与正式387.803s通过；完整两模式双格式seed/native字节固定点已实测。纯编译作业真实集成，VM启动链由CX14继续，未冒充完整L3完成。",
+      "historical_verification_passed": true,
+      "historical_source_stable": true,
+      "historical_checks": [
+        {
+          "cancelled": false,
+          "elapsed_seconds": 387.803,
+          "execution_exited": true,
+          "passed": true,
+          "process_stopped": true,
+          "returncode": 0,
+          "skips": 0,
+          "spec": "module:lang.tests.test_bootstrap_compiler_job",
+          "tests": 1,
+          "timed_out": false
+        }
+      ],
+      "fingerprint_audit": [
+        {
+          "path": "codex-works/deliveries/CX13.md",
+          "historical_sha256": "049481e1e16b4be1187e523ce8b077bc131f4e0f201a3eadc64d9d48206e9f57",
+          "exists": true,
+          "current_raw_sha256": "da499eaa4da205259fdbd73a61e7a17258cc91d54cb1072749fab154f2b2eef7",
+          "comparison": "crlf-normalized"
+        },
+        {
+          "path": "docs/l3-compiler-job.md",
+          "historical_sha256": "183f78bf8aa71e6dd082961fed3543d4369887c1452d430f31c4f930aaed806b",
+          "exists": true,
+          "current_raw_sha256": "0f4a7f9fdfcb07b511cd7e1d5c4cae8bd6fb3b2bc878c2a7063008f4641b76c1",
+          "comparison": "successor-content"
+        },
+        {
+          "path": "lang/bootstrap/compiler_job.dg",
+          "historical_sha256": "c071546dcad196024fc9cfd4ac2b9843f9540bda5540c2dc74a39ee763fe0e84",
+          "exists": true,
+          "current_raw_sha256": "db89b00b942b665020e3f58d34a166aa4416bc8b90b5429ea905f93f4d7590cd",
+          "comparison": "successor-content"
+        },
+        {
+          "path": "lang/tests/test_bootstrap_compiler_job.py",
+          "historical_sha256": "b3e5874a8756cdf75a96b215b516ceab15e91e85f48a0c8e6471a61fad355925",
+          "exists": true,
+          "current_raw_sha256": "c9a2729c32715a8490af916f1bf6c8bdc2f349da456c845dd39d75a7fbbdb2ae",
+          "comparison": "successor-content"
+        },
+        {
+          "path": "tools/compiler_job.py",
+          "historical_sha256": "63a2e2f3a3a3672e5b36fd26c90eaf225e304b5f7e3bdbad87f91900380712f9",
+          "exists": true,
+          "current_raw_sha256": "cd2c27cabfa04f898b6f3ca2e7cf3dc1c4031ae4e166c0d8690d01995cadc0af",
+          "comparison": "successor-content"
+        }
+      ],
+      "new_acceptance_granted_by_this_audit": false
+    },
+    {
+      "id": "codex:CX14",
+      "source_rev": 2,
+      "source_status": "in_progress",
+      "source_commit": "50ab7cf9cde101691774a8480bdb7fcc07c766be",
+      "source_git_blob": "814872393128d95f7dff5f383c8b6988a54626f9",
+      "original_review_note": "",
+      "original_integration_note": null,
+      "historical_verification_passed": null,
+      "historical_source_stable": null,
+      "historical_checks": [],
+      "fingerprint_audit": [],
+      "new_acceptance_granted_by_this_audit": false
+    },
+    {
+      "id": "codex:CX15",
+      "source_rev": 4,
+      "source_status": "submitted",
+      "source_commit": "50ab7cf9cde101691774a8480bdb7fcc07c766be",
+      "source_git_blob": "6e0766d7cf8ec7709300b0e93ccec1c38a55de39",
+      "original_review_note": "",
+      "original_integration_note": null,
+      "historical_verification_passed": true,
+      "historical_source_stable": true,
+      "historical_checks": [
+        {
+          "cancelled": false,
+          "elapsed_seconds": 358.667,
+          "execution_exited": true,
+          "passed": true,
+          "process_stopped": true,
+          "returncode": 0,
+          "skips": 0,
+          "spec": "module:lang.tests.test_bootstrap_compiler_job",
+          "tests": 1,
+          "timed_out": false
+        }
+      ],
+      "fingerprint_audit": [
+        {
+          "path": "codex-works/deliveries/CX15.md",
+          "historical_sha256": "3d1b7e1460f819ff44aca949a95bd74967bcb29c6b23a1bc6a6f76bfb96ce7d6",
+          "exists": true,
+          "current_raw_sha256": "a7449b4984fdcedb151d44fb8679a73ec4096de671333d9d440548817c9a193a",
+          "comparison": "crlf-normalized"
+        },
+        {
+          "path": "docs/l3-compiler-job-host.md",
+          "historical_sha256": "c18891fc8adee492e7db0270048d94b88df4c88e2637df49051d3d47c04cdd6a",
+          "exists": true,
+          "current_raw_sha256": "a0abbdc3b85acc3a84723f8c1511fce243a3b594faf7d67e71e17bf6adf8e4a2",
+          "comparison": "lf-normalized"
+        },
+        {
+          "path": "tools/compiler_job.py",
+          "historical_sha256": "4490cacbd83987f1472abe8d84069258649fec4d92644f2f56a180260d944e60",
+          "exists": true,
+          "current_raw_sha256": "cd2c27cabfa04f898b6f3ca2e7cf3dc1c4031ae4e166c0d8690d01995cadc0af",
+          "comparison": "successor-content"
+        }
+      ],
+      "new_acceptance_granted_by_this_audit": false
+    },
+    {
+      "id": "codex:CX6",
+      "source_rev": 6,
+      "source_status": "integrated",
+      "source_commit": "50ab7cf9cde101691774a8480bdb7fcc07c766be",
+      "source_git_blob": "f32caa2afce21eb5838899dbc3024384f566d488",
+      "original_review_note": "独立审查子代理review_io实际完整审核源码/契约/测试，独立SHA核对原对象并追加debug/release各2200条短读/精确容量/超容边界及9预检，全部原生exit0。正式隔离425a27aeef594fce946c7d6944844eb8 1test/0skip/38.717秒/source_stable/退出并停止。当前四文件指纹一致。报告reviews/2026-10-20-independent-io-review.md，证据code/build/test/independent-io/reader/evidence.json。准予文件读取适配组件验收，非完整L3完成。",
+      "original_integration_note": "实现已真实落于主线code/services/lib/compiler_source.dg/.md和lang/tests/test_guest_files_reader.py，文件身份与独立验收/正式隔离指纹一致。正式隔离及独立2200边界/模式通过，主线此前完整1test0skip34.794秒通过，冻结后未修改。独立审查报告reviews/2026-10-20-independent-io-review.md。登记真实集成，未扩大权限/内存/栈。",
+      "historical_verification_passed": true,
+      "historical_source_stable": true,
+      "historical_checks": [
+        {
+          "cancelled": false,
+          "elapsed_seconds": 38.717,
+          "execution_exited": true,
+          "passed": true,
+          "process_stopped": true,
+          "returncode": 0,
+          "skips": 0,
+          "spec": "module:lang.tests.test_guest_files_reader",
+          "tests": 1,
+          "timed_out": false
+        }
+      ],
+      "fingerprint_audit": [
+        {
+          "path": "codex-works/deliveries/CX6.md",
+          "historical_sha256": "0b5c33da08f42dbed9e6d50ec77112aea8ab634977548f1a0eceb45f84a51199",
+          "exists": true,
+          "current_raw_sha256": "2a802f69b857b62cc2abe7fcc2bdcc143968ec053251be98054665743feafe97",
+          "comparison": "crlf-normalized"
+        },
+        {
+          "path": "docs/l3-guest-source-integration.md",
+          "historical_sha256": "fcc01504cd55128f5470e2062cf33ff89e8842df4283371a73566a6db57e4e23",
+          "exists": true,
+          "current_raw_sha256": "e51fe10d4b71a42a8f7dc5c7d661e3759dd7cdec1ffd905d9072d4892715dc58",
+          "comparison": "lf-normalized"
+        },
+        {
+          "path": "lang/tests/test_guest_files_reader.py",
+          "historical_sha256": "26ce537dded8a5f2d4867f5c1000dfe248d7198a3a64a896362b2b068c12e5f0",
+          "exists": true,
+          "current_raw_sha256": "8e6aeb1274abf4d5c11f8ee7cc97bf5f13564607717892a3edbb6942632351aa",
+          "comparison": "lf-normalized"
+        },
+        {
+          "path": "services/lib/compiler_source.dg",
+          "historical_sha256": "7f60d9c0e1357ea74ca54eaf2da6244a7830123f4a1f27a732fb4d692ccdc522",
+          "exists": true,
+          "current_raw_sha256": "8a28aef8e6266bac0329fc6e5b2203f5e104a10aadedc365786d5a87b622de01",
+          "comparison": "lf-normalized"
+        },
+        {
+          "path": "services/lib/compiler_source.md",
+          "historical_sha256": "13c1a60f51c2c26eb4e78fec42d759c0ba291dca585ba889c8c902e509828a0c",
+          "exists": true,
+          "current_raw_sha256": "30ae3f3f1054068a18163455c4bb45a604bdfe013cd5b050cca5d73123969790",
+          "comparison": "lf-normalized"
+        }
+      ],
+      "new_acceptance_granted_by_this_audit": false
+    },
+    {
+      "id": "codex:CX7",
+      "source_rev": 12,
+      "source_status": "integrated",
+      "source_commit": "50ab7cf9cde101691774a8480bdb7fcc07c766be",
+      "source_git_blob": "0f9e7eeca8954fc71a9d97fa3a5384e7faa50b7e",
+      "original_review_note": "用户明确委托选择栈约束，采用专用64KiB上下guard且计入既有64MiB，普通仍16KiB。独立review_stack每模式2729145实测检查全17失败位置/回滚/复用清零/边界/ET_DYN通过，报告2026-10-20-independent-compiler-stack-review.md；正式003019复验1test0skip288.257s源码稳定/停止确认。已审查profile封闭入口与容量/保护保留，无用户选择大小或权限扩张。",
+      "original_integration_note": "此任务声明路径即主线真实文件，已落盘并逐项与正式指纹一致；主线先前1test0skip267.672s及独立全面执行、正式最终288.257s均通过。完成组件真实集成；尚未宣称客体编译链完成。",
+      "historical_verification_passed": true,
+      "historical_source_stable": true,
+      "historical_checks": [
+        {
+          "cancelled": false,
+          "elapsed_seconds": 288.257,
+          "execution_exited": true,
+          "passed": true,
+          "process_stopped": true,
+          "returncode": 0,
+          "skips": 0,
+          "spec": "discover:tests:test_compiler_stack.py",
+          "tests": 1,
+          "timed_out": false
+        }
+      ],
+      "fingerprint_audit": [
+        {
+          "path": "codex-works/deliveries/CX7.md",
+          "historical_sha256": "d3b0b932b9f1ef18cb0548d008632099b9945c7337d8f9d2a024e9a069694a5b",
+          "exists": true,
+          "current_raw_sha256": "79a07818e57e34f98c61e5d6c0d9f64824314b25d55127d6ffd39f6d920d02b5",
+          "comparison": "crlf-normalized"
+        },
+        {
+          "path": "docs/l3-compiler-stack.md",
+          "historical_sha256": "93d0205ccb269b66bc16b5a6eba5cfba86e118601f1415d42f9a5461ae622d56",
+          "exists": true,
+          "current_raw_sha256": "7e3e435e35f4953a9f3d86aa8086db77ad28a6a820fb2df2b15552cfded708ca",
+          "comparison": "lf-normalized"
+        },
+        {
+          "path": "kernel/user/compiler_stack.dg",
+          "historical_sha256": "ca725ad53b4bf6f1b291c1c777f451abe171834614bebe6489ebab48f90d8a26",
+          "exists": true,
+          "current_raw_sha256": "8308a791bcd6b133477b37a179c56ac8b491cc25dc89074ce4af555a8a0c5b55",
+          "comparison": "lf-normalized"
+        },
+        {
+          "path": "kernel/user/memory.dg",
+          "historical_sha256": "6fae95b3919a399d5e4af0f57cb45b0478c15bb6c3dbc03618273b530fc4375c",
+          "exists": true,
+          "current_raw_sha256": "863e43a33a5abc95b29770a3dbe4dd141a537deddb2113f9c1b7e42c8a32aa61",
+          "comparison": "successor-content"
+        },
+        {
+          "path": "tests/test_compiler_stack.py",
+          "historical_sha256": "ec8448901c5d9193646c68624e76f5688e97d62dfbaa46bae7a413ab78773d2d",
+          "exists": true,
+          "current_raw_sha256": "3c01806cb0eefdc69e79bf464e18c40882ff9becda7a3c9df42c7a58eb861b24",
+          "comparison": "lf-normalized"
+        }
+      ],
+      "new_acceptance_granted_by_this_audit": false
+    },
+    {
+      "id": "codex:CX8",
+      "source_rev": 6,
+      "source_status": "integrated",
+      "source_commit": "50ab7cf9cde101691774a8480bdb7fcc07c766be",
+      "source_git_blob": "8158480f18a79b84b44fadb014335e02e196f1ce",
+      "original_review_note": "独立review_io完成源码/契约/永久测试读审并追加两模式各16边界序列+10结构预检，原生全exit0，含全局stall7/8、transport高位u64、H_SYNC版本错、2MiB/61440边界与wrap/align/尾部别名。独立报告reviews/2026-10-20-independent-io-review.md，独立code/build/test/independent-io/files-commit/evidence.json。正式a7c058... 1test/0skip/49.85s/source_stable/已停止退出，当前四文件指纹一致，准予适配组件验收，非真实客体FLUSH或完整L3。",
+      "original_integration_note": "任务直接在授权code/services/lib/compiler_artifact.dg、lang/tests/test_guest_files_commit.py、docs/l3-guest-artifact-integration.md真实实施，非只存在works候选。主线实测1test/0skip/38.282s与正式隔离49.85s全部通过，生产SHA3caa1ed8099e09c710de734cc483a7737f32c393d16bf40b0be7cb7b18ce39ab与验收指纹一致。登记真实主线集成；无额外句柄/路径/权限/进程/关机能力。",
+      "historical_verification_passed": true,
+      "historical_source_stable": true,
+      "historical_checks": [
+        {
+          "cancelled": false,
+          "elapsed_seconds": 49.85,
+          "execution_exited": true,
+          "passed": true,
+          "process_stopped": true,
+          "returncode": 0,
+          "skips": 0,
+          "spec": "module:lang.tests.test_guest_files_commit",
+          "tests": 1,
+          "timed_out": false
+        }
+      ],
+      "fingerprint_audit": [
+        {
+          "path": "codex-works/deliveries/CX8.md",
+          "historical_sha256": "047888bdfe6dd698526ff5db4b3d242c6628463030858c79da35fbd320c4d878",
+          "exists": true,
+          "current_raw_sha256": "8f6ccc24a36f677110eef134c76ab42d30a8454841cd73aa8e019189c55ff602",
+          "comparison": "crlf-normalized"
+        },
+        {
+          "path": "docs/l3-guest-artifact-integration.md",
+          "historical_sha256": "dc6706224d6dab61795334e51ecd474c995fd45668f450d3ed7a94565bb92abd",
+          "exists": true,
+          "current_raw_sha256": "94828767d6fd9b162579eaf418b7093287f231937862b9869ae2a8ac639c5d3f",
+          "comparison": "lf-normalized"
+        },
+        {
+          "path": "lang/tests/test_guest_files_commit.py",
+          "historical_sha256": "418b3356083c803a138f3d312afb26d28aee4207ad340e7028263434f8609a90",
+          "exists": true,
+          "current_raw_sha256": "b5221d80c959b1ac36065b2f8b6d303a6f054aababa1d0b9f30b925f1a65f466",
+          "comparison": "lf-normalized"
+        },
+        {
+          "path": "services/lib/compiler_artifact.dg",
+          "historical_sha256": "3caa1ed8099e09c710de734cc483a7737f32c393d16bf40b0be7cb7b18ce39ab",
+          "exists": true,
+          "current_raw_sha256": "7fb2a19cbd1a25ce3bcae4b6a017b7ce849d6e7f75c80fcefe5d86d1088ca2f1",
+          "comparison": "lf-normalized"
+        }
+      ],
+      "new_acceptance_granted_by_this_audit": false
+    },
+    {
+      "id": "cursor:CR45",
+      "source_rev": 7,
+      "source_status": "integrated",
+      "source_commit": "50ab7cf9cde101691774a8480bdb7fcc07c766be",
+      "source_git_blob": "4046224b73a93ce59686f8ac9baa19ae1030726a",
+      "original_review_note": "实现者之外的独立子代理review_catalog_sink已实际审查完整源码/契约/永久测试及实际负控产物，未发现阻塞；独立安全C探针复用已核对SHA对象重新链接debug/release，catalog18场景+sink12场景/模式全通过。报告reviews/2026-10-20-independent-catalog-sink-review.md及code/build/test/independent-catalog-sink/summary.json。正式隔离CR45 2tests0skip233.343秒、CR46 1test0skip638.269秒，均returncode0/source_stable/process_stopped/execution_exited=true，当前四文件指纹一致。准予组件验收；尚未集成，非L3整体验收。",
+      "original_integration_note": "已真实复制生产源码/契约至code/lang/bootstrap并将永久测试仅路径适配到code/lang/tests；清单code/build/test/guest-integration/CR45-CR46-files.json。主线联合3 tests/0skip/877.096秒，源码稳定通过；CR45生产SHAd4e6abff...、CR46生产SHA46c59707...与验收候选一致。沿用独立review_catalog_sink及各正式复验。仅组件主线集成，非客体L3/FLUSH/重启验收。",
+      "historical_verification_passed": true,
+      "historical_source_stable": true,
+      "historical_checks": [
+        {
+          "cancelled": false,
+          "elapsed_seconds": 233.343,
+          "execution_exited": true,
+          "passed": true,
+          "process_stopped": true,
+          "returncode": 0,
+          "skips": 0,
+          "spec": "discover:cursor-works/tests:test_guest_source_catalog.py",
+          "tests": 2,
+          "timed_out": false
+        }
+      ],
+      "fingerprint_audit": [
+        {
+          "path": "cursor-works/deliveries/CR45.md",
+          "historical_sha256": "0ce863226c45e2585b238508dca1affc810513c505362163fbb5c76016c5f60e",
+          "exists": true,
+          "current_raw_sha256": "46779acdff99efa817f529a8c3e32586dca926428adecd41363d55c24fe2b3b0",
+          "comparison": "crlf-normalized"
+        },
+        {
+          "path": "cursor-works/lang/bootstrap/guest_source_catalog.dg",
+          "historical_sha256": "d4e6abffdfbfec8b7af7cf669836f160045a6bb11b27a834ef8eb54703377408",
+          "exists": true,
+          "current_raw_sha256": "7ffb8b0a377bc64c51b2846f08fc6e4dbecbe04fdaa84e359f2da18a34bab778",
+          "comparison": "lf-normalized"
+        },
+        {
+          "path": "cursor-works/lang/bootstrap/guest_source_catalog.md",
+          "historical_sha256": "9d72013ee78345003fb7a2f450daf60cabe3376c67fb82b2d06ad5a27b2e838f",
+          "exists": true,
+          "current_raw_sha256": "39d3d724ea6b45a17903ad812adf3f2a0fbc3d615fc71b9cf15638e4087f565d",
+          "comparison": "lf-normalized"
+        },
+        {
+          "path": "cursor-works/tests/test_guest_source_catalog.py",
+          "historical_sha256": "baacca610346159402964ba1870d8559ae33174ad0e08cbbab4213c3b5c150af",
+          "exists": true,
+          "current_raw_sha256": "baacca610346159402964ba1870d8559ae33174ad0e08cbbab4213c3b5c150af",
+          "comparison": "exact"
+        }
+      ],
+      "new_acceptance_granted_by_this_audit": false
+    },
+    {
+      "id": "cursor:CR46",
+      "source_rev": 7,
+      "source_status": "integrated",
+      "source_commit": "50ab7cf9cde101691774a8480bdb7fcc07c766be",
+      "source_git_blob": "1e6ca42c3afd56c4addfecf29cdd98ca18cba70a",
+      "original_review_note": "实现者之外的独立子代理review_catalog_sink已实际审查完整源码/契约/永久测试及实际负控产物，未发现阻塞；独立安全C探针复用已核对SHA对象重新链接debug/release，catalog18场景+sink12场景/模式全通过。报告reviews/2026-10-20-independent-catalog-sink-review.md及code/build/test/independent-catalog-sink/summary.json。正式隔离CR45 2tests0skip233.343秒、CR46 1test0skip638.269秒，均returncode0/source_stable/process_stopped/execution_exited=true，当前四文件指纹一致。准予组件验收；尚未集成，非L3整体验收。",
+      "original_integration_note": "已真实复制生产源码/契约至code/lang/bootstrap并将永久测试仅路径适配到code/lang/tests；清单code/build/test/guest-integration/CR45-CR46-files.json。主线联合3 tests/0skip/877.096秒，源码稳定通过；CR45生产SHAd4e6abff...、CR46生产SHA46c59707...与验收候选一致。沿用独立review_catalog_sink及各正式复验。仅组件主线集成，非客体L3/FLUSH/重启验收。",
+      "historical_verification_passed": true,
+      "historical_source_stable": true,
+      "historical_checks": [
+        {
+          "cancelled": false,
+          "elapsed_seconds": 638.269,
+          "execution_exited": true,
+          "passed": true,
+          "process_stopped": true,
+          "returncode": 0,
+          "skips": 0,
+          "spec": "discover:cursor-works/tests:test_guest_diagnostic_sink.py",
+          "tests": 1,
+          "timed_out": false
+        }
+      ],
+      "fingerprint_audit": [
+        {
+          "path": "cursor-works/deliveries/CR46.md",
+          "historical_sha256": "7957aa6cad367d2e3d3ba9ec4a002c791ee12ec5432c5e0c9869452975747644",
+          "exists": true,
+          "current_raw_sha256": "54bdd77062ab28ef53c4b10d356da34a5dc4606a5f3cbc13a6dea95068d3b299",
+          "comparison": "crlf-normalized"
+        },
+        {
+          "path": "cursor-works/lang/bootstrap/guest_diagnostic_sink.dg",
+          "historical_sha256": "46c59707abc44dd34cba0885d8f0a438d5c0108c99dc2db104a7ca1d2d864a20",
+          "exists": true,
+          "current_raw_sha256": "f958d83310e1fe1ecfdf98bb60c0490c3003298da9ce44408b49add32f2ea53a",
+          "comparison": "lf-normalized"
+        },
+        {
+          "path": "cursor-works/lang/bootstrap/guest_diagnostic_sink.md",
+          "historical_sha256": "a5ab8761df2da5dc4c474c580c3cf1d751459c5ca01f3b32a3432a28e49b82e7",
+          "exists": true,
+          "current_raw_sha256": "5fd48a18fed3c78a44bce04a452e2d673b5d85de0369caf20d24d3ce923596a1",
+          "comparison": "lf-normalized"
+        },
+        {
+          "path": "cursor-works/tests/test_guest_diagnostic_sink.py",
+          "historical_sha256": "7b7504ee82c5b61c9b83be4186dc39ef5699b3aabc6222482fac5cf32ddb06ba",
+          "exists": true,
+          "current_raw_sha256": "7b7504ee82c5b61c9b83be4186dc39ef5699b3aabc6222482fac5cf32ddb06ba",
+          "comparison": "exact"
+        }
+      ],
+      "new_acceptance_granted_by_this_audit": false
+    },
+    {
+      "id": "cursor:CR47",
+      "source_rev": 13,
+      "source_status": "integrated",
+      "source_commit": "50ab7cf9cde101691774a8480bdb7fcc07c766be",
+      "source_git_blob": "a4ec05f9ea853005a52d906704327fd96e6fdfa9",
+      "original_review_note": "已审查rt_expr拆分与原语义/发布契约，独立review_stack实际160语义+容量8变体、闭包seed/native栈测量通过（code/build/test/independent-stack/review.md及独立并行审查）；正式46c435复验1测试0skip1642.989秒、双模式双格式、语义/真实坏体及源码稳定通过。仅接受递归帧优化，native峰值37056字节仍超过16KiB，不能宣称guest L3完成；64KiB专用受保护栈另属用户授权CX7。",
+      "original_integration_note": "已真实复制candidate semantic_types.dg与semantic_stack.md至主线，源SHA e28128c7...与正式/独审一致。新增主线完整compiler_job run-3383cd152203通过1test0skip406.892s（两个seed模式、两个格式、真实全编译器闭包seed/native有界固定点+坏语义），独立同闭包与kernel ELF验证通过；CR47正式全语义/栈优化比较先前1642.989s零skip通过。已有semantic_types/runtime广泛回归另仍运行，不把未完成测试报作成功。组件真实集成，普通16KiB栈不改变；专用64KiB另由已集成CX7负责。",
+      "historical_verification_passed": true,
+      "historical_source_stable": true,
+      "historical_checks": [
+        {
+          "cancelled": false,
+          "elapsed_seconds": 1642.989,
+          "execution_exited": true,
+          "passed": true,
+          "process_stopped": true,
+          "returncode": 0,
+          "skips": 0,
+          "spec": "discover:cursor-works/tests:test_semantic_stack.py",
+          "tests": 1,
+          "timed_out": false
+        }
+      ],
+      "fingerprint_audit": [
+        {
+          "path": "cursor-works/deliveries/CR47.md",
+          "historical_sha256": "56c4ee339f3241b512c8ff91225921933fdda8e824860c8c2561940a0ac2a8a2",
+          "exists": true,
+          "current_raw_sha256": "b77fb5c0613146d66ad4b20d7037869d25b0c7a3cd0b58e746c1558fb523056a",
+          "comparison": "crlf-normalized"
+        },
+        {
+          "path": "cursor-works/lang/bootstrap/semantic_stack.md",
+          "historical_sha256": "eb9fb4f51e8db0891caec25ec1948a9fd9c4da446dfcf5ab79925817167fd4b6",
+          "exists": true,
+          "current_raw_sha256": "23769692eb9b123ba26c9f2211db73266760d255a4d84d84d14a4b230379853f",
+          "comparison": "lf-normalized"
+        },
+        {
+          "path": "cursor-works/lang/bootstrap/semantic_types.dg",
+          "historical_sha256": "e28128c7a6c5c742d1a2caa9bbb4f89e5f83a8c265de151e885b5d65166f5271",
+          "exists": true,
+          "current_raw_sha256": "e28128c7a6c5c742d1a2caa9bbb4f89e5f83a8c265de151e885b5d65166f5271",
+          "comparison": "exact"
+        },
+        {
+          "path": "cursor-works/tests/test_semantic_stack.py",
+          "historical_sha256": "19a0513edba2fa5738245fceffb3f8aa50c22168a439c369d548c5b40d71f2c7",
+          "exists": true,
+          "current_raw_sha256": "19a0513edba2fa5738245fceffb3f8aa50c22168a439c369d548c5b40d71f2c7",
+          "comparison": "exact"
+        }
+      ],
+      "new_acceptance_granted_by_this_audit": false
+    },
+    {
+      "id": "pool:GUEST1",
+      "source_rev": 9,
+      "source_status": "integrated",
+      "source_commit": "50ab7cf9cde101691774a8480bdb7fcc07c766be",
+      "source_git_blob": "0a8fc32d7858b82bd9c9b5134c7defa75293e55d",
+      "original_review_note": "实际审查R1完整out描述符修复、任务契约及永久测试：先验证整个out.len端点及与path/written完整区间别名，再判断容量；非法路径优先级和失败零写入保留。正式作业60cfd4a66b364bd3885d847d2667e522通过19tests/0skip/returncode0，process_stopped=true/source_stable=true，当前四交付指纹一致。debug/release安全永久探针验证written位于out尾部、path位于out尾部、out端点回绕均INVALID且全文不变，合法正控可成功；真实退化为prefix-only的坏Dong被指定状态/原子性拒绝，原5类坏体保留。本轮summary产物SHA已独立核对，原P2关闭。登记组件验收，未集成主线，路径门禁不授予文件权限。",
+      "original_integration_note": "已实际复制Dong生产/说明到code/lang/bootstrap及路径适配永久测试到code/lang/tests，生产与验收源逐字SHA相同；主线联合53 tests/0skip/97.642秒通过（GUEST1=19/GUEST2=21/GUEST3=13），包括debug/release真实编译执行、双格式及坏Dong负控，测试源码稳定。build/test/guest-integration/integration-files.json记录来源与目标指纹。此为组件真实集成，不代表客体I/O/内存已接线或完整L3完成。",
+      "historical_verification_passed": true,
+      "historical_source_stable": true,
+      "historical_checks": [
+        {
+          "cancelled": false,
+          "elapsed_seconds": 50.028,
+          "execution_exited": true,
+          "passed": true,
+          "process_stopped": true,
+          "returncode": 0,
+          "skips": 0,
+          "spec": "discover:pool-works/tests:test_guest_source_path.py",
+          "tests": 19,
+          "timed_out": false
+        }
+      ],
+      "fingerprint_audit": [
+        {
+          "path": "pool-works/deliveries/GUEST1.md",
+          "historical_sha256": "67c97ad430457270750bfc6f81fc481d2b3d772193a3fc36af2ff0246450ca4c",
+          "exists": true,
+          "current_raw_sha256": "a9d603db2570ea0f58b667f4440e8272415942e9ad35ccf6f3737460f9ebd5e1",
+          "comparison": "crlf-normalized"
+        },
+        {
+          "path": "pool-works/lang/bootstrap/guest_source_path.dg",
+          "historical_sha256": "80e046debce67153b7a655f7b7161985c99b9ce6e2cf318f7e3edfc5115044ee",
+          "exists": true,
+          "current_raw_sha256": "e335dfc3d924d513068bc89f23edb6894a6fb7ab68e1948012c399565abf6f5d",
+          "comparison": "lf-normalized"
+        },
+        {
+          "path": "pool-works/lang/bootstrap/guest_source_path.md",
+          "historical_sha256": "319d28540ecf15a436110ae3860dfdc7cacd67450d8a3180c1e431dff99d171e",
+          "exists": true,
+          "current_raw_sha256": "299c1efd34440fc76d56d4900627cf4e9ebfb799bfed7adb8b841b7b7ce15b78",
+          "comparison": "lf-normalized"
+        },
+        {
+          "path": "pool-works/tests/test_guest_source_path.py",
+          "historical_sha256": "9cdeec44b23c8e5aee199374ca89fbfca770da11a6f50fd3d7e4d72f9403b466",
+          "exists": true,
+          "current_raw_sha256": "5a47d424460068efa83e93dbaa1c9649ec9a74550b8ae6c9c205ede2637e0d7f",
+          "comparison": "lf-normalized"
+        }
+      ],
+      "new_acceptance_granted_by_this_audit": false
+    },
+    {
+      "id": "pool:GUEST2",
+      "source_rev": 6,
+      "source_status": "integrated",
+      "source_commit": "50ab7cf9cde101691774a8480bdb7fcc07c766be",
+      "source_git_blob": "ffbb13e302b22a297df0c1e802dff7f08e888ecf",
+      "original_review_note": "实际审查Dong生产load及回调ABI、描述符/完整scratch-out-result别名、短读推进、精确容量额外EOF探测、错误阶段/原码保持和单点发布；永久测试含真实debug/release与坏Dong负控。正式隔离作业55ecdf4cea7f401c9627ac360d391648通过21 tests/0skip/returncode0，92.433秒，process_stopped=true、source_stable=true，当前授权文件指纹一致。此前独立产物审查核对245个产物SHA，无阻塞发现。验收组件，未集成主线，不代表真实客体I/O或L3完成。",
+      "original_integration_note": "已实际复制Dong生产/说明到code/lang/bootstrap及路径适配永久测试到code/lang/tests，生产与验收源逐字SHA相同；主线联合53 tests/0skip/97.642秒通过（GUEST1=19/GUEST2=21/GUEST3=13），包括debug/release真实编译执行、双格式及坏Dong负控，测试源码稳定。build/test/guest-integration/integration-files.json记录来源与目标指纹。此为组件真实集成，不代表客体I/O/内存已接线或完整L3完成。",
+      "historical_verification_passed": true,
+      "historical_source_stable": true,
+      "historical_checks": [
+        {
+          "cancelled": false,
+          "elapsed_seconds": 92.433,
+          "execution_exited": true,
+          "passed": true,
+          "process_stopped": true,
+          "returncode": 0,
+          "skips": 0,
+          "spec": "discover:pool-works/tests:test_guest_source_reader.py",
+          "tests": 21,
+          "timed_out": false
+        }
+      ],
+      "fingerprint_audit": [
+        {
+          "path": "pool-works/deliveries/GUEST2.md",
+          "historical_sha256": "7f170a1915970ccae2b6d94db9d1c10a2dde7da1ec526b7b7df3d31aaa498ca8",
+          "exists": true,
+          "current_raw_sha256": "c2a05cb76a7a56fc4715231e826f3fbde1583e42a477f9ed2f423d9a6300aba4",
+          "comparison": "crlf-normalized"
+        },
+        {
+          "path": "pool-works/lang/bootstrap/guest_source_reader.dg",
+          "historical_sha256": "131afe98052cd8c28ffbbb53b3c1ddadccb8f87196b4a4f9f2084240f7c93db4",
+          "exists": true,
+          "current_raw_sha256": "1be8b093bf1a54e36f2e6f81e288e3e29173b60d5c7544f10c5233516e159498",
+          "comparison": "lf-normalized"
+        },
+        {
+          "path": "pool-works/lang/bootstrap/guest_source_reader.md",
+          "historical_sha256": "55a46f3b39f11ee5467a30ae10be3dfa0843bd4fafec544104997f4adb491cc5",
+          "exists": true,
+          "current_raw_sha256": "ec328f097a6dcf261f4d37aafbb77e502e433aeda861f858bb319ac37366b129",
+          "comparison": "lf-normalized"
+        },
+        {
+          "path": "pool-works/tests/test_guest_source_reader.py",
+          "historical_sha256": "3b286a2c8823f1212357e50254a81e8a5d3d811c510c152bfb3487b5366bbb6c",
+          "exists": true,
+          "current_raw_sha256": "ef269547205d77f7216a1d54027d00a1c8189f516aaa64c76f1a45a655327b5d",
+          "comparison": "lf-normalized"
+        }
+      ],
+      "new_acceptance_granted_by_this_audit": false
+    },
+    {
+      "id": "pool:GUEST3",
+      "source_rev": 9,
+      "source_status": "integrated",
+      "source_commit": "50ab7cf9cde101691774a8480bdb7fcc07c766be",
+      "source_git_blob": "44c016b5eec38917482bdde601cfbaa117a73c9f",
+      "original_review_note": "已实际审查R1源码：所有非OK路径先返回，Result/out全文保持，成功后一次发布；规划/对齐/阶段并存复用/溢出/栈门禁正确。独立13测试与debug/release额外安全探针均确认BUDGET时Result改变0字节，251产物SHA已审查。正式隔离作业e8069a1bf067437b898b92c5c8e56514通过13 tests/0skip/returncode0、source_stable=true、process_stopped=true，当前交付指纹一致。修复原P2，登记组件验收，未集成主线。",
+      "original_integration_note": "已实际复制Dong生产/说明到code/lang/bootstrap及路径适配永久测试到code/lang/tests，生产与验收源逐字SHA相同；主线联合53 tests/0skip/97.642秒通过（GUEST1=19/GUEST2=21/GUEST3=13），包括debug/release真实编译执行、双格式及坏Dong负控，测试源码稳定。build/test/guest-integration/integration-files.json记录来源与目标指纹。此为组件真实集成，不代表客体I/O/内存已接线或完整L3完成。",
+      "historical_verification_passed": true,
+      "historical_source_stable": true,
+      "historical_checks": [
+        {
+          "cancelled": false,
+          "elapsed_seconds": 94.772,
+          "execution_exited": true,
+          "passed": true,
+          "process_stopped": true,
+          "returncode": 0,
+          "skips": 0,
+          "spec": "discover:pool-works/tests:test_guest_compile_memory.py",
+          "tests": 13,
+          "timed_out": false
+        }
+      ],
+      "fingerprint_audit": [
+        {
+          "path": "pool-works/deliveries/GUEST3.md",
+          "historical_sha256": "468cdab0e986d97587d0cdf73fea797133a90ab7448c64eb35dac05901e63029",
+          "exists": true,
+          "current_raw_sha256": "468cdab0e986d97587d0cdf73fea797133a90ab7448c64eb35dac05901e63029",
+          "comparison": "exact"
+        },
+        {
+          "path": "pool-works/lang/bootstrap/guest_compile_memory.dg",
+          "historical_sha256": "0fea3cbb9e30ebbc9a51a0901d7517f47b713bd68380b9124066aaa25036831d",
+          "exists": true,
+          "current_raw_sha256": "f128c44001a15dc4b139d19edc48f8020b77832eb7cd37db7f2c3a89a17853ec",
+          "comparison": "lf-normalized"
+        },
+        {
+          "path": "pool-works/lang/bootstrap/guest_compile_memory.md",
+          "historical_sha256": "19d24177b05831071f37726cdec9e152c87cb096341b15c052b0b8d373974bda",
+          "exists": true,
+          "current_raw_sha256": "a1c1d8900dd2ea674e19ee7b9517962f15b5d18efd318402476902ac3a80d910",
+          "comparison": "lf-normalized"
+        },
+        {
+          "path": "pool-works/tests/test_guest_compile_memory.py",
+          "historical_sha256": "61a024f9b031004b2b859eb6ca461dac918116fc17c52bd05d4ba020c6939475",
+          "exists": true,
+          "current_raw_sha256": "a78a843894ab4edbcfeb099891c7074b079725eb4443dd001c9cc8ee81cdb83e",
+          "comparison": "lf-normalized"
+        }
+      ],
+      "new_acceptance_granted_by_this_audit": false
+    },
+    {
+      "id": "pool:GUEST4",
+      "source_rev": 13,
+      "source_status": "integrated",
+      "source_commit": "50ab7cf9cde101691774a8480bdb7fcc07c766be",
+      "source_git_blob": "d03c2c4d1508ec5818e6b3b650f8d6bdeacb1c1e",
+      "original_review_note": "R1由独立review_io源码/契约/永久测试复审，并用冻结debug/release对象自身alignment witness确认两空slice缺陷关闭；四正常方法独立复放含20预检、真实ELF验证及入口36全部通过。完整正式7c3f234b... 6tests/0skip/749.438秒/source_stable/已停止退出，指纹一致；实际Graph prefix/skip assembler/UNSUPPORTED-as-OK三坏体各双模式精确拒绝。并行编排独立读审确认无竞态/无弱化。报告reviews/2026-10-20-independent-io-review.md。准予组件验收，不等同客体L3或FLUSH重启验收。",
+      "original_integration_note": "已逐字真实复制guest_compile_image.dg/.md至code/lang/bootstrap，永久测试仅SOURCE/build输出路径适配至code/lang/tests/test_bootstrap_guest_compile_image.py。主线完整6tests/0skip/673.778秒全部通过；正式749.438秒通过；生产SHA5d69356d09ba92336377888fcdc38becf5eeb83d4940546b76fc37c5796030e7保持，三文件清单code/build/test/guest-integration/GUEST4-files.json。沿用独立源码/契约/Graph/空alignment/真实ELF复审，登记组件真实主线集成，非完整L3。",
+      "historical_verification_passed": true,
+      "historical_source_stable": true,
+      "historical_checks": [
+        {
+          "cancelled": false,
+          "elapsed_seconds": 749.438,
+          "execution_exited": true,
+          "passed": true,
+          "process_stopped": true,
+          "returncode": 0,
+          "skips": 0,
+          "spec": "discover:pool-works/tests:test_guest_compile_image.py",
+          "tests": 6,
+          "timed_out": false
+        }
+      ],
+      "fingerprint_audit": [
+        {
+          "path": "pool-works/deliveries/GUEST4.md",
+          "historical_sha256": "f694616c558c2041d687609f09ed2b744fbb21464b7f8de2b6740220f5509f36",
+          "exists": true,
+          "current_raw_sha256": "ddcfca12271b8d42c2dfb8075d63a574016d2ef2aff95db646bfcf26f7688fc8",
+          "comparison": "crlf-normalized"
+        },
+        {
+          "path": "pool-works/lang/bootstrap/guest_compile_image.dg",
+          "historical_sha256": "5d69356d09ba92336377888fcdc38becf5eeb83d4940546b76fc37c5796030e7",
+          "exists": true,
+          "current_raw_sha256": "5d69356d09ba92336377888fcdc38becf5eeb83d4940546b76fc37c5796030e7",
+          "comparison": "exact"
+        },
+        {
+          "path": "pool-works/lang/bootstrap/guest_compile_image.md",
+          "historical_sha256": "ad336fc5a8472fe8eff94793d8e1c98d020348fda3df7f517f72468db798f67d",
+          "exists": true,
+          "current_raw_sha256": "ad336fc5a8472fe8eff94793d8e1c98d020348fda3df7f517f72468db798f67d",
+          "comparison": "exact"
+        },
+        {
+          "path": "pool-works/tests/test_guest_compile_image.py",
+          "historical_sha256": "841f4200272041fd1e5916fa2f1263266ba9adead61a65152c458008ffb6a3d8",
+          "exists": true,
+          "current_raw_sha256": "841f4200272041fd1e5916fa2f1263266ba9adead61a65152c458008ffb6a3d8",
+          "comparison": "exact"
+        }
+      ],
+      "new_acceptance_granted_by_this_audit": false
+    },
+    {
+      "id": "pool:GUEST5",
+      "source_rev": 16,
+      "source_status": "integrated",
+      "source_commit": "50ab7cf9cde101691774a8480bdb7fcc07c766be",
+      "source_git_blob": "797ad6cdc7b4c844d379f51f2d038e6dbbae5a76",
+      "original_review_note": "R2由独立子代理review_io重新读审全部源码/契约/永久测试，并从当前SHA0264475d79e0b38cbef38bfe195c1e1f175ec1d3f95c9840b6181ac1c891dcf8重新独立编译debug/release，各10000条随机短写/零进展/负错/超长/FLUSH/终态无后续调用计划，通过逐step偏移/指针/计数核对，全部exit0。正式隔离10c71d602ff848a996219f1232bc87cc 16 tests/0skip/148.3秒/source_stable/退出并停止，当前交付指纹一致。报告reviews/2026-10-20-independent-io-review.md及code/build/test/independent-io/commit/evidence.json，旧回绕缺陷关闭。准予组件验收，尚未主线集成，非真实FLUSH/重启或完整L3验收。",
+      "original_integration_note": "已真实复制生产源码/接口说明至code/lang/bootstrap，永久测试适配至code/lang/tests/test_bootstrap_guest_artifact_commit.py。主线16 tests/0skip/108.351s全部通过；源码SHA0264475d...与已验收候选一致，清单code/build/test/guest-integration/GUEST5-files.json。沿用独立review_io及正式148.3秒稳定复验；仅组件集成，不声称真实DongOS FLUSH/重启或L3完成。",
+      "historical_verification_passed": true,
+      "historical_source_stable": true,
+      "historical_checks": [
+        {
+          "cancelled": false,
+          "elapsed_seconds": 148.3,
+          "execution_exited": true,
+          "passed": true,
+          "process_stopped": true,
+          "returncode": 0,
+          "skips": 0,
+          "spec": "discover:pool-works/tests:test_guest_artifact_commit.py",
+          "tests": 16,
+          "timed_out": false
+        }
+      ],
+      "fingerprint_audit": [
+        {
+          "path": "pool-works/deliveries/GUEST5.md",
+          "historical_sha256": "962c7bf86ed3e4cf6155b435ecbace8c1351525f8d0be6319321aa0e0ee84fb4",
+          "exists": true,
+          "current_raw_sha256": "2ca598f4935290c71398e713d1cc148541428a1fed0d7029d1bc800b9c1d0be5",
+          "comparison": "crlf-normalized"
+        },
+        {
+          "path": "pool-works/lang/bootstrap/guest_artifact_commit.dg",
+          "historical_sha256": "0264475d79e0b38cbef38bfe195c1e1f175ec1d3f95c9840b6181ac1c891dcf8",
+          "exists": true,
+          "current_raw_sha256": "4652c4b99df7bb443fe9bc7c96cf18b2720f88f35e203c97ac6064925588aa6e",
+          "comparison": "lf-normalized"
+        },
+        {
+          "path": "pool-works/lang/bootstrap/guest_artifact_commit.md",
+          "historical_sha256": "cf430a4e5e1273d8e383ece9648d10584897fe9fd370724cd22d5080e2cfb342",
+          "exists": true,
+          "current_raw_sha256": "46b5be8bb9c3eb98892626cc8c057b03b49d6bf5271ffd11b5555fce7fcbdc5b",
+          "comparison": "lf-normalized"
+        },
+        {
+          "path": "pool-works/tests/test_guest_artifact_commit.py",
+          "historical_sha256": "370022da1981e09ef5bdf77ad05a27edd6959e0ec34b35a8e57c4b6c1bff72a6",
+          "exists": true,
+          "current_raw_sha256": "6a1ca77eb4549eddda8649a246e4397df3eca0c38175cd84f05d63941c7a9c28",
+          "comparison": "lf-normalized"
+        }
+      ],
+      "new_acceptance_granted_by_this_audit": false
+    },
+    {
+      "id": "pool:MCPPOOL1",
+      "source_rev": 8,
+      "source_status": "integrated",
+      "source_commit": "50ab7cf9cde101691774a8480bdb7fcc07c766be",
+      "source_git_blob": "3320eccaced6ea932d7b0853ea0cb2a07dceb6ee",
+      "original_review_note": "已实际审查共用MCP源码、配置生成及新规则文档：省略owner发布公共池、worker身份不可覆盖/不可升权、默认本人+公共池查询去重排序分页、稳定pool任务编号、领取释放与旧令牌保护。两份永久测试已适配正式隔离目录，只读服务依赖复制到临时包且前后指纹守卫，不碰生产状态。正式作业46bf8df03c054df1a168546082a90e48两项checks合计12tests/0skip/returncode0，process_stopped=true、source_stable=true，实际stdio/临时HTTP竞争与配置保留回归均通过。当前授权文件与正式指纹一致，登记验收，尚未将候选MCP代码集成正式服务。",
+      "original_integration_note": "已集成：候选 mcp_server.py/mcp_config.py/docs/MCP.md 按行尾约定回写 coordination/dongos_coordination；两项永久回归复制为 coordination/tests/test_mcp_pool.py、test_mcp_pool_config.py（改为针对正式包）；与 test_mcp 合计29项通过、0skip（98.2秒）。需重载客户端MCP连接或新建会话后新规则才生效；本次未改真实客户端配置。",
+      "historical_verification_passed": true,
+      "historical_source_stable": true,
+      "historical_checks": [
+        {
+          "cancelled": false,
+          "elapsed_seconds": 34.954,
+          "execution_exited": true,
+          "passed": true,
+          "process_stopped": true,
+          "returncode": 0,
+          "skips": 0,
+          "spec": "discover:pool-works/tests:test_mcp_pool.py",
+          "tests": 6,
+          "timed_out": false
+        },
+        {
+          "cancelled": false,
+          "elapsed_seconds": 3.116,
+          "execution_exited": true,
+          "passed": true,
+          "process_stopped": true,
+          "returncode": 0,
+          "skips": 0,
+          "spec": "discover:pool-works/tests:test_mcp_pool_config.py",
+          "tests": 6,
+          "timed_out": false
+        }
+      ],
+      "fingerprint_audit": [
+        {
+          "path": "pool-works/deliveries/MCPPOOL1.md",
+          "historical_sha256": "6440bd6cde535a8d9c0f5c8f83496fdc21a047176325c32b3e5e6ed3e480e807",
+          "exists": true,
+          "current_raw_sha256": "336cffe5bdd517500f9315fc3a4d68c1122c10ca467a92e2346fc0f5e93f9d62",
+          "comparison": "crlf-normalized"
+        },
+        {
+          "path": "pool-works/mcp-pool/README.md",
+          "historical_sha256": "f58c9232ede99ff4065229288f4988fd628a927b20c9483c2b1ec9fbbcbbee42",
+          "exists": true,
+          "current_raw_sha256": "f58c9232ede99ff4065229288f4988fd628a927b20c9483c2b1ec9fbbcbbee42",
+          "comparison": "exact"
+        },
+        {
+          "path": "pool-works/mcp-pool/dongos_coordination/docs/MCP.md",
+          "historical_sha256": "32030a82a27295b282bbf6e02156f4cef881ec3d10e98592b90f171b71763c4d",
+          "exists": true,
+          "current_raw_sha256": "32030a82a27295b282bbf6e02156f4cef881ec3d10e98592b90f171b71763c4d",
+          "comparison": "exact"
+        },
+        {
+          "path": "pool-works/mcp-pool/dongos_coordination/mcp_config.py",
+          "historical_sha256": "a91518fed911f286db1b92e5087772513a18b0a411fa1f01bae51c5b176b3c8f",
+          "exists": true,
+          "current_raw_sha256": "a91518fed911f286db1b92e5087772513a18b0a411fa1f01bae51c5b176b3c8f",
+          "comparison": "exact"
+        },
+        {
+          "path": "pool-works/mcp-pool/dongos_coordination/mcp_server.py",
+          "historical_sha256": "5417cb1321b84043a81b93589e1243b591044b93d21ca4169c01c6a5b4ca6a51",
+          "exists": true,
+          "current_raw_sha256": "5417cb1321b84043a81b93589e1243b591044b93d21ca4169c01c6a5b4ca6a51",
+          "comparison": "exact"
+        },
+        {
+          "path": "pool-works/tests/test_mcp_pool.py",
+          "historical_sha256": "e488f4aff9a7fb071e1537d22504213f424688b77dfc73efc26589d865e7189d",
+          "exists": true,
+          "current_raw_sha256": "e488f4aff9a7fb071e1537d22504213f424688b77dfc73efc26589d865e7189d",
+          "comparison": "exact"
+        },
+        {
+          "path": "pool-works/tests/test_mcp_pool_config.py",
+          "historical_sha256": "017a28861507cb5cd594dff0c086405113b27da730da203251ddc77fdea3d021",
+          "exists": true,
+          "current_raw_sha256": "017a28861507cb5cd594dff0c086405113b27da730da203251ddc77fdea3d021",
+          "comparison": "exact"
+        }
+      ],
+      "new_acceptance_granted_by_this_audit": false
+    },
+    {
+      "id": "pool:WINVERIFY1",
+      "source_rev": 9,
+      "source_status": "integrated",
+      "source_commit": "50ab7cf9cde101691774a8480bdb7fcc07c766be",
+      "source_git_blob": "499a2e93ace588809623766eb587fdaecee830ae",
+      "original_review_note": "按用户明确授权Codex接续集成适配。已实际审查WindowsJob的挂起创建→先归入Job→恢复、无breakaway、活动计数为0才确认停止、残留后代终止、无Job保守回退及服务重启停止确认，未把None伪造为True。修复测试正式隔离目录的只读依赖定位、依赖前后SHA守卫和集成后候选相同的误断言。正式隔离作业c0f8c5285d28423e80eafea8e049c648通过11tests/0skip，48.706秒，process_stopped=true/source_stable=true，当前任务文件指纹一致；主线coordination/tests/test_windows_verification_finish.py另11tests/0skip通过44.470秒。确认正常父子退出保存verification，残留/暂停/取消/旧令牌/重启/失效Job保护均真实子进程通过。源码runner已复制到正式包，等待下一步登记实际集成。",
+      "original_integration_note": "已完成真实文件集成：候选runner.py复制至coordination/dongos_coordination/runner.py，两者SHA256同为40504e6f0ca2beca2d6e1a08b9c91735d978529854c575f3a4590cc325b08abe；新增coordination/tests/test_windows_verification_finish.py对正式包运行11项零skip回归。原runner备份coordination/.local/WINVERIFY1-integration/runner-before.py。通过正式shutdown接口停止旧服务13684，无活动/排队作业，隐藏启动新服务1388，HTTP/MCP恢复且多项正式复验process_stopped=true正常登记。任务正式11项零skip与文件稳定已验收，不改库/索引、不伪造复验。",
+      "historical_verification_passed": true,
+      "historical_source_stable": true,
+      "historical_checks": [
+        {
+          "cancelled": false,
+          "elapsed_seconds": 48.706,
+          "execution_exited": true,
+          "passed": true,
+          "process_stopped": true,
+          "returncode": 0,
+          "skips": 0,
+          "spec": "discover:pool-works/tests:test_windows_verification_finish.py",
+          "tests": 11,
+          "timed_out": false
+        }
+      ],
+      "fingerprint_audit": [
+        {
+          "path": "pool-works/deliveries/WINVERIFY1.md",
+          "historical_sha256": "32fec1d934155889d1f6013b12b8fe4304410f0f49f991856376191a951c0314",
+          "exists": true,
+          "current_raw_sha256": "5f5b5f2a1055a9f1b117baf705127e67eece1fb4e499bf6dea9874d88675cd69",
+          "comparison": "successor-content"
+        },
+        {
+          "path": "pool-works/tests/test_windows_verification_finish.py",
+          "historical_sha256": "6d756663e59ea4cb0a1cfd21b55372cebefc2bb61d7b3da422fc3a37a310fca1",
+          "exists": true,
+          "current_raw_sha256": "beb896f7b0161c9f269014f4c75334cffd644cc94e3a37143cbd367063c4be86",
+          "comparison": "lf-normalized"
+        },
+        {
+          "path": "pool-works/win-verify/dongos_coordination/runner.py",
+          "historical_sha256": "40504e6f0ca2beca2d6e1a08b9c91735d978529854c575f3a4590cc325b08abe",
+          "exists": true,
+          "current_raw_sha256": "4a27a084b57db7864eea77913d918d77f43ec3d7c077470baa994417013fe6e5",
+          "comparison": "lf-normalized"
+        }
+      ],
+      "new_acceptance_granted_by_this_audit": false
+    }
+  ],
+  "line_endings": "Explicitly compare LF/CRLF without replacing original fingerprints. Changed files are successor content, never retroactively declared identical."
+}

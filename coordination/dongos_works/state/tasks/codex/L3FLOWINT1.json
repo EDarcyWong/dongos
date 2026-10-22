@@ -1,0 +1,89 @@
+{
+  "assignment_owner": "codex",
+  "auto_dispatch": false,
+  "auto_verify": false,
+  "candidate": null,
+  "checks": [
+    "discover:codex-works/tests:test_l3_control_integration.py"
+  ],
+  "claim_from_status": "rework",
+  "claim_token": "02b810159e4e472da1285d924ededc4a",
+  "claimed_at": "2026-10-22T05:30:03+00:00",
+  "claimed_by": "codex-mcp-8c76f5a25c8d4b71",
+  "completed_at": "2026-10-22T05:31:40+00:00",
+  "complexity": "standard",
+  "created_at": "2026-10-22T05:06:19+00:00",
+  "delivery": "codex-works/deliveries/L3FLOWINT1.md",
+  "depends_on": [
+    "codex:L3METHODLOW1",
+    "codex:L3DEFER1",
+    "codex:L3FOR1"
+  ],
+  "description": "依赖L3METHODLOW1已集成、L3DEFER1与L3FOR1独立候选验收；全部依赖验收后领取。保留原候选字节与历史，真实合并两候选到生产lower_program，for设置/恢复自身loop_cleanup边界，不覆盖defer。永久defer/for测试脱离works/project.json/overlay，从生产源码构建；方法G5门禁保留原8探针且新增4个for/bool探针，要求已闭合7路径全部真实执行，未知缺口仍明确失败。加入for+match+defer循环退出/返回pair/cleanup内临时数组组合，实际Dong输出交原生汇编器生成ELF，在宿主执行及exact/short/guard核验。独立集成测试运行全部永久方法/defer/for用例，共享冻结good编译器但每测试独立输入/记录，并分别真实构建坏callee/坏return清理/坏for步长；零skip源稳定后补独立新输入/ABI/清理复核。实际审查和真实生产合并通过后再登记两候选与集成任务integrated。不运行OS/VM或提交推送，不关闭完整G5/L3。",
+  "document": "codex-works/tasks/L3FLOWINT1-board.md",
+  "historical": false,
+  "id": "codex:L3FLOWINT1",
+  "integration_note": "生产lower_program2eb36a...已真实合并验收defer7fd2be.../for e64ff2...，for新增并恢复自身loop_cleanup而不覆盖原功能；永久主线25项、组合/原生ELF/G5保留8增4接线全部落盘，并由正式R1直接冻结生产验证及四份新输入独审通过。nasm_program.dg/IR ABI不变，两个原候选字节和历史保持，生产13项指纹复核一致。登记真实文件集成，L3/G5仍partial，默认extern unsafe差异单列cursor:L3EXTUNSAFE1，不以状态标记替代文件合并。",
+  "legacy_hash": "5f651d7c8a147112aad29a58f816e856fa17aa0baeae5cdd0c8a28fb79594b4e",
+  "number": "L3FLOWINT1",
+  "owner": "codex",
+  "pause_note": "只读实际探针确认观察器路径过长：294字符C可编译但296字符EXE启动CreateProcess报WinError206；集成wrapper目前用完整测试名作目录，需改短ID保留完整名称映射。请求停止当前正式作业及进程树，停止确认前不改任何冻结源码；不跳过测试或伪造源稳定，随后同25项重新复验，Dong生产源码不变。",
+  "rev": 12,
+  "review_note": "真实生产合并/源码贡献/契约/测试有效性实际审查通过。正式R1 f48ec24178864741a9a0b2d09290f546：25项(方法10/defer6/for9)0skip，1558.879s，源稳定且执行停止/退出；无overlay，生产13项与两个原候选各4项指纹逐项相等。实际Dong→原生汇编器ELF两模式宿主返回69，exact/short/guard与独立ELF范围/W^X核验通过。四组新源码/C独审：方法384、defer1280、for512观察及混合256向量；真实坏callee/清理/步长共3变体正常执行后精确拒绝。见codex-works/reviews/2026-10-22-L3FLOWINT1-integration.md及L3FLOWINT1-result.json。旧0tests受管停止未作通过，R1只改wrapper目录。新确认默认extern unsafe差异交原负责人cursor:L3EXTUNSAFE1，完整L3/G5仍partial，未跑OS/VM/G4/G6或提交推送。",
+  "status": "integrated",
+  "title": "L3/L3A defer、for、bool match 主线合并与真实 ELF 组合验收",
+  "updated_at": "2026-10-22T06:10:32+00:00",
+  "verification": {
+    "checks": [
+      {
+        "cancelled": false,
+        "elapsed_seconds": 1558.879,
+        "execution_exited": true,
+        "passed": true,
+        "process_stopped": true,
+        "returncode": 0,
+        "skips": 0,
+        "spec": "discover:codex-works/tests:test_l3_control_integration.py",
+        "tests": 25,
+        "timed_out": false
+      }
+    ],
+    "execution_exited": true,
+    "fingerprint": {
+      "codex-works/deliveries/L3FLOWINT1.md": "722c4c2ed52221a8f7371267a41681bb1a7a94425eb186a2ed34c6e26d411908",
+      "codex-works/tests/test_l3_control_integration.py": "808cbb5990947b7b6af67972528b5a2a99b147f0a37287a555feb5fdb193d27b",
+      "docs/language-l2-l3.md": "f8628089264ca52a5352647d3e7fcaefed32a6982d4b3ba003332b351b9a9124",
+      "lang/bootstrap/defer-lowering.md": "88c37edcb76276225bff3a404b57569a3bc9400a6fa13d9f069e8345b264bd9b",
+      "lang/bootstrap/for-match-lowering.md": "0435e8b466d7c35e0b85686b426bf7fa758a76eef49bb7804ece4aade3a4cead",
+      "lang/bootstrap/lower_program.dg": "2eb36a91291ce4293e89654a9f2b91e1edf9742e8b87c73624a701dc2e10241e",
+      "lang/bootstrap/lower_program.md": "650abe4e1c1f21122bdb631ed60f6f974e032d3ae53f03f2aeac7cb774ca61d9",
+      "lang/bootstrap/nasm_program.md": "f9cfb6b837919d85191b80f94d058ddfe9a8fe414f06c608b4cb876fe67cadf8",
+      "lang/bootstrap/semantic_types.md": "737adae019695bfbbc1ffd787734801e65fcc2a964f1bf0724375ba11262882a",
+      "lang/tests/test_l3_defer_native.py": "e06c9a97c910f08678b2f31dabdd4cfaa508bb0cf64535d217c357372bf3be11",
+      "lang/tests/test_l3_for_native.py": "edffac6f4589b826764478f3366c842003364907dc6cfbc8c91834f01d4ae18e",
+      "lang/tests/test_l3_method_native.py": "f1dd0a955edfb007094ba23c9f1dc21d1c00fb9d076a0f462ab376ef730056e7",
+      "tools/g5_differential.py": "4e2c362213187373518aa8ed704419071a8626a2e1edbfb2895b9aa420500108"
+    },
+    "finished_at": "2026-10-22T05:58:02+00:00",
+    "job": "f48ec24178864741a9a0b2d09290f546",
+    "passed": true,
+    "process_stopped": true,
+    "source_stable": true,
+    "summary": "定向复验通过，等待源码/契约审查"
+  },
+  "write_paths": [
+    "lang/bootstrap/lower_program.dg",
+    "lang/bootstrap/lower_program.md",
+    "lang/bootstrap/nasm_program.md",
+    "lang/bootstrap/semantic_types.md",
+    "lang/bootstrap/defer-lowering.md",
+    "lang/bootstrap/for-match-lowering.md",
+    "lang/tests/test_l3_defer_native.py",
+    "lang/tests/test_l3_for_native.py",
+    "lang/tests/test_l3_method_native.py",
+    "tools/g5_differential.py",
+    "docs/language-l2-l3.md",
+    "codex-works/tests/test_l3_control_integration.py",
+    "codex-works/deliveries/L3FLOWINT1.md"
+  ]
+}

@@ -1,0 +1,36 @@
+{
+  "project": "dongos",
+  "task_id": "codex:CX15",
+  "rev_before_acceptance": 6,
+  "source_review": "已实际审查原任务书、tools/compiler_job.py的64位ULL/printf ABI与非Windows -no-pie / 0x10000000链接参数、现有guarded loader/固定点测试及原独审。当前工具/契约与已验收G6 f54c35c的LF内容一致；没有改变guest地址、64MiB限额或oracle。本轮正式隔离8d6893090cd74e3c96a9af844a27a15c：1 test/0 skip/returncode0，391.284秒，source_stable、process_stopped、execution_exited均true。实际重建debug/release两模式、双对象格式、当前纯编译闭包完整ELF固定点、32前置原子性、真实语义/后端容量拒绝和实际启动桥寄存器正反例。当前三文件指纹一致；本轮Windows宿主实际运行，不把ELF64组装冒作新机Linux运行。准予宿主兼容修复验收，保留原Linux未执行记录与后继Linux/G6验收各自范围。",
+  "verification": {
+    "passed": true,
+    "checks": [
+      {
+        "spec": "module:lang.tests.test_bootstrap_compiler_job",
+        "passed": true,
+        "tests": 1,
+        "skips": 0,
+        "returncode": 0,
+        "cancelled": false,
+        "timed_out": false,
+        "process_stopped": true,
+        "execution_exited": true,
+        "elapsed_seconds": 391.284
+      }
+    ],
+    "process_stopped": true,
+    "execution_exited": true,
+    "source_stable": true,
+    "fingerprint": {
+      "tools/compiler_job.py": "cd2c27cabfa04f898b6f3ca2e7cf3dc1c4031ae4e166c0d8690d01995cadc0af",
+      "docs/l3-compiler-job-host.md": "a0abbdc3b85acc3a84723f8c1511fce243a3b594faf7d67e71e17bf6adf8e4a2",
+      "codex-works/deliveries/CX15.md": "a7449b4984fdcedb151d44fb8679a73ec4096de671333d9d440548817c9a193a"
+    },
+    "summary": "定向复验通过，等待源码/契约审查",
+    "finished_at": "2026-10-22T01:07:18+00:00",
+    "job": "8d6893090cd74e3c96a9af844a27a15c"
+  },
+  "original_worker_impersonated": false,
+  "new_guest_execution": false
+}

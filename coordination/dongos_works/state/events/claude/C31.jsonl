@@ -13,3 +13,5 @@
 {"at":"2026-10-18T15:32:19+00:00","data":{"rev":9,"status":"accepted"},"kind":"accept","task_id":"claude:C31"}
 {"at":"2026-10-18T15:33:12+00:00","data":{"rev":10,"status":"integrated"},"kind":"integrate","task_id":"claude:C31"}
 {"at":"2026-10-19T11:42:09+00:00","data":{"rev":12,"status":"integrated"},"kind":"state_reconciled","task_id":"claude:C31"}
+{"at":"2026-10-19T04:21:47+00:00","data":{"rev":1,"status":"todo"},"kind":"imported","task_id":"claude:C31"}
+{"at":"2026-10-19T04:43:01+00:00","data":{"rev":11,"status":"integrated"},"kind":"state_restored","task_id":"claude:C31"}
