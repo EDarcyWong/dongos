@@ -52,6 +52,7 @@ export("kernel_validate") fn validate_raw(raw:*const u8,n:usize,plan:*elf.Plan)u
 '''
 
 NATIVE = '''module native;
+export("__dong_panic")fn panic(k:u32,line:u32,p:*const u8,n:usize)noreturn{loop{}}
 pub var canary_lo:u64 = 0x0102030405060708;
 pub var a:u8 = 0x11;
 pub var b:u8 = 0x22;
@@ -507,8 +508,18 @@ class L3ANativeRegressionTests(unittest.TestCase):
         text = asm.read_text(encoding="utf-8")
         self.assertIn("section .data", text)
         self.assertNotIn("section .bss", text)
+        self.assertIn("global $__dong_panic\n", text)
+        self.assertNotIn("extern $__dong_panic\n", text)
         model = self.expected_data()
         self.assertEqual(self.asm_data(text), model)
+        # The native assembler places .rodata and .data in the same load
+        # segment. Independently account for this source path and the export
+        # attribute string before the unchanged, exactly modeled globals.
+        readonly = b"native.dg__dong_panic"
+        prefix = readonly + bytes((-len(readonly)) % 8)
+        self.assertIn("__dong_source_0: db " + ",".join(map(str, b"native.dg")), text)
+        self.assertRegex(text, r"__dong_string_\d+: db " + ",".join(map(str, b"__dong_panic")) + r"(?:\r?\n|$)")
+        elf_model = prefix + model
         image = elf.read_bytes()
         entry, headers = self.parse_elf(image)
         text_header, data_header = headers
@@ -519,8 +530,8 @@ class L3ANativeRegressionTests(unittest.TestCase):
         data_offset = (PAGE + text_size + PAGE - 1) & ~(PAGE - 1)
         self.assertEqual((data_header[1], data_header[2], data_header[3]), (6, data_offset, BASE + data_offset))
         self.assertEqual(data_header[5], data_header[6])
-        self.assertEqual(data_header[5], len(model))
-        self.assertEqual(image[data_offset:data_offset + data_header[5]], model)
+        self.assertEqual(data_header[5], len(elf_model))
+        self.assertEqual(image[data_offset:data_offset + data_header[5]], elf_model)
         self.assertTrue(BASE + PAGE <= entry < BASE + text_header[5])
         self.assertEqual(self.command([self.driver, "validate", elf], "kernel-validate").stdout.strip(), "VALIDATE 0")
         expected = self.expected_observations()
@@ -535,6 +546,7 @@ class L3ANativeRegressionTests(unittest.TestCase):
 
     def test_fixed_address_static_pointer_initializers_execute(self):
         source="""module native;
+export("__dong_panic")fn panic(k:u32,line:u32,p:*const u8,n:usize)noreturn{loop{}}
 pub const fixed:[3]u16=[0x11,0x2233,0x4455];
 pub var values:[4]u16=[3,5,7,11];
 pub struct Bag{pub tag:u8,pub word:u32}
@@ -552,6 +564,8 @@ pub fn probe()*u64{unsafe{
 """
         _,asm,elf,_=self.pipeline(source,label('native','probe'),'static-pointers')
         text=asm.read_text(encoding='utf-8')
+        self.assertIn('global $__dong_panic\n',text)
+        self.assertNotIn('extern $__dong_panic\n',text)
         for name,offset in [('values',4),('bag',4),('fixed',2)]:
             self.assertIn('dq '+label('native',name)+'+'+str(offset),text)
         self.assertEqual(self.command([self.driver,'validate',elf],'pointer-kernel-validate').stdout.strip(),'VALIDATE 0')

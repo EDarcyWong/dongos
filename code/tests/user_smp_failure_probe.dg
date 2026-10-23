@@ -1,0 +1,16 @@
+module user_smp_failure_probe;
+import user_current_entry_probe as current;
+import sched.user_bridge as bridge;
+export("uf_version") fn version()u64{return bridge.FAILURE_VERSION;}
+export("uf_failure") fn failure(cpu:usize)*const bridge.Failure{unsafe{
+ if cpu>=16{return null;}return &bridge.FAILURES[cpu];
+}}
+export("uf_progress") fn progress(cpu:usize)*const bridge.Progress{unsafe{
+ if cpu>=16{return null;}return &bridge.PROGRESS[cpu];
+}}
+export("uf_bridge") fn active()*bridge.Bridge{return bridge.pointer();}
+export("uf_size") fn size(which:u64)u64{
+ if which==0{return sizeof(bridge.Failure) as u64;}
+ if which==1{return sizeof(bridge.Progress) as u64;}
+ return bridge.required_bytes();
+}

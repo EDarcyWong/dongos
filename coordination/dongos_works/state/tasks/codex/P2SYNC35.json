@@ -1,0 +1,75 @@
+{
+  "assignment_owner": "codex",
+  "auto_dispatch": false,
+  "auto_verify": false,
+  "candidate": null,
+  "checks": [
+    "module:tests.test_user_smp_barrier"
+  ],
+  "claim_from_status": "todo",
+  "claimed_at": "2026-10-22T23:07:12+00:00",
+  "claimed_by": "codex-mcp-daece153b59c4bd5",
+  "completed_at": "2026-10-23T00:00:00+00:00",
+  "complexity": "standard",
+  "created_at": "2026-10-22T23:04:41+00:00",
+  "delivery": "codex-works/deliveries/P2SYNC35.md",
+  "depends_on": [],
+  "description": "按用户顺序先 P2 后 P5。更新六个现有主线计划/进度入口的顶部检查点并新增可追溯 MD/JSON，不覆盖历史。同步 OBS32 integrated6/正式29、SYNC33 integrated6、LARGE16 submitted17/正式35零skip但 actual 正常尚未通过，记录 actual-normal-r1、R2 API诊断失败、R3 before→explicit cont→terminal after 的真实来源/磁盘hash/stop-cont 3921ms/原1s期限自然老化及局限；OBS34 实现、独立复验、实际重建/启动最终结果以完成时真实回执为准，不预写 passed。用户于当前会话明确暂无真机环境，physical WC性能门标记待外部环境验证，不能关闭P2或以QEMU代替。P2仍partial直到所有原门实际通过；P5本轮尚未开始，不能因硬件不可用自行提前开始P5。绑定实际源码HEAD、任务最新rev、正式receipt和原artifact SHA，分清组件与运行接线/实际正常与精确负控/warmPCID/物理WC余项。原失败完整保留，无提交推送物理设备。可修改路径仅以下9项，禁止改DB/index/协调器状态文件。文档实施者不运行编译测试VM或自行验收；root冻结所有源/works再定向复验及实际审查链接/hash。",
+  "document": "codex-works/tasks/P2SYNC35-board.md",
+  "historical": false,
+  "id": "codex:P2SYNC35",
+  "integration_note": "九声明文档已真实写入主目录code/与coordination/dongos_works/codex-works/，根审与独立a7c1复验后当前指纹一致，登记主线集成。保留所有历史失败/检查点及未完成软件门；完整GitHub上传和关机尚未执行。",
+  "legacy_hash": "cd925536a78a361f39417996d95937aedb054f0df12dcc8ff2297fe91cc6a863",
+  "number": "P2SYNC35",
+  "owner": "codex",
+  "rev": 6,
+  "review_note": "根实际审查九主目录文件与07:50有界契约：六入口旧正文保留、25个绑定原始证据SHA独立重算全同，OBS34仅IO组件/B R6正式37历史/R4真实failed4688ms/当前R7与OBS36未测的时点语义准确；用户最终P2/P5软件本机范围、物理待验和末端授权未执行均明确。独立a7c1263dadb942e896c947102ce3343c barrier真生产/native门1test0skip rc0/11.719s，source_stable/process_stopped/execution_exited全true；九当前文件匹配复验指纹。仅验收文档有界检查点，不验收P2/P5整体，不把随后新OBS66结果倒写为该时点通过。三任务快照已全部真正开始unittest后才登记状态。",
+  "status": "integrated",
+  "title": "P2 观察器实际诊断、延后落盘复验与真机不可用状态同步",
+  "updated_at": "2026-10-23T00:14:53+00:00",
+  "verification": {
+    "checks": [
+      {
+        "cancelled": false,
+        "elapsed_seconds": 11.719,
+        "execution_exited": true,
+        "passed": true,
+        "process_stopped": true,
+        "returncode": 0,
+        "skips": 0,
+        "spec": "module:tests.test_user_smp_barrier",
+        "tests": 1,
+        "timed_out": false
+      }
+    ],
+    "execution_exited": true,
+    "fingerprint": {
+      "PLAN.md": "34bce9e7e5133a5512e6c560be3047df4484cd8803fd9a434d8b84cd22ae4dd2",
+      "codex-works/deliveries/P2SYNC35.md": "8ed4569191f0e99538f3f8fce5e6aa64b80a9540d598732b4c869bbf5b86eaf8",
+      "codex-works/reviews/2026-10-23-P2-deferred-capture-progress.json": "47dc2c3a6d45b5418aed342de7ec2639d93e4ec5ec3dc4f1c7dfc81e90858e91",
+      "codex-works/reviews/2026-10-23-P2-deferred-capture-progress.md": "92f27ed84bd81e818393a803a3b8169bc3f2129cee30751d39d4c256f0e8c86f",
+      "docs/p2-acceptance.md": "808d46081bb23df729bbe1aff85f06e61e6c1c3ee941853eaf1fe087a3e133b1",
+      "docs/p2-alias-consumers.md": "7b451145d37575e5e6632107e3dc65ed12e7b37bacfc06459556be370fddf01c",
+      "docs/p2-extensions.md": "36d1c71c37e46585ac279f58b61db0387286080c709093e0b9076840ec2523fb",
+      "docs/progress-map.md": "dcff03c735643faee46d341c14792207ae8d49b2c19d53bdb3381a1dfb3a15a2",
+      "docs/remaining-plan.md": "d05bed1e29103c41ddce92578600a13bf3319ca6f5d1ba27a59fd40111085464"
+    },
+    "finished_at": "2026-10-23T00:13:48+00:00",
+    "job": "a7c1263dadb942e896c947102ce3343c",
+    "passed": true,
+    "process_stopped": true,
+    "source_stable": true,
+    "summary": "定向复验通过，等待源码/契约审查"
+  },
+  "write_paths": [
+    "PLAN.md",
+    "docs/p2-acceptance.md",
+    "docs/p2-extensions.md",
+    "docs/p2-alias-consumers.md",
+    "docs/remaining-plan.md",
+    "docs/progress-map.md",
+    "codex-works/reviews/2026-10-23-P2-deferred-capture-progress.md",
+    "codex-works/reviews/2026-10-23-P2-deferred-capture-progress.json",
+    "codex-works/deliveries/P2SYNC35.md"
+  ]
+}

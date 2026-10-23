@@ -1,0 +1,326 @@
+{
+  "schema": 1,
+  "project": "dongos",
+  "checkpoint_at": "2026-10-23T04:56:52+08:00",
+  "head": "db4ea7c9a74839d95a5e80a0bbf8468a4bfa0d73",
+  "working_tree_has_uncommitted_changes": true,
+  "requested_order": [
+    "P2",
+    "P5"
+  ],
+  "p2_status": "partial",
+  "p5_started_this_round": false,
+  "task_snapshot": [
+    {
+      "id": "codex:P2FLUSH11",
+      "status": "integrated",
+      "rev": 6,
+      "verification": {
+        "job": "64cf4d5d11454dfebd38a28ec54136b8",
+        "passed": true,
+        "tests": 3,
+        "skips": 0,
+        "source_stable": true,
+        "process_stopped": true,
+        "execution_exited": true
+      }
+    },
+    {
+      "id": "codex:P2PCID12",
+      "status": "integrated",
+      "rev": 13,
+      "verification": {
+        "job": "b893487745444470ada6ec46686c7f0a",
+        "passed": true,
+        "tests": 33,
+        "skips": 0,
+        "source_stable": true,
+        "process_stopped": true,
+        "execution_exited": true
+      }
+    },
+    {
+      "id": "codex:P2ROOT13",
+      "status": "integrated",
+      "rev": 15,
+      "verification": {
+        "job": "688d4e6524cc4711b057277f22cba22e",
+        "passed": true,
+        "tests": 4,
+        "skips": 0,
+        "source_stable": true,
+        "process_stopped": true,
+        "execution_exited": true
+      }
+    },
+    {
+      "id": "codex:P2WC14",
+      "status": "integrated",
+      "rev": 10,
+      "verification": {
+        "job": "771f1364dcae4599970d908643969e73",
+        "passed": true,
+        "tests": 5,
+        "skips": 0,
+        "source_stable": true,
+        "process_stopped": true,
+        "execution_exited": true
+      }
+    },
+    {
+      "id": "codex:P2SYNC15",
+      "status": "integrated",
+      "rev": 10,
+      "verification": {
+        "job": "7194b75aff094bb38a43d363664ee79e",
+        "passed": true,
+        "tests": 1,
+        "skips": 0,
+        "source_stable": true,
+        "process_stopped": true,
+        "execution_exited": true
+      }
+    },
+    {
+      "id": "codex:P2LARGE16",
+      "status": "in_progress",
+      "rev": 11,
+      "verification": {
+        "job": "9fb3005cc48e4b97b63c41bc01751ad6",
+        "passed": false,
+        "tests": 22,
+        "skips": 0,
+        "source_stable": true,
+        "process_stopped": true,
+        "execution_exited": true
+      }
+    },
+    {
+      "id": "codex:P2HARNESS17",
+      "status": "integrated",
+      "rev": 6,
+      "verification": {
+        "job": "2676654ed39c4bd8ad28e4484a4b62db",
+        "passed": true,
+        "tests": 7,
+        "skips": 0,
+        "source_stable": true,
+        "process_stopped": true,
+        "execution_exited": true
+      }
+    },
+    {
+      "id": "codex:P2MASK18",
+      "status": "integrated",
+      "rev": 6,
+      "verification": {
+        "job": "91bb571d06604d46a889b6ab8a1cd0ad",
+        "passed": true,
+        "tests": 4,
+        "skips": 0,
+        "source_stable": true,
+        "process_stopped": true,
+        "execution_exited": true
+      }
+    },
+    {
+      "id": "codex:P2EXEC19",
+      "status": "integrated",
+      "rev": 12,
+      "verification": {
+        "job": "33aa513f0cca4706b80adbfc2bac7105",
+        "passed": true,
+        "tests": 3,
+        "skips": 0,
+        "source_stable": true,
+        "process_stopped": true,
+        "execution_exited": true
+      }
+    },
+    {
+      "id": "codex:P2CACHE20",
+      "status": "integrated",
+      "rev": 9,
+      "verification": {
+        "job": "ac7fe821d9b44c2b8bd854e30218d121",
+        "passed": true,
+        "tests": 3,
+        "skips": 0,
+        "source_stable": true,
+        "process_stopped": true,
+        "execution_exited": true
+      }
+    },
+    {
+      "id": "codex:P2ENTRY21",
+      "status": "integrated",
+      "rev": 6,
+      "verification": {
+        "job": "f3f29865ca4b48ad9b946e65877f431e",
+        "passed": true,
+        "tests": 2,
+        "skips": 0,
+        "source_stable": true,
+        "process_stopped": true,
+        "execution_exited": true
+      }
+    },
+    {
+      "id": "codex:P2DISCOVERY22",
+      "status": "integrated",
+      "rev": 6,
+      "verification": {
+        "job": "c6d05731305847e599981387aaef81ea",
+        "passed": true,
+        "tests": 5,
+        "skips": 0,
+        "source_stable": true,
+        "process_stopped": true,
+        "execution_exited": true
+      }
+    },
+    {
+      "id": "codex:P2SIZE23",
+      "status": "in_progress",
+      "rev": 2,
+      "verification": null
+    },
+    {
+      "id": "codex:P2HARNESS24",
+      "status": "in_progress",
+      "rev": 2,
+      "verification": null
+    },
+    {
+      "id": "codex:P2SYNC26",
+      "status": "in_progress",
+      "rev": 2,
+      "verification": null
+    },
+    {
+      "id": "codex:G6DOC1",
+      "status": "paused",
+      "rev": 2,
+      "verification": null
+    },
+    {
+      "id": "codex:P2SMP27",
+      "status": "in_progress",
+      "rev": 2,
+      "verification": null
+    }
+  ],
+  "pending_job": {
+    "task": "codex:P2LARGE16",
+    "job": "9fb3005cc48e4b97b63c41bc01751ad6",
+    "passed": false,
+    "observed": [
+      "1+17+2+1 modules passed; buddy module failed E0202 because output root was missing; paging not run",
+      "fresh normal build kernel.bin=2077072 bytes; 2MiB margin=20080 bytes",
+      "root fixed buddy resolver source roots; direct diagnostic 1 test/0 skip/1.541s passed; not formal full pass"
+    ],
+    "actual_guest_passed": false
+  },
+  "remaining": [
+    "LARGE actual stable before/after, complete lifecycle and exact omitted-AP-flush control",
+    "EXEC/CACHE normal services/build and independent GOP alias ledger plus panic/NMI drawing gate wiring",
+    "Actual AP PCIDE=1 warm tag and cross-generation reuse positive/negative proof",
+    "Physical display hardware WC throughput",
+    "Fresh runtime7 budget and actual service arena/kernel table headroom"
+  ],
+  "actual_failures": [
+    {
+      "run": "WHPX R7",
+      "error": "legacy TLB fatal 0x06030004; all new APs failed entry before user execution",
+      "diagnosis": "full ECAM discovery inside first BSP-held service call is consistent with absolute AP acquire deadline exhaustion; first cause remains inference",
+      "archive": "code/build/test/p2-pcid-revision-review/current-r3/diagnostic-legacy-whpx-r7/diagnostic-result.json"
+    },
+    {
+      "run": "LARGE normal-r1",
+      "error": "fresh UART command failed: stop terminal -> unknown command",
+      "owner_transaction_verdict": "no before/after/launch evidence; no transaction pass",
+      "owned_process_stopped": true,
+      "archive": "coordination/dongos_works/.local/runs/21db00c589cf4e5fb66f31c739c63793/workspace/build/test/p2-runtime-large-actual/normal-r1/result.json"
+    },
+    {
+      "run": "WHPX R8 / Discovery22 fresh production",
+      "archive": "code/build/test/p2-discovery-review-r8/diagnostic-discovery-whpx-r8/diagnostic-result.json",
+      "diagnostic_only": true,
+      "passed": false,
+      "inputs_unchanged": true,
+      "physical_reads_verified": 700,
+      "physical_archive_sha256": "50fe885925bc7ad0a03a9e3701ccc0f1fbf5680beaed9d0c5617594cc5205fb5",
+      "desktop_ready": true,
+      "ap_user_entries": [
+        0,
+        0,
+        0
+      ],
+      "ap_user_timers": [
+        0,
+        0,
+        0
+      ],
+      "ap_switches": [
+        0,
+        0,
+        0
+      ],
+      "ap_cr4": [
+        "0x360e68",
+        "0x360e68",
+        "0x360e68"
+      ],
+      "domain": {
+        "failed": 1,
+        "owner": 0,
+        "lock": 1,
+        "sequence": 1925,
+        "barrier": 1925,
+        "completed": 1924
+      },
+      "bridge": {
+        "failed": 1,
+        "calls": 2738
+      },
+      "error": "late decode rejected wrong BootInfo schema; actual 160-byte BootInfo has magic/version/size u64 prefix; production fields still diagnosed AP failure",
+      "owned_process_stopped": true,
+      "qemu_returncode": 0,
+      "cleanup_completed": true
+    }
+  ],
+  "limits": {
+    "physical_wc_performance_proven": false,
+    "host_privileged_irq_executed": false,
+    "pge_supported": false,
+    "loader_bytes": 2097152,
+    "user_frames": 16384
+  },
+  "documents_task": "codex:P2SYNC26",
+  "updated_at": "2026-10-23T05:02:44+08:00",
+  "direct_diagnostics": [
+    {
+      "task": "codex:P2HARNESS24",
+      "tests": 18,
+      "skips": 0,
+      "elapsed_seconds": 0.109,
+      "formal_verification": false
+    },
+    {
+      "task": "codex:P2LARGE16",
+      "tests": 1,
+      "skips": 0,
+      "elapsed_seconds": 1.541,
+      "formal_verification": false
+    }
+  ],
+  "document_sha256": {
+    "PLAN.md": "159fc1b94be714925bac3577fe52aeb9a96ad00588adabec16ab5a667081566b",
+    "docs/p2-acceptance.md": "5e2085723e086d4ea5ac61fafe6cee44de8dea6d5221a762ecd318d262f01cec",
+    "docs/p2-extensions.md": "3c614da2bd765c5c61a7655dc0a6f4077c3212ac45e8aa91cc896bffccfa060b",
+    "docs/p2-alias-consumers.md": "749844b24ef148838d73d42955afe849d4598242720ba36baf741280a862823b",
+    "docs/remaining-plan.md": "a80c1c101e880e8a226097c864d941c0fc749fabdda28a38387bb4de9de54a86",
+    "docs/progress-map.md": "5434902fe44af98277496bbf37d69ebac55b839822e83d14fefdfd851caa07e4",
+    "codex-works/reviews/2026-10-23-P2-runtime-progress.md": "151fce0beb89b36eddb576ea2a31abe3604d0a48eb15c939bb9d3e568b3ec934"
+  }
+}

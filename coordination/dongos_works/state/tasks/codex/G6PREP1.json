@@ -1,0 +1,124 @@
+{
+  "assignment_owner": "codex",
+  "auto_dispatch": false,
+  "auto_verify": false,
+  "candidate": null,
+  "checks": [
+    "module:tests.test_compiler_job_preparation",
+    "module:tests.test_compiler_guest_runner",
+    "module:tests.test_fat32_allocation",
+    "module:tests.test_compiler_job_launch",
+    "module:tests.test_compiler_stack"
+  ],
+  "claim_from_status": "todo",
+  "claimed_at": "2026-10-22T18:11:16+00:00",
+  "claimed_by": "codex-mcp-daece153b59c4bd5",
+  "completed_at": "2026-10-22T18:15:50+00:00",
+  "complexity": "standard",
+  "created_at": "2026-10-22T18:11:07+00:00",
+  "delivery": "codex-works/deliveries/G6PREP1.md",
+  "depends_on": [
+    "codex:G5INT1",
+    "codex:G5CLOSURE1"
+  ],
+  "description": "用户继续推进G5之后的新G6。本项只完成当前扩大编译器的可复验宿主准备：在协调器隔离副本中用当前源码新生成release完整固定点fixture，fresh构建production runtime5/compiler_job/test=False内核与controller/fs/block，调用现有runner.load_inputs+verify_frozen绑定所有真实源码和启动产物；seed_disk写入fresh SOURCES/SEED并用真实FAT解析逐字读回，两份stage ELF相同且在既有2MiB/512KiB/56MiB/64KiB边界内。保留带SHA的产物与命令/工具日志，设置guest_executed=false，不以宿主落盘声称guest FLUSH/双启/退休通过。扩展宿主准备永久测试，异常启动fixture/启动产物必须失败且不得调用QEMU；修正compiler-job契约与最新进度中的G5旧状态和47.25MiB/8.75MiB分区，历史G6与新准备分开。禁止启动OS/VM/AI CLI或commit/push；协调角色审查源码、契约和独立定向零skip/稳定结果后登记本地集成并同步工作区进度。",
+  "document": "codex-works/tasks/G6PREP1-board.md",
+  "historical": false,
+  "id": "codex:G6PREP1",
+  "integration_note": "新增永久测试与3份契约/进度文档已实际在code主目录，全部正式复验指纹一致，独立原始产物与源码契约审查通过，登记本地集成。未启动来宾/提交/推送。按用户最新要求先P2后P5，G6DOC1保留paused2，扩大compiler新G6未外推为完成。",
+  "legacy_hash": "d15e70e5b9860573577f6661caf552984860245cfdbfb24499c405321c2abb93",
+  "number": "G6PREP1",
+  "owner": "codex",
+  "rev": 6,
+  "review_note": "已实际审查新增host集成测试、3文档及调用图；真实exercise/build，无fakefixture/编译，双改字节负控精确拒绝/finally恢复、boot护栏及独立FAT解码有效。正式7b55181e05024fdba45198cdcf4858cd五组1+15+2+3+1=22tests/0skip，全部rc0/source_stable/process_stopped/execution_exited=true。root独立复算318原产物SHA、445源+7harness+4fixture+12profile冻结输入一致，stage1==stage2及原G5 ELF/hash一致，2,046,376B/500页、49源码491,683B；实际services1172+113+48页，干净单次静态managed16265/16384余119，但动态峰值明确未证。64MiB seed FAT/SOURCES/SEED字节及空stage条目已核，未运行OS/VM。G6新guest仍未完成，用户已改优先P2→P5，文档后继G6DOC1暂停。",
+  "status": "integrated",
+  "title": "扩大G5编译器的新G6宿主准备与源码绑定复验",
+  "updated_at": "2026-10-22T18:27:31+00:00",
+  "verification": {
+    "checks": [
+      {
+        "cancelled": false,
+        "elapsed_seconds": 352.078,
+        "execution_exited": true,
+        "passed": true,
+        "process_stopped": true,
+        "returncode": 0,
+        "skips": 0,
+        "spec": "module:tests.test_compiler_job_preparation",
+        "tests": 1,
+        "timed_out": false
+      },
+      {
+        "cancelled": false,
+        "elapsed_seconds": 1.047,
+        "execution_exited": true,
+        "passed": true,
+        "process_stopped": true,
+        "returncode": 0,
+        "skips": 0,
+        "spec": "module:tests.test_compiler_guest_runner",
+        "tests": 15,
+        "timed_out": false
+      },
+      {
+        "cancelled": false,
+        "elapsed_seconds": 31.906,
+        "execution_exited": true,
+        "passed": true,
+        "process_stopped": true,
+        "returncode": 0,
+        "skips": 0,
+        "spec": "module:tests.test_fat32_allocation",
+        "tests": 2,
+        "timed_out": false
+      },
+      {
+        "cancelled": false,
+        "elapsed_seconds": 20.344,
+        "execution_exited": true,
+        "passed": true,
+        "process_stopped": true,
+        "returncode": 0,
+        "skips": 0,
+        "spec": "module:tests.test_compiler_job_launch",
+        "tests": 3,
+        "timed_out": false
+      },
+      {
+        "cancelled": false,
+        "elapsed_seconds": 161.438,
+        "execution_exited": true,
+        "passed": true,
+        "process_stopped": true,
+        "returncode": 0,
+        "skips": 0,
+        "spec": "module:tests.test_compiler_stack",
+        "tests": 1,
+        "timed_out": false
+      }
+    ],
+    "execution_exited": true,
+    "fingerprint": {
+      "codex-works/deliveries/G6PREP1.md": "a439a816b1d7d568367b600a01f39ddabaaf1026c71188164077049f723c0930",
+      "docs/l3-compiler-job-host.md": "16b431f0ebccdb85d4dc295971cf57fe2e4ade69b8dd2eff1481c390721c481a",
+      "docs/l3-compiler-job.md": "7e630453c1bf8732f74f1d5a09797f73c752e0d8996de58eada50ff3f5843006",
+      "docs/l3-native-selfhost-progress.md": "0526ef0542e47985987590629b3d70919862c3aea682e9925442ee85316ca048",
+      "tests/test_compiler_job_preparation.py": "7ff4b61badd988ba4ceeb5c797822ce43a9cda4732a791a0e9539323fd27019c"
+    },
+    "finished_at": "2026-10-22T18:25:27+00:00",
+    "job": "7b55181e05024fdba45198cdcf4858cd",
+    "passed": true,
+    "process_stopped": true,
+    "source_stable": true,
+    "summary": "定向复验通过，等待源码/契约审查"
+  },
+  "write_paths": [
+    "tests/test_compiler_job_preparation.py",
+    "docs/l3-compiler-job.md",
+    "docs/l3-compiler-job-host.md",
+    "docs/l3-native-selfhost-progress.md",
+    "codex-works/reviews/2026-10-23-G6-preparation.md",
+    "codex-works/reviews/2026-10-23-G6-preparation.json",
+    "codex-works/deliveries/G6PREP1.md"
+  ]
+}

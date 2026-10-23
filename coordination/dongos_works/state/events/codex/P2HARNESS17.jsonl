@@ -1,0 +1,9 @@
+{"at":"2026-10-22T19:18:17+00:00","data":{"rev":1,"status":"todo"},"kind":"created","task_id":"codex:P2HARNESS17"}
+{"at":"2026-10-22T19:18:18+00:00","data":{"claimed_at":"2026-10-22T19:18:18+00:00","claimed_by":"codex-mcp-daece153b59c4bd5","completed_at":null,"owner":"codex","resume_status":null,"rev":2,"status":"in_progress"},"kind":"claim","task_id":"codex:P2HARNESS17"}
+{"at":"2026-10-22T19:19:12+00:00","data":{"claimed_at":"2026-10-22T19:18:18+00:00","claimed_by":"codex-mcp-daece153b59c4bd5","completed_at":"2026-10-22T19:19:12+00:00","owner":"codex","resume_status":null,"rev":3,"status":"submitted"},"kind":"submit","task_id":"codex:P2HARNESS17"}
+{"at":"2026-10-22T19:32:20+00:00","data":{"job":"2676654ed39c4bd8ad28e4484a4b62db","kind":"verify","provider":"python"},"kind":"queued","task_id":"codex:P2HARNESS17"}
+{"at":"2026-10-22T19:32:21+00:00","data":{"job":"2676654ed39c4bd8ad28e4484a4b62db"},"kind":"verification_started","task_id":"codex:P2HARNESS17"}
+{"at":"2026-10-22T19:32:38+00:00","data":{"rev":4,"status":"submitted"},"kind":"verified","task_id":"codex:P2HARNESS17"}
+{"at":"2026-10-22T19:32:38+00:00","data":{"job":"2676654ed39c4bd8ad28e4484a4b62db","status":"completed"},"kind":"job_finished","task_id":"codex:P2HARNESS17"}
+{"at":"2026-10-22T19:35:21+00:00","data":{"rev":5,"status":"accepted"},"kind":"accept","task_id":"codex:P2HARNESS17"}
+{"at":"2026-10-22T19:35:23+00:00","data":{"rev":6,"status":"integrated"},"kind":"integrate","task_id":"codex:P2HARNESS17"}

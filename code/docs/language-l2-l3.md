@@ -1,5 +1,24 @@
 # L2 / L3 实施与验收记录
 
+2026-10-23 G5 收尾：**G5FULL1 integrated rev16、G5CLOSURE1 integrated rev21，
+G5INT1 integrated rev24**。七个生产模块已真实写入本地主线工作树并独立复验；
+正式作业 `0856b466a4d44a13be901c02f8acff46` 的 51 项完整语言矩阵、1 项闭包和
+18 项关联回归共 **70 项全部通过，零 skip**，源码稳定、进程停止及退出均确认。
+完整矩阵覆盖 27 组要求，`scope_complete=true`；两模式四份编译器 ELF
+逐字节相同，每份 2,046,376 字节，56 MiB arena / 64 KiB 栈 / 2 MiB ELF
+预算保持。详细原始证据、失败历史及实际状态见 [完成回执](../../coordination/dongos_works/codex-works/reviews/2026-10-22-G5-completion.md)，
+永久入口见 [G5 门禁](g5-differential.md)。
+
+G5 完成范围为语言/ABI 的 frontend → lower → NASM 执行及宿主有界自编译
+闭包；内建汇编器仍有明确指令范围，Win64 XMM、原子及受限 asm 的完整
+NASM 覆盖不等于任意程序均可由它生成 ELF。扩大后的编译器须另做新 G6
+客体自编译、持久化和同盘双启；历史 G6 仍只绑定原 head / 49 模块 profile。
+因此 L3 整体及更广纯 ELF 后端继续保留各自余项，P2/P5/P6/P7/P8、KVM/
+真机和 P9 门禁不因本次完成而关闭。本轮未运行 OS/VM，未提交或推送。
+
+以下保留各自日期和源码范围的历史记录；旧 164 项数量、旧 G5 缺口和
+“当前/待完成”不再代表最新状态。实时任务数量见协调器及协作区整体任务图。
+
 2026-10-22 控制流接续（L3FLOWINT1）：已验收的普通 defer 与 range/array/slice for、bool match 在生产 lower_program 真实合并，for 保存/恢复独立清理边界，跨 match arm 的退出不会清外层注册。永久主线方法10项、defer6项、for9项及原生ELF宿主执行由独立集成门禁执行复验；原候选、交付和历史证据保留，实际结果以协调器原任务及独审为准。G5 保留原八探针并新增四控制流探针，方法/defer/SysV/for三类/bool-match七条路径必须实际原生执行；原enum/error/try/orelse/Win64及函数指针、内存内建、asm、完整诊断/ABI和更广defer形式仍未闭合，不关闭整体L3/L3A/G5，不外推历史G4/G6到新源码。
 
 2026-10-22 语言线增量：`L3METHOD1` R1 前端已集成；`L3METHODLOW1` 将结构体指针方法体和 `get(p)` / `p.get()` 两种调用接入真实整程序 lower/NASM 路径。方法调用读取语义选中的 FUNCTION 声明，接收者单次顺序求值，符号区分模块、名义接收者和同名自由函数。永久测试 `lang.tests.test_l3_method_native` 同时覆盖 seed 差分、真实坏 Dong 负控及既有全局/聚合/SysV 回归，独立复验及指纹记录见协调器原任务。G5 的 method 与显式 SysV 夹具要求原生执行通过；enum/error/try/orelse/defer/Win64 仍保留为缺口，完整语言/ABI/诊断门禁继续 partial。已有 G4/G6 记录保持其原源码与 profile 范围。
@@ -13,12 +32,12 @@
 
 | 门禁 | 可交付结果与通过依据 | 当前状态 |
 | --- | --- | --- |
-| G1 原生语义正确性 | 保留实际类型和不返回流程事实，宿主/原生正反例一致；所有未支持构造明确拒绝。实际运行编译器源码闭包；更广的完整语言缺口继续明确拒绝 | 主线 semantic_types 已保留 NORETURN/NEVER 与实际类型，由 frontend 调用 analyze_program；PR8 另保存 CR47 语义栈优化的独审、正式复验及集成记录。闭包语义与完整语言覆盖分开，G5 继续保留 |
+| G1 原生语义正确性 | 保留实际类型和不返回流程，宿主/原生正反例一致，不支持的接口明确拒绝 | 已由 G5FULL1 完整语言矩阵与关联语义回归验证；本轮 144 次旧语义用例逐项独立解码，标签、终止流程和容量拒绝保持 |
 | G2 原生前端入口 | 源码目录由 Dong 连续执行 modules.load → names.collect → binding.check → analyze_program；有界调用方内存，成功图可供后端使用，诊断准确定位源码/行列 | 主线宿主 frontend/diagnostics/CLI 已接通；PR8 已有 GUEST1/2、CR45/46、CX6 的客体输入、目录、诊断与真实 H_READ 适配，并保存独审和正式复验。实现已随PR#8合入并同步本机；异机任务记录仍单独保留，不自动导入当前调度库 |
-| G3 通用源码到后端 | 同一成功语义图降为类型化 IR，再由 Dong 生成完整 NASM；未支持语法失败，不借宿主生成 IR/汇编正文 | 主线 compiler_driver 已接通 program_ir → lower_program → nasm_program；PR8 的 GUEST4、CX12、CX13 又接通原生汇编器和完整单 arena 编译作业，已有独审、正式复验及分支集成历史。当前为显式语言子集，未关闭 G5 |
-| G4 宿主编译器固定点 | seed 编译董编译器得 stage1；stage1 再编译自身得 stage2，再生成下一代；同源、同选项、规范路径下规定 NASM/布局/清单逐字一致，并运行生成的编译器与差分语言测试 | 主线已有 clean-debug/packed-debug 宿主固定点记录；PR8 的 CX13 保存两种 seed 模式下原生 ELF 固定点、独审与正式通过记录，历史四份 ELF 均为 1,892,632 字节且逐字一致；新27字节入口桥在50ab7cf的Linux CI中复验，两seed模式四份ELF均1,892,648字节且逐字一致（SHA256 e7f2424dc2010cf5b66e32c14faafec87f1f0f76051c04bd4e9eee050d34c9f2）。CX15 最终宿主修正也已正式复验通过，状态仍 submitted 待登记。恢复原证据与任务历史，不因本机缺 build 回执退回未实现；更广语言差分仍归 G5 |
-| G5 完整语言覆盖 | 对既有活动编译器支持的语言、ABI、诊断、检查模式逐项有可执行差分证据；首个能自编译的子集不能代替完整功能 | 未完成；受限可变全局、结构体指针方法、scalar/pointer SysV 外部声明/定义、普通defer、for和bool match已有增量接线与定向测试；错误/枚举声明、try/orelse、函数指针、内存内建/原子/asm、Win64、完整 ABI/诊断及更广defer仍需逐项差分验证。部分静态 struct/array 已支持，完整聚合覆盖另验 |
-| G6 DongOS 自编译 | 从 FAT32 读取真实源码，客体生成并 FLUSH 新 ELF，运行下一阶段，独立比较规定产物，同盘重启后核对持久结果 | 已通过，仅限现有runtime5/compiler_job隔离profile及49模块自编译闭包：run39467503226 attempt1真实两启，完整SEED/STAGE1/STAGE2各1,892,648字节且与宿主逐字一致；Git/source/fixture绑定、物理隔离、FLUSH、128页表退休和持久性均经双独审。PR#11已合并/同步为代码检查点19e1a19，G5仍未完成；旧run-cc7、首轮超时及第二轮解析失败保留历史 |
+| G3 通用源码到后端 | 同一成功语义图由 Dong 降为类型化 IR 并产生 NASM | G5FULL1 的 51 项/27 组完整语言与 ABI 门禁已通过并集成；内建 native_assembler 只承诺已实现的指令范围，选定原生 ELF 与完整自编译闭包另有真实验证 |
+| G4 宿主编译器固定点 | 同源、同选项、规范路径的实际编译器 stage1/stage2 产物逐字节一致 | G5CLOSURE1/G5INT1 本轮 debug/release 四份完整 ELF 均 2,046,376 字节、SHA256 2bda587a6842913879eb6bf0445202066adb68baef06d06593ff0f3ee787defa，49 模块及预算独审通过；旧 CX15 已 integrated rev8，历史 1,892,648 字节版本独立保留 |
+| G5 完整语言覆盖 | 对活动编译器语言、ABI、诊断和检查模式逐项真实差分执行 | 已完成宿主范围；G5FULL1 integrated rev16，G5CLOSURE1 rev21，主线正式 51+1+18 共70项零skip/source stable及原始产物独审通过；全矩阵 scope_complete=true |
+| G6 DongOS 自编译 | 从 FAT32 读源码、客体生成并 FLUSH ELF、运行下一阶段并同盘重启核对 | 历史 runtime5/compiler_job 49模块 profile/19e1a19 检查点仍已通过，产物 1,892,648 字节；本轮扩大编译器的 2,046,376 字节产物没有新客体证据，须另做 G6 回归，不以宿主固定点替代 |
 
 G4 的固定点是同一 Dong 编译器不同代之间的规定产物一致，不要求两个结构不同的 Python/Dong 后端未经规范就输出相同汇编文本。Python seed 与 Dong 后端的语言行为一致仍须单独差分验证。客体 NASM 文本一致是有用的中间证据，不能代替 G6 的 ELF、执行、FLUSH 和重启门禁。
 
@@ -43,7 +62,7 @@ PR8 保存的原任务完成历史快照如下；状态指原开发机/分支归
 ### 当前实证约束
 
 - 旧 semantic_types 闭包的 13 模块、224 函数是此前范围；主线早期记录扩展为 49 模块编译器闭包，PR8 的 CX13 又覆盖完整编译作业闭包。binding.check 的 SysV 参数展开为 20 字，modules.load/analyze_program 为 18 字，analyze 为 17 字；当前 nasm_program 已使用无 16 字固定上限的 `sysv_integer_args.plan` 与调用方工作区，不能把旧整函数组合限制套到通用后端。
-- lower_program/nasm_program 已支持受限结构体/数组构造及复制、重复数组、切片/字符串、只读静态 scalar/struct/array 和地址重定位；后续增量补齐受限可变全局、结构体指针方法、scalar/pointer SysV 外部声明/定义、普通defer、for及bool match。聚合局部对齐仍限 16，未支持的静态初始化明确拒绝；错误/枚举、try/orelse、函数指针、内存内建/asm、Win64及其它完整语言/ABI/诊断缺口仍按 G5 保留，不能把能自编译的闭包当作全语言覆盖。
+- lower_program/nasm_program 已接入 enum/error/optional/result、try/orelse、函数指针、内存内建/原子/受限 asm、Win64、方法、for/match/defer/noreturn 清理和目标 panic。局部对齐与总栈预算、静态对象和重定位、正式诊断与失败原子性均由 G5 完整门禁覆盖；具体表示、ABI 和边界见 [G5 门禁](g5-differential.md)。
 - lower_program 按生命周期复用临时槽，nasm_program 把函数帧与 outgoing 区合计限制在 4080 字节内。主线早期 16 KiB 栈失败记录仍是当时事实；PR8 已通过 CX7 的 64 KiB 专用栈和 CR47 优化处理该开发缺口，CX13 的 seed/native 全流水线均在受保护 64 KiB 栈及单 56 MiB arena 内执行通过。其记录的 frontend/retained/backend 字节分别为 57,144,296 / 27,228,976 / 20,702,968，按阶段独占复用，不能相加当作同时峰值。
 - 动态 EXEC 文件上限仍为 **2 MiB**（`services/lib/process_abi.dg:MAX_EXEC_IMAGE`）；下文 256 KiB 是历史快照。本地主线普通用户栈仍为 4 页（16 KiB），PR8 的 `memory.stage_compiler`/`stage_compiler_random` 固定使用 16 页（64 KiB）及双 guard，普通路径不变。CX10 启用既有 16384 帧（64 MiB）用户配额，专用栈也计入其中；本轮两启已实际核验16栈页、14336 arena页与源码/ELF/元数据物理不重叠，每启633份live转储独审通过。
 - 普通 EXEC 的 FS_RIGHTS=395 仍仅 STAT/READ/LIST/DUP/OPEN。PR8 已用显式 P5 compiler profile 解决专用启动和输出接线：controller slot0 使用已有文件根授权，core slot3 无文件、进程、电源 handle，借入源码只读 NX，执行期间 controller 阻塞；core 仅允许退出 syscall 255。`compiler_artifact` 使用已授权 token 发 H_WRITE/H_SYNC，不能再把“普通 EXEC 只读”误写成该专用实现不存在。
@@ -105,7 +124,7 @@ C7～C12与CR1已按验收字节集成到lang/bootstrap，并进入永久主线�
 
 另用独立种子0x20261018F1生成200个不同的1～4层嵌套分支程序，独立宿主接受性作期望，两模式共400次原生执行全部通过；只读页/guard与INVALID预检沿用真实harness。证据`build/test/bootstrap-semantic-runtime/independent-eab1f420d902/result.json`及同目录corpus.json，源码hash与本轮受测版本一致。
 
-Claude C5已验收：3项定向、5600次独立新种子执行及8次真实坏实现拒绝，见[验收记录](../claude-works/reviews/2026-10-18-C5-acceptance.md)。C6源码位置定位随后也已通过独立3项、两模式43194次扩展执行及6次坏董控制，见[C6验收](../claude-works/reviews/2026-10-18-C6-acceptance.md)。C1～C6与DeepSeek D1～D13均已验收。新任务[Cursor CR1字节常量编码](../cursor-works/tasks/CR1-nasm-byte-literals.md)发布到cursor-works，源码/测试也先隔离在该目录，避开主线和已验收组件。VS Code项目设置接入本地LM Studio Code，与编译器语义改动独立，API连接验证见`build/test/local-model-vscode/result.json`。
+Claude C5已验收：3项定向、5600次独立新种子执行及8次真实坏实现拒绝，见[验收记录](../../coordination/dongos_works/claude-works/reviews/2026-10-18-C5-acceptance.md)。C6源码位置定位随后也已通过独立3项、两模式43194次扩展执行及6次坏董控制，见[C6验收](../../coordination/dongos_works/claude-works/reviews/2026-10-18-C6-acceptance.md)。C1～C6与DeepSeek D1～D13均已验收。新任务[Cursor CR1字节常量编码](../../coordination/dongos_works/cursor-works/tasks/CR1-nasm-byte-literals.md)发布到cursor-works，源码/测试也先隔离在该目录，避开主线和已验收组件。VS Code项目设置接入本地LM Studio Code，与编译器语义改动独立，API连接验证见`build/test/local-model-vscode/result.json`。
 
 剩余顺序：完整运行时/聚合常量/方法/错误与标签语义及defer清理→目标模块I/O/诊断CLI→后端/工具链→宿主stage1/stage2→真正DongOS自编译、FLUSH及同盘重启比较。C5尚未接入原生CLI；D12生命周期/D13源码与诊断适配也不以独立组件验收代替集成。
 
@@ -119,7 +138,7 @@ Claude C5已验收：3项定向、5600次独立新种子执行及8次真实坏�
 
 独审修正了固定尺寸间接类型的假布局环：宿主接受的 `align(sizeof(*S)) struct S{x:u8}` 和 `struct S{x:[sizeof([]S)]u8}` 原先被拒绝，现已加入永久测试。C4紧凑图只追踪按值布局依赖；指针/切片等固定尺寸描述符采用合法的opaque metadata目标，真实payload仍保留在语义Type中，全部声明及签名在最终发布前另行验证。真正的按值环继续拒绝。早期C观察器构建警告、测试输入语法与负控运算编号错误均保留在原运行目录，未把这些准备失败计为有效负控；发现假环后中断的回归保留在 `l3-semantic-types-18db0c5c8b89/interrupted.json`。
 
-Claude 新任务[C5单行诊断格式化](../claude-works/tasks/C5-diagnostic-format.md)已发布，文件归属避开本类型层；C1～C4保持已验收。DeepSeek D13在第四次复验已验收，D12第五次补交的原rewind used及init256正文也已独立验收，现D1～D13均已关闭，见[D12验收](../deepseek-works/reviews/2026-10-18-D12-acceptance.md)和[D13验收](../deepseek-works/reviews/2026-10-18-D12-D13-fourth-followup.md)。没有代改协作方生产实现或测试。
+Claude 新任务[C5单行诊断格式化](../../coordination/dongos_works/claude-works/tasks/C5-diagnostic-format.md)已发布，文件归属避开本类型层；C1～C4保持已验收。DeepSeek D13在第四次复验已验收，D12第五次补交的原rewind used及init256正文也已独立验收，现D1～D13均已关闭，见[D12验收](../../coordination/dongos_works/deepseek-works/reviews/2026-10-18-D12-acceptance.md)和[D13验收](../../coordination/dongos_works/deepseek-works/reviews/2026-10-18-D12-D13-fourth-followup.md)。没有代改协作方生产实现或测试。
 
 声明阶段OK仍不等于完整语义通过：聚合/运行时初始化计入 `unchecked_initializers`，运行时类型推导、赋值/调用、聚合常量、方法/错误码专项、确定初始化和返回/分支流分析及defer仍待完成；目标模块I/O、后端/CLI、stage1/stage2和真正DongOS自举也仍待完成。D12工作区生命周期及D13源码/诊断适配尚未集成，不以独立组件验收代替它们。
 
@@ -131,7 +150,7 @@ Claude 新任务[C5单行诊断格式化](../claude-works/tasks/C5-diagnostic-fo
 
 新增原生[模块图](../lang/bootstrap/modules.md)与[模块名称语义](../lang/bootstrap/names.md)：显式源码目录、根/路径匹配、导入别名、共享依赖、循环/重名拒绝，经真正 Dong lexer/parser 建图；再检查顶层名称/成员重名及 pub/private，原子发布符号表。模块与名称层各3项定向测试通过，两模式/双格式均执行。模块图29个案例独立对照既有文件系统Resolver；名称层42个确定/生成案例及10个重名/容量/坏图案例通过，删除private检查的真实董负控被拒绝。模块提供的是预读目录接口，DongOS文件系统I/O适配器尚未完成，不据此声称目标环境模块加载或完整语义已完成。
 
-Claude C3纯常量求值、C4已解析类型布局均已独立验收：8项定向通过、0skip，两项共16次实际坏董源码准确拒绝；新种子每模式600纯常量/360布局图也通过，见[验收记录](../claude-works/reviews/2026-10-18-C3-C4-acceptance.md)。Codex继续类型/初始化/流程语义和组件集成；C1/C2保持已验收。DeepSeek D12/D13三次补交的原6项通过，先前guard和pre容量已关闭；仅补原失败init存储观察、单字节逐调用guard和精确容量prefix等原剩余，见[最新复验](../deepseek-works/reviews/2026-10-18-D12-D13-third-followup.md)。未代改协作方实现/测试，不重开D1～D11。
+Claude C3纯常量求值、C4已解析类型布局均已独立验收：8项定向通过、0skip，两项共16次实际坏董源码准确拒绝；新种子每模式600纯常量/360布局图也通过，见[验收记录](../../coordination/dongos_works/claude-works/reviews/2026-10-18-C3-C4-acceptance.md)。Codex继续类型/初始化/流程语义和组件集成；C1/C2保持已验收。DeepSeek D12/D13三次补交的原6项通过，先前guard和pre容量已关闭；仅补原失败init存储观察、单字节逐调用guard和精确容量prefix等原剩余，见[最新复验](../../coordination/dongos_works/deepseek-works/reviews/2026-10-18-D12-D13-third-followup.md)。未代改协作方实现/测试，不重开D1～D11。
 
 上一模块/名称阶段：407项语言回归通过、0skip（248.968秒），编译器/核心/测试前后hash稳定。回执 `build/test/language-priority/l3-modules-names-599fb1ffa934/result.json`，排除C1/C2/C3/C4/D12/D13六个协作测试模块；独立协作复验另记。两模式各219个完整模块AST、26517个实际提取表达式、1093个生成组合、45个类型表达式和73个宿主拒绝的标点删除模块均通过。原始证据：`build/test/bootstrap-expression/run-f290721af2a4/summary.json`、`build/test/bootstrap-syntax/run-87c7d8c40d72/summary.json`、`build/test/bootstrap-modules/run-c26db4c1dc22/summary.json`、`build/test/bootstrap-names/run-9c55c9a6f265/summary.json`。没有OS/VM构建或启动；完整语义和自举仍未完成。
 
@@ -155,7 +174,7 @@ Codex 已补齐 `bootstrap.expression` 的类型转换、结构体字面量、si
 
 `bootstrap.bigint` 已有符号/小端 u32 limb、规范零、任意长度整数解析及加/减/乘/比较；原生3项两模式测试包含4096位独立Python期望、描述符/失败原子性和实际坏carry负控，证据 `build/test/bootstrap-bigint/run-29372d6b40d3/summary.json`。没有以64位截断任意精度常量。
 
-文件归属：Claude C1/C2 的 `bigint_div` / `bigint_bits` 已独立验收：永久7项及新种子最高8192位、C1每模式1500/C2每模式3580附加用例通过，见[验收记录](../claude-works/reviews/2026-10-18-C1-C2-acceptance.md)；C3/C4验收见上方。DeepSeek D12/D13 的 `core.arena` / `core.utf8` 补交仍有原共同项漏检，见[最新返修要求](../deepseek-works/reviews/2026-10-18-D12-D13-third-followup.md)，暂不验收。Codex 维护核心、语法/语义/集成；本轮未代改协作方实现或测试。
+文件归属：Claude C1/C2 的 `bigint_div` / `bigint_bits` 已独立验收：永久7项及新种子最高8192位、C1每模式1500/C2每模式3580附加用例通过，见[验收记录](../../coordination/dongos_works/claude-works/reviews/2026-10-18-C1-C2-acceptance.md)；C3/C4验收见上方。DeepSeek D12/D13 的 `core.arena` / `core.utf8` 补交仍有原共同项漏检，见[最新返修要求](../../coordination/dongos_works/deepseek-works/reviews/2026-10-18-D12-D13-third-followup.md)，暂不验收。Codex 维护核心、语法/语义/集成；本轮未代改协作方实现或测试。
 
 剩余顺序：模块I/O适配与类型/常量/布局/局部作用域及流分析（语法阶段保留未折叠长度和编号，尚不做目标正数/范围检查）→ 后端/CLI/产物发布 → 宿主 stage1/stage2 → 真正 DongOS 自编译、FLUSH 与同盘重启比较。运行环境限制和最终门槛见下方，L3仍未完成。
 

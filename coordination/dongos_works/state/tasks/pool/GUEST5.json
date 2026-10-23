@@ -16,7 +16,6 @@
     "discover:pool-works/tests:test_guest_artifact_commit.py"
   ],
   "claim_from_status": "rework",
-  "claim_token": "d8404bb1aa1c42c1844104ea3e8c3806",
   "claimed_at": "2026-10-20T07:21:45+00:00",
   "claimed_by": "codex-mcp-d76b66689d824a70",
   "completed_at": "2026-10-20T07:27:07+00:00",
@@ -30,14 +29,14 @@
   "historical": false,
   "id": "pool:GUEST5",
   "integration_note": "已真实复制生产源码/接口说明至code/lang/bootstrap，永久测试适配至code/lang/tests/test_bootstrap_guest_artifact_commit.py。主线16 tests/0skip/108.351s全部通过；源码SHA0264475d...与已验收候选一致，清单code/build/test/guest-integration/GUEST5-files.json。沿用独立review_io及正式148.3秒稳定复验；仅组件集成，不声称真实DongOS FLUSH/重启或L3完成。",
-  "legacy_hash": "def850f5c270099d8eb0f827ed24367bbfc68995a14361a73724fd62c8ef9e31",
+  "legacy_hash": "6c1d72827a8c2092920475a8b96249b4ae6b53e7602cd4bd9ba0f08f12a9ccca",
   "number": "GUEST5",
   "owner": "codex",
-  "rev": 17,
+  "rev": 18,
   "review_note": "R2由独立子代理review_io重新读审全部源码/契约/永久测试，并从当前SHA0264475d79e0b38cbef38bfe195c1e1f175ec1d3f95c9840b6181ac1c891dcf8重新独立编译debug/release，各10000条随机短写/零进展/负错/超长/FLUSH/终态无后续调用计划，通过逐step偏移/指针/计数核对，全部exit0。正式隔离10c71d602ff848a996219f1232bc87cc 16 tests/0skip/148.3秒/source_stable/退出并停止，当前交付指纹一致。报告reviews/2026-10-20-independent-io-review.md及code/build/test/independent-io/commit/evidence.json，旧回绕缺陷关闭。准予组件验收，尚未主线集成，非真实FLUSH/重启或完整L3验收。",
   "status": "integrated",
   "title": "[L3] 编译产物写入与FLUSH确认的有界状态机",
-  "updated_at": "2026-10-22T00:59:08+00:00",
+  "updated_at": "2026-10-22T14:38:35+00:00",
   "verification": {
     "checks": [
       {

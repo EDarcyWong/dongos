@@ -1,5 +1,34 @@
 # DongOS 客户端分工（2026-10-18）
 
+## P2 优先，随后 P5（2026-10-23T02:55:00+08:00）
+
+用户最新顺序：先完成 P2，再完成 P5。P2FLUSH11 已 integrated rev6，
+正式独立作业64cf4d5d11454dfebd38a28ec54136b8通过3项、零skip；190原始
+产物SHA及三正/三真坏ASM独审通过。P2仍partial：调度后多根大页/EXEC/WC
+消费者、支持环境的AP PCIDE=1及物理WC性能仍须完成。普通多根变更协议和
+BSP/逐CPU PCID已有实现，既有11项P2任务不重复派发。
+
+P2PCID12、P2ROOT13、P2WC14和进度接续P2SYNC15在途，未提前验收。
+ROOT13首轮因快照期间源变化而未执行测试，已保留记录并准备重排。
+本检查点190项=161 integrated+24 accepted+4 in_progress+1 paused；
+实时以MCP为准。G6PREP1宿主22项0skip已integrated6，未运行新G6来宾；
+G6DOC1按用户优先级paused2。P5尚未开始本轮实现。没有运行OS/VM或提交推送。
+
+详见[当前P2检查点](codex-works/reviews/2026-10-23-P2-current.md)。
+以下带日期的数量、候选和“当前”均保留各自历史范围。
+
+
+2026-10-23 用户授权G5收尾已完成：FULL1 integrated16、CLOSURE1
+integrated21、INT1 integrated24，方法及两项文档收尾均integrated6。
+最新正式70项零skip、源码稳定及原始产物独审通过；主线真实文件和
+[完成回执](codex-works/reviews/2026-10-22-G5-completion.md)已落盘。
+当前183项=159 integrated+24 accepted，其余活动状态为0；实时仍以MCP为准。
+
+不重复派发旧method/enum/error/try/orelse/defer/双ABI八类G5差集。
+后续按用户安排分别处理扩大编译器的新G6、内建assembler更广指令范围、
+P5安全回收及其它OS/外部门禁；旧G6范围保持。没有启动外部AI CLI、
+没有接管其它客户端已领取任务。一般派单偏好及下方历史记录保留。
+
 本轮17份缺失任务书、CX6同号异义和CX14/CX15旧状态均已处理完成。CX14 integrated rev7，CX15 integrated rev8；CX6 integrated rev9，已恢复读取器契约，分离5条原NASM事件，耗时恢复为1轮/265秒，原始事件全部保留。协调器issues=0；核对时间2026-10-22T09:18:41+08:00。
 
 本次恢复收尾没有新派单或接管其它客户端的新任务。已恢复组件及CX14/CX15不重复派发；后续继续按真实G5/P5/硬件差集及用户最新分工授权执行。其它客户端新增队列以MCP最新rev为准。来源见[恢复报告](reviews/2026-10-22-task-recovery/README.md)。

@@ -1,0 +1,262 @@
+// Component only: service/PF entry wiring and actual guest acceptance are separate.
+module mm.runtime_exec;
+import mm.paging as pg;
+import mm.runtime_roots as forest;
+import mm.phys_buddy as buddy;
+import sched.user_domain as ud;
+pub const ANCHOR:u64=0xffff_a900_0000_0000;
+pub const WRITE_ALIAS:u64=ANCHOR+8192;pub const EXEC_ALIAS:u64=ANCHOR+12288;
+pub const CODE42:u64=0x0000_c300_0000_2ab8;pub const CODE43:u64=0x0000_c300_0000_2bb8;
+pub const CODE99:u64=0x0000_c300_0000_63b8;
+pub const SERIALIZE:u64=1;pub const READ:u64=2;pub const CALL:u64=3;
+pub const PROBE:u64=4;pub const WARM:u64=5;pub const STORE:u64=6;
+pub error Invalid=0x0614_0001;pub error Authority=0x0614_0002;
+pub error Forest=0x0614_0003;pub error Reader=0x0614_0004;
+pub error Timeout=0x0614_0005;pub error StaleWrite=0x0614_0006;
+pub const FAULT_MISMATCH:u64=0x0614_0007;
+const MAX:u64=0xffff_ffff_ffff_ffff;const NX:u64=0x8000_0000_0000_0000;
+pub struct Environment{pub cpu:u64,pub root:u64,pub cr0:u64,pub cr4:u64,pub rflags:u64}
+pub struct Sample{pub cpu:u64,pub root:u64,pub cr0:u64,pub cr4:u64,pub rflags:u64,pub value:u64,pub fault:u64}
+pub struct FaultTicket{pub armed:u64,pub consumed:u64,pub cpu:u64,pub sequence:u64,
+ pub root:u64,pub virtual:u64,pub rip:u64,pub after:u64}
+pub struct Fault{pub cpu:u64,pub sequence:u64,pub root:u64,pub rip:u64,pub cr2:u64,
+ pub error_code:u64,pub cs:u64,pub rflags:u64,pub vector:u64}
+pub struct FaultBinding{pub cpu:u64,pub sequence:u64,pub root:u64,pub virtual:u64,pub rip:u64,pub after:u64}
+pub type Hardware=unsafe fn(out:*Environment)void;
+pub type Action=unsafe fn(command:u64,virtual:u64,value:u64,ticket:*FaultTicket,out:*Sample)void;
+pub type Check=unsafe fn(cookie:u64)u64;
+pub struct ReaderReport{pub request:u64,pub acknowledged:u64,pub command:u64,pub virtual:u64,
+ pub expected:u64,pub count:u64,pub ticket:FaultTicket,pub sample:Sample,
+ pub called42:Sample,pub called43:Sample,pub denied42:Sample,pub denied43:Sample,
+ pub serialized:Sample,pub serialized_sequence:u64}
+pub struct Report{pub version:u64,pub attempted:u64,pub complete:u64,pub poison:u64,pub error_code:u64,
+ pub phase:u64,pub state:u64,pub root:u64,pub physical:u64,pub online:u64,pub root_count:u64,
+ pub barriers:u64,pub sequence:u64,pub action_sequence:u64,pub command:u64,pub expected:u64,
+ pub ack_mask:u64,pub held:u64,pub unmapped:u64,pub receipts_consumed:u64,pub tables_before:u64,
+ pub tables_after:u64,pub aliases:u64,pub readers_pointer:u64,pub roots_pointer:u64}
+// A caller-owned arena object. No Scratch/array/retirement object is copied.
+pub align(64) struct Context{pub report:Report,pub domain:*ud.Domain,pub space:*pg.Space,
+ pub allocator:*const buddy.Allocator,pub cookie:u64,pub check:Check,pub hardware:Hardware,pub action:Action,
+ pub deadline:u64,pub ready:u64,pub busy:u64,pub payload:u64,pub probe_rip:u64,pub probe_after:u64,
+ pub anchor_a:u64,pub anchor_b:u64,pub anchor_pt:u64,pub roots:[16]forest.Root,
+ pub aliases:[64]forest.Alias,pub forest_report:forest.Report,pub scratch:forest.Scratch,
+ pub retired:[2]pg.Retired,pub readers:[16]ReaderReport}
+unsafe extern "sysv64" fn runtime_exec_probe_label(which:u64)u64;
+fn object(p:u64,n:u64,a:u64)bool{return p!=0&&(p&(a-1))==0&&n<=MAX-p;}
+fn overlap(a:u64,n:u64,b:u64,m:u64)bool{return n!=0&&m!=0&&a<b+m&&b<a+n;}
+// No hardware operation and no fault recovery on mismatch. The expected
+// binding is trusted handler/owner state, never values supplied by a faulting task.
+pub unsafe fn consume_fault(t:*FaultTicket,f:*const Fault,b:*const FaultBinding,out:*u64)u64{unsafe{
+ if !object(t as u64,sizeof(FaultTicket) as u64,8)||!object(f as u64,sizeof(Fault) as u64,8)
+  ||!object(b as u64,sizeof(FaultBinding) as u64,8)||!object(out as u64,8,8){return FAULT_MISMATCH;}
+ if overlap(t as u64,sizeof(FaultTicket) as u64,f as u64,sizeof(Fault) as u64)
+  ||overlap(t as u64,sizeof(FaultTicket) as u64,b as u64,sizeof(FaultBinding) as u64)
+  ||overlap(out as u64,8,t as u64,sizeof(FaultTicket) as u64)
+  ||overlap(out as u64,8,f as u64,sizeof(Fault) as u64)||overlap(out as u64,8,b as u64,sizeof(FaultBinding) as u64){return FAULT_MISMATCH;}
+ let e=*b;let v=*f;
+ if (*t).armed!=1||(*t).consumed!=0||e.cpu>=16||e.sequence==0||e.root==0||(e.root&4095)!=0
+  ||e.virtual!=WRITE_ALIAS||e.rip==0||e.after<=e.rip||(*t).cpu!=e.cpu||(*t).sequence!=e.sequence
+  ||(*t).root!=e.root||(*t).virtual!=e.virtual||(*t).rip!=e.rip||(*t).after!=e.after
+  ||v.cpu!=e.cpu||v.sequence!=e.sequence||v.root!=e.root||v.rip!=e.rip||v.cr2!=e.virtual
+  ||v.error_code!=3||v.cs!=8||(v.rflags&512)!=0||v.vector!=14{return FAULT_MISMATCH;}
+ (*t).armed=0;(*t).consumed=1;*out=e.after;return 0;
+}}
+pub unsafe fn handle_fault(c:*Context,id:usize,f:*const Fault,out:*u64)u64{unsafe{
+ if c==null||(*c).ready!=1||(*c).busy!=1||(*c).report.poison!=0||id>=16
+  ||((*c).report.online&(1<<id as u64))==0||(*c).report.command!=PROBE{return FAULT_MISMATCH;}
+ if !object(out as u64,8,8)||overlap(out as u64,8,c as u64,sizeof(Context) as u64){return FAULT_MISMATCH;}
+ let r=&(*c).readers[id];let sequence=atomic_load(&(*r).request);
+ if sequence==0||sequence!=(*c).report.action_sequence||(*r).command!=PROBE
+  ||atomic_load(&(*r).acknowledged)>=sequence{return FAULT_MISMATCH;}
+ let binding=FaultBinding{cpu:id as u64,sequence:sequence,root:(*c).report.root,virtual:WRITE_ALIAS,
+  rip:(*c).probe_rip,after:(*c).probe_after};
+ return consume_fault(&(*r).ticket,f,&binding,out);
+}}
+unsafe fn failed(c:*Context,code:u64)void{unsafe{
+ (*c).report.poison=1;(*c).report.error_code=code;(*c).busy=0;atomic_store(&(*(*c).domain).failed,1);
+}return;}
+unsafe fn authority(c:*Context)!void{unsafe{
+ let d=(*c).domain;
+ if (*c).ready!=1||(*c).report.poison!=0||d==null||(*d).ready!=1||(*d).failed!=0
+  ||(*d).lock!=1||(*d).owner!=0||((*d).online&1)==0||((*d).online&~(0xffff as u64))!=0
+  ||!object((*d).cpus as u64,16*sizeof(ud.Cpu) as u64,8)
+  ||(*((*d).cpus)).mode!=ud.LOCKED||(*d).barrier!=0
+  ||(*d).online!=(*c).report.online||(*d).kernel_root!=(*c).report.root{return error.Authority;}
+ var e=Environment{cpu:0,root:0,cr0:0,cr4:0,rflags:0};(*c).hardware(&e);
+ if e.cpu!=0||e.root!=(*d).kernel_root||(e.rflags&512)!=0||(e.cr4&128)!=0||(e.cr4&32)==0
+  ||(e.cr0&0x8001_0001)!=0x8001_0001||(e.cr0&0x6000_0000)!=0{return error.Authority;}
+ if (*c).check((*c).cookie)!=0{return error.Authority;}
+ try buddy.allocated_block((*c).allocator,(*c).report.physical,0);
+}return;}
+unsafe fn leaf(c:*Context,virtual:u64,out:*pg.PoolView)!*const pg.Table{unsafe{
+ try pg.inspect((*c).space,out);let v=*out;var physical=v.physical;var level:u64=0;
+ while level<3{
+  if physical<v.physical||physical-v.physical>=v.count as u64*4096||(physical&4095)!=0{return error.Forest;}
+  let table=v.tables+((physical-v.physical)/4096) as usize;
+  let entry=(*table).entries[((virtual>>(39-level*9))&511) as usize];
+  if (entry&1)==0||(entry&128)!=0{return error.Forest;}physical=entry&v.address_mask;level+=1;
+ }
+ if physical<v.physical||physical-v.physical>=v.count as u64*4096||(physical&4095)!=0{return error.Forest;}
+ return v.tables+((physical-v.physical)/4096) as usize;
+}}
+unsafe fn anchors(c:*Context)!void{unsafe{
+ var v=pg.PoolView{tables:null,metadata:null,count:0,physical:0,address_mask:0,used:0,nx:false};
+ let pt=try leaf(c,ANCHOR,&v);
+ if pt as u64!=(*c).anchor_pt||((*pt).entries[0]&~(96 as u64))!=(*c).anchor_a
+  ||((*pt).entries[1]&~(96 as u64))!=(*c).anchor_b{return error.Forest;}
+}return;}
+unsafe fn closure(c:*Context)!void{unsafe{
+ try authority(c);try anchors(c);let count=(*c).report.root_count as usize;if count>16{return error.Forest;}
+ if forest.audit((*c).space,(*c).roots[..count],(*c).report.physical,4096,(*c).aliases[..],
+  &(*c).forest_report,&(*c).scratch)!=forest.OK{return error.Forest;}
+ let n=(*c).forest_report.aliases;let state=(*c).report.state;if state>3{return error.Forest;}
+ if (state==0&&n!=0)||(state!=0&&n!=2){return error.Forest;}
+ var bits:u64=0;var i:usize=0;while i<n as usize{let a=(*c).aliases[i];
+  if a.identity!=forest.KERNEL_ID||a.generation!=0||a.root!=(*c).report.root
+   ||a.physical!=(*c).report.physical||a.bytes!=4096||a.leaf_bytes!=4096{return error.Forest;}
+  var expected:u64=0;var bit:u64=0;
+  if a.virtual==WRITE_ALIAS{bit=1;if state==1{expected=pg.WRITE;}}
+  else if a.virtual==EXEC_ALIAS{bit=2;if state==3{expected=pg.EXECUTE;}}else{return error.Forest;}
+  if a.flags!=expected||(bits&bit)!=0{return error.Forest;}bits|=bit;i+=1;
+ }
+ if state!=0&&bits!=3{return error.Forest;}(*c).report.aliases=n;
+}return;}
+unsafe fn limit(c:*Context)!u64{unsafe{let now=ud.user_smp_arch_clock();
+ if (*c).deadline==0||now>MAX-(*c).deadline{return error.Timeout;}return now+(*c).deadline;
+}}
+unsafe fn barrier(c:*Context)!void{unsafe{
+ try authority(c);let d=(*c).domain;if (*d).sequence==MAX{return error.Authority;}
+ (*c).report.sequence=(*d).sequence+1;let sequence=try ud.barrier_begin(d,0);
+ if sequence!=(*c).report.sequence{return error.Authority;}
+ try ud.barrier_wait(d,0,sequence,try limit(c));var id:usize=0;
+ while id<16{if ((*c).report.online&(1<<id as u64))!=0{let cpu=(*d).cpus+id;
+  if ((*cpu).mode!=ud.IDLE&&(*cpu).mode!=ud.KERNEL&&(*cpu).mode!=ud.LOCKED)
+   ||(*cpu).acknowledged!=sequence{return error.Authority;}
+ }id+=1;}(*c).report.barriers+=1;
+}return;}
+// Called only by a future trusted poll multiplexer, after full kernel entry.
+pub unsafe fn poll(c:*Context,d:*ud.Domain,id:usize)u64{unsafe{
+ if c==null||(*c).ready!=1||(*c).domain!=d||id>=16||(*c).report.poison!=0{return 1;}
+ if ((*c).report.online&(1<<id as u64))==0{return 1;}let r=&(*c).readers[id];
+ var e=Environment{cpu:0,root:0,cr0:0,cr4:0,rflags:0};(*c).hardware(&e);let cpu=(*d).cpus+id;
+ if e.cpu!=id as u64||e.root!=(*d).kernel_root||(e.rflags&512)!=0||(e.cr4&128)!=0||(e.cr4&32)==0
+  ||(e.cr0&0x8001_0001)!=0x8001_0001||(e.cr0&0x6000_0000)!=0
+  ||((*cpu).mode!=ud.IDLE&&(*cpu).mode!=ud.KERNEL&&(*cpu).mode!=ud.LOCKED){return 1;}
+ // Validate even a quiesce-only poll: the Domain root helper normalizes CR3,
+ // while this owner requires the raw kernel root with reserved tag zero.
+ let request=atomic_load(&(*r).request);if request<=atomic_load(&(*r).acknowledged){return 0;}
+ if request!=(*c).report.action_sequence||(*r).command!=(*c).report.command{return 1;}
+ if (*r).command==PROBE{(*r).ticket=FaultTicket{armed:1,consumed:0,cpu:id as u64,sequence:request,
+  root:(*c).report.root,virtual:WRITE_ALIAS,rip:(*c).probe_rip,after:(*c).probe_after};}
+ (*c).action((*r).command,(*r).virtual,(*r).expected,&(*r).ticket,&(*r).sample);
+ let s=(*r).sample;
+ if s.cpu!=id as u64||s.root!=e.root||s.cr0!=e.cr0||s.cr4!=e.cr4||(s.rflags&512)!=0{return 1;}
+ if (*r).command==PROBE{
+  if s.fault!=1||(*r).ticket.armed!=0||(*r).ticket.consumed!=1{return 2;}
+  if (*c).payload==CODE42{(*r).denied42=s;}else{(*r).denied43=s;}
+ }else{
+  if s.fault!=0||s.value!=(*r).expected{return 1;}
+  if (*r).command==SERIALIZE{(*r).serialized=s;(*r).serialized_sequence=request;}
+  if (*r).command==CALL{if (*r).expected==42{(*r).called42=s;}else{(*r).called43=s;}}
+ }
+ (*r).count+=1;compiler_fence();atomic_store(&(*r).acknowledged,request);return 0;
+}}
+unsafe fn actions(c:*Context,kind:u64,virtual:u64,value:u64,mask:u64)!void{unsafe{
+ try authority(c);if mask==0||(mask&~(*c).report.online)!=0||(*c).report.action_sequence==MAX{return error.Invalid;}
+ (*c).report.command=kind;(*c).report.expected=value;(*c).report.action_sequence+=1;(*c).report.ack_mask=0;
+ let sequence=(*c).report.action_sequence;let until=try limit(c);var id:usize=0;
+ while id<16{if (mask&(1<<id as u64))!=0{let r=&(*c).readers[id];
+  (*r).command=kind;(*r).virtual=virtual;(*r).expected=value;compiler_fence();atomic_store(&(*r).request,sequence);
+  if id!=0&&ud.user_smp_arch_kick(id as u64)!=0{if kind==PROBE{return error.StaleWrite;}return error.Reader;}
+ }id+=1;}
+ while true{let progress=ud.poll((*c).domain,0);match progress{ok(v)=>{},err(code)=>{if kind==PROBE{return error.StaleWrite;}return error.Reader;},}
+  var done:bool=true;id=0;var ack:u64=0;while id<16{if (mask&(1<<id as u64))!=0{
+   if atomic_load(&(*c).readers[id].acknowledged)!=sequence{done=false;}else{ack|=1<<id as u64;}
+  }id+=1;}(*c).report.ack_mask=ack;
+  if done{return;}if ud.user_smp_arch_clock()>=until{return error.Timeout;}ud.user_smp_arch_pause();
+ }
+}}
+unsafe fn separate(c:*Context,s:*const pg.Space)!void{unsafe{
+ if s==null{return error.Invalid;}
+ var v=pg.PoolView{tables:null,metadata:null,count:0,physical:0,address_mask:0,used:0,nx:false};try pg.inspect(s,&v);
+ if v.count==0||v.count>256||overlap(c as u64,sizeof(Context) as u64,s as u64,sizeof(pg.Space) as u64)
+  ||overlap(c as u64,sizeof(Context) as u64,v.tables as u64,v.count as u64*4096)
+  ||overlap(c as u64,sizeof(Context) as u64,v.metadata as u64,v.count as u64){return error.Invalid;}
+}return;}
+pub unsafe fn bind(c:*Context,d:*ud.Domain,space:*pg.Space,allocator:*const buddy.Allocator,roots:[]const forest.Root,
+ physical:u64,cookie:u64,check:Check,hardware:Hardware,action:Action,ticks:u64)!void{unsafe{
+ // Typed callbacks cannot compare to null; inspect their actual stored bits
+ // just as the existing EXEC owner does at its unsafe ABI boundary.
+ if !object(c as u64,sizeof(Context) as u64,64)||!object(d as u64,sizeof(ud.Domain) as u64,8)
+  ||space==null||!object(allocator as u64,sizeof(buddy.Allocator) as u64,8)
+  ||read_unaligned((&check) as *const u64)==0||read_unaligned((&hardware) as *const u64)==0
+  ||read_unaligned((&action) as *const u64)==0||ticks==0||roots.len>16||physical==0||(physical&4095)!=0
+  ||physical>0x1_0000_0000-4096||(*c).ready!=0{return error.Invalid;}
+ if roots.len!=0&&!object(roots.ptr as u64,roots.len as u64*sizeof(forest.Root) as u64,8){return error.Invalid;}
+ if overlap(c as u64,sizeof(Context) as u64,d as u64,sizeof(ud.Domain) as u64)
+  ||overlap(c as u64,sizeof(Context) as u64,space as u64,sizeof(pg.Space) as u64)
+  ||overlap(c as u64,sizeof(Context) as u64,allocator as u64,sizeof(buddy.Allocator) as u64)
+  ||overlap(c as u64,sizeof(Context) as u64,roots.ptr as u64,roots.len as u64*sizeof(forest.Root) as u64){return error.Invalid;}
+ if !object((*d).cpus as u64,16*sizeof(ud.Cpu) as u64,8)
+  ||overlap(c as u64,sizeof(Context) as u64,(*d).cpus as u64,16*sizeof(ud.Cpu) as u64){return error.Invalid;}
+ try separate(c,space);var root_index:usize=0;while root_index<roots.len{try separate(c,roots[root_index].space);root_index+=1;}
+ let root=try pg.root_physical(space);try buddy.allocated_block(allocator,physical,0);
+ var clear:usize=0;while clear<sizeof(Context){*((c as *u8)+clear)=0;clear+=1;}
+ (*c).domain=d;(*c).space=space;(*c).allocator=allocator;(*c).cookie=cookie;(*c).check=check;
+ (*c).hardware=hardware;(*c).action=action;(*c).deadline=ticks;(*c).report.version=1;(*c).report.root=root;
+ (*c).report.physical=physical;(*c).report.online=(*d).online;(*c).report.root_count=roots.len as u64;(*c).report.held=1;
+ (*c).report.roots_pointer=&(*c).roots[0] as u64;(*c).report.readers_pointer=&(*c).readers[0] as u64;
+ (*c).probe_rip=runtime_exec_probe_label(0);(*c).probe_after=runtime_exec_probe_label(1);
+ if (*c).probe_rip==0||(*c).probe_after<=(*c).probe_rip{return error.Invalid;}
+ var i:usize=0;while i<roots.len{(*c).roots[i]=roots[i];i+=1;}
+ var v=pg.PoolView{tables:null,metadata:null,count:0,physical:0,address_mask:0,used:0,nx:false};
+ let pt=try leaf(c,ANCHOR,&v);let a=(*pt).entries[0]&~(96 as u64);let b=(*pt).entries[1]&~(96 as u64);
+ if (a&~v.address_mask)!=(NX|1)||(b&~v.address_mask)!=1||(a&v.address_mask)!=(b&v.address_mask)
+  ||(a&v.address_mask)==physical||(*pt).entries[2]!=0||(*pt).entries[3]!=0{return error.Forest;}
+ (*c).anchor_a=a;(*c).anchor_b=b;(*c).anchor_pt=pt as u64;(*c).ready=1;
+ try closure(c);(*c).report.tables_before=(try pg.used_tables(space)) as u64;
+}return;}
+unsafe fn executable(c:*Context)!void{unsafe{
+ (*c).report.phase=3;try barrier(c); // final quiesce BEFORE warming writable translations
+ try actions(c,WARM,WRITE_ALIAS,(*c).payload,(*c).report.online);
+ try pg.protect_live((*c).space,WRITE_ALIAS,0);(*c).report.state=2;
+ try closure(c);(*c).report.phase=4;try barrier(c);
+ try actions(c,SERIALIZE,0,0,(*c).report.online);try closure(c);
+ // Observe revoked writable translations BEFORE any grant/publication flush.
+ // CPUID serializes instruction execution but does not invalidate a stale TLB.
+ (*c).report.phase=5;try actions(c,PROBE,WRITE_ALIAS,CODE99,(*c).report.online);
+ try actions(c,READ,WRITE_ALIAS,(*c).payload,1);try closure(c);
+ (*c).report.phase=6;try pg.protect_live((*c).space,EXEC_ALIAS,pg.EXECUTE);(*c).report.state=3;
+ try closure(c);try barrier(c);try actions(c,SERIALIZE,0,0,(*c).report.online);
+ var expected:u64=42;if (*c).payload==CODE43{expected=43;}
+ (*c).report.phase=7;try actions(c,CALL,EXEC_ALIAS,expected,(*c).report.online);try closure(c);
+}return;}
+unsafe fn writable(c:*Context)!void{unsafe{
+ (*c).report.phase=8;try barrier(c);try pg.protect_live((*c).space,EXEC_ALIAS,0);(*c).report.state=2;
+ try closure(c);try barrier(c);try actions(c,SERIALIZE,0,0,(*c).report.online);try closure(c);
+ try pg.protect_live((*c).space,WRITE_ALIAS,pg.WRITE);(*c).report.state=1;
+ try closure(c);try barrier(c);(*c).payload=CODE43;try actions(c,STORE,WRITE_ALIAS,CODE43,1);
+}return;}
+unsafe fn lifecycle(c:*Context)!void{unsafe{
+ try closure(c);(*c).report.phase=1;try barrier(c);try closure(c);
+ try pg.map_live((*c).space,WRITE_ALIAS,(*c).report.physical,pg.WRITE);
+ try pg.map_live((*c).space,EXEC_ALIAS,(*c).report.physical,0);(*c).report.state=1;
+ try closure(c);try barrier(c);(*c).payload=CODE42;(*c).report.phase=2;
+ try actions(c,STORE,WRITE_ALIAS,CODE42,1);try executable(c);try writable(c);try executable(c);
+ (*c).report.phase=9;try pg.protect_live((*c).space,EXEC_ALIAS,0);(*c).report.state=2;
+ try closure(c);try barrier(c);try actions(c,SERIALIZE,0,0,(*c).report.online);
+ try closure(c);(*c).retired[0]=pg.EMPTY_RETIRED;(*c).retired[1]=pg.EMPTY_RETIRED;
+ try pg.unmap_live((*c).space,WRITE_ALIAS,&(*c).retired[0]);
+ try pg.unmap_live((*c).space,EXEC_ALIAS,&(*c).retired[1]);(*c).report.state=0;
+ (*c).report.phase=10;try barrier(c);
+ try pg.reclaim((*c).space,&(*c).retired[0]);try pg.reclaim((*c).space,&(*c).retired[1]);
+ (*c).report.receipts_consumed=2;try closure(c);(*c).report.unmapped=1;
+ (*c).report.tables_after=(try pg.used_tables((*c).space)) as u64;
+ if (*c).report.tables_after!=(*c).report.tables_before{return error.Forest;}
+ // No lease transfer/free API exists: the order0 frame remains held.
+}return;}
+pub unsafe fn run(c:*Context)!void{unsafe{
+ if c==null||(*c).ready!=1||(*c).busy!=0||(*c).report.attempted!=0||(*c).report.poison!=0{return error.Invalid;}
+ (*c).busy=1;(*c).report.attempted=1;let result=lifecycle(c);
+ match result{ok=>{(*c).busy=0;(*c).report.complete=1;},err(code)=>{failed(c,code);return result;},}
+}return;}

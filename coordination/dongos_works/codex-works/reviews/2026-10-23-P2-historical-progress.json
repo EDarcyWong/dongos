@@ -1,0 +1,732 @@
+{
+  "schema": 1,
+  "project": "dongos",
+  "task": "codex:P2SYNC40",
+  "task_rev": 2,
+  "checkpoint": "2026-10-23T09:40:00+08:00",
+  "checkpoint_finalized": true,
+  "checkpoint_finalized_does_not_mean_project_complete": true,
+  "source_head": "db4ea7c9a74839d95a5e80a0bbf8468a4bfa0d73",
+  "local_origin_main": "db4ea7c9a74839d95a5e80a0bbf8468a4bfa0d73",
+  "working_tree_dirty": true,
+  "latest_user_scope": {
+    "objective": "Complete all P2 and P5 software and local verification, retain unavailable physical validation, then upload complete code to GitHub and verify, then shut down.",
+    "order": [
+      "P2 software/local gates",
+      "P5 software/local gates",
+      "Record physical pending items",
+      "Commit/push and verify",
+      "Shutdown"
+    ],
+    "physical_machine_available": false,
+    "physical_wc_status": "pending_external_hardware",
+    "physical_wc_blocks_entry_to_p5": false,
+    "p2_software_gate_must_complete_before_p5": true,
+    "end_operations_authorized": true,
+    "commit_executed": false,
+    "push_executed": false,
+    "shutdown_executed": false
+  },
+  "phases": {
+    "p2_software": "partial",
+    "p2_actual_gates": "incomplete",
+    "physical_wc": "unverified",
+    "p5_current_round_implementation_started": false,
+    "p5_activity": "read-only planning",
+    "g5_existing_integrated_work": "preserved; no duplicate implementation"
+  },
+  "task_state_source": "Read-only coordination-tasks MCP snapshots at bounded 09:40 checkpoint; token/secret fields omitted; no global task counts inferred",
+  "tasks": [
+    {
+      "id": "codex:P2OBS36",
+      "status": "submitted",
+      "rev": 12,
+      "verification_job": "0e6d7f219f48448eab82270188736f59"
+    },
+    {
+      "id": "codex:P2LARGE16",
+      "status": "in_progress",
+      "rev": 36,
+      "round": "R9",
+      "verification": null,
+      "latest_formal_history_job": "c33a7c763bd94b86925883bd6e76b217"
+    },
+    {
+      "id": "codex:P2SYNC35",
+      "status": "integrated",
+      "rev": 6
+    },
+    {
+      "id": "cursor:P5CTX1",
+      "status": "integrated",
+      "rev": 7
+    },
+    {
+      "id": "codex:P5CTX2",
+      "status": "integrated",
+      "rev": 6
+    },
+    {
+      "id": "codex:P2SYNC40",
+      "status": "in_progress",
+      "rev": 2,
+      "verification": null
+    }
+  ],
+  "formal": {
+    "observer36_r3": {
+      "evidence_key": "obs_formal",
+      "passed": true,
+      "tests": 71,
+      "skips": 0,
+      "source_stable": true,
+      "process_stopped": true,
+      "execution_exited": true,
+      "checks": [
+        {
+          "spec": "module:tests.test_p2_bulk_capture",
+          "passed": true,
+          "tests": 17,
+          "skips": 0,
+          "returncode": 0,
+          "cancelled": false,
+          "timed_out": false,
+          "process_stopped": true,
+          "execution_exited": true,
+          "elapsed_seconds": 16.844
+        },
+        {
+          "spec": "module:tests.test_p2_pcid",
+          "passed": true,
+          "tests": 22,
+          "skips": 0,
+          "returncode": 0,
+          "cancelled": false,
+          "timed_out": false,
+          "process_stopped": true,
+          "execution_exited": true,
+          "elapsed_seconds": 0.61
+        },
+        {
+          "spec": "module:tests.test_user_smp_gui_control",
+          "passed": true,
+          "tests": 15,
+          "skips": 0,
+          "returncode": 0,
+          "cancelled": false,
+          "timed_out": false,
+          "process_stopped": true,
+          "execution_exited": true,
+          "elapsed_seconds": 0.422
+        },
+        {
+          "spec": "module:tests.test_p2_historical_capture",
+          "passed": true,
+          "tests": 17,
+          "skips": 0,
+          "returncode": 0,
+          "cancelled": false,
+          "timed_out": false,
+          "process_stopped": true,
+          "execution_exited": true,
+          "elapsed_seconds": 5.547
+        }
+      ],
+      "actual_gate_accepted": false
+    },
+    "runtime_large_r8": {
+      "evidence_key": "b_formal",
+      "passed": true,
+      "tests": 44,
+      "skips": 0,
+      "source_stable": true,
+      "process_stopped": true,
+      "execution_exited": true,
+      "checks": [
+        {
+          "spec": "module:tests.test_runtime_large",
+          "passed": true,
+          "tests": 1,
+          "skips": 0,
+          "returncode": 0,
+          "cancelled": false,
+          "timed_out": false,
+          "process_stopped": true,
+          "execution_exited": true,
+          "elapsed_seconds": 73.516
+        },
+        {
+          "spec": "module:tests.test_p2_runtime_large",
+          "passed": true,
+          "tests": 37,
+          "skips": 0,
+          "returncode": 0,
+          "cancelled": false,
+          "timed_out": false,
+          "process_stopped": true,
+          "execution_exited": true,
+          "elapsed_seconds": 907.641
+        },
+        {
+          "spec": "module:tests.test_user_domain",
+          "passed": true,
+          "tests": 2,
+          "skips": 0,
+          "returncode": 0,
+          "cancelled": false,
+          "timed_out": false,
+          "process_stopped": true,
+          "execution_exited": true,
+          "elapsed_seconds": 64.063
+        },
+        {
+          "spec": "module:tests.test_user_smp_barrier",
+          "passed": true,
+          "tests": 1,
+          "skips": 0,
+          "returncode": 0,
+          "cancelled": false,
+          "timed_out": false,
+          "process_stopped": true,
+          "execution_exited": true,
+          "elapsed_seconds": 14.328
+        },
+        {
+          "spec": "module:tests.test_buddy",
+          "passed": true,
+          "tests": 1,
+          "skips": 0,
+          "returncode": 0,
+          "cancelled": false,
+          "timed_out": false,
+          "process_stopped": true,
+          "execution_exited": true,
+          "elapsed_seconds": 1.688
+        },
+        {
+          "spec": "module:tests.test_paging",
+          "passed": true,
+          "tests": 2,
+          "skips": 0,
+          "returncode": 0,
+          "cancelled": false,
+          "timed_out": false,
+          "process_stopped": true,
+          "execution_exited": true,
+          "elapsed_seconds": 5.172
+        }
+      ],
+      "actual_gate_accepted": false
+    }
+  },
+  "host_precheck": {
+    "evidence_key": "obs_host_precheck",
+    "tests": 99,
+    "skips": 0,
+    "elapsed_seconds": 19.321,
+    "returncode": 0,
+    "formal": false,
+    "composition": "OBS71+BHost28; not additive with formal verification"
+  },
+  "historical_diagnostics": {
+    "r4": {
+      "diagnostic_only": true,
+      "acceptance": false,
+      "passed": false,
+      "observations_completed": false,
+      "historical_image_source_root": "D:\\projects\\2026\\dongos\\coordination\\dongos_works\\.local\\runs\\7951803b495e40bcbd2ff85940ea7063\\workspace",
+      "runner_workspace": "D:\\projects\\2026\\dongos\\coordination\\dongos_works\\.local\\runs\\0e6d7f219f48448eab82270188736f59\\workspace",
+      "historical_image_unchanged": true,
+      "tools_unchanged": true,
+      "synthetic": false,
+      "owned_exit": true,
+      "qemu_returncode": 0,
+      "cleanup_completed": true,
+      "result_key": "r4_result",
+      "bulk_key": "r4_bulk",
+      "independent_key": "r4_independent_json",
+      "epochs": 2,
+      "unique_raw_files": 444,
+      "first_pause_ms": 1281,
+      "stop_confirmation_ms": 922,
+      "bulk_ms": 343,
+      "tail_ms": 16,
+      "first_domain_failed": 0,
+      "first_bridge_failed": 0,
+      "second_domain_failed": 1,
+      "second_bridge_failed": 1,
+      "hypervisor_internal_cause_proved": false,
+      "raw_capture_final_disk_verified": true
+    },
+    "r5": {
+      "diagnostic_only": true,
+      "acceptance": false,
+      "passed": false,
+      "observations_completed": true,
+      "historical_image_source_root": "D:\\projects\\2026\\dongos\\coordination\\dongos_works\\.local\\runs\\7951803b495e40bcbd2ff85940ea7063\\workspace",
+      "runner_workspace": "D:\\projects\\2026\\dongos\\coordination\\dongos_works\\.local\\runs\\0e6d7f219f48448eab82270188736f59\\workspace",
+      "historical_image_unchanged": true,
+      "tools_unchanged": true,
+      "synthetic": false,
+      "owned_exit": true,
+      "qemu_returncode": 0,
+      "cleanup_completed": true,
+      "result_key": "r5_result",
+      "bulk_key": "r5_bulk",
+      "independent_key": "r5_independent_json",
+      "epochs": 13,
+      "bulks": 78,
+      "slices": 690,
+      "hmp_sources": 52,
+      "materialized_files": 742,
+      "materialization_batches": 26,
+      "independent_leaf_walks": 359,
+      "independent_final_parts": 36,
+      "max_pause_ms": 859,
+      "configured_budget_ns": 10000000000,
+      "strict_one_second_deadline_guarantee": false,
+      "final_domain_failed": 0,
+      "final_bridge_failed": 0,
+      "final_all_cpu_ack": 8388,
+      "b_attempted": 0,
+      "b_requested": false,
+      "strict_gui_ps_and_four_kills_completed": true,
+      "raw_capture_final_disk_verified": true
+    }
+  },
+  "fresh_builds": [
+    {
+      "case": "normal",
+      "workspace": "D:\\projects\\2026\\dongos\\coordination\\dongos_works\\.local\\runs\\c33a7c763bd94b86925883bd6e76b217\\workspace",
+      "output": "D:\\projects\\2026\\dongos\\coordination\\dongos_works\\.local\\runs\\c33a7c763bd94b86925883bd6e76b217\\workspace\\build\\test\\p2-runtime-large-build\\run-892cf48fd37a\\normal",
+      "receipt_key": "build_normal",
+      "source_files": 1109,
+      "staged_files": 1109,
+      "artifacts": 286,
+      "kernel_bytes": 1966480,
+      "loader_limit_bytes": 2097152,
+      "kernel_margin_bytes": 130672,
+      "built": true,
+      "source_unchanged": true,
+      "actual_acceptance": false
+    },
+    {
+      "case": "omit-ap-flush",
+      "workspace": "D:\\projects\\2026\\dongos\\coordination\\dongos_works\\.local\\runs\\c33a7c763bd94b86925883bd6e76b217\\workspace",
+      "output": "D:\\projects\\2026\\dongos\\coordination\\dongos_works\\.local\\runs\\c33a7c763bd94b86925883bd6e76b217\\workspace\\build\\test\\p2-runtime-large-build\\run-892cf48fd37a\\omit-ap-flush",
+      "receipt_key": "build_omit-ap-flush",
+      "source_files": 1109,
+      "staged_files": 1109,
+      "artifacts": 286,
+      "kernel_bytes": 1966480,
+      "loader_limit_bytes": 2097152,
+      "kernel_margin_bytes": 130672,
+      "built": true,
+      "source_unchanged": true,
+      "actual_acceptance": false
+    }
+  ],
+  "actual_r8": {
+    "normal": {
+      "result_key": "actual_normal",
+      "passed": false,
+      "inputs_unchanged": true,
+      "error": "ValueError: no complete actual runtime-large checkpoint: current all-tag barrier is incomplete",
+      "required_boots": 2,
+      "epochs": 32,
+      "slices": 2078,
+      "actual_guest_executed": true,
+      "synthetic": false,
+      "qemu_returncode": 0,
+      "owned_exit": true,
+      "cleanup_completed": true,
+      "bulk_schema": "p2-historical-bulk-v3",
+      "first_pause_ms": 313.0,
+      "precise_negative_accepted": false,
+      "last_epoch": 32,
+      "last_raw_owner": {
+        "complete": 1,
+        "poison": 0,
+        "steps": 127,
+        "pre_sequence": 22279,
+        "post_sequence": 22280,
+        "barriers": 16,
+        "retired": 2,
+        "reclaimed": 2
+      },
+      "last_raw_domain": {
+        "failed": 0,
+        "lock": 1,
+        "owner": 0,
+        "sequence": 84551,
+        "barrier": 84551,
+        "expected": 15,
+        "completed": 84550,
+        "bridge_failed": 0
+      },
+      "ap_user_timers": [
+        3852,
+        3817,
+        3742
+      ],
+      "classification": "B lifecycle completed; subsequent service barrier pending; legacy idle observation gate failed, not actual acceptance",
+      "boots_started": 1,
+      "successful_boots": 0,
+      "raw_capture_final_disk_verified": true,
+      "data_image_final_sha256_present": false,
+      "data_image_cross_boot_stability_proved": false,
+      "observation_retry_window_seconds": 120,
+      "retry_window_source_key": "b_r8_frozen_runner"
+    },
+    "omit-ap-flush": {
+      "result_key": "actual_omit-ap-flush",
+      "passed": false,
+      "inputs_unchanged": true,
+      "error": "ValueError: UTF-8 UART response timeout",
+      "required_boots": 2,
+      "epochs": 2,
+      "slices": 423,
+      "actual_guest_executed": true,
+      "synthetic": false,
+      "qemu_returncode": 0,
+      "owned_exit": true,
+      "cleanup_completed": true,
+      "bulk_schema": "p2-historical-bulk-v3",
+      "first_pause_ms": 1781.0,
+      "precise_negative_accepted": false,
+      "ordinary_trigger_receipts": 0,
+      "classification": "First strict ps timed out before B trigger; not the specified A/PTE-B stale-load negative",
+      "boots_started": 1,
+      "successful_boots": 0,
+      "raw_capture_final_disk_verified": true,
+      "data_image_final_sha256_present": false,
+      "data_image_cross_boot_stability_proved": false
+    }
+  },
+  "r9": {
+    "status": "in_progress",
+    "rev": 36,
+    "implementation_paths": 4,
+    "tests_executed": false,
+    "passed": false,
+    "accepted": false,
+    "integrated": false,
+    "contract": "Explicit current-kernel-v2 only for all-CPL0 source-bound Header/GS/exact kernel CR3/IF0 held state and later pending ACK floor; legacy default unchanged; negative exact gate unchanged.",
+    "static_review_key": "r9_contract_review"
+  },
+  "outstanding": [
+    "B R9 full formal and actual normal/precise-negative two boots and replay",
+    "PCID actual cold/warm/retire/reuse and wrong-tag",
+    "C/D normal service wiring, complete GOP ledger, real PF RawTrace and seven CACHE forests",
+    "Physical WC performance remains unverified",
+    "P5 new trustworthy recovery/retirement/reuse and init external-generation adoption not implemented"
+  ],
+  "plans_only": {
+    "cd_three_drafts_key": "cd_draft",
+    "cd_harness_key": "cd_harness_notes",
+    "cd_independent_key": "cd_independent_review",
+    "p5_plan_key": "p5_plan",
+    "p5_dependency_review_key": "p5_independent_review",
+    "implementation_authorized_by_these_artifacts": false,
+    "tests_or_actual_gates_proved": false
+  },
+  "evidence": {
+    "task_book": {
+      "path": "D:\\projects\\2026\\dongos\\coordination\\dongos_works\\codex-works\\tasks\\P2SYNC40-board.md",
+      "sha256": "9058f4ba79e5a37ece422976a03117c254112f1fce1675f891ab5b89fd012996",
+      "bytes": 3513,
+      "scope": "P2SYNC40 authorized nine paths; generic worker restrictions do not imply end operations executed"
+    },
+    "obs_formal": {
+      "path": "D:\\projects\\2026\\dongos\\coordination\\dongos_works\\.local\\runs\\0e6d7f219f48448eab82270188736f59\\result.json",
+      "sha256": "321960364aa7c3f850b533162f5e3f1dc6d9867bfef18fd7d348289cecda2389",
+      "bytes": 2758,
+      "scope": "Independent OBS36 R3 host verification 71/0skip"
+    },
+    "b_formal": {
+      "path": "D:\\projects\\2026\\dongos\\coordination\\dongos_works\\.local\\runs\\c33a7c763bd94b86925883bd6e76b217\\result.json",
+      "sha256": "4c4a3e9fe00a93118e5fe2bb053eac2997e0b73b485b05375f06891ee28059b4",
+      "bytes": 3922,
+      "scope": "Independent B R8 host/build verification 44/0skip, not actual acceptance"
+    },
+    "obs_host_precheck": {
+      "path": "D:\\projects\\2026\\dongos\\code\\build\\test\\p2-historical36-review\\host-precheck-r4.log",
+      "sha256": "4afe85f4525c311e4e448402ec2162b30bda60a4a0b3e993ee055c1f0533db46",
+      "bytes": 18321,
+      "scope": "Coordinator nonformal OBS71+BHost28=99/0skip/19.321s"
+    },
+    "obs_root_review": {
+      "path": "D:\\projects\\2026\\dongos\\code\\build\\test\\p2-historical36-review\\obs36-root-review-r3.json",
+      "sha256": "aed367a97568a226c2f5e49e9e1b0b028caa90f38d82bb3af4e8ccee5b4317a9",
+      "bytes": 4583,
+      "scope": "Coordinator source/control review; historical diagnostics retain acceptance=false"
+    },
+    "b_root_review": {
+      "path": "D:\\projects\\2026\\dongos\\code\\build\\test\\p2-historical36-review\\b-r8-formal-root-review.json",
+      "sha256": "d4aab147923e335eb359d768bc987023c3cf75d78c21643119d8bf8fd61faa23",
+      "bytes": 4601,
+      "scope": "Coordinator R8 formal/source review, no actual acceptance"
+    },
+    "b_build_recheck": {
+      "path": "D:\\projects\\2026\\dongos\\code\\build\\test\\p2-historical36-review\\b-r8-fresh-build-recheck.json",
+      "sha256": "3153b52c42ca3391346424e1af7e434569a37285213a99819a06c8bd2dbe829c",
+      "bytes": 563453,
+      "scope": "Coordinator real build.identity recheck for both fresh c33 outputs"
+    },
+    "b_main_fp_check": {
+      "path": "D:\\projects\\2026\\dongos\\code\\build\\test\\p2-historical36-review\\b-r8-main-source-check.json",
+      "sha256": "68697b2ac9d62fda19c1eed543665a8f371851a2c52c3d519fc48dbe4718622a",
+      "bytes": 2027,
+      "scope": "R8-time 18 main directory fingerprints; does not claim later R9 files unchanged"
+    },
+    "r4_result": {
+      "path": "D:\\projects\\2026\\dongos\\code\\build\\test\\p2-historical36-review\\observer36-historical-image-diagnostic-r4\\diagnostic-result.json",
+      "sha256": "e67d2b622e75eaa3dc063fb3bac9b7d6cc1d4b07fd9dc0088f2fcd7d1b04c91d",
+      "bytes": 448709,
+      "scope": "0e6 observer plus explicitly historical 795 R6 normal image, diagnostic failure"
+    },
+    "r4_bulk": {
+      "path": "D:\\projects\\2026\\dongos\\code\\build\\test\\p2-historical36-review\\observer36-historical-image-diagnostic-r4\\boot-1\\physical-bulk-manifest.json",
+      "sha256": "5fc181ed98ca8db1d50808d893a542b6ada6007db3f910d09d752511e4c54912",
+      "bytes": 617593,
+      "scope": "R4 two frozen raw epochs with full stop request-to-cont timings"
+    },
+    "r4_independent_json": {
+      "path": "D:\\projects\\2026\\dongos\\code\\build\\test\\p2-historical36-review\\r4-independent-review.json",
+      "sha256": "46c713e9db2e519e591eafcf880a067605e5beaa40a5f40b83f370f409d2e8bf",
+      "bytes": 257301,
+      "scope": "Independent stdlib raw audit of 444 unique files"
+    },
+    "r4_independent_md": {
+      "path": "D:\\projects\\2026\\dongos\\code\\build\\test\\p2-historical36-review\\r4-independent-review.md",
+      "sha256": "b148cd48638461115b608bc6687287f226df2344754495bd1abfe75e5df8d4a8",
+      "bytes": 8173,
+      "scope": "Independent interpretation: E1 healthy, E2 timeout/held, no hypervisor cause proved"
+    },
+    "r5_result": {
+      "path": "D:\\projects\\2026\\dongos\\code\\build\\test\\p2-historical36-review\\observer36-historical-image-diagnostic-r5\\diagnostic-result.json",
+      "sha256": "181a027a48739d67c404476d69b94bd37a6828854a0df2c6184a152626f3a41c",
+      "bytes": 837480,
+      "scope": "Completed bounded historical diagnostic, passed=false/acceptance=false"
+    },
+    "r5_bulk": {
+      "path": "D:\\projects\\2026\\dongos\\code\\build\\test\\p2-historical36-review\\observer36-historical-image-diagnostic-r5\\boot-1\\physical-bulk-manifest.json",
+      "sha256": "da614afa3381d030c4b75d3877ffe32e0629184a66692d5438ebd51c7d2db7f4",
+      "bytes": 1722980,
+      "scope": "13 epochs, deferred historical materialization provenance"
+    },
+    "r5_independent_json": {
+      "path": "D:\\projects\\2026\\dongos\\code\\build\\test\\p2-historical36-review\\observer36-r5-independent-review.json",
+      "sha256": "7323f1a54ffa7017d44d7283e81076382f5baedb0aa1130e9a510650e1c27852",
+      "bytes": 80058,
+      "scope": "Independent stdlib parent hashes, timings, raw walks and GUI UART review"
+    },
+    "r5_independent_md": {
+      "path": "D:\\projects\\2026\\dongos\\code\\build\\test\\p2-historical36-review\\observer36-r5-independent-review.md",
+      "sha256": "4b36362f33034d14b91aa7d202bb91fe852772df7d4f16ed83a8251fcbc5cb2a",
+      "bytes": 6836,
+      "scope": "359 leaf walks/36 final parts; diagnostic consistency only"
+    },
+    "r9_contract_review": {
+      "path": "D:\\projects\\2026\\dongos\\code\\build\\test\\p2-historical36-review\\b-r9-normal-observation-review.md",
+      "sha256": "e4943bbf9b828924a3ec7f631d600182b5cbb9b38be72f9bc637952c5269a66e",
+      "bytes": 10515,
+      "scope": "Static v2 normal observation review, not implementation or test"
+    },
+    "cd_draft": {
+      "path": "D:\\projects\\2026\\dongos\\code\\build\\test\\p2-historical36-review\\cd-task-book-draft.md",
+      "sha256": "93bd0f66acc2dec824407d624eb841d545d7ebd6a8cebcab7855f0da644c2754",
+      "bytes": 23951,
+      "scope": "Three unissued C/D task drafts; suggested numbers are not task states"
+    },
+    "cd_harness_notes": {
+      "path": "D:\\projects\\2026\\dongos\\code\\build\\test\\p2-historical36-review\\cd-ledger-harness-notes.md",
+      "sha256": "44b6f68cbe6027803e775de1ffd4d0217edd0efaeea3b1f65583006f9ea604f0",
+      "bytes": 13866,
+      "scope": "Read-only C/D source/harness notes"
+    },
+    "cd_independent_review": {
+      "path": "D:\\projects\\2026\\dongos\\code\\build\\test\\p2-historical36-review\\cd-plan-independent-review.md",
+      "sha256": "78fd4a3d7b6ce625cea621486a31a3c48f7caddd4d76a78ddefb1f58f9f79323",
+      "bytes": 14374,
+      "scope": "Read-only C/D contract review"
+    },
+    "p5_plan": {
+      "path": "D:\\projects\\2026\\dongos\\code\\build\\test\\p2-historical36-review\\p5-recovery-implementation-plan.md",
+      "sha256": "49cd3f255e449c05057f14f929000c4a12f9666afbedf3eb6cfda52f28f4ac5e",
+      "bytes": 26537,
+      "scope": "Read-only modern block recovery plan; no implementation"
+    },
+    "p5_independent_review": {
+      "path": "D:\\projects\\2026\\dongos\\code\\build\\test\\p2-historical36-review\\p5-plan-independent-review.md",
+      "sha256": "b2faacc3b3a5649e417fdec52f1f8f9f4bdec43f1aca7d3fd458b323965f192b",
+      "bytes": 15032,
+      "scope": "Read-only dependency review: init external generation adoption still required"
+    },
+    "sync35_review": {
+      "path": "D:\\projects\\2026\\dongos\\coordination\\dongos_works\\codex-works\\reviews\\2026-10-23-P2-deferred-capture-progress.md",
+      "sha256": "92f27ed84bd81e818393a803a3b8169bc3f2129cee30751d39d4c256f0e8c86f",
+      "bytes": 12497,
+      "scope": "Preserved 07:50 historical checkpoint"
+    },
+    "sync35_json": {
+      "path": "D:\\projects\\2026\\dongos\\coordination\\dongos_works\\codex-works\\reviews\\2026-10-23-P2-deferred-capture-progress.json",
+      "sha256": "47dc2c3a6d45b5418aed342de7ec2639d93e4ec5ec3dc4f1c7dfc81e90858e91",
+      "bytes": 26405,
+      "scope": "Preserved SYNC35 historical machine-readable checkpoint"
+    },
+    "build_normal": {
+      "path": "D:\\projects\\2026\\dongos\\coordination\\dongos_works\\.local\\runs\\c33a7c763bd94b86925883bd6e76b217\\workspace\\build\\test\\p2-runtime-large-build\\run-892cf48fd37a\\normal\\runtime-large-source.json",
+      "sha256": "656d8a9c1781abf79b7735c03bacd1d937e56f926ee51d7cb84316d39e28a310",
+      "bytes": 271251,
+      "scope": "Fresh c33 source-bound build receipt"
+    },
+    "build_normal_command": {
+      "path": "D:\\projects\\2026\\dongos\\coordination\\dongos_works\\.local\\runs\\c33a7c763bd94b86925883bd6e76b217\\workspace\\build\\test\\p2-runtime-large-build\\run-892cf48fd37a\\normal\\build-command.json",
+      "sha256": "0bb25584d2148ae453519575c04d70fffbbd3140109a380c5b0be6027a297cf3",
+      "bytes": 1158,
+      "scope": "Actual build command and cwd binding"
+    },
+    "build_normal_log": {
+      "path": "D:\\projects\\2026\\dongos\\coordination\\dongos_works\\.local\\runs\\c33a7c763bd94b86925883bd6e76b217\\workspace\\build\\test\\p2-runtime-large-build\\run-892cf48fd37a\\normal\\build.log",
+      "sha256": "cf9fdc5a2ce77a091d7ea704f80050b76a4f5d04046456aef3b6fd6672d2a5ce",
+      "bytes": 149443,
+      "scope": "Actual compiler/assembler/linker output"
+    },
+    "build_normal_kernel": {
+      "path": "D:\\projects\\2026\\dongos\\coordination\\dongos_works\\.local\\runs\\c33a7c763bd94b86925883bd6e76b217\\workspace\\build\\test\\p2-runtime-large-build\\run-892cf48fd37a\\normal\\image\\kernel.bin",
+      "sha256": "78fdf1e1dad488c754f57e20f26069946ef21299a1a8bafc7cf9171aaf716817",
+      "bytes": 1966480,
+      "scope": "Actual 2MiB-budget kernel bytes"
+    },
+    "actual_normal": {
+      "path": "D:\\projects\\2026\\dongos\\coordination\\dongos_works\\.local\\runs\\c33a7c763bd94b86925883bd6e76b217\\workspace\\build\\test\\p2-runtime-large\\qemu\\normal-r8\\result.json",
+      "sha256": "7560c44c5200edf51c5e4e189f7127e835eb680e858e0cc955003488c4ef35e2",
+      "bytes": 1128359,
+      "scope": "Actual fresh R8 execution failure retained unchanged"
+    },
+    "actual_normal_bulk": {
+      "path": "D:\\projects\\2026\\dongos\\coordination\\dongos_works\\.local\\runs\\c33a7c763bd94b86925883bd6e76b217\\workspace\\build\\test\\p2-runtime-large\\qemu\\normal-r8\\boot-1\\physical-bulk-manifest.json",
+      "sha256": "ea6e3f09002b6cc44c228dd712af6fc2d572e8826e47bdd37954437c536d1c5c",
+      "bytes": 4742228,
+      "scope": "Actual v3 raw epochs/materialization index"
+    },
+    "build_omit-ap-flush": {
+      "path": "D:\\projects\\2026\\dongos\\coordination\\dongos_works\\.local\\runs\\c33a7c763bd94b86925883bd6e76b217\\workspace\\build\\test\\p2-runtime-large-build\\run-892cf48fd37a\\omit-ap-flush\\runtime-large-source.json",
+      "sha256": "24253958d8ebb0c146d7772038a6a6901d0266441a444847a7b42756130712ef",
+      "bytes": 271357,
+      "scope": "Fresh c33 source-bound build receipt"
+    },
+    "build_omit-ap-flush_command": {
+      "path": "D:\\projects\\2026\\dongos\\coordination\\dongos_works\\.local\\runs\\c33a7c763bd94b86925883bd6e76b217\\workspace\\build\\test\\p2-runtime-large-build\\run-892cf48fd37a\\omit-ap-flush\\build-command.json",
+      "sha256": "907d198a544201ee313100a71aa858473139abdf7e3b33b4863b22e562db41dd",
+      "bytes": 1172,
+      "scope": "Actual build command and cwd binding"
+    },
+    "build_omit-ap-flush_log": {
+      "path": "D:\\projects\\2026\\dongos\\coordination\\dongos_works\\.local\\runs\\c33a7c763bd94b86925883bd6e76b217\\workspace\\build\\test\\p2-runtime-large-build\\run-892cf48fd37a\\omit-ap-flush\\build.log",
+      "sha256": "37dffb4899903e69ab231c57cf35b165342fc8910233cb7d4e8be9fea524434a",
+      "bytes": 154273,
+      "scope": "Actual compiler/assembler/linker output"
+    },
+    "build_omit-ap-flush_kernel": {
+      "path": "D:\\projects\\2026\\dongos\\coordination\\dongos_works\\.local\\runs\\c33a7c763bd94b86925883bd6e76b217\\workspace\\build\\test\\p2-runtime-large-build\\run-892cf48fd37a\\omit-ap-flush\\image\\kernel.bin",
+      "sha256": "7b05ca34ed325413ffb3fdda67198521e91b210df47c7cb165219882979a13e1",
+      "bytes": 1966480,
+      "scope": "Actual 2MiB-budget kernel bytes"
+    },
+    "actual_omit-ap-flush": {
+      "path": "D:\\projects\\2026\\dongos\\coordination\\dongos_works\\.local\\runs\\c33a7c763bd94b86925883bd6e76b217\\workspace\\build\\test\\p2-runtime-large\\qemu\\omit-ap-flush-r8\\result.json",
+      "sha256": "c120f70bbe0af1808fde7d4c164c3808db8c64f395c830ceb05cf55a25fb4b61",
+      "bytes": 455928,
+      "scope": "Actual fresh R8 execution failure retained unchanged"
+    },
+    "actual_omit-ap-flush_bulk": {
+      "path": "D:\\projects\\2026\\dongos\\coordination\\dongos_works\\.local\\runs\\c33a7c763bd94b86925883bd6e76b217\\workspace\\build\\test\\p2-runtime-large\\qemu\\omit-ap-flush-r8\\boot-1\\physical-bulk-manifest.json",
+      "sha256": "8f905630e0038bdd74d29aa6ed3d8945c49cb2fa740cde6e9bd63109617a7e65",
+      "bytes": 617132,
+      "scope": "Actual v3 raw epochs/materialization index"
+    },
+    "b_r8_frozen_runner": {
+      "path": "D:\\projects\\2026\\dongos\\coordination\\dongos_works\\.local\\runs\\c33a7c763bd94b86925883bd6e76b217\\workspace\\tests\\run_p2_runtime_large_qemu.py",
+      "sha256": "c636f40694adb23f698e0cc72840038a460e400164bcf1234df04d9a17f8ebf1",
+      "bytes": 57302,
+      "scope": "Immutable c33 R8 runner; collect_boot retry window +120 seconds; unrelated to original guest absolute deadline"
+    }
+  },
+  "main_document_body_preservation": [
+    {
+      "path": "D:\\projects\\2026\\dongos\\code\\PLAN.md",
+      "original_bytes": 79347,
+      "original_sha256": "34bce9e7e5133a5512e6c560be3047df4484cd8803fd9a434d8b84cd22ae4dd2",
+      "original_body_offset_bytes": 1156,
+      "preserved_body_sha256": "34bce9e7e5133a5512e6c560be3047df4484cd8803fd9a434d8b84cd22ae4dd2",
+      "full_document_sha256": "d27ba2a79ff1240c0573ddd01c95a191cc54c1eeed4525c6aa639b7e86dfa65c",
+      "full_document_bytes": 80503,
+      "byte_exact_preserved": true
+    },
+    {
+      "path": "D:\\projects\\2026\\dongos\\code\\docs\\p2-acceptance.md",
+      "original_bytes": 12718,
+      "original_sha256": "808d46081bb23df729bbe1aff85f06e61e6c1c3ee941853eaf1fe087a3e133b1",
+      "original_body_offset_bytes": 1162,
+      "preserved_body_sha256": "808d46081bb23df729bbe1aff85f06e61e6c1c3ee941853eaf1fe087a3e133b1",
+      "full_document_sha256": "b54092a5c2e2e0f1b7210b66113cda2331d8247b66cc286fb43e462b4389c593",
+      "full_document_bytes": 13880,
+      "byte_exact_preserved": true
+    },
+    {
+      "path": "D:\\projects\\2026\\dongos\\code\\docs\\p2-extensions.md",
+      "original_bytes": 16463,
+      "original_sha256": "36d1c71c37e46585ac279f58b61db0387286080c709093e0b9076840ec2523fb",
+      "original_body_offset_bytes": 1162,
+      "preserved_body_sha256": "36d1c71c37e46585ac279f58b61db0387286080c709093e0b9076840ec2523fb",
+      "full_document_sha256": "701865a069947e5fcc4d2e8783d83a5754a10f5a47e0b45f1d5023e9b261b522",
+      "full_document_bytes": 17625,
+      "byte_exact_preserved": true
+    },
+    {
+      "path": "D:\\projects\\2026\\dongos\\code\\docs\\p2-alias-consumers.md",
+      "original_bytes": 12392,
+      "original_sha256": "7b451145d37575e5e6632107e3dc65ed12e7b37bacfc06459556be370fddf01c",
+      "original_body_offset_bytes": 1162,
+      "preserved_body_sha256": "7b451145d37575e5e6632107e3dc65ed12e7b37bacfc06459556be370fddf01c",
+      "full_document_sha256": "b1514a1169c6a83f45c5b4bf857ae7c120304fe8d801a6b401939c47252b1c73",
+      "full_document_bytes": 13554,
+      "byte_exact_preserved": true
+    },
+    {
+      "path": "D:\\projects\\2026\\dongos\\code\\docs\\remaining-plan.md",
+      "original_bytes": 34929,
+      "original_sha256": "d05bed1e29103c41ddce92578600a13bf3319ca6f5d1ba27a59fd40111085464",
+      "original_body_offset_bytes": 1162,
+      "preserved_body_sha256": "d05bed1e29103c41ddce92578600a13bf3319ca6f5d1ba27a59fd40111085464",
+      "full_document_sha256": "0a3121c2c87aab23ea855a1552ff969b65fb40ec082195160f171d9f9787405a",
+      "full_document_bytes": 36091,
+      "byte_exact_preserved": true
+    },
+    {
+      "path": "D:\\projects\\2026\\dongos\\code\\docs\\progress-map.md",
+      "original_bytes": 16594,
+      "original_sha256": "dcff03c735643faee46d341c14792207ae8d49b2c19d53bdb3381a1dfb3a15a2",
+      "original_body_offset_bytes": 1162,
+      "preserved_body_sha256": "dcff03c735643faee46d341c14792207ae8d49b2c19d53bdb3381a1dfb3a15a2",
+      "full_document_sha256": "35220ade0472864de22ebf27ea3b756af83fc373ff029fcfbf0a85992e2266d6",
+      "full_document_bytes": 17756,
+      "byte_exact_preserved": true
+    }
+  ],
+  "checkpoint_markdown": {
+    "path": "D:\\projects\\2026\\dongos\\coordination\\dongos_works\\codex-works\\reviews\\2026-10-23-P2-historical-progress.md",
+    "sha256": "e2f8ac6cfc650bc91c2c81fa6a56c6ef9b22fff47ef58d2a5bc086e8667bc77e",
+    "bytes": 8095
+  },
+  "author_actions": {
+    "tests_executed": false,
+    "compiler_executed": false,
+    "vm_executed": false,
+    "mcp_status_changed": false,
+    "database_or_index_modified": false
+  },
+  "hash_closure": "This JSON binds six prefixed documents, their byte-identical complete old bodies, checkpoint MD and evidence; delivery binds this JSON. Self/delivery hashes are excluded to avoid cycles. No overall passed flag."
+}

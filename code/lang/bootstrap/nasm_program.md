@@ -1,109 +1,129 @@
 # Native typed program to NASM module
 
-`emit(program,workspace,out,written)` renders a published `program_ir.Program`
-into complete deterministic NASM text. The workspaces are caller-owned `text`,
-`piece` (at least 1024 bytes), parameter `kinds`, and SysV `locations`. The
-backend reuses the native symbol, instruction, checked arithmetic, width/load/
-store, comparison, branch, frame and SysV argument-planning modules.
+`emit(program,workspace,out,written)` renders a published
+`program_ir.Program` into deterministic NASM text. The caller owns text,
+piece (at least 1024 bytes), parameter kinds and argument locations. Actual
+Dong frontend, typed IR, lowering and this backend produce target code;
+Python only bootstraps the compiler and supplies an independent seed oracle.
 
-Symbols derive from the checked canonical module path and declaration name.
-Method symbols append `_t` and the hex bytes of the nominal receiver struct
-name to the ordinary module/item symbol. Alias receivers use their resolved
-nominal declaration. This separates methods on different structs and methods
-from same-name free functions; module identity separates same-name structs in
-different modules. The symbol is identical at each definition and call site.
-Bodyless SysV methods use their checked external link name just like bodyless
-free functions; explicit SysV method definitions retain the nominal symbol
-and publish their linker alias at the same address.
-The backend uses the bottom-level `sysv_integer_args.plan`; it does not inherit
-the older component wrappers' 16-expanded-word limit. Slice pairs are never
-split across register/stack placement. Stack arguments are assigned before
-register arguments, and all arguments are independent frame snapshots.
-The outgoing stack area is 16-aligned; frame plus outgoing area may not exceed
-4080. The prologue preserves RBP; only caller-saved registers are otherwise used.
+## Language values and control flow
 
-Explicit SysV definitions use the same implementation. Bodyless SysV
-declarations emit `extern $name` and direct calls to that actual linker symbol;
-they never emit a placeholder body. The default name is the declaration name,
-overridden by `extern "sysv64"("name")` or `export("name")`. Definitions keep
-their canonical module symbol and publish such names as aliases at the same
-address. Linker identifiers use NASM's `$` escape, including register-like names.
-Two modules may declare the same source name with different linker names.
-The existing frontend restricts external declarations to scalar/pointer
-signatures. Win64 remains unsupported; function-pointer calls, foreign data,
-unresolved-symbol linking in the native ELF assembler and complete external
-ABI coverage are separate work.
+The backend supports scalar and pointer values, function addresses/storage/
+indirect calls, slices, strings, exact-byte struct/array construction and
+overlap-safe copies, mutable globals and static constants/relocations.
+Method symbols include canonical module/item identity and the nominal
+receiver name; alias receivers resolve to that declaration. Both method call
+forms use the selected declaration and evaluate the receiver once before
+arguments. Aggregate values cannot generally cross a function boundary by
+value; supported scalar/pointer/pair signatures remain checked.
 
-## Runtime behavior
+Optional/result occupy two 64-bit slots. Empty optionals, error results and
+payload-free variants zero unused payload; narrow payload high bits are
+normalized. Payload-free enums occupy one word and enums with payloads occupy
+two. Cross-module static enum constants retain their tag and payload.
+Wrapping a payload first performs its normal coercion, including read-only
+pointer conversion. Match, try, orelse, range/array/slice for and defer lower
+through the real typed flow graph. Cleanup follows lexical reverse order;
+return values survive cleanup, loop exits use their proper cleanup boundary,
+and noreturn cleanup is reflected in reachability.
 
-Narrow loads sign/zero extend according to semantic type. Pointer stores use
-the exact language width; slice memory loads/stores use two 64-bit words.
-Integer casts normalize to the destination width. Debug add/subtract/multiply
-and negate check overflow, including narrow ranges; unsigned negation is
-checked `0-x` (carry), signed negation uses signed overflow. Release and explicit
-wrapping intrinsics wrap. Division by zero, signed MIN/-1, invalid shifts and
-slice indices trap in both modes. Unsafe pointer arithmetic/index scaling wrap
-like the existing seed compiler. Pointer indexing has no invented length bound.
+## Function ABI and frame budget
 
-Runtime errors currently terminate with `ud2`, without the final L3 diagnostic
-runtime. Every function also ends in a fail-closed trap before the next label,
-and a noreturn call is followed by a trap. This is an executable intermediate
-backend, not full compiler/guest acceptance. Struct/array locals use exact-byte overlap-safe copies and zeroed literal padding. Strings and checked static constants live in deterministic read-only data; static arrays do not consume frame space. Subslice bounds are checked in both modes. Additional language constructs remain explicitly unsupported by lowering.
+SysV uses the real argument planner. A supported two-word value is placed
+whole in registers or whole on the stack; it is never split and does not
+consume a spare single register when moved to the stack. Arguments are
+independent frame snapshots and outgoing stack storage is 16-aligned.
+Bodyless extern declarations are unsafe by default; ABI and unsafe are part
+of function types. Actual scalar/pointer external declarations emit linker
+symbols, and explicit definitions retain their canonical module symbol and
+publish a checked linker alias at the same address.
 
-## Atomicity
+Win64 scalar definitions bridge to the SysV internal body. Calls reserve
+32-byte shadow space and place additional arguments on the stack. Bridges
+preserve RDI/RSI and XMM6–15, along with the remaining nonvolatile registers.
+Entry and normal return clear DF. Link names use NASM's dollar escape,
+including register-like identifiers.
+
+The combined frame/outgoing bound is `F + W + A + O <= 4080`; adding the
+common return address and saved RBP gives a worst-case 4096-byte total.
+F is the 16-rounded local/temporary frame. For a Win64 definition,
+`W = align16(176 + 8*max(parameter_count-6,0)) + 16`; otherwise W is zero.
+A is the largest object alignment when greater than 16, accounting for
+dynamic alignment/padding and saved R12. O is the current aligned SysV
+outgoing area or Win64 shadow/stack area. Dynamic alignment uses R12 while
+RBP retains the frame chain. A legal type alignment of 4096 does not imply
+that a local of that alignment fits this budget. Static objects do not consume
+local frame space; oversized locals reject before alignment arithmetic.
+
+## Memory, checks and panic
+
+Loads extend according to signedness and width; stores use the exact language
+width. Slice values use two words. Debug arithmetic checks overflow; release
+and explicit wrapping operations wrap. Bounds, invalid shifts, division by
+zero and signed MIN/-1 remain checked in both modes. Unsafe pointer arithmetic
+follows the seed contract without inventing a length bound.
+
+Guards call the target-provided SysV ABI:
+
+`__dong_panic(u32 kind,u32 line,*const u8 file,usize length)noreturn`
+
+Kinds are bounds=1, overflow=2, division by zero=3, shift=4 and signed
+MIN/-1=5. Paths come from the corresponding source and lines from its original
+node token. Panic does not run defer. A real exported target definition is
+used when present; otherwise NASM declares the external runtime.
+`ud2` remains a fail-closed protection if noreturn returns and at unreachable
+tails, not the normal panic ABI.
+
+Volatile/unaligned memory supports 8/16/32/64-bit integer widths. Atomics are
+restricted to u32/u64 and use ordinary load, xchg, lock cmpxchg and lock xadd
+as specified. compiler_fence emits no CPU instruction. Inline asm accepts
+only cli, sti, hlt, pause, int3, lfence, sfence and mfence.
+
+## Output atomicity and linking boundary
 
 Statuses: OK=0, INVALID=1, CAPACITY=2, UNSUPPORTED=3, FRAME=4.
-Before any mutation, descriptor ranges/alignment and overlap against the complete
-frontend arena, sources, IR prefixes and both descriptors are checked. Output,
-written and all four workspaces must be mutually disjoint and separate from
-those inputs. INVALID leaves caller bytes unchanged. Once preflight succeeds,
-workspaces may change on failure, but output and written remain unchanged for
-all failures. The complete module is rendered to `workspace.text` first; only
-success copies its exact used bytes to out and updates written. Output tails
-and guards remain unchanged. A piece capacity below 1024 returns CAPACITY.
+Preflight checks descriptor ranges/alignment and overlap against the complete
+frontend arena, sources, IR prefixes and descriptors. Output, written and all
+four workspaces must be mutually disjoint and separate from those inputs.
+INVALID leaves caller bytes unchanged. After preflight, workspace bytes may
+change on failure, but output and written stay unchanged for every failure.
+The complete module is first rendered into workspace.text; success copies
+only the used bytes and publishes written. Output tails/guards stay unchanged.
+A piece capacity below 1024 returns CAPACITY.
 
-## Reproduction
+NASM output can use a normal linker to resolve external symbols. The built-in
+native_assembler accepts an extern only when the same final assembly actually
+defines that symbol; even unused extern declarations must resolve. There is no
+dynamic linker or external symbol loader.
 
-From `code/`, with NASM/GCC available:
+Complete G5 NASM execution coverage does not mean every supported language
+program can already be assembled by native_assembler. Its current dialect
+does not encode XMM/movdqu, the atomic instructions or the inline-asm whitelist.
+Those paths use actual NASM assembly and the applicable CPU/diagnostic
+oracles. Selected native ELF,
+static-pointer/target-runtime cases and the 49-module self-compilation fixed
+point validate the built-in assembler's implemented dialect.
 
-`NASM=/tmp/dongos-tools/usr/bin/nasm python -m unittest lang.tests.test_bootstrap_native_compiler -v`
+## Permanent gates and evidence
 
-The test uses Python only to build the initial native compiler executable.
-Every target IR instruction and target NASM byte is then produced by actual
-Dong modules at runtime from source bytes. The unchanged artifact comparator
-runs against an independent C oracle. Generic Dong source covers nested pairs,
-20-word calls, spare-register whole-pair placement, single-evaluation lvalues,
-narrow signed operations, overflow modes and runtime traps. Both modes include
-capacity/alias/guard checks and a real Dong source mutation whose generated
-artifact returns normally but fails the independent value oracle. Per-run
-commands, source hashes and results live under `build/test/bootstrap-native-compiler/`.
+From code/ with NASM and a suitable GCC available:
 
-`python -m unittest lang.tests.test_l3_sysv_native -v` runs explicit definitions,
-external C links, eight-argument calls, narrow signed values, guarded pointer
-writes, linker aliases, module isolation, rejection atomicity and a real
-mutated Dong emitter with an independently observed wrong call target. Each
-mode assembles ELF64 and COFF; the host executes its native object format.
-`python -m unittest lang.tests.test_l3_method_native -v` rebuilds the native
-compiler and executes both method forms, overload selection, symbol isolation,
-cross-module visibility, nominal aliases, const/unsafe receivers, single
-receiver evaluation, nested/stack/pair arguments, pointer/slice/void/narrow
-returns and recursion. C memory canaries and separate seed executions observe
-actual generated code. A real Dong lowering mutant incorrectly using the
-candidate head must compile/link/run and fail the independent value oracle.
-The existing global/aggregate/SysV and runtime-guard observations also use the
-new compiler objects. All successful targets run exact/one-short workspace,
-alias, output atomicity, readonly graph/source/IR and guard checks.
+- `python -m unittest lang.tests.test_g5_full_native -v`: 51 tests and
+  27 requirement groups, independent seed and CPU oracles, actual semantic
+  mutants, panic diagnostics, both ABIs, source/driver/object provenance.
+- `python -m unittest lang.tests.test_g5_closure_native -v`: debug/release
+  seed and native full-ELF fixed points, 56 MiB arena, 64 KiB guarded stack,
+  512 KiB source bundle and 2 MiB ELF caps, 32 atomic preflights and genuine
+  semantic/capacity failures.
+- `python -m unittest lang.tests.test_l3_sysv_native -v` and the method,
+  defer and for modules retain focused real execution and failure oracles.
 
-`python -m unittest lang.tests.test_l3_defer_native lang.tests.test_l3_for_native -v`
-rebuilds production sources without works overlays. The for module also tests
-for/match/defer composition, pair returns through array-loop cleanups, and real
-Dong-generated text consumed by the native assembler: the ELF executes on the
-host and returns 69 in both modes. Exact/one-short output, guards and preserved
-source bytes are checked. This host ELF execution is separate from DongOS G6.
-
-The G5 runner retains the original eight fixtures and adds range/array/slice
-for and bool match probes. Method, ordinary defer, explicit SysV and those four
-control paths must pass actual native execution. Win64, enum, error, try and
-orelse remain precise gaps. These are bounded probes, not complete G5 coverage;
-function pointers, memory intrinsics, asm, complete ABI/diagnostics and broader
-defer forms still require separate closure.
+The full gate's full-coverage.json, rather than the CLI's intentionally
+limited scope_complete=false receipt, decides complete G5 coverage.
+The Linux/POSIX native-compiler suite has separate platform requirements;
+this Windows integration does not claim it ran. Host evidence does not replace
+a new DongOS guest/self-compilation/persistence run for the enlarged compiler.
+See [G5 full gate](../../docs/g5-differential.md),
+[closure](../../docs/g5-closure.md) and the
+[completion receipt](../../../coordination/dongos_works/codex-works/reviews/2026-10-22-G5-completion.md)
+for actual jobs, independent reviews and integration state.

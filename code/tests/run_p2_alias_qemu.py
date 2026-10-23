@@ -6,6 +6,7 @@ sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 from tools import build as builder
 from tools.build_usb import verify_build
 from tools.make_fat32_disk import create
+from tools.kernel_storage_profile import verify_profile, verify_definition
 from tests import run_virtio_reset_qemu as control
 from tests import run_p2_active_large_qemu as prior
 from tests import run_p2_shared_large_qemu as shared
@@ -131,8 +132,8 @@ class Raw:
     def record(self,typ,raw):return {f['name']:int.from_bytes(raw[f['offset']:f['offset']+8],'little') for f in self.types[typ]['fields'] if f['size']==8}
 
 def audit_compositor(raw,r):
-    # Actual process2 must use the existing arena path under the explicit
-    # two-static-pool build; this is independent of compiler text/layout claims.
+    # Actual process2 must still use the held arena path under the explicit
+    # one-static-pool build; slot1 is independently checked by common readers.
     s2=raw.kernel('user.memory','SPACES','mm.paging.Space',2)
     check(raw.number('mm.paging.Space',s2,'initialized')==1 and raw.number('mm.paging.Space',s2,'pool_count')==32,'actual pid2 complete ordinary pool')
     def global_u64(name,index):
@@ -235,7 +236,7 @@ def verify_bytes(read,layout,symbols,boot,cpus,negative=None):
 def run(esp,cpus=4,negative=None):
     esp=Path(esp).resolve();verify_build(esp);state=ROOT/'build/test/p2-alias'/('run-'+uuid.uuid4().hex[:12]);state.mkdir(parents=True);art=state/'artifacts';art.mkdir()
     for name in ('kernel.elf','dong_layout.json','build-inputs.json','kernel-optimization.json'):shutil.copy2(esp.parent/name,art/name)
-    build_manifest=json.loads((esp.parent/'build-inputs.json').read_text());profile=build_manifest['kernel_storage_profile'];shutil.copy2(esp.parent/profile['source'],art/'kernel-storage-profile.dg')
+    build_manifest=json.loads((esp.parent/'build-inputs.json').read_text());verify_profile(esp.parent,build_manifest,expected_runtime=7,source_root=ROOT);profile=build_manifest['kernel_storage_profile'];shutil.copy2(esp.parent/profile['source'],art/'kernel-storage-profile.dg')
     if negative:
         fixture=json.loads((ROOT/'p2-alias-fixture.json').read_text());check(fixture['kind']==negative,'bound mutant kind')
         shutil.copy2(ROOT/'p2-alias-fixture.json',art/'fixture.json');shutil.copy2(ROOT/'p2-alias-original-source.txt',art/'production-source.txt');shutil.copy2(ROOT/fixture['target'],art/'mutant-source.txt')
@@ -291,7 +292,8 @@ def replay(path):
     build=json.loads((state/'artifacts/build-inputs.json').read_text())
     check(build['runtime_level']==7 and build['test']is False and build['source_unchanged']is True,'normal completed build')
     check(all(r['source_before'].get(k)==v for k,v in build['source_sha256'].items()),'all observed build sources match actual compiler inputs')
-    check(build['kernel_storage_profile']['sha256']==r['artifacts_sha256']['kernel-storage-profile.dg'] and build['kernel_storage_profile']['static_user_pools']==2,'actual generated profile SHA/count')
+    check(verify_definition(build,(state/'artifacts/kernel-storage-profile.dg').read_bytes(),expected_runtime=7,source_root=ROOT)==1
+          and build['kernel_storage_profile']['sha256']==r['artifacts_sha256']['kernel-storage-profile.dg'],'actual generated current profile SHA/count')
     for name in ('kernel.elf','kernel-optimization.json'):
         hashes=[v for k,v in build['artifacts'].items() if Path(k).name==name];check(hashes==[r['artifacts_sha256'][name]],'artifact bound to actual build '+name)
     if r['negative']:

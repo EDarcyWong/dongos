@@ -1,0 +1,84 @@
+{
+  "assignment_owner": "codex",
+  "auto_dispatch": false,
+  "auto_verify": false,
+  "candidate": null,
+  "checks": [
+    "module:tests.test_p2_bulk_capture",
+    "module:tests.test_p2_pcid"
+  ],
+  "claim_from_status": "todo",
+  "claimed_at": "2026-10-22T22:09:33+00:00",
+  "claimed_by": "codex-mcp-daece153b59c4bd5",
+  "completed_at": "2026-10-22T22:31:20+00:00",
+  "complexity": "standard",
+  "created_at": "2026-10-22T22:09:11+00:00",
+  "delivery": "codex-works/deliveries/P2OBS32.md",
+  "depends_on": [],
+  "description": "实现P2只读观测批量快照，修复旧constructor长stop/settle cont造成超时证据污染风险；保留旧失败历史，原guest时钟/绝对deadline/CR3/寄存器/内存完全不改。PcidGuest父构造前预解析本次ELF/layout/profile；首stop先用唯一真实UART BootInfo PA严格20Q160B ABI，dump实际完整kernel2MiB、WORK initialized allocator的1024页buddy4MiB、真实PLAN.arena/NEXT_PAGE已用前缀（总128MiB上限）、真实必要map/RSDP。依据真实compiler offsets和源绑定符号推导/验证所有范围、所有权、overlap/overflow；不接受manifest自选范围。每stop确认真实query-status，建立明确epoch，少量实际pmemsave。私有EpochRegistry保存已读取immutable bytes+冻结metadata，physical仅真实stopped下当前sealed epoch切片（原slice≤16MiB），缺范围failclosed，无按需QMP/跨epochfallback。slice需epoch/bulk_id/offset完整原始文件SHA；HMP实际源transcript同epoch且同CPU。Archive显式registry/ begin_snapshot(epoch)，多个live Archive共享可信内存避免O(n²)重hash，严禁mtime全局缓存/monkeypatch/排序隐式reset。退出及replay seal前重新从磁盘完整校验所有bulk/slice/hash/精确字节，read-only重推范围契约拒篡改。Pcid snapshot/decode/ordinary retired old word各显式scope。settle不隐式resume，pause不暗中cont；resume仅明确runner调用，记录完整stop→cont hostmonotonic/QMP状态/串口边界，post-resume失败保留并标observer风险，固定较大采集预算超出拒绝而非归生产。不得弱化AP/PCID/warmreuse/库口负控。B原runner最小显式适配将由原P2LARGE16任务返修执行，不越界编辑。新增有意义host真路径控制：数百slice不新增pmemsave、共享cache、最终文件篡改重新hash、PA/offset/escaped/missing/epoch/register错绑、running读、settle不cont、pause全时长计账、旧WHPX无bulk不得冒充新capture。仅组件，不宣称真实AP门禁或P2完成；不自行编译/测试/VM或状态验收。任务原scope7文件。",
+  "document": "codex-works/tasks/P2OBS32-board.md",
+  "historical": false,
+  "id": "codex:P2OBS32",
+  "integration_note": "授权文件已实际在主工作树，源码/契约/真实检查已审，逐文件SHA与独立回执完全一致；登记实际文件集成，无commit/push，不扩大为P2整体验收。",
+  "legacy_hash": "c075861fd904d080f4dbc2b3932ab5562a4a2014c6bffb1408b499bc2e8ae587",
+  "number": "P2OBS32",
+  "owner": "codex",
+  "rev": 6,
+  "review_note": "根逐审7文件及实际来源/字节/时序契约：metadata来自已完整identity的staged profile/ELF/layout并比resident RO；真实UART及serial.log prefix、BootInfo20Q、kernel2MiB/buddy4MiB/已用arena<=128MiB/map/RSDP/完整8页bootstrapPT互斥，6实际pmemsave原始request/response；immutable bytes registry显式epoch/CPU/HMP原CRLF、晚期disk重新hash，拒PA/offset/混epoch/缺失/运行态读取/legacy冒充真实。全stop→cont时长包含host解码与实际确认，固定10s明显干扰拒绝不声称无扰动，不改guest时钟/内存/寄存器或原deadline。独立c44b321d8dd0470b8989a23fbd24804f 10+19=29test0skip/stable/stopped/exited，500缓存读取无额外QMP与最终篡改负控真实productionPython路径通过；当前7文件逐SHA一致。仅observer组件验收，未据host边界声称真实AP/PCID/P2通过。",
+  "status": "integrated",
+  "title": "P2只读批量内存观测与明确epoch证据重放",
+  "updated_at": "2026-10-22T22:37:21+00:00",
+  "verification": {
+    "checks": [
+      {
+        "cancelled": false,
+        "elapsed_seconds": 9.641,
+        "execution_exited": true,
+        "passed": true,
+        "process_stopped": true,
+        "returncode": 0,
+        "skips": 0,
+        "spec": "module:tests.test_p2_bulk_capture",
+        "tests": 10,
+        "timed_out": false
+      },
+      {
+        "cancelled": false,
+        "elapsed_seconds": 0.406,
+        "execution_exited": true,
+        "passed": true,
+        "process_stopped": true,
+        "returncode": 0,
+        "skips": 0,
+        "spec": "module:tests.test_p2_pcid",
+        "tests": 19,
+        "timed_out": false
+      }
+    ],
+    "execution_exited": true,
+    "fingerprint": {
+      "codex-works/deliveries/P2OBS32.md": "eb2373838d78c04248fe0372494e76c36c563efd45768865bd5d122105d00cd4",
+      "docs/p2-observer-capture.md": "b203d833ccac4705f8e9f4d1ac8586f76a7a02cc544a297f21abd9ecee3096b6",
+      "tests/p2_bulk_capture.py": "15762d71ae9579c4051c4b262b8afbead3348aa3fe0624505c177b7f34aee8b3",
+      "tests/p2_pcid_oracle.py": "54795ea1c37623360b6db48bc0e1c9c4c9e41c9311428952b04f9ae3b4c6ad1d",
+      "tests/run_p2_pcid_qemu.py": "4e2d2298fccd16def30ccfa1e5432d8f5ba8f7556782508b92bddc891a34316f",
+      "tests/test_p2_bulk_capture.py": "b611410f607f3842d9eab94754e350b55f409c69063b876f739908d438aa2e84",
+      "tests/test_p2_pcid.py": "e3321003546ccbc847ef9a0deec0bf2fc79b9e3725abea6bc91eb6d70068ba13"
+    },
+    "finished_at": "2026-10-22T22:35:57+00:00",
+    "job": "c44b321d8dd0470b8989a23fbd24804f",
+    "passed": true,
+    "process_stopped": true,
+    "source_stable": true,
+    "summary": "定向复验通过，等待源码/契约审查"
+  },
+  "write_paths": [
+    "tests/run_p2_pcid_qemu.py",
+    "tests/p2_pcid_oracle.py",
+    "tests/p2_bulk_capture.py",
+    "tests/test_p2_bulk_capture.py",
+    "tests/test_p2_pcid.py",
+    "docs/p2-observer-capture.md",
+    "codex-works/deliveries/P2OBS32.md"
+  ]
+}

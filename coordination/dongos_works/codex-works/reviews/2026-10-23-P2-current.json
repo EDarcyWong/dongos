@@ -1,0 +1,170 @@
+{
+  "schema": 1,
+  "project": "dongos",
+  "checkpoint_at": "2026-10-23T02:55:00+08:00",
+  "requested_order": [
+    "P2",
+    "P5"
+  ],
+  "p2_status": "partial",
+  "p5_started_this_round": false,
+  "task_snapshot": {
+    "at": "2026-10-23T02:55:00+08:00",
+    "total": 190,
+    "counts": {
+      "accepted": 24,
+      "integrated": 161,
+      "paused": 1,
+      "in_progress": 4
+    },
+    "tasks": [
+      {
+        "id": "codex:G6DOC1",
+        "status": "paused",
+        "rev": 2
+      },
+      {
+        "id": "codex:G6PREP1",
+        "status": "integrated",
+        "rev": 6
+      },
+      {
+        "id": "codex:P2ALIAS8",
+        "status": "integrated",
+        "rev": 6
+      },
+      {
+        "id": "codex:P2BUILD5",
+        "status": "integrated",
+        "rev": 6
+      },
+      {
+        "id": "codex:P2FLUSH11",
+        "status": "integrated",
+        "rev": 6
+      },
+      {
+        "id": "codex:P2LIVE1",
+        "status": "integrated",
+        "rev": 6
+      },
+      {
+        "id": "codex:P2OOM4",
+        "status": "integrated",
+        "rev": 9
+      },
+      {
+        "id": "codex:P2PCID12",
+        "status": "in_progress",
+        "rev": 2
+      },
+      {
+        "id": "codex:P2ROOT13",
+        "status": "in_progress",
+        "rev": 5
+      },
+      {
+        "id": "codex:P2SIZE10",
+        "status": "integrated",
+        "rev": 9
+      },
+      {
+        "id": "codex:P2SIZE2",
+        "status": "integrated",
+        "rev": 6
+      },
+      {
+        "id": "codex:P2SIZE9",
+        "status": "integrated",
+        "rev": 6
+      },
+      {
+        "id": "codex:P2SMP3",
+        "status": "integrated",
+        "rev": 6
+      },
+      {
+        "id": "codex:P2SYNC15",
+        "status": "in_progress",
+        "rev": 2
+      },
+      {
+        "id": "codex:P2VIEW6",
+        "status": "integrated",
+        "rev": 6
+      },
+      {
+        "id": "codex:P2WC14",
+        "status": "in_progress",
+        "rev": 2
+      },
+      {
+        "id": "deepseek:L3",
+        "status": "integrated",
+        "rev": 13
+      },
+      {
+        "id": "deepseek:L3A",
+        "status": "integrated",
+        "rev": 11
+      }
+    ]
+  },
+  "completed_this_round": [
+    {
+      "task": "codex:P2FLUSH11",
+      "status": "integrated",
+      "rev": 6,
+      "job": "64cf4d5d11454dfebd38a28ec54136b8",
+      "tests": 3,
+      "skips": 0,
+      "source_stable": true,
+      "process_stopped": true,
+      "execution_exited": true,
+      "artifacts_independently_hashed": 190,
+      "commands": 46,
+      "native_positives": 3,
+      "native_mutants_rejected": 3,
+      "hardware_tlb_mocked": true
+    }
+  ],
+  "g6": {
+    "task": "codex:G6PREP1",
+    "status": "integrated",
+    "rev": 6,
+    "job": "7b55181e05024fdba45198cdcf4858cd",
+    "tests": 22,
+    "skips": 0,
+    "guest_executed": false,
+    "next_task": "codex:G6DOC1",
+    "next_status": "paused",
+    "next_rev": 2
+  },
+  "remaining_p2": [
+    "调度后多根大页/EXEC/WC安全事务和真实消费者，保持旧启动owner封存契约",
+    "支持PCID+INVPCID环境的AP实际PCIDE1、暖tag/同槽跨代复用、全读者失效与退休证据",
+    "物理显示设备WC吞吐；虚拟机性能不替代"
+  ],
+  "pge_policy": "rejected, no GLOBAL leaves admitted",
+  "source_findings": [
+    "runtime7已接用户SMP入口，普通服务页表变更前后双屏障存在",
+    "user/context.asm和sched/user_arch.asm已有BSP/逐CPU PCID能力门控及失效",
+    "用户PML4[1..511]借用kernel分支，私有slot0须独立审计，不能放行任意foreign PA"
+  ],
+  "new_tasks_not_accepted": [
+    "codex:P2PCID12",
+    "codex:P2ROOT13",
+    "codex:P2WC14"
+  ],
+  "attempt_history": [
+    {
+      "task": "codex:P2ROOT13",
+      "job": "8cc763c5ecd44c13a5f07a0198061954",
+      "outcome": "source_changed_during_snapshot",
+      "tests_executed": false,
+      "source_test_failure": false
+    }
+  ],
+  "os_or_vm_started_this_round": false,
+  "commit_or_push": false
+}

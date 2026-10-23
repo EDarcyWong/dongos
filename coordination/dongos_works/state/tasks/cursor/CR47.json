@@ -16,7 +16,6 @@
     "discover:cursor-works/tests:test_semantic_stack.py"
   ],
   "claim_from_status": "rework",
-  "claim_token": "f4a4cc08957a46f78b2774b992b8668d",
   "claimed_at": "2026-10-20T08:27:37+00:00",
   "claimed_by": "codex-mcp-d76b66689d824a70",
   "completed_at": "2026-10-20T08:28:36+00:00",
@@ -30,14 +29,14 @@
   "historical": false,
   "id": "cursor:CR47",
   "integration_note": "已真实复制candidate semantic_types.dg与semantic_stack.md至主线，源SHA e28128c7...与正式/独审一致。新增主线完整compiler_job run-3383cd152203通过1test0skip406.892s（两个seed模式、两个格式、真实全编译器闭包seed/native有界固定点+坏语义），独立同闭包与kernel ELF验证通过；CR47正式全语义/栈优化比较先前1642.989s零skip通过。已有semantic_types/runtime广泛回归另仍运行，不把未完成测试报作成功。组件真实集成，普通16KiB栈不改变；专用64KiB另由已集成CX7负责。",
-  "legacy_hash": "b82a13eed8d1e9ba81c1c7dd4b52a15a69e85f5352dd1e803bb701cf607b1acb",
+  "legacy_hash": "3d6f0c22fa1233014600493cb6cea32f621488216e9753e4632f97e578122ca9",
   "number": "CR47",
   "owner": "codex",
-  "rev": 14,
+  "rev": 15,
   "review_note": "已审查rt_expr拆分与原语义/发布契约，独立review_stack实际160语义+容量8变体、闭包seed/native栈测量通过（code/build/test/independent-stack/review.md及独立并行审查）；正式46c435复验1测试0skip1642.989秒、双模式双格式、语义/真实坏体及源码稳定通过。仅接受递归帧优化，native峰值37056字节仍超过16KiB，不能宣称guest L3完成；64KiB专用受保护栈另属用户授权CX7。",
   "status": "integrated",
   "title": "[L3] 测量并降低semantic_types递归路径实际栈峰值",
-  "updated_at": "2026-10-22T00:59:07+00:00",
+  "updated_at": "2026-10-22T14:38:34+00:00",
   "verification": {
     "checks": [
       {

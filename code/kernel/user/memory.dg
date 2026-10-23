@@ -8,6 +8,7 @@ import boot.device_memory as devices;
 import mm.paging as paging;
 import mm.paging_errors as paging_errors;
 import mm.phys_buddy as buddy;
+import mm.runtime_roots as runtime_roots;
 import exec.elf as elf;
 import user.abi as abi;
 import boot.service_memory as resources;
@@ -611,6 +612,76 @@ pub unsafe fn unshare_range(id:usize,base:u64,pages:usize)!void{unsafe{
 
 pub fn dma_pinned(id:usize)bool { unsafe { return id>=LIMIT || PINNED[id]; } }
 pub fn generation(id:usize)u64 { unsafe { if id>=LIMIT { return 0; }return GENERATIONS[id]; } }
+
+// Complete memory-owned forest, independent of Catalog READY/admission. An
+// initialized Space is included even if pinned or preloaded but not runnable.
+// The trusted BSP holds BKL and excludes every loader/withdrawal throughout.
+pub struct RootSnapshot{pub count:usize,pub mask:u64,pub roots:[16]runtime_roots.Root,
+ pub ready:[16]u64,pub pinned:[16]u64,pub pool:[16]u64,pub pages:[16]u64}
+unsafe fn root_snapshot_check()!void{unsafe{
+ if KERNEL_PHYSICAL==0||STAGE_ID!=LIMIT||STAGE_FAILED||UNSHARE_FAILED||UNSHARE_ACTIVE
+  ||RESOURCE_FAILED||OBJECT_FAILED{return error.InvalidState;}
+}return;}
+unsafe fn snapshot_slot(id:usize,out:*paging.PoolView)!bool{unsafe{
+ // EMPTY_SPACE is the only absent state. No generation/ready shortcut may
+ // hide an initialized, preloaded or partially damaged Space.
+ match paging.inspect(&SPACES[id],out){ok=>{},err(code)=>{
+  if code!=0x0200_0001||PROCESSES[id].ready!=0||PROCESSES[id].root!=0||PROCESSES[id].frame.cr3!=0{return error.InvalidState;}
+  // EMPTY_SPACE has an all-zero representation. The public inspector rejects
+  // uninitialized objects before inspecting the rest; require that exact empty
+  // object here instead of accepting an uninitialized but damaged descriptor.
+  let raw=(&SPACES[id]) as *const u8;var at:usize=0;
+  while at<sizeof(paging.Space){if *(raw+at)!=0{return error.InvalidState;}at+=1;}
+  return false;
+ },}
+ let pages=pool_pages(id);
+ var physical=DYNAMIC_PHYSICAL[id];let table=table_at(id,0);
+ if uses_static_tables(id){physical=KERNEL_PHYSICAL+(table as u64-KERNEL);}
+ if (pages!=32&&(id!=3||pages!=128))||(*out).count!=pages||(*out).tables!=table
+  ||(*out).metadata!=&META[id][0]||(*out).physical!=physical||physical==0
+  ||(*out).address_mask!=0x0000_ffff_ffff_f000||!(*out).nx
+  ||GENERATIONS[id]==0||PROCESSES[id].ready!=1||PROCESSES[id].root!=physical
+  ||PROCESSES[id].frame.cr3!=physical{return error.InvalidState;}
+ if !uses_static_tables(id)&&(DYNAMIC_TABLES[id]==null||DYNAMIC_PHYSICAL[id]==0){return error.InvalidState;}
+ return true;
+}}
+pub unsafe fn snapshot_roots(out:*RootSnapshot)!void{unsafe{
+ if out==null{return error.InvalidState;}try root_snapshot_check();
+ // Validate all slots before publishing any output, using bounded locals.
+ var id:usize=0;var count:usize=0;var mask:u64=0;
+ while id<LIMIT{var view=paging.PoolView{tables:null,metadata:null,count:0,physical:0,address_mask:0,used:0,nx:false};
+  if try snapshot_slot(id,&view){count+=1;mask|=1<<id as u64;}id+=1;
+ }
+ (*out).count=count;(*out).mask=mask;count=0;id=0;
+ while id<LIMIT{
+  (*out).ready[id]=PROCESSES[id].ready;(*out).pinned[id]=0;if PINNED[id]{(*out).pinned[id]=1;}
+  (*out).pool[id]=0;(*out).pages[id]=pool_pages(id) as u64;
+  (*out).roots[id]=runtime_roots.Root{space:null,identity:0,generation:0};
+  if (mask&(1<<id as u64))!=0{
+   (*out).pool[id]=PROCESSES[id].root;
+   (*out).roots[count]=runtime_roots.Root{space:&SPACES[id],identity:id as u64,generation:GENERATIONS[id]};count+=1;
+  }id+=1;
+ }
+}return;}
+pub unsafe fn recheck_roots(snapshot:*const RootSnapshot)!void{unsafe{
+ if snapshot==null{return error.InvalidState;}try root_snapshot_check();
+ if (*snapshot).count>16{return error.InvalidState;}
+ var id:usize=0;var count:usize=0;var mask:u64=0;
+ while id<LIMIT{var view=paging.PoolView{tables:null,metadata:null,count:0,physical:0,address_mask:0,used:0,nx:false};
+  let present=try snapshot_slot(id,&view);var pinned:u64=0;if PINNED[id]{pinned=1;}
+  if (*snapshot).ready[id]!=PROCESSES[id].ready||(*snapshot).pinned[id]!=pinned
+   ||(*snapshot).pages[id]!=pool_pages(id) as u64{return error.InvalidState;}
+  if present{
+   if count>=(*snapshot).count{return error.InvalidState;}
+   let expected=(*snapshot).roots[count];
+   if expected.space!=&SPACES[id]||expected.identity!=id as u64||expected.generation!=GENERATIONS[id]
+    ||(*snapshot).pool[id]!=PROCESSES[id].root{return error.InvalidState;}
+   count+=1;mask|=1<<id as u64;
+  }else if (*snapshot).pool[id]!=0{return error.InvalidState;}
+  id+=1;
+ }
+ if count!=(*snapshot).count||mask!=(*snapshot).mask{return error.InvalidState;}
+}return;}
 
 // Scan only the private user branch. All present entries there have U/S=1;
 // intermediate-table PAs are disjoint held BSS/arena table allocations and

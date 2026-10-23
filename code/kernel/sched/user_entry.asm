@@ -14,6 +14,8 @@ global user_smp_iret,user_smp_idle,user_smp_fail
 global user_smp_entry_stubs,user_smp_entry_stubs_end
 global user_smp_entry_table,user_smp_entry_table_end
 global user_smp_to_kernel
+global user_smp_exec_register,user_smp_exec_registration,user_smp_exec_callback_bits
+global user_smp_exec_snapshot,user_smp_exec_apply
 section .text
 ; Pure native-testable table construction. Header owns disjoint, mapped buffers
 ; previously validated by user_entry_plan. Caller excludes active descriptors.
@@ -313,6 +315,7 @@ user_smp_irq_common:
     push r15
     mov rax,cr2
     push rax
+    xor r12d,r12d                  ; saved GPR already owns interrupted R12
     ; Paranoid GS selection handles NMI in either SWAPGS window. User GS is
     ; constrained to zero; no untrusted base can resemble the high-half header.
     mov ecx,0xc0000101
@@ -321,6 +324,7 @@ user_smp_irq_common:
     js .kernel_gs
     swapgs
     lfence
+    mov r12d,1                     ; only stable, unexchanged CPL0 may recover
 .kernel_gs:
     mov ecx,0xc0000101
     rdmsr
@@ -358,6 +362,8 @@ user_smp_irq_common:
 .kernel_irq:
     ; Maskable kernel IRQs are legal only in STI/HLT idle, never with BKL held.
     mov r13,[rsp+ExceptionContext.vector]
+    cmp r13,14
+    je .exec_fault
     cmp r13,0x40
     je .idle
     cmp r13,USER_SMP_RESCHEDULE_VECTOR
@@ -386,6 +392,70 @@ user_smp_irq_common:
     test rax,rax
     jnz user_smp_return
     jmp user_smp_idle
+
+.exec_fault:
+    ; Dormant registration leaves exactly the original fail-stop policy.
+    ; Claim on the original stack BEFORE selecting the private callback stack.
+    test r12d,r12d
+    jnz user_smp_fail
+    mov r15,rax                    ; validated current GS header from common
+    mov r12,rsp                    ; immutable original ExceptionContext
+    mov r13,cr3                    ; retain raw tag-bearing root
+    cmp qword [rel user_exec_state],2
+    jne user_smp_fail
+    mov r9,[r15+UserSmpCpu.logical_id]
+    cmp r9,16
+    jae user_smp_fail
+    shl r9,5
+    lea r10,[rel user_exec_slots]
+    add r10,r9
+    cmp r15,[r10]
+    jne user_smp_fail
+    mov rax,[r10+8]
+    add rax,16                     ; aligned CALL must not touch the lower guard
+    jc user_smp_fail
+    cmp r12,rax
+    jb user_smp_fail
+    mov rdi,r15
+    mov rsi,r13
+    mov rdx,r12
+    mov rcx,[rel user_exec_generation]
+    xor r8d,r8d
+    and rsp,-16
+    call user_smp_exec_claim
+    mov rsp,r12
+    test rax,rax
+    jz user_smp_fail
+    mov rsp,rax                    ; registered, disjoint per-CPU exception_top
+    mov rdi,r15
+    mov rsi,r13
+    mov rdx,r12
+    mov rcx,[rel user_exec_generation]
+    call user_smp_exec_invoke
+    mov rsp,r12
+    test rax,rax
+    jz user_smp_fail
+    cmp rax,[rel user_exec_after]
+    jne user_smp_fail
+    ; Only invoke's exact-after gate may have written the saved RIP.
+    add rsp,8                      ; discard CR2 snapshot, never write CR2
+    pop r15
+    pop r14
+    pop r13
+    pop r12
+    pop r11
+    pop r10
+    pop r9
+    pop r8
+    pop rdi
+    pop rsi
+    pop rbp
+    pop rdx
+    pop rcx
+    pop rbx
+    pop rax
+    add rsp,16                     ; vector and hardware error, not SS:RSP
+    iretq                          ; exact original CS/flags/RSP/SS, no SWAPGS
 
 user_smp_captured:
     cld
@@ -465,6 +535,267 @@ user_smp_fail_untrusted:
     hlt
     jmp .halt
 
+; Trusted once-only registration, pure SysV native-testable. No new extern is
+; required by old builds. Only the DG binder validates the typed callback ABI.
+; (callback, probe, after, generation, slots[16][4], online), 0 = registered.
+user_smp_exec_register:
+    test rdi,rdi
+    jz .bad
+    test rsi,rsi
+    jz .bad
+    cmp rdx,rsi
+    jbe .bad
+    test rcx,rcx
+    jz .bad
+    test r8,r8
+    jz .bad
+    test r8,7
+    jnz .bad
+    test r9,1
+    jz .bad
+    mov r10,r9
+    shr r10,16
+    jnz .bad
+    xor eax,eax
+    mov r10d,1
+    lock cmpxchg [rel user_exec_state],r10
+    jnz .bad
+    mov [rel user_exec_callback],rdi
+    mov [rel user_exec_probe],rsi
+    mov [rel user_exec_after],rdx
+    mov [rel user_exec_generation],rcx
+    mov [rel user_exec_online],r9
+    push rsi
+    push rdi
+    mov rsi,r8
+    lea rdi,[rel user_exec_slots]
+    mov ecx,64
+    cld
+    rep movsq
+    pop rdi
+    pop rsi
+    mfence
+    mov qword [rel user_exec_state],2
+    xor eax,eax
+    ret
+.bad:
+    mov eax,1
+    ret
+
+user_smp_exec_callback_bits:
+    mov rax,rdi                    ; actual fn value, never a guessed symbol id
+    ret
+
+; Read-only registration evidence: 0 state, 1 callback, 2 probe, 3 after,
+; 4 generation, 5 online, 16..79 slots, 80..95 per-CPU in-handler guard.
+user_smp_exec_registration:
+    xor eax,eax
+    cmp rdi,6
+    jb .metadata
+    cmp rdi,16
+    jb .done
+    cmp rdi,80
+    jb .slot
+    cmp rdi,96
+    jae .done
+    sub rdi,80
+    lea rax,[rel user_exec_busy]
+    mov rax,[rax+rdi*8]
+    ret
+.slot:
+    sub rdi,16
+    lea rax,[rel user_exec_slots]
+    mov rax,[rax+rdi*8]
+    ret
+.metadata:
+    lea rax,[rel user_exec_state]
+    mov rax,[rax+rdi*8]
+.done:
+    ret
+
+; Privileged snapshot used only by production bind(), NEVER the host oracle.
+user_smp_exec_snapshot:
+    mov r8,rdi
+    mov ecx,0xc0000101
+    rdmsr
+    shl rdx,32
+    or rax,rdx
+    mov [r8+40],rax
+    mov rax,[rax+UserSmpCpu.logical_id]
+    mov [r8],rax
+    mov rax,cr3
+    mov [r8+8],rax
+    mov rax,cr0
+    mov [r8+16],rax
+    mov rax,cr4
+    mov [r8+24],rax
+    pushfq
+    pop rax
+    mov [r8+32],rax
+    ret
+
+; Shared pure gate. r8 = whether common entry exchanged GS; reject otherwise.
+; Returns registered callback-stack top only after acquiring the per-CPU guard.
+; All pointers are backed trusted kernel objects (or backed host oracle data).
+user_smp_exec_claim:
+    test r8,r8
+    jnz .bad
+    cmp qword [rel user_exec_state],2
+    jne .bad
+    cmp rcx,[rel user_exec_generation]
+    jne .bad
+    test rdi,rdi
+    jz .bad
+    test rdi,63
+    jnz .bad
+    test rdx,rdx
+    jz .bad
+    test rdx,7
+    jnz .bad
+    test rsi,rsi
+    jz .bad
+    test rsi,4095
+    jnz .bad
+    xor r9d,r9d
+    lea r10,[rel user_exec_slots]
+.header:
+    cmp rdi,[r10]
+    je .bound
+    add r10,32
+    inc r9
+    cmp r9,16
+    jb .header
+    jmp .bad                       ; unknown pointer is never dereferenced
+.bound:
+    bt [rel user_exec_online],r9
+    jnc .bad
+    cmp [rdi+UserSmpCpu.logical_id],r9
+    jne .bad
+    cmp rsi,[rdi+UserCpu.original_cr3]
+    jne .bad
+    cmp qword [rdi+UserEntryCpu.ready],2
+    jne .bad
+    mov r11,USER_ENTRY_MAGIC
+    cmp [rdi+UserCpu.result],r11
+    jne .bad
+    mov r11,[rdi+UserEntryCpu.stack_bottom]
+    cmp r11,[r10+8]
+    jne .bad
+    mov r11,[rdi+UserCpu.kernel_stack]
+    cmp r11,[r10+16]
+    jne .bad
+    mov r11,[rdi+UserEntryCpu.exception_top]
+    cmp r11,[r10+24]
+    jne .bad
+    test r11,4095
+    jnz .bad
+    cmp r11,16384
+    jb .bad
+    mov r11,[r10+8]
+    add r11,16
+    jc .bad
+    cmp rdx,r11
+    jb .bad
+    mov r11,rdx
+    add r11,ExceptionContext_size
+    jc .bad
+    cmp r11,[r10+16]
+    ja .bad
+    cmp [rdx+ExceptionContext.rsp],r11
+    jb .bad
+    mov r11,[rdx+ExceptionContext.rsp]
+    cmp r11,[r10+16]
+    ja .bad
+    cmp qword [rdx+ExceptionContext.vector],14
+    jne .bad
+    cmp qword [rdx+ExceptionContext.error],3
+    jne .bad
+    cmp qword [rdx+ExceptionContext.cs],CPU_KERNEL_CODE_SELECTOR
+    jne .bad
+    test qword [rdx+ExceptionContext.rflags],512
+    jnz .bad
+    mov r11,[rel user_exec_probe]
+    cmp [rdx+ExceptionContext.rip],r11
+    jne .bad
+    mov r11,0xffffa90000002000      ; owned WRITE_ALIAS, not an arbitrary fault
+    cmp [rdx+ExceptionContext.cr2],r11
+    jne .bad
+    lea r11,[rel user_exec_busy]
+    xor eax,eax
+    mov r8d,1
+    lock cmpxchg [r11+r9*8],r8
+    jnz .bad
+    mov rax,[r10+24]
+    ret
+.bad:
+    xor eax,eax
+    ret
+
+; Shared callback/commit, after claim. Preserves all callee-saved registers.
+; Callback is immutable after trusted registration and receives const raw.
+user_smp_exec_invoke:
+    push rbx
+    push r12
+    push r13
+    push r14
+    push r15
+    mov r12,rdi
+    mov r13,rsi
+    mov r14,rdx
+    mov r15,rcx
+    mov rbx,[rdi+UserSmpCpu.logical_id]
+    call [rel user_exec_callback]
+    mov r13,rax
+    lea r11,[rel user_exec_busy]
+    mov qword [r11+rbx*8],0
+    test r13,r13
+    jz .bad
+    cmp r13,[rel user_exec_after]
+    jne .bad
+    mov rax,[rel user_exec_probe]
+    cmp [r14+ExceptionContext.rip],rax
+    jne .bad
+    mov [r14+ExceptionContext.rip],r13 ; the only saved-frame write
+    mov rax,r13
+    jmp .done
+.bad:
+    xor eax,eax
+.done:
+    pop r15
+    pop r14
+    pop r13
+    pop r12
+    pop rbx
+    ret
+
+; Pure host-safe analogue of the guarded callback/commit. It shares the exact
+; gate and commit; it never executes RDMSR/CR/IRET or selects the exception stack.
+user_smp_exec_apply:
+    push r12
+    push r13
+    push r14
+    push r15
+    sub rsp,8
+    mov r12,rdi
+    mov r13,rsi
+    mov r14,rdx
+    mov r15,rcx
+    call user_smp_exec_claim
+    test rax,rax
+    jz .done
+    mov rdi,r12
+    mov rsi,r13
+    mov rdx,r14
+    mov rcx,r15
+    call user_smp_exec_invoke
+.done:
+    add rsp,8
+    pop r15
+    pop r14
+    pop r13
+    pop r12
+    ret
+
 align 16
 user_smp_entry_stubs:
 %assign V 0
@@ -494,3 +825,14 @@ user_smp_entry_table_end:
 %if __NASM_MAJOR__ >= 3
 [warning pop]
 %endif
+
+section .bss align=64
+user_exec_state: resq 1
+user_exec_callback: resq 1
+user_exec_probe: resq 1
+user_exec_after: resq 1
+user_exec_generation: resq 1
+user_exec_online: resq 1
+resb 16
+user_exec_slots: resq 64
+user_exec_busy: resq 16

@@ -239,3 +239,27 @@ pub unsafe fn free_pages(state: *const Allocator) !usize {
     if !is_initialized(state) { return error.errors.NotInitialized; }
     unsafe { return (*state).free_total; }
 }
+
+// Read-only proof of one exact currently allocated block. A successful head
+// alone is insufficient: every tail must still be a canonical allocated tail.
+// Caller retains the allocator lock/lifetime; this neither leases nor frees it.
+pub unsafe fn allocated_block(state:*const Allocator,address:u64,order:usize)!void{unsafe{
+    if state==null||(state as u64&7)!=0||state as u64>U64_MAX-sizeof(Allocator) as u64{return error.errors.InvalidFree;}
+    if (*state).initialized!=1||order>MAX_ORDER{return error.errors.InvalidFree;}
+    let count=(*state).page_count;let base=(*state).base;
+    if count==0||count>(1<<20)||(count&(count-1))!=0||(*state).metadata==null
+        ||((*state).metadata as u64&7)!=0||(*state).metadata as u64>U64_MAX-count as u64*sizeof(PageMeta) as u64
+        ||(*state).free_total>count||base>U64_MAX-(count as u64)*4096
+        ||(base&((count as u64)*4096-1))!=0||address<base{return error.errors.InvalidFree;}
+    let offset=address-base;let pages:usize=1<<order;
+    if (offset&4095)!=0{return error.errors.InvalidFree;}
+    let first=(offset/4096) as usize;
+    if first>=count||(first&(pages-1))!=0||pages>count-first{return error.errors.InvalidFree;}
+    let head=(*state).metadata+first;
+    if (*head).state!=2||(*head).order!=order as u8||(*head).next!=LIST_END{return error.errors.InvalidFree;}
+    var index:usize=1;while index<pages{
+        let tail=head+index;
+        if (*tail).state!=3||(*tail).order!=0||(*tail).next!=LIST_END{return error.errors.InvalidFree;}
+        index+=1;
+    }
+}return;}

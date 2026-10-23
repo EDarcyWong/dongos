@@ -1,0 +1,75 @@
+{
+  "assignment_owner": "codex",
+  "auto_dispatch": false,
+  "auto_verify": false,
+  "candidate": null,
+  "checks": [
+    "module:tests.test_user_shared_flush"
+  ],
+  "claim_from_status": "rework",
+  "claimed_at": "2026-10-22T19:00:12+00:00",
+  "claimed_by": "codex-mcp-daece153b59c4bd5",
+  "completed_at": "2026-10-22T19:04:10+00:00",
+  "complexity": "standard",
+  "created_at": "2026-10-22T18:51:45+00:00",
+  "delivery": "codex-works/deliveries/P2SYNC15.md",
+  "depends_on": [
+    "codex:P2FLUSH11"
+  ],
+  "description": "用户明确先完成P2、P2完成后P5。只同步P2最新源码/协调器与既有证据，修正PLAN、P2核心/扩展/alias文档中已失真的PCID未实现或EXEC/WC消费者尚候选等段落，保留历史明确日期。P2FLUSH11已独立正式3tests/0skip并本地integrated6；P2PCID12/P2ROOT13/P2WC14仍在实现或待复验，不能提前算完成。P2整体partial真实差集：调度后多根大页/EXEC/WC安全owner/消费者与支持环境AP PCIDE1、WC物理性能，PGE当前拒绝。普通map/unmap/退休双屏障与每CPU tag实现已存在，勿重做。G5已集成、G6PREP1宿主正式22tests已integrated6，G6DOC1按用户优先级paused2，无新guest证据。新增本轮审查/进度md/json，协调角色依据最新MCP另同步工作区progress-map/roadmap/ALLOCATION文档，不碰库/index。独立入口复验及实际文字/链接/事实复核后验收集成。全程不OS/VM/AI CLI/commit/push，P5此时只登记后续顺序不开始实现。",
+  "document": "codex-works/tasks/P2SYNC15-board.md",
+  "historical": false,
+  "id": "codex:P2SYNC15",
+  "integration_note": "已在真实本地主线工作树核对五份源文档及两份检查点，非候选副本；协调器入口新指纹覆盖当前PLAN返修字节，工作区progress-map/roadmap/ALLOCATION已实际同步。登记本地集成，未commit/push，不把P2整体partial改为完成。",
+  "legacy_hash": "63467c5a97da0f1fe1a4cb64cc3733e46eb9f55df37102ae4117b373acfefe11",
+  "number": "P2SYNC15",
+  "owner": "codex",
+  "rev": 10,
+  "review_note": "已实际逐段审查5份文档、检查点MD/JSON及工作区进度同步；PLAN返修准确区分P2EXEC1/P2WC1/P2ALIAS8已集成的启动消费者与调度后多根/AP PCID/物理WC余项，P2保持partial，P2后P5顺序明确。5条检查点链接全存在、JSON可解析，历史02:55状态不冒充实时。新正式7194b75aff094bb38a43d363664ee79e入口1test/0skip、rc0，4.625秒，source_stable/process_stopped/execution_exited=true；旧82b7记录保留不替代新字节。无OS/VM或提交推送。",
+  "status": "integrated",
+  "title": "P2当前源码进度校准与P2后P5执行顺序登记",
+  "updated_at": "2026-10-22T19:05:52+00:00",
+  "verification": {
+    "checks": [
+      {
+        "cancelled": false,
+        "elapsed_seconds": 4.625,
+        "execution_exited": true,
+        "passed": true,
+        "process_stopped": true,
+        "returncode": 0,
+        "skips": 0,
+        "spec": "module:tests.test_user_shared_flush",
+        "tests": 1,
+        "timed_out": false
+      }
+    ],
+    "execution_exited": true,
+    "fingerprint": {
+      "PLAN.md": "802a41a510f026a2ae1944410531507d4012e0739e60c4430315f479815fa7b8",
+      "codex-works/deliveries/P2SYNC15.md": "5dc6f0fd2dfb2736c6dc71e15515531f0476e43aed7ba9718ec3b00c1a60a1ba",
+      "codex-works/reviews/2026-10-23-P2-current.json": "7fbecbb137f28848da865cb49c791bd2a7db5697bdeb722b69ee48066c09f4b6",
+      "codex-works/reviews/2026-10-23-P2-current.md": "d24f2884f42f38f99a865967bf5d9c74a80c535e133f29158c1d91713ddc9ffa",
+      "docs/p2-acceptance.md": "082c55bf187c43cc6a41dc01347e7e834d3828a121487bb292a627a1b9d8cb25",
+      "docs/p2-alias-consumers.md": "6217855aa48825b1b2c9df0d3c30627b7412ab43cedc6ed2fe7305ee66d0d135",
+      "docs/p2-extensions.md": "00d8166c5998e2d05c0b50e2e5e88e8ab10a0e51678792066b2056851c6f658d",
+      "docs/remaining-plan.md": "f6b23aaccad4ff927e24abaf7cc1d105c1cdc9a91ed1955b9c29d3ca59e14b0d"
+    },
+    "finished_at": "2026-10-22T19:05:05+00:00",
+    "job": "7194b75aff094bb38a43d363664ee79e",
+    "passed": true,
+    "process_stopped": true,
+    "source_stable": true,
+    "summary": "定向复验通过，等待源码/契约审查"
+  },
+  "write_paths": [
+    "PLAN.md",
+    "docs/p2-acceptance.md",
+    "docs/p2-extensions.md",
+    "docs/p2-alias-consumers.md",
+    "docs/remaining-plan.md",
+    "codex-works/reviews/2026-10-23-P2-current.md",
+    "codex-works/reviews/2026-10-23-P2-current.json",
+    "codex-works/deliveries/P2SYNC15.md"
+  ]
+}

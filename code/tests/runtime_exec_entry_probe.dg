@@ -1,0 +1,275 @@
+// Host bridge only. Privileged bind/entry paths are never invoked here.
+module runtime_exec_entry_probe;
+import sched.runtime_exec_entry as e;
+import mm.runtime_exec as r;
+import mm.runtime_roots as forest;
+import sched.user_domain as ud;
+import mm.paging as pg;
+import mm.phys_buddy as buddy;
+export("ree_size") fn size(which:u64)u64{
+ if which==0{return sizeof(e.Raw) as u64;}
+ if which==1{return sizeof(e.Header) as u64;}
+ if which==2{return sizeof(e.Snapshot) as u64;}
+ if which==3{return sizeof(r.Context) as u64;}
+ if which==4{return sizeof(r.ReaderReport) as u64;}
+ if which==5{return sizeof(forest.Root) as u64;}
+ if which==6{return sizeof(r.Report) as u64;}
+ if which==7{return sizeof(ud.Cpu) as u64;}
+ if which==8{return sizeof(ud.Domain) as u64;}
+ if which==9{return sizeof(r.FaultTicket) as u64;}
+ if which==10{return sizeof(e.RawTrace) as u64;}
+ if which==11{return sizeof(pg.Space) as u64;}
+ if which==12{return sizeof(buddy.Allocator) as u64;}
+ return 0;
+}
+// Compute offsets using the actual Dong types; C independently declares every layout.
+export("ree_layout") fn layout(address:u64,which:u64,index:u64)u64{unsafe{
+ if which==0{let p=address as *e.Raw;
+  if index==0{return (&(*p).cr2 as u64)-address;}
+  if index==1{return (&(*p).r15 as u64)-address;}
+  if index==2{return (&(*p).r14 as u64)-address;}
+  if index==3{return (&(*p).r13 as u64)-address;}
+  if index==4{return (&(*p).r12 as u64)-address;}
+  if index==5{return (&(*p).r11 as u64)-address;}
+  if index==6{return (&(*p).r10 as u64)-address;}
+  if index==7{return (&(*p).r9 as u64)-address;}
+  if index==8{return (&(*p).r8 as u64)-address;}
+  if index==9{return (&(*p).rdi as u64)-address;}
+  if index==10{return (&(*p).rsi as u64)-address;}
+  if index==11{return (&(*p).rbp as u64)-address;}
+  if index==12{return (&(*p).rdx as u64)-address;}
+  if index==13{return (&(*p).rcx as u64)-address;}
+  if index==14{return (&(*p).rbx as u64)-address;}
+  if index==15{return (&(*p).rax as u64)-address;}
+  if index==16{return (&(*p).vector as u64)-address;}
+  if index==17{return (&(*p).error_code as u64)-address;}
+  if index==18{return (&(*p).rip as u64)-address;}
+  if index==19{return (&(*p).cs as u64)-address;}
+  if index==20{return (&(*p).rflags as u64)-address;}
+  if index==21{return (&(*p).rsp as u64)-address;}
+  if index==22{return (&(*p).ss as u64)-address;}
+ }
+ if which==1{let p=address as *e.Header;
+  if index==0{return (&(*p).kernel_stack as u64)-address;}
+  if index==1{return (&(*p).user_stack as u64)-address;}
+  if index==2{return (&(*p).continuation as u64)-address;}
+  if index==3{return (&(*p).root_frame as u64)-address;}
+  if index==4{return (&(*p).original_cr3 as u64)-address;}
+  if index==5{return (&(*p).syscalls as u64)-address;}
+  if index==6{return (&(*p).busy as u64)-address;}
+  if index==7{return (&(*p).result as u64)-address;}
+  if index==8{return (&(*p).smp as u64)-address;}
+  if index==9{return (&(*p).domain as u64)-address;}
+  if index==10{return (&(*p).logical_id as u64)-address;}
+  if index==11{return (&(*p).contexts as u64)-address;}
+  if index==12{return (&(*p).context_count as u64)-address;}
+  if index==13{return (&(*p).pcid_enabled as u64)-address;}
+  if index==14{return (&(*p).gdt as u64)-address;}
+  if index==15{return (&(*p).tss as u64)-address;}
+  if index==16{return (&(*p).idt as u64)-address;}
+  if index==17{return (&(*p).stack_bottom as u64)-address;}
+  if index==18{return (&(*p).df_top as u64)-address;}
+  if index==19{return (&(*p).nmi_top as u64)-address;}
+  if index==20{return (&(*p).exception_top as u64)-address;}
+  if index==21{return (&(*p).kernel_xstate as u64)-address;}
+  if index==22{return (&(*p).capture as u64)-address;}
+  if index==23{return (&(*p).returned as u64)-address;}
+  if index==24{return (&(*p).return_xstate as u64)-address;}
+  if index==25{return (&(*p).ready as u64)-address;}
+  if index==26{return (&(*p).last_error as u64)-address;}
+  if index==27{return (&(*p).event as u64)-address;}
+  if index==28{return (&(*p).raw_frame as u64)-address;}
+  if index==29{return (&(*p).deadline_ticks as u64)-address;}
+  if index==30{return (&(*p).tsc_hz as u64)-address;}
+  if index==31{return (&(*p).timer_hz as u64)-address;}
+ }
+ if which==2{let p=address as *e.Snapshot;
+  if index==0{return (&(*p).cpu as u64)-address;}
+  if index==1{return (&(*p).root as u64)-address;}
+  if index==2{return (&(*p).cr0 as u64)-address;}
+  if index==3{return (&(*p).cr4 as u64)-address;}
+  if index==4{return (&(*p).rflags as u64)-address;}
+  if index==5{return (&(*p).header as u64)-address;}
+ }
+ if which==3{let p=address as *r.Context;
+  if index==0{return (&(*p).report as u64)-address;}
+  if index==1{return (&(*p).domain as u64)-address;}
+  if index==2{return (&(*p).space as u64)-address;}
+  if index==3{return (&(*p).allocator as u64)-address;}
+  if index==4{return (&(*p).cookie as u64)-address;}
+  if index==5{return (&(*p).check as u64)-address;}
+  if index==6{return (&(*p).hardware as u64)-address;}
+  if index==7{return (&(*p).action as u64)-address;}
+  if index==8{return (&(*p).deadline as u64)-address;}
+  if index==9{return (&(*p).ready as u64)-address;}
+  if index==10{return (&(*p).busy as u64)-address;}
+  if index==11{return (&(*p).payload as u64)-address;}
+  if index==12{return (&(*p).probe_rip as u64)-address;}
+  if index==13{return (&(*p).probe_after as u64)-address;}
+  if index==14{return (&(*p).anchor_a as u64)-address;}
+  if index==15{return (&(*p).anchor_b as u64)-address;}
+  if index==16{return (&(*p).anchor_pt as u64)-address;}
+  if index==17{return (&(*p).roots as u64)-address;}
+  if index==18{return (&(*p).readers as u64)-address;}
+ }
+ if which==4{let p=address as *r.ReaderReport;
+  if index==0{return (&(*p).request as u64)-address;}
+  if index==1{return (&(*p).acknowledged as u64)-address;}
+  if index==2{return (&(*p).command as u64)-address;}
+  if index==3{return (&(*p).virtual as u64)-address;}
+  if index==4{return (&(*p).expected as u64)-address;}
+  if index==5{return (&(*p).count as u64)-address;}
+  if index==6{return (&(*p).ticket as u64)-address;}
+  if index==7{return (&(*p).sample as u64)-address;}
+  if index==8{return (&(*p).called42 as u64)-address;}
+  if index==9{return (&(*p).called43 as u64)-address;}
+  if index==10{return (&(*p).denied42 as u64)-address;}
+  if index==11{return (&(*p).denied43 as u64)-address;}
+  if index==12{return (&(*p).serialized as u64)-address;}
+  if index==13{return (&(*p).serialized_sequence as u64)-address;}
+ }
+ if which==5{let p=address as *forest.Root;
+  if index==0{return (&(*p).space as u64)-address;}
+  if index==1{return (&(*p).identity as u64)-address;}
+  if index==2{return (&(*p).generation as u64)-address;}
+ }
+ if which==6{let p=address as *r.Report;
+  if index==0{return (&(*p).version as u64)-address;}
+  if index==1{return (&(*p).attempted as u64)-address;}
+  if index==2{return (&(*p).complete as u64)-address;}
+  if index==3{return (&(*p).poison as u64)-address;}
+  if index==4{return (&(*p).error_code as u64)-address;}
+  if index==5{return (&(*p).phase as u64)-address;}
+  if index==6{return (&(*p).state as u64)-address;}
+  if index==7{return (&(*p).root as u64)-address;}
+  if index==8{return (&(*p).physical as u64)-address;}
+  if index==9{return (&(*p).online as u64)-address;}
+  if index==10{return (&(*p).root_count as u64)-address;}
+  if index==11{return (&(*p).barriers as u64)-address;}
+  if index==12{return (&(*p).sequence as u64)-address;}
+  if index==13{return (&(*p).action_sequence as u64)-address;}
+  if index==14{return (&(*p).command as u64)-address;}
+  if index==15{return (&(*p).expected as u64)-address;}
+  if index==16{return (&(*p).ack_mask as u64)-address;}
+  if index==17{return (&(*p).held as u64)-address;}
+  if index==18{return (&(*p).unmapped as u64)-address;}
+  if index==19{return (&(*p).receipts_consumed as u64)-address;}
+  if index==20{return (&(*p).tables_before as u64)-address;}
+  if index==21{return (&(*p).tables_after as u64)-address;}
+  if index==22{return (&(*p).aliases as u64)-address;}
+  if index==23{return (&(*p).readers_pointer as u64)-address;}
+  if index==24{return (&(*p).roots_pointer as u64)-address;}
+ }
+ if which==7{let p=address as *ud.Cpu;
+  if index==0{return (&(*p).mode as u64)-address;}
+  if index==1{return (&(*p).token as u64)-address;}
+  if index==2{return (&(*p).incarnation as u64)-address;}
+  if index==3{return (&(*p).slot as u64)-address;}
+  if index==4{return (&(*p).captured_token as u64)-address;}
+  if index==5{return (&(*p).captured_incarnation as u64)-address;}
+  if index==6{return (&(*p).captured as u64)-address;}
+  if index==7{return (&(*p).requested as u64)-address;}
+  if index==8{return (&(*p).acknowledged as u64)-address;}
+  if index==9{return (&(*p).capture as u64)-address;}
+  if index==10{return (&(*p).capture_xstate as u64)-address;}
+  if index==11{return (&(*p).returned as u64)-address;}
+  if index==12{return (&(*p).return_xstate as u64)-address;}
+  if index==13{return (&(*p).return_root as u64)-address;}
+  if index==14{return (&(*p).seen as u64)-address;}
+ }
+ if which==8{let p=address as *ud.Domain;
+  if index==0{return (&(*p).ready as u64)-address;}
+  if index==1{return (&(*p).failed as u64)-address;}
+  if index==2{return (&(*p).lock as u64)-address;}
+  if index==3{return (&(*p).owner as u64)-address;}
+  if index==4{return (&(*p).online as u64)-address;}
+  if index==5{return (&(*p).sequence as u64)-address;}
+  if index==6{return (&(*p).barrier as u64)-address;}
+  if index==7{return (&(*p).expected as u64)-address;}
+  if index==8{return (&(*p).completed as u64)-address;}
+  if index==9{return (&(*p).kernel_root as u64)-address;}
+  if index==10{return (&(*p).engine as u64)-address;}
+  if index==11{return (&(*p).cpus as u64)-address;}
+  if index==12{return (&(*p).processes as u64)-address;}
+  if index==13{return (&(*p).arena as u64)-address;}
+  if index==14{return (&(*p).bytes as u64)-address;}
+ }
+ if which==9{let p=address as *r.FaultTicket;
+  if index==0{return (&(*p).armed as u64)-address;}
+  if index==1{return (&(*p).consumed as u64)-address;}
+  if index==2{return (&(*p).cpu as u64)-address;}
+  if index==3{return (&(*p).sequence as u64)-address;}
+  if index==4{return (&(*p).root as u64)-address;}
+  if index==5{return (&(*p).virtual as u64)-address;}
+  if index==6{return (&(*p).rip as u64)-address;}
+  if index==7{return (&(*p).after as u64)-address;}
+ }
+ if which==10{let p=address as *e.RawTrace;
+  if index==0{return (&(*p).version as u64)-address;}
+  if index==1{return (&(*p).commit as u64)-address;}
+  if index==2{return (&(*p).cpu as u64)-address;}
+  if index==3{return (&(*p).payload as u64)-address;}
+  if index==4{return (&(*p).header as u64)-address;}
+  if index==5{return (&(*p).root as u64)-address;}
+  if index==6{return (&(*p).generation as u64)-address;}
+  if index==7{return (&(*p).frame as u64)-address;}
+  if index==8{return (&(*p).stack_bottom as u64)-address;}
+  if index==9{return (&(*p).stack_top as u64)-address;}
+  if index==10{return (&(*p).context as u64)-address;}
+  if index==11{return (&(*p).domain as u64)-address;}
+  if index==12{return (&(*p).reader as u64)-address;}
+  if index==13{return (&(*p).request as u64)-address;}
+  if index==14{return (&(*p).acknowledged as u64)-address;}
+  if index==15{return (&(*p).action_sequence as u64)-address;}
+  if index==16{return (&(*p).command as u64)-address;}
+  if index==17{return (&(*p).virtual as u64)-address;}
+  if index==18{return (&(*p).expected as u64)-address;}
+  if index==19{return (&(*p).after as u64)-address;}
+  if index==20{return (&(*p).raw as u64)-address;}
+  if index==21{return (&(*p).ticket_before as u64)-address;}
+  if index==22{return (&(*p).ticket_after as u64)-address;}
+  if index==23{return (&(*p).reserved[0] as u64)-address;}
+ }
+ return 0xffff_ffff_ffff_ffff;
+}}
+export("ree_pointer") fn pointer(c:*r.Context,which:u64)u64{unsafe{
+ if which==0{return &(*c).report as u64;}
+ if which==1{return &(*c).readers[0] as u64;}
+ return &(*c).roots[0] as u64;
+}}
+export("ree_prepare") fn prepare(c:*r.Context,d:*ud.Domain,probe:u64,after:u64)void{unsafe{
+ (*c).domain=d;(*c).ready=1;(*c).busy=0;
+ (*c).report.version=1;(*c).report.root=(*d).kernel_root;
+ (*c).report.online=(*d).online;(*c).report.root_count=2;
+ (*c).report.readers_pointer=&(*c).readers[0] as u64;
+ (*c).report.roots_pointer=&(*c).roots[0] as u64;
+ (*c).probe_rip=probe;(*c).probe_after=after;
+}return;}
+export("ree_bind") fn bind(c:*r.Context,d:*ud.Domain,headers:**e.Header,count:usize,
+ generation:u64,callback:e.Callback,snapshot:*const e.Snapshot)u64{unsafe{
+ match e.bind_snapshot(c,d,slice_from_raw_parts(headers,count),generation,callback,snapshot){
+  ok=>{return 0;},err(code)=>{return code;},
+ }
+}}
+export("ree_dispatch") fn dispatch(header:*e.Header,root:u64,raw:*const e.Raw,generation:u64)u64{unsafe{
+ return e.dispatch(header,root,raw,generation);
+}}
+export("ree_callback") fn callback()u64{unsafe{
+ let value:e.Callback=e.dispatch;return read_unaligned((&value) as *const u64);
+}}
+export("ree_trace_bind") fn trace_bind(c:*r.Context,records:*e.RawTrace,count:usize,base:u64,bytes:u64,headers:**e.Header,header_count:usize)u64{unsafe{
+ match e.bind_trace(c,slice_from_raw_parts(records,count),base,bytes,slice_from_raw_parts(headers,header_count)){
+  ok=>{return 0;},err(code)=>{return code;},
+ }
+}}
+// These are explicit synthetic admission boundaries, not a substitute for a
+// production re.bind or an allocator's actual allocation/provenance receipt.
+export("ree_trace_prepare") fn trace_prepare(c:*r.Context,space:*pg.Space,allocator:*const buddy.Allocator)void{unsafe{
+ (*c).space=space;(*c).allocator=allocator;
+}return;}
+export("ree_pool") fn pool(space:*pg.Space,tables:*pg.Table,metadata:*u8,count:usize,physical:u64)u64{unsafe{
+ match pg.init(space,slice_from_raw_parts(tables,count),physical,slice_from_raw_parts(metadata,count),48,true){
+  ok=>{return 0;},err(code)=>{return code;},
+ }
+}}
+

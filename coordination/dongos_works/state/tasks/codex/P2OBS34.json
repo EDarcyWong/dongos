@@ -1,0 +1,80 @@
+{
+  "assignment_owner": "codex",
+  "auto_dispatch": false,
+  "auto_verify": false,
+  "candidate": null,
+  "checks": [
+    "module:tests.test_p2_bulk_capture",
+    "module:tests.test_p2_pcid"
+  ],
+  "claim_from_status": "todo",
+  "claimed_at": "2026-10-22T22:59:14+00:00",
+  "claimed_by": "codex-mcp-daece153b59c4bd5",
+  "completed_at": "2026-10-22T23:18:01+00:00",
+  "complexity": "standard",
+  "created_at": "2026-10-22T22:59:13+00:00",
+  "delivery": "codex-works/deliveries/P2OBS34.md",
+  "depends_on": [],
+  "description": "先P2后P5。OBS32已独立29 integrated6，严格bulk/epoch来源成立；但actual-normal-r1首ps失败，resume-diagnostic-r3实际before Failure0，显式resume后原Timeout/Held发布，3.921s暂停对应原1s deadline越期，保留原failed/脚本归档。只优化暂停host IO，不改guest TSC/内存/寄存器/clock/absolute deadline/ACK/功能门。EpochRegistry普通slice/register-source immutable bytes先入私有pending队列，cont/query真实成功后或owned QEMU退出后才materialize文件；live Archive仍读可信同epoch内存，不额外pmemsave/运行中补读/跨epoch/假stopped/auto-cont/Path monkeypatch。所有file/length/SHA/epoch/bulk_id/offset引用、6实际paused bulk、原始CRLF/HMP/metadata/serial prefix与完整stop→cont计账原样；可保少量caller alias write_bytes与小index即时写。记录实际queued/materialized时间和阶段，不假装文件在暂停时已存在。最终所有文件真实落盘后重新完整freshhash/切片==parent/时序/字节核验；重复flush不得覆盖已落盘后被篡改文件以掩盖篡改；cache/mtime不能替代最终验证。Guest.resume只在真实cont确认后flush；denied/cont异常不提前flush，close退出后flush+save+最终校验，主错误保留。保持10s明显干扰拒绝预算，lazy只性能改进，不能宣称stop握手/期限扰动已解决；先实测，若仍越期不得放宽门，另设计连续UART+resident原始trace profile。新增production API宿主控制500slice暂停期零切片文件写、cont前后真实顺序/时间、退出materialize、重复flush晚期篡改仍拒、failedcont/deniedresume不提前写；原29与所有严格负控保留。五授权文件，不修改B runner。执行者不编译测试VM/提交推送/状态验收。协调器先两模块独立，另做B HostOracle19兼容实测。",
+  "document": "codex-works/tasks/P2OBS34-board.md",
+  "historical": false,
+  "id": "codex:P2OBS34",
+  "integration_note": "五真实文件已在code及codex-works主目录，root对照正式36回执5fp完全一致。仅登记v2延后落盘证据组件集成，实际normal-r4仍failed/暂停4688ms/首ps timeout，B和P2仍partial；后继修显式historical capture审计，不放宽原期限。",
+  "legacy_hash": "f33c754794c9b8de2cc47a5aed199ef354d0b73ae324029ae16050a7c2f7a900",
+  "number": "P2OBS34",
+  "owner": "codex",
+  "rev": 6,
+  "review_note": "仅验收延后落盘/证据组件：root逐读5源码/契约/17production宿主控制，主目录57零skip预检；正式afc75c10...独立17+19=36零skip/stable/stopped/exited真，5主目录fp匹配。新795 sourcegraph真实normal/omit构建及1108/1108/286链已独立复核。实际normal-r4输入不变/cleanup0/final_disk_verified真，root另独立核6bulk+424slice长度/SHA/父bytes及真实cont后batch；v2队列/xb/重复flush/late tamper/多epoch时序成立。严格保留实际运行failed：首ps UTF8 UART timeout，首次stop确认0ms、bulk235ms、host审计4453ms、总暂停4688ms，落盘424文件在cont后250ms。组件门成立不代表期限扰动已解决，更不验收B/AP/PCID/P2；需后续显式历史image将重审计移出暂停，不调原clock/deadline/ACK。R4 result SHA a034554b0f18da17970df8a2cdde65ad28a0540d58d68955ccf77035a84f72e2，原失败完整保留。",
+  "status": "integrated",
+  "title": "P2暂停期切片延后落盘与原期限扰动性能修正",
+  "updated_at": "2026-10-22T23:47:52+00:00",
+  "verification": {
+    "checks": [
+      {
+        "cancelled": false,
+        "elapsed_seconds": 7.422,
+        "execution_exited": true,
+        "passed": true,
+        "process_stopped": true,
+        "returncode": 0,
+        "skips": 0,
+        "spec": "module:tests.test_p2_bulk_capture",
+        "tests": 17,
+        "timed_out": false
+      },
+      {
+        "cancelled": false,
+        "elapsed_seconds": 0.61,
+        "execution_exited": true,
+        "passed": true,
+        "process_stopped": true,
+        "returncode": 0,
+        "skips": 0,
+        "spec": "module:tests.test_p2_pcid",
+        "tests": 19,
+        "timed_out": false
+      }
+    ],
+    "execution_exited": true,
+    "fingerprint": {
+      "codex-works/deliveries/P2OBS34.md": "fb812d2bccc23d0e722fd6e3d0e799d977a28ed75073aac70d79181cb00ecf92",
+      "docs/p2-observer-capture.md": "a6f535196c5bfd317653298388765dfb4c103f8e761bf726d5b6adf6350332e6",
+      "tests/p2_bulk_capture.py": "75abd60e47f31dccc68f7e9abd4494810ae0f4a30f5c907b57101b4339f039e3",
+      "tests/run_p2_pcid_qemu.py": "523cbf792a76477291325e1753279ad2a8fb27610a22dc56d1796a77983d5132",
+      "tests/test_p2_bulk_capture.py": "784eecbb3ca772f422c9b374f2a910f41b7b165fec30bf31dbf494bbb5a43a03"
+    },
+    "finished_at": "2026-10-22T23:18:37+00:00",
+    "job": "afc75c10c58e4ca7aca83b82ce71b217",
+    "passed": true,
+    "process_stopped": true,
+    "source_stable": true,
+    "summary": "定向复验通过，等待源码/契约审查"
+  },
+  "write_paths": [
+    "tests/run_p2_pcid_qemu.py",
+    "tests/p2_bulk_capture.py",
+    "tests/test_p2_bulk_capture.py",
+    "docs/p2-observer-capture.md",
+    "codex-works/deliveries/P2OBS34.md"
+  ]
+}

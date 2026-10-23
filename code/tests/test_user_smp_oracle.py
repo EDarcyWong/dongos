@@ -75,6 +75,7 @@ class Tests(unittest.TestCase):
   with mock.patch.object(module,'identity',return_value={'explicit':'test-only'}),mock.patch.object(module,'UserGuest',side_effect=AssertionError('unexpected VM')),mock.patch.object(sys,'argv',['runner','--reuse-esp',str(ROOT/'build/test/not-a-real-esp')]):self.assertEqual(0,module.main())
  def test_completed_test_build_binds_candidate_and_workload_sources(self):
   module=runner()
+  (ROOT/'build/test').mkdir(parents=True,exist_ok=True)
   with tempfile.TemporaryDirectory(prefix='p6-source-',dir=ROOT/'build/test')as temporary:
    base=Path(temporary)/'candidate';out=Path(temporary)/'out';esp=out/'esp';esp.mkdir(parents=True)
    for tree in('kernel','tools','include','services'):(base/tree).mkdir(parents=True)

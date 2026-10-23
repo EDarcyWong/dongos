@@ -6,6 +6,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from tools import build as builder
 from tools.make_fat32_disk import create
 from tools.elf_symbols import read_elf_symbols
+from tools.kernel_storage_profile import verify_profile
 from tests import run_acpi_qemu as acpi, run_services_qemu as storage
 from tests import desktop_preferences_oracle as oracle
 
@@ -20,6 +21,17 @@ def check(condition, message):
     if not condition: raise ValueError(message)
 def rect(state, i): return struct.unpack_from('<4q', state, i*144+40)
 def theme_bytes(colors, scale): return struct.pack('<9I4x4Q', *colors, 7, 8, scale, 140)
+
+def storage_profile(esp):
+    """Read the exact profile from real input sources, never infer it from roots."""
+    output = Path(esp).resolve().parent
+    manifest = json.loads((output / 'build-inputs.json').read_text(encoding='utf-8'))
+    # Explicit build helpers place their reviewed source copy beside image/.
+    # Ordinary build.py uses this module's current repository source root.
+    staged = output.parent / 'source'
+    source_root = staged if output.name == 'image' and staged.is_dir() else ROOT
+    count = verify_profile(output, manifest, source_root=source_root)
+    return count, manifest['runtime_level']
 
 class Guest:
     """Only QMP input and read-only physical inspection; never patches guest RAM."""
@@ -63,19 +75,22 @@ class Guest:
             self.qmp.request('cont')
             for marker in (b'DONGOS_P7_DESKTOP_READY',b'DONGOS_INPUT_VIRTIO_TABLET_READY',b'DONGOS_P7_AVX_CONTEXT_READY'):self.wait(marker)
             self.pause()
-            self.symbols=acpi.validation_symbols(esp.parent/'kernel.elf')
-            memory={k.decode():int(v,16) for k,v in re.findall(rb'^memory_([a-z_]+)=0x([0-9a-f]{16})\r?$',self.raw,re.MULTILINE)}
-            self.boot=struct.unpack('<20Q',self.physical(memory['runtime_boot_info']-acpi.HHDM,160,'BootInfo'))
-            self.processes=self.kernel(self.ksym('user.memory','PROCESSES'),5*1288,'five private processes')
-            self.roots=[struct.unpack_from('<Q',self.processes,i*1288+8)[0] for i in range(5)]
-            self.validate_private_pools()
-            check(all(struct.unpack_from('<Q',self.processes,i*1288)[0]==1 for i in range(5)),'missing service')
-            self.bias=struct.unpack_from('<Q',self.processes,3*1288+224)[0]
-            self.syms=read_elf_symbols(esp.parent/'services/compositor/program.elf')
-            self.verify_elf()
+            self.bootstrap_audit()
             self.settle()
         except Exception:
             self.close();raise
+    def bootstrap_audit(self):
+        """Default synchronous audit; specialized runners may audit a sealed image."""
+        self.symbols=acpi.validation_symbols(self.esp.parent/'kernel.elf')
+        memory={k.decode():int(v,16) for k,v in re.findall(rb'^memory_([a-z_]+)=0x([0-9a-f]{16})\r?$',self.raw,re.MULTILINE)}
+        self.boot=struct.unpack('<20Q',self.physical(memory['runtime_boot_info']-acpi.HHDM,160,'BootInfo'))
+        self.processes=self.kernel(self.ksym('user.memory','PROCESSES'),5*1288,'five private processes')
+        self.roots=[struct.unpack_from('<Q',self.processes,i*1288+8)[0] for i in range(5)]
+        self.validate_private_pools()
+        check(all(struct.unpack_from('<Q',self.processes,i*1288)[0]==1 for i in range(5)),'missing service')
+        self.bias=struct.unpack_from('<Q',self.processes,3*1288+224)[0]
+        self.syms=read_elf_symbols(self.esp.parent/'services/compositor/program.elf')
+        self.verify_elf()
     def wait(self,marker,timeout=90):
         deadline=time.monotonic()+timeout
         while marker not in self.raw:
@@ -99,7 +114,9 @@ class Guest:
     def kval(self,module,name):return struct.unpack('<Q',self.kernel(self.ksym(module,name),8,module+'.'+name))[0]
     def validate_private_pools(self):
         # Limits come from trusted kernel records, never an application's PTEs.
+        self.static_pools,self.storage_runtime=storage_profile(self.esp)
         symbol=storage.symbol('user.memory','POOL_LIMITS')
+        check(self.storage_runtime<5 or symbol in self.symbols,'service kernel omitted private pool limits')
         self.pool_limits=([32]*16 if symbol not in self.symbols else
             list(struct.unpack('<16Q',self.kernel(self.symbols[symbol],128,'trusted per-process pool limits'))))
         expected=[32]*16
@@ -107,15 +124,78 @@ class Guest:
         check(self.pool_limits==expected,'unexpected private table capacity/role')
         base=self.boot[15]+self.ksym('user.memory','TABLES')-storage.KERNEL
         dynamic=struct.unpack('<16Q',self.kernel(self.ksym('user.memory','DYNAMIC_PHYSICAL'),128,'held arena table pools'))
-        ranges=[]
-        for pid,root in enumerate(self.roots):
-            if root==0:continue
-            wanted=base+pid*32*4096 if pid<4 and self.pool_limits[pid]==32 else dynamic[pid]
-            check(root==wanted and root>0 and root%4096==0,'private root differs from its own held table pool')
+        pointers=struct.unpack('<16Q',self.kernel(self.ksym('user.memory','DYNAMIC_TABLES'),128,'held arena table aliases'))
+        spaces=self.kernel(self.ksym('user.memory','SPACES'),16*64,'all private Space descriptors')
+        metadata=self.kernel(self.ksym('user.memory','META'),16*128,'all private table metadata')
+        generations=struct.unpack('<16Q',self.kernel(self.ksym('user.memory','GENERATIONS'),128,'memory root generations'))
+        processes=self.kernel(self.ksym('user.memory','PROCESSES'),16*1288,'complete memory Process identities')
+        plan=self.kernel(self.ksym('boot.service_memory','PLAN'),48,'actual held service arena plan')
+        arena,arena_bytes=struct.unpack_from('<2Q',plan,32)
+        next_page=self.kval('boot.service_memory','NEXT_PAGE')
+        check(0<arena<1<<32 and arena_bytes==128*1024*1024 and arena+arena_bytes<=1<<32
+              and 0<next_page<=32768,'held service arena extent differs')
+        roots=[struct.unpack_from('<Q',processes,pid*1288+8)[0] for pid in range(16)]
+        check(0<len(self.roots)<=16 and self.roots==roots[:len(self.roots)],'process root snapshot changed')
+        kernel_base,kernel_pages=self.trusted_kernel_pool()
+        kernel_root=self.evidence['trusted_kernel_page_table_pool']['root_physical']
+        kernel_raw=self.physical(kernel_base,kernel_pages*4096,'complete retained kernel table pool')
+        ranges=[(kernel_base,kernel_base+kernel_pages*4096)];audits=[]
+        # Local imports avoid the oracle -> lifecycle -> settings import cycle.
+        from tests.p2_pcid_oracle import audit_pool
+        from tests.run_fat_paths_qemu import effective_mapping
+        def kernel_table(pa):
+            check(kernel_base<=pa<=kernel_base+len(kernel_raw)-4096 and pa%4096==0,'table alias escaped kernel pool')
+            return kernel_raw[pa-kernel_base:pa-kernel_base+4096]
+        for pid,root in enumerate(roots):
+            space=spaces[pid*64:(pid+1)*64]
+            ready=struct.unpack_from('<Q',processes,pid*1288)[0]
+            frame_root=struct.unpack_from('<Q',processes,pid*1288+160)[0]
+            if root==0:
+                check(ready==frame_root==0 and space==bytes(64),'empty process retained Space/root identity')
+                continue
+            wanted=base+pid*32*4096 if self.uses_static_pool(pid) else dynamic[pid]
+            check(ready==1 and root==frame_root==wanted and root>0 and root%4096==0 and generations[pid]>0,'private root differs from its own held table pool/Frame/generation')
             end=root+self.pool_limits[pid]*4096
+            check(end<=1<<48,'private pool physical extent overflows')
             check(all(not(root<stop and start<end) for start,stop in ranges),'private table pools overlap')
             ranges.append((root,end))
+            pointer=self.ksym('user.memory','TABLES')+pid*32*4096 if self.uses_static_pool(pid) else pointers[pid]
+            check(struct.unpack_from('<Q',space,8)[0]==pointer and pointer!=0
+                  and struct.unpack_from('<Q',space,32)[0]==self.ksym('user.memory','META')+pid*128,'Space pool/metadata alias differs')
+            if not self.uses_static_pool(pid):
+                check(arena<=root and end<=arena+next_page*4096 and pointer==0xffffd40000000000+root-arena
+                      and not(root<self.boot[15]+0x200000 and self.boot[15]<end),'dynamic pool is not held in the allocated service arena')
+            else:check(self.boot[15]<=root and end<=self.boot[15]+0x200000,'static pool escaped the loader window')
+            for offset in range(0,self.pool_limits[pid]*4096,4096):
+                mapping=effective_mapping(kernel_root,pointer+offset,kernel_table,(kernel_base,kernel_pages),kernel_pages)
+                check(mapping['present'],'table pool supervisor alias is absent')
+                selector=0x118|(128 if mapping['leaf_bytes']==4096 else 4096)
+                check(mapping['present'] and not mapping['effective_user'] and mapping['effective_writable'] and mapping['effective_nx']
+                      and mapping['physical']==root+offset and not mapping['leaf_entry']&selector,'table pool supervisor WB alias differs')
+            image=self.physical(root,self.pool_limits[pid]*4096,'complete private pool '+str(pid))
+            audit=audit_pool(image,metadata[pid*128:(pid+1)*128],space,root,self.pool_limits[pid],kernel_raw,kernel_root-kernel_base)
+            audit.update(slot=pid,generation=generations[pid],kind='static' if self.uses_static_pool(pid) else 'arena')
+            audits.append(audit)
         self.evidence['trusted_private_pool_pages']=self.pool_limits
+        self.evidence['trusted_static_user_pools']=self.static_pools
+        self.evidence['trusted_private_pool_audits']=audits
+        self.evidence['trusted_service_arena']=dict(physical=arena,bytes=arena_bytes,next_page=next_page)
+    def uses_static_pool(self,pid):
+        check(type(pid)is int and 0<=pid<16,'invalid private pool slot')
+        return pid<self.static_pools and self.pool_limits[pid]==32
+    def trusted_kernel_pool(self):
+        # The actual linked layout and UART independently bind the retained
+        # kernel View. No compiler or guest write is invoked by this reader.
+        layout_path=self.esp.parent/'dong_layout.json'
+        types={t['full_name']:t for t in json.loads(layout_path.read_text())['types']}
+        work,view=types['boot.memory_startup.Workspace'],types['boot.runtime_view.View']
+        fields={f['name']:f['offset'] for f in view['fields']}
+        runtime=next(f for f in work['fields'] if f['name']=='runtime')
+        check(view['size']==runtime['size']==160 and all(fields.get(n)==o for n,o in
+              dict(pool=96,pool_physical=104,pool_pages=112,root_physical=152).items()),'kernel View ABI differs')
+        self.kernel_memory_layout=dict(layout_file_sha256=sha(layout_path),workspace_size=work['size'],runtime_offset=runtime['offset'],view_size=160,view_fields=fields)
+        from tests.run_nvme_qemu import NvmeGuest
+        return NvmeGuest.trusted_kernel_pool(self)
     def private_pages(self,root):
         check(root in self.roots and root>0,'unknown private root')
         return self.pool_limits[self.roots.index(root)]

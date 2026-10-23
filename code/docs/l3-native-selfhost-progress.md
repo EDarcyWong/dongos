@@ -1,5 +1,33 @@
 # L3 native compiler progress, 2026-10-20
 
+2026-10-23 G5 收尾：**G5FULL1 integrated rev16、G5CLOSURE1 integrated rev21，
+G5INT1 integrated rev24**。七个生产模块已真实写入本地主线工作树并独立复验；
+正式作业 `0856b466a4d44a13be901c02f8acff46` 的 51 项完整语言矩阵、1 项闭包和
+18 项关联回归共 **70 项全部通过，零 skip**，源码稳定、进程停止及退出均确认。
+完整矩阵覆盖 27 组要求，`scope_complete=true`；两模式四份编译器 ELF
+逐字节相同，每份 2,046,376 字节，56 MiB arena / 64 KiB 栈 / 2 MiB ELF
+预算保持。详细原始证据、失败历史及实际状态见 [完成回执](../../coordination/dongos_works/codex-works/reviews/2026-10-22-G5-completion.md)，
+永久入口见 [G5 门禁](g5-differential.md)。
+
+G5 完成范围为语言/ABI 的 frontend → lower → NASM 执行及宿主有界自编译
+闭包；内建汇编器仍有明确指令范围，Win64 XMM、原子及受限 asm 的完整
+NASM 覆盖不等于任意程序均可由它生成 ELF。扩大后的编译器须另做新 G6
+客体自编译、持久化和同盘双启；历史 G6 仍只绑定原 head / 49 模块 profile。
+因此 L3 整体及更广纯 ELF 后端继续保留各自余项，P2/P5/P6/P7/P8、KVM/
+真机和 P9 门禁不因本次完成而关闭。本轮未运行 OS/VM，未提交或推送。
+
+2026-10-23 接续项 `codex:G6PREP1` 为扩大编译器的新 G6 宿主准备。
+永久入口 `python -m unittest tests.test_compiler_job_preparation` 在独立目录
+重新生成 release 完整固定点、生产 runtime5/compiler_job 内核与三服务，
+核验真实源码/启动产物绑定并逐字读回新建 FAT 输入盘；异常 fixture 和
+启动产物须拒绝。它不会启动 OS/VM，宿主读盘不证明客体 FLUSH 或双启。
+编译器的 2 MiB ELF、512 KiB 源码包、56 MiB arena 和 64 KiB 栈上限保持；
+新 profile 的真实用户帧峰值仍须由来宾观测确认。契约见
+[compiler job](l3-compiler-job.md) 与 [宿主准备](l3-compiler-job-host.md)。
+
+以下保留各自日期和源码范围的历史记录；旧 164 项数量、旧 G5 缺口和
+“当前/待完成”不再代表最新状态。实时任务数量见协调器及协作区整体任务图。
+
 L3 remains **incomplete**: PLAN.md requires the compiler to run on DongOS,
 compile itself there, persist the product, and match the host artifact. The
 following host evidence does not substitute for that guest acceptance.

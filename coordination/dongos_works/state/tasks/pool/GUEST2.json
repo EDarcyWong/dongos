@@ -7,7 +7,6 @@
     "discover:pool-works/tests:test_guest_source_reader.py"
   ],
   "claim_from_status": "todo",
-  "claim_token": "b52e3bb4e8b84f33aa4f6de31ce3925f",
   "claimed_at": "2026-10-20T05:31:37+00:00",
   "claimed_by": "deepseek-mcp-199bcd394d05436c",
   "completed_at": "2026-10-20T05:36:54+00:00",
@@ -21,14 +20,14 @@
   "historical": false,
   "id": "pool:GUEST2",
   "integration_note": "已实际复制Dong生产/说明到code/lang/bootstrap及路径适配永久测试到code/lang/tests，生产与验收源逐字SHA相同；主线联合53 tests/0skip/97.642秒通过（GUEST1=19/GUEST2=21/GUEST3=13），包括debug/release真实编译执行、双格式及坏Dong负控，测试源码稳定。build/test/guest-integration/integration-files.json记录来源与目标指纹。此为组件真实集成，不代表客体I/O/内存已接线或完整L3完成。",
-  "legacy_hash": "c40d3e47dd5233873a659ec262bcade3181794d851bde5d91e54c89b31b0e1cf",
+  "legacy_hash": "e32697db180562a516febb34901ca9617647f2faffba2c225e6911197dfd04de",
   "number": "GUEST2",
   "owner": "deepseek",
-  "rev": 7,
+  "rev": 8,
   "review_note": "实际审查Dong生产load及回调ABI、描述符/完整scratch-out-result别名、短读推进、精确容量额外EOF探测、错误阶段/原码保持和单点发布；永久测试含真实debug/release与坏Dong负控。正式隔离作业55ecdf4cea7f401c9627ac360d391648通过21 tests/0skip/returncode0，92.433秒，process_stopped=true、source_stable=true，当前授权文件指纹一致。此前独立产物审查核对245个产物SHA，无阻塞发现。验收组件，未集成主线，不代表真实客体I/O或L3完成。",
   "status": "integrated",
   "title": "[L3] 通过调用者读回调装载有界源码字节",
-  "updated_at": "2026-10-22T00:59:07+00:00",
+  "updated_at": "2026-10-22T14:38:35+00:00",
   "verification": {
     "checks": [
       {

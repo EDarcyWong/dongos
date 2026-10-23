@@ -1,4 +1,13 @@
 {
+  "assignment_history": [
+    {
+      "at": "2026-10-22T14:46:41+00:00",
+      "from_owner": "codex",
+      "note": "用户明确授权本会话接续；协调者已核验本机无外部编辑/构建进程且两项无活动作业，通过confirm_pause记录停止依据。保留原任务、候选、所有失败与原领取历史，转至本会话重新领取。",
+      "previous_claimed_by": "codex-mcp-a56c25d7f28e4bc4",
+      "to_owner": "codex"
+    }
+  ],
   "assignment_owner": "codex",
   "auto_dispatch": false,
   "auto_verify": false,
@@ -6,11 +15,10 @@
   "checks": [
     "discover:codex-works/tests:test_g5_full_native.py"
   ],
-  "claim_from_status": "todo",
-  "claim_token": "949e54882bcc4955820ba2bbe760ac03",
-  "claimed_at": "2026-10-22T07:26:44+00:00",
-  "claimed_by": "codex-mcp-a56c25d7f28e4bc4",
-  "completed_at": null,
+  "claim_from_status": "rework",
+  "claimed_at": "2026-10-22T14:49:33+00:00",
+  "claimed_by": "codex-mcp-daece153b59c4bd5",
+  "completed_at": "2026-10-22T14:53:26+00:00",
   "complexity": "standard",
   "created_at": "2026-10-22T07:26:43+00:00",
   "delivery": "codex-works/deliveries/G5FULL1.md",
@@ -21,15 +29,52 @@
   "document": "codex-works/tasks/G5FULL1-board.md",
   "historical": false,
   "id": "codex:G5FULL1",
+  "integration_note": "已按accepted原字节真实复制生产实现到code主线，候选冻结原文未改。G5INT1主线独立正式0856三check70项0skip及本轮原始源码/产物独审通过；7生产逐字节一致，closure四ELF2046376B SHA2bda587a6842913879eb6bf0445202066adb68baef06d06593ff0f3ee787defa；G5INT1已integrated rev24。登记实际本地集成，不把宿主G5外推新G6客体。",
   "legacy_hash": "588648b97817d1ed1d091198c8faba31925cc334453600e4d2d89bbb11f83bd5",
   "number": "G5FULL1",
   "owner": "codex",
-  "rev": 2,
-  "review_note": "",
-  "status": "in_progress",
+  "pause_note": "独立源码审查发现G5FULL候选超大局部对象slot对齐前溢出及跨模块const enum FIELD被误识别为变体构造。先由协调器停止本轮复验/排队，确认进程退出后修复并增加实际差分回归；本轮中断不计成功。闭包读取同一候选，需同步冻结后重新复验。",
+  "rev": 16,
+  "review_note": "实际审查6个生产候选、v0.1语言/ABI/诊断/容量/失败原子性契约及51项永久测试，独立审查修复const enum跨模块payload、包装前const指针转换与known-error try终止；大合法local提前FRAME拒绝不放宽对象/帧预算。正式job2619ead341924ea89cdcd4b955906d70为51tests/0skip/836.563s，source_stable/process_stopped/execution_exited均true。另一独立代理复算11声明文件候选及隔离字节SHA匹配，263项source_before/after现场一致，51成功测试精确覆盖27组要求，scope_complete=true且remaining/known_gap/failure/skip全空。1495命令无timeout，实际ELF8328B/SHA928c8a380e2d81867fc0be196d5d1cdf85687e8c93ef6e7a405a702c6183b436以0x400000真实执行、RX/RW及kernel_validate通过；extern解析/未解析及容量原子拒绝、6真实语义/来源坏体均核实。仅验收G5宿主完整语言候选；G5CLOSURE1及主线真实集成仍待完成，不扩大旧G6客体证据。",
+  "status": "integrated",
   "title": "G5 完整语言矩阵、剩余语义差异与闭合证据候选",
-  "updated_at": "2026-10-22T07:26:44+00:00",
-  "verification": null,
+  "updated_at": "2026-10-22T17:24:08+00:00",
+  "verification": {
+    "checks": [
+      {
+        "cancelled": false,
+        "elapsed_seconds": 836.563,
+        "execution_exited": true,
+        "passed": true,
+        "process_stopped": true,
+        "returncode": 0,
+        "skips": 0,
+        "spec": "discover:codex-works/tests:test_g5_full_native.py",
+        "tests": 51,
+        "timed_out": false
+      }
+    ],
+    "execution_exited": true,
+    "fingerprint": {
+      "codex-works/deliveries/G5FULL1.md": "a603b2ee16dfb0af43627a0503689c60d6bce3a16e048158d465167403bc59d9",
+      "codex-works/g5-full/docs/coverage.md": "f0e78dbc01f0f7097cf81a827d82b048656efbf2ce15d2971a995c74159478e7",
+      "codex-works/g5-full/g5_differential.py": "0120178338198ea2873505c784fdeb561923e26b4a1c928b9b8f1d2b6577b827",
+      "codex-works/g5-full/requirements.json": "57d03e581d1531345df2f4d3b35c7f867593361e744aad8e105bf7534873d342",
+      "codex-works/g5-full/src/bootstrap/frontend_diagnostics.dg": "0d53ca25a6cb3e70db55ab9f90f0b0db071c6208887b58ceb19b23a2e7251fb7",
+      "codex-works/g5-full/src/bootstrap/lower_program.dg": "073b926880e128faca6a12c52135665b3b33c7e8ea6b675f8e16b11e0d56c627",
+      "codex-works/g5-full/src/bootstrap/nasm_program.dg": "152942fa3e787f770292f6f858c8827d9fcf5c42528b36010b07a2433b148f63",
+      "codex-works/g5-full/src/bootstrap/native_assembler.dg": "11a2f18ab4a37fb458bd4209c2952bf29c43c43c7c053cd91c531739e2ea2406",
+      "codex-works/g5-full/src/bootstrap/program_ir.dg": "96a4b9c0d4976d09bc6b830554358678b3ada5b2be216f7b8755298065d89be2",
+      "codex-works/g5-full/src/bootstrap/semantic_types.dg": "59d76cdb8a083f944b57e2b3ef7b74b8643e9578cac9e6d1760f40ea83e8eed7",
+      "codex-works/tests/test_g5_full_native.py": "5d84de7008b09f8ed3e8ed42b9c2881e1cc90a1aa989424045ae28b3cbfc1783"
+    },
+    "finished_at": "2026-10-22T15:07:30+00:00",
+    "job": "2619ead341924ea89cdcd4b955906d70",
+    "passed": true,
+    "process_stopped": true,
+    "source_stable": true,
+    "summary": "定向复验通过，等待源码/契约审查"
+  },
   "write_paths": [
     "codex-works/g5-full/src/bootstrap/semantic_types.dg",
     "codex-works/g5-full/src/bootstrap/program_ir.dg",

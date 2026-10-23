@@ -1,4 +1,71 @@
+2026-10-23 09:40 +08:00 有界检查点（P2SYNC40，尚待独立文档门）：**P2软件仍partial，P5本轮未实施**。
+OBS36 submitted rev12：正式71项零skip；历史R5仅诊断observations_completed，acceptance/passed均false。
+B R8正式44项零skip、两份fresh各1109source/staged与286产物、kernel1966480B；
+实际normal-r8仍false（B已complete、后续service barrier pending），omit-r8首ps超时且未触发B，不是精准负控。
+**B R9 in_progress rev36，未测/未通过**；normal v2区分后续pending，negative原门保持，验收/集成待后续。
+C/D接线、PCID实际复用/wrongtag及真正WC仍未闭；P5CTX1/2旧组件保留。
+暂无真机，待验留档不阻断P2软件及本机门完成后进入P5；全部软件/本机复验后上传GitHub并关机，末端操作尚未执行。
+详见[09:40证据与边界](../../coordination/dongos_works/codex-works/reviews/2026-10-23-P2-historical-progress.md)、[来源JSON](../../coordination/dongos_works/codex-works/reviews/2026-10-23-P2-historical-progress.json)。
+以下07:50及更早正文逐字保留，仅代表当时范围，不被本检查点改写。
+
+---
+
 # P2 核心阶段验收与剩余清单
+
+2026-10-23 07:50 +08:00 检查点：最终范围为 **P2、P5 全部软件工作及本机复验**。
+暂无真机，物理 WC 等待验项留档；P2 软件及本机门完成后可进入 P5，不能写成真机通过。
+完成后完整代码上传 GitHub 并关机已获授权，末端操作尚未执行。
+**OBS32/SYNC33/OBS34 integrated rev6**；OBS34 正式 36 项零 skip，仅集成 IO 证据组件。
+LARGE16 的 R6 正式 37 项零 skip 与新源两构建通过，但实际 normal-r4 首个 ps 仍超时：
+暂停内审计 4453ms、总 stop→cont 4688ms；cont 后落盘有效，原 1 秒期限问题未闭。
+**LARGE16 in_progress rev26、OBS36 in_progress rev2**，接续历史镜像/R7 适配尚未测试。
+P2 软件仍 partial，P5 本轮只读准备、尚未开始实现；原失败和中断不覆盖。
+详见[有界进度与证据](../../coordination/dongos_works/codex-works/reviews/2026-10-23-P2-deferred-capture-progress.md)、
+[来源 JSON](../../coordination/dongos_works/codex-works/reviews/2026-10-23-P2-deferred-capture-progress.json)。
+下方 06:32/05:55/05:42 均为各自源码和授权范围的历史记录。
+
+2026-10-23 06:32 +08:00 检查点：**SYNC31 integrated rev9、GOP29 integrated rev6、
+HARNESS28 integrated rev6、BKL30 integrated rev9**，各正式独立回执均零 skip、
+源码稳定且进程已停止/退出。BKL R1 失败保留；R2 为 3 项通过，FIFO 组件尚未接入 Bridge。
+**OBS32 submitted rev3，LARGE16 submitted rev16**：修复采集 epoch 与五个忙进程
+实际提交后才发起一次 request 的活性条件；OBS 29 项、LARGE 20 项本机预检通过，
+完整独立复验未执行。
+旧 31 项及构建仅属各自历史源码。
+R13 的 AP 空闲/屏蔽计时快照不构成 AP 用户计时门通过，也不能据此认定硬件限制。
+P2 仍 **partial**，P5 本轮尚未开始；实际大页/EXEC/受控 PF/缓存接线、暖 PCID 与
+物理 WC 门继续保留。详见[本次状态与原始证据](../../coordination/dongos_works/codex-works/reviews/2026-10-23-P2-observer-progress.md)
+及[机器可读记录](../../coordination/dongos_works/codex-works/reviews/2026-10-23-P2-observer-progress.json)。下方 05:55/05:42 为历史快照。
+
+2026-10-23 05:55 +08:00 追加：**SIZE23 integrated rev6，SMP27 v2 integrated rev9**。
+R13 在首次暂停前连续运行2秒、之后不再恢复，Domain.failed=0、无首错，三个AP
+实际用户进入161/168/213次，完整16槽（11个live根）池审计通过。旧采集在大量
+QMP读取后恢复，存在WHPX绝对期限被观察过程扰动的风险；先修采集方法，不能
+直接归责生产锁。AP计时仍0，暖PCID及实际事务余项未关闭，P2仍partial，完成后
+再进入P5。详见[05:55追加与原始证据](../../coordination/dongos_works/codex-works/reviews/2026-10-23-P2-lock-diagnostics.md)，下方05:42状态为历史快照。
+
+2026-10-23 05:42 +08:00 检查点：继续按 **P2 → P5** 执行，P2 保持 partial，
+P5 本轮尚未开始。SIZE23 已正式独立 99 项零 skip，LARGE16 已正式独立 31 项
+零 skip；正常/负控两份实际构建均为 1,962,384B，但实际 WHPX 仍出现获取
+内核锁超时，AP 用户进入/计时/切换仍为零，故两任务尚未验收/集成。
+HARNESS24 已集成；SMP27 时间诊断 v2、HARNESS28 夹具、GOP29 永久绘图
+Gate、BKL30 FIFO 组件继续复验或实现。完整 C/D/ledger 接线、实际大页/受控
+PF/缓存迁移/暖 PCID 与物理 WC 门禁仍须通过。详见[锁诊断与当前状态](../../coordination/dongos_works/codex-works/reviews/2026-10-23-P2-lock-diagnostics.md)。
+下方旧检查点、任务数量及“当前/未运行”保留各自日期和源码范围，不覆盖本次状态。
+
+2026-10-23 接续：用户顺序为 **P2 完成后再完成 P5**，P2 整体仍为 partial。
+根闭包 ROOT13/MASK18、失效桥 FLUSH11、PCID12 严格采集准备、WC14
+采集器，以及调度后 EXEC19/CACHE20 组件均已各自独立复验并本地集成。
+ENTRY21 的精确受控异常入口已通过 2 项零 skip，DISCOVERY22 的设备枚举
+预处理已通过 5 项零 skip，均 integrated rev6。组件通过不代替实际 AP/PF 验收。
+
+LARGE16 正在返修；此前实际运行在采集器发送不支持的 `stop terminal` 后
+失败，没有事务前后证据。HARNESS24 修复真实 shell 收尾，SIZE23 调整 runtime7
+静态池并严格绑定新 profile；保持原 2 MiB 装载窗及私有池容量。完整 C/D 服务、
+alias ledger、绘屏 gate 与构建接线、实际多根事务正负控、AP PCIDE=1 暖 tag/
+跨代复用及物理显示 WC 吞吐仍待完成，PGE 继续拒绝。
+新 WHPX 已到桌面，但三个 AP 的用户进入次数仍0且域失败，SMP27 正在补精确
+首错诊断。本轮逐项作业、真实失败与范围见[运行进展](../../coordination/dongos_works/codex-works/reviews/2026-10-23-P2-runtime-progress.md)。
+下文保留 2026-10-17 核心验收的原始范围与证据。
 
 2026-10-17，结论：**P2核心阶段验收通过；P2扩展清单未完成**。原阶段标准已由当前版本的直接实测和综合门禁达成，下一主线可进入P3。
 

@@ -1,0 +1,63 @@
+{
+  "assignment_owner": "codex",
+  "auto_dispatch": false,
+  "auto_verify": false,
+  "candidate": null,
+  "checks": [
+    "discover:codex-works/tests:test_g5_host_mapping.py"
+  ],
+  "claim_from_status": "rework",
+  "claimed_at": "2026-10-22T15:26:24+00:00",
+  "claimed_by": "codex-mcp-daece153b59c4bd5",
+  "completed_at": "2026-10-22T15:26:25+00:00",
+  "complexity": "standard",
+  "created_at": "2026-10-22T15:14:36+00:00",
+  "delivery": "codex-works/deliveries/G5HOST1.md",
+  "depends_on": [],
+  "description": "用户授权完成G5闭包及必要测试适配。本机正式闭包jobc9682daca7bd417ba6bf615f9bdebb4c两模式在small ELF映射前失败；实际PE64 probe.exe ImageBase=0x400000，与真实native ELF固定0x400000冲突。为Windows宿主C探针显式选择不重叠的PE image base，保持被测ELF原始字节/地址与56MiB/64KiB/2MiB契约，不改ELF、不回退seed、不改固定映射oracle。独立定向测试使用真实GCC生成PE探针并解析/实际运行验证基址，测试生成程序在0x400000实际VirtualAlloc并写读释放；非Windows给出对应真实ELF宿主基址/固定地址检查，不用skip。工具链不支持必须明确失败。此任务修复不代表G5闭包固定点通过；之后G5CLOSURE1须重新独立冷构建。",
+  "document": "codex-works/tasks/G5HOST1-board.md",
+  "historical": false,
+  "id": "codex:G5HOST1",
+  "integration_note": "已实际将宿主修复落在主线code/tools/compiler_job.py，当前SHA a4f9830ce2cb1d1306c7b79e531a7f1e4e407d78cacea46d960ba3992c13d565与正式候选一致；永久独立测试及交付保留于声明works路径，3声明文件均保持验收指纹。G5CLOSURE1已用同一主线工具重新排独立冷构建c464866d6f9b4fb2beeac4c23d9974fc，未将host小门禁冒作固定点成功。无提交/推送/OS/VM。",
+  "legacy_hash": "d78201aefa4a650700ba7cb9aede4a1d1b3c0dc888a20bc32a13401fcab97cc8",
+  "number": "G5HOST1",
+  "owner": "codex",
+  "rev": 15,
+  "review_note": "实际审查宿主PE链接、_beginthreadex/static ctx/真实原线程句柄退休与fflush/ExitProcess生命周期，不改ELF或compiler预算。独立job4d1c4e4057a142f2aa9af0c87050d60c为1test/0skip/1.609s，stable/stopped/exited全部true。另一代理复算3份指纹候选/隔离均匹配；good PE64 ImageBase10000000/size536576，完整2MiB固定400000映射首尾canary/free真实rc0；bad固定PE400000/RELOCS_STRIPPED，无ASLR避开，实际rc17且VirtualQuery MEM_IMAGE及模块路径精确指向bad.exe。6进程rc=[0,0,0,0,0,17]，source和good/bad产物SHA核实。仅宿主门禁通过，closure固定点另验。",
+  "status": "integrated",
+  "title": "Windows自编译宿主探针避开固定ELF地址并核验真实PE布局",
+  "updated_at": "2026-10-22T15:28:11+00:00",
+  "verification": {
+    "checks": [
+      {
+        "cancelled": false,
+        "elapsed_seconds": 1.609,
+        "execution_exited": true,
+        "passed": true,
+        "process_stopped": true,
+        "returncode": 0,
+        "skips": 0,
+        "spec": "discover:codex-works/tests:test_g5_host_mapping.py",
+        "tests": 1,
+        "timed_out": false
+      }
+    ],
+    "execution_exited": true,
+    "fingerprint": {
+      "codex-works/deliveries/G5HOST1.md": "9277c527cb68bf403119a94a1021898abedf831f947ca314516ebbce35c3420b",
+      "codex-works/tests/test_g5_host_mapping.py": "afb7417abc304a8f5b4b8c70e3252a1bfed5ec4d893db3409fb9e133e9af9a50",
+      "tools/compiler_job.py": "a4f9830ce2cb1d1306c7b79e531a7f1e4e407d78cacea46d960ba3992c13d565"
+    },
+    "finished_at": "2026-10-22T15:26:35+00:00",
+    "job": "4d1c4e4057a142f2aa9af0c87050d60c",
+    "passed": true,
+    "process_stopped": true,
+    "source_stable": true,
+    "summary": "定向复验通过，等待源码/契约审查"
+  },
+  "write_paths": [
+    "tools/compiler_job.py",
+    "codex-works/tests/test_g5_host_mapping.py",
+    "codex-works/deliveries/G5HOST1.md"
+  ]
+}

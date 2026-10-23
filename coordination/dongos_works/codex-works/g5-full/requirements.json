@@ -52,13 +52,16 @@
       "tests": [
         "test_optional_result_abi_bytes_and_narrow_payload",
         "test_match_optional_and_error_payload",
-        "test_h_tagged_pointer_function_bool_and_imported_error_payloads"
+        "test_h_tagged_pointer_function_bool_and_imported_error_payloads",
+        "test_k_const_pointer_conversion_before_tagged_wrap",
+        "test_l_known_error_try_is_a_terminating_path"
       ]
     },
     {
       "id": "nominal-enums",
       "tests": [
-        "test_enum_nominal_tag_payload_and_scalar"
+        "test_enum_nominal_tag_payload_and_scalar",
+        "test_j_imported_constant_enum_preserves_tag_and_payload"
       ]
     },
     {
@@ -160,7 +163,8 @@
       "tests": [
         "test_aligned_objects_copy_stack_parameters_and_nested_calls",
         "test_win64_bridge_and_realigned_sysv_body_share_budget",
-        "test_oversize_combined_frame_rejects_without_output"
+        "test_oversize_combined_frame_rejects_without_output",
+        "test_m_huge_local_capacity_rejects_without_output"
       ]
     },
     {
@@ -241,7 +245,11 @@
         "test_z_real_missing_xmm_restore_is_rejected_after_normal_execution",
         "test_z_wrong_panic_category_mutation_is_rejected",
         "test_h_tagged_pointer_function_bool_and_imported_error_payloads",
-        "test_i_static_objects_larger_than_frame_budget"
+        "test_i_static_objects_larger_than_frame_budget",
+        "test_j_imported_constant_enum_preserves_tag_and_payload",
+        "test_k_const_pointer_conversion_before_tagged_wrap",
+        "test_l_known_error_try_is_a_terminating_path",
+        "test_m_huge_local_capacity_rejects_without_output"
       ]
     }
   ]

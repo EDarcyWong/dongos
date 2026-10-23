@@ -11,6 +11,32 @@ pub struct Pending{pub event:u64,pub affinity:u64,pub incarnation:u64,pub token:
 pub struct Bridge{pub ready:u64,pub failed:u64,pub domain:*ud.Domain,pub pending:*Pending,pub headers:*u64,pub service_cpu:u64,pub calls:u64,pub deferred:u64}
 pub struct Counts{pub calls:u64,pub pci:u64,pub clock:u64,pub full:u64,pub skipped:u64,pub last_event:u64,pub last_op:u64}
 var ACTIVE:*Bridge=null;
+// Independent, bounded first-failure evidence. Existing Bridge/Domain/Header
+// layouts and the held return remain unchanged. Only the current CPU writes
+// its own slot; published=2 is private/incomplete, published=1 is readable.
+pub const FAILURE_VERSION:u64=2;
+pub const CHECKED:u64=1;pub const CAPTURE:u64=2;pub const DEADLINE:u64=3;
+pub const POLL:u64=4;pub const ACQUIRE:u64=5;pub const DRAIN:u64=6;
+pub const CHOOSE:u64=7;pub const PROJECT:u64=8;pub const SELECT:u64=9;
+pub const TIMER:u64=10;pub const SERVICE_BEFORE:u64=11;pub const SERVICE:u64=12;
+pub const SERVICE_AFTER:u64=13;pub const RELEASE:u64=14;pub const COMMIT:u64=15;
+pub const CANCEL:u64=16;pub const SHARED:u64=17;pub const IRQ:u64=18;
+pub const DEFER:u64=19;pub const UNLOCK:u64=20;pub const PARK:u64=21;
+pub struct Progress{pub entry:u64,pub vector:u64,pub stage:u64,
+ pub wait_started:u64,pub deadline:u64,pub acquired:u64}
+pub struct Failure{pub published:u64,pub version:u64,pub cpu:u64,pub argument_cpu:u64,
+ pub entry:u64,pub vector:u64,pub stage:u64,pub error_code:u64,pub detail_code:u64,pub clock:u64,
+ pub domain_available:u64,pub domain:u64,pub sequence:u64,pub owner:u64,pub lock:u64,pub mode:u64,
+ pub requested:u64,pub acknowledged:u64,pub barrier:u64,pub completed:u64,pub published_kernel_root:u64,
+ pub raw_root_available:u64,pub raw_root:u64,pub normalized_root_available:u64,pub normalized_root:u64,
+ pub wait_started:u64,pub deadline:u64,pub acquired:u64}
+const EMPTY_FAILURE:Failure=Failure{published:0,version:0,cpu:0,argument_cpu:0,entry:0,vector:0,stage:0,error_code:0,
+ detail_code:0,clock:0,domain_available:0,domain:0,sequence:0,owner:0,lock:0,mode:0,requested:0,acknowledged:0,
+ barrier:0,completed:0,published_kernel_root:0,raw_root_available:0,raw_root:0,normalized_root_available:0,normalized_root:0,
+ wait_started:0,deadline:0,acquired:0};
+pub var FAILURES:[16]Failure=[EMPTY_FAILURE;16];
+pub var PROGRESS:[16]Progress=[Progress{entry:0,vector:0,stage:0,wait_started:0,deadline:0,acquired:0};16];
+var TRACE_BRIDGE:*Bridge=null;var TRACE_DOMAIN:*ud.Domain=null;var TRACE_CPUS:*ud.Cpu=null;
 pub unsafe fn counts(slot:usize)*Counts{unsafe{if ACTIVE==null||slot>=16{return null;}return ((ACTIVE as u64)+576+slot as u64*56) as *Counts;}}
 unsafe extern "sysv64" fn user_bridge_service_policy(slot:u64,event:u64,frame:u64)u64;
 unsafe extern "sysv64" fn user_bridge_cpu()u64;
@@ -25,6 +51,53 @@ unsafe extern "sysv64" fn user_bridge_timer(cpu:u64,needed:u64)u64;
 unsafe extern "sysv64" fn user_bridge_service(slot:u64,event:u64,frame:u64)u64;
 unsafe extern "sysv64" fn user_bridge_project()u64;
 unsafe extern "sysv64" fn user_bridge_interrupt(vector:u64)u64;
+unsafe fn begin_trace(cpu:usize,entry:u64,vector:u64)void{unsafe{
+ if ACTIVE==null||ACTIVE!=TRACE_BRIDGE||cpu>=16||user_bridge_cpu()!=cpu as u64{return;}
+ if atomic_load(&FAILURES[cpu].published)!=0{return;}
+ PROGRESS[cpu].entry=entry;PROGRESS[cpu].vector=vector;PROGRESS[cpu].stage=CHECKED;
+ PROGRESS[cpu].wait_started=0;PROGRESS[cpu].deadline=0;PROGRESS[cpu].acquired=0;
+}return;}
+unsafe fn stage(cpu:usize,value:u64)void{unsafe{
+ if ACTIVE==null||ACTIVE!=TRACE_BRIDGE||cpu>=16||user_bridge_cpu()!=cpu as u64{return;}
+ if atomic_load(&FAILURES[cpu].published)==0{PROGRESS[cpu].stage=value;}
+}return;}
+unsafe fn wait_start(cpu:usize,limit:u64)void{unsafe{
+ if ACTIVE==null||ACTIVE!=TRACE_BRIDGE||cpu>=16||user_bridge_cpu()!=cpu as u64{return;}
+ if atomic_load(&FAILURES[cpu].published)!=0{return;}
+ // Observe the already computed limit. Never renew or otherwise change it.
+ PROGRESS[cpu].wait_started=user_bridge_clock();PROGRESS[cpu].deadline=limit;PROGRESS[cpu].acquired=0;
+}return;}
+unsafe fn wait_acquired(cpu:usize)void{unsafe{
+ if ACTIVE==null||ACTIVE!=TRACE_BRIDGE||cpu>=16||user_bridge_cpu()!=cpu as u64{return;}
+ if atomic_load(&FAILURES[cpu].published)==0{PROGRESS[cpu].acquired=user_bridge_clock();}
+}return;}
+unsafe fn record_failure(cpu:usize,entry:u64,vector:u64,code:u64,detail:u64)void{unsafe{
+ // Never inspect caller-selected CPU storage, a missing ACTIVE, or a changed
+ // active pointer. The saved pointers belong to the permanent initialized arena.
+ if ACTIVE==null||ACTIVE!=TRACE_BRIDGE{return;}
+ let actual=user_bridge_cpu();if actual>=16{return;}
+ let id=actual as usize;let f=&FAILURES[id];
+ if atomic_compare_exchange(&(*f).published,0,2)!=0{return;}
+ (*f).version=FAILURE_VERSION;(*f).cpu=actual;(*f).argument_cpu=cpu as u64;
+ (*f).entry=entry;(*f).vector=vector;(*f).stage=CHECKED;
+ if cpu==id&&PROGRESS[id].entry==entry&&PROGRESS[id].vector==vector{
+  (*f).stage=PROGRESS[id].stage;(*f).wait_started=PROGRESS[id].wait_started;
+  (*f).deadline=PROGRESS[id].deadline;(*f).acquired=PROGRESS[id].acquired;
+ }
+ (*f).error_code=code;(*f).detail_code=detail;(*f).clock=user_bridge_clock();
+ // No extra privileged ABI is introduced. Neither root field is hardware
+ // evidence: live raw CR3 must be obtained independently by the guest observer.
+ (*f).raw_root_available=0;(*f).raw_root=0;
+ (*f).normalized_root_available=0;(*f).normalized_root=0;
+ let d=TRACE_DOMAIN;
+ if d!=null&&(*ACTIVE).domain==d&&(*d).cpus==TRACE_CPUS&&TRACE_CPUS!=null{
+  (*f).domain_available=1;(*f).domain=d as u64;(*f).sequence=(*d).sequence;
+  (*f).owner=(*d).owner;(*f).lock=(*d).lock;(*f).barrier=(*d).barrier;(*f).completed=(*d).completed;
+  (*f).published_kernel_root=(*d).kernel_root;let c=TRACE_CPUS+id;
+  (*f).mode=(*c).mode;(*f).requested=atomic_load(&(*c).requested);(*f).acknowledged=atomic_load(&(*c).acknowledged);
+ }
+ compiler_fence();atomic_store(&(*f).published,1);
+}return;}
 unsafe fn checked(cpu:usize)!*ud.Domain{unsafe{
  if ACTIVE==null||(*ACTIVE).ready!=1||(*ACTIVE).failed!=0||cpu>=16||user_bridge_cpu()!=cpu as u64{return error.Held;}
  let d=(*ACTIVE).domain;if d==null||(*d).ready!=1||(*d).failed!=0||((*d).online&(1<<cpu as u64))==0{return error.Held;}return d;
@@ -42,6 +115,12 @@ pub unsafe fn initialize(arena:u64,bytes:u64,d:*ud.Domain,headers:*u64)!void{uns
  (*b).service_cpu=0;(*b).calls=0;(*b).deferred=0;
  var id:usize=0;while id<16{let p=(*b).pending+id;(*p).event=0;(*p).affinity=0;(*p).incarnation=0;(*p).token=0;id+=1;}
  var at=arena+576;while at<arena+1536{*(at as *u64)=0;at+=8;}
+ // Evidence is optional if the legacy initialize contract is given a shape
+ // that cannot be independently bounded. Do not add a new admission rule.
+ TRACE_BRIDGE=b;let base=(*d).arena;let span=(*d).bytes;let cpus=(*d).cpus as u64;
+ let need=16*sizeof(ud.Cpu) as u64;
+ if base==d as u64&&span>=ud.required_bytes()&&span<=0xffff_ffff_ffff_ffff-base
+  &&cpus!=0&&(cpus&7)==0&&cpus>=base&&cpus<=base+span-need{TRACE_DOMAIN=d;TRACE_CPUS=(*d).cpus;}
  compiler_fence();(*b).ready=1;ACTIVE=b;
 }return;}
 pub fn pointer()*Bridge{return ACTIVE;}
@@ -54,10 +133,16 @@ unsafe fn shared_barrier()!void{unsafe{
 }return;}
 pub export("dong_user_smp_barrier") fn global_barrier()u64{unsafe{
  if ACTIVE==null{return 1;}
- if (*ACTIVE).ready!=1||(*ACTIVE).failed!=0{return held();}
+ // A service may call this inside its outer event/project. A successful
+ // nested barrier must not relabel a later error as a barrier entry.
+ let tracing=ACTIVE==TRACE_BRIDGE&&user_bridge_cpu()==0;
+ var previous=Progress{entry:0,vector:0,stage:0,wait_started:0,deadline:0,acquired:0};if tracing{previous=PROGRESS[0];}
+ defer {if tracing&&ACTIVE==TRACE_BRIDGE&&atomic_load(&FAILURES[0].published)==0{PROGRESS[0]=previous;}}
+ begin_trace(0,4,0);
+ if (*ACTIVE).ready!=1||(*ACTIVE).failed!=0{record_failure(0,4,0,0x060b_0011,0);return held();}
  let header=*((*ACTIVE).headers) as *ep.Cpu;
- if header==null{return held();}if (*header).ready!=2{return 1;}
- match shared_barrier(){ok=>{return 0;},err(e)=>{return held();},}
+ if header==null{record_failure(0,4,0,0x060b_0011,0);return held();}if (*header).ready!=2{return 1;}
+ stage(0,SHARED);match shared_barrier(){ok=>{return 0;},err(e)=>{record_failure(0,4,0,e,0);return held();},}
 }}
 pub unsafe fn retire(slot:usize)!void{unsafe{
  let d=try checked(0);if slot>=16||(*d).owner!=0||(*d).lock!=1{return error.Held;}
@@ -72,21 +157,26 @@ unsafe fn deadline(d:*ud.Domain,cpu:usize)!u64{unsafe{
  let now=user_bridge_clock();if now>0xffff_ffff_ffff_ffff-(*header).deadline_ticks{return error.Held;}return now+(*header).deadline_ticks;
 }}
 unsafe fn choose(d:*ud.Domain,cpu:usize)!u64{unsafe{
- if cpu==0&&user_bridge_project()!=0{return error.Held;}
+ stage(cpu,PROJECT);
+ if cpu==0{let status=user_bridge_project();if status!=0{
+  record_failure(cpu,PROGRESS[cpu].entry,PROGRESS[cpu].vector,0x060b_0011,status);return error.Held;}}
  var attempts:usize=0;
  while attempts<17{
+  stage(cpu,SELECT);
   var frame:u64=0;
   if !(try ud.select(d,cpu,&frame)){
+   stage(cpu,TIMER);
    if user_bridge_timer(cpu as u64,0)!=0{return error.Held;}
-   try ud.unlock(d,cpu);try ud.park(d,cpu);return 0;
+   stage(cpu,UNLOCK);try ud.unlock(d,cpu);stage(cpu,PARK);try ud.park(d,cpu);return 0;
   }
   let c=(*d).cpus+cpu;let slot=(*c).slot as usize;let p=(*ACTIVE).pending+slot;
   if (*p).event==0{
    // One-shot quantum is necessary only with an eligible equal/higher-priority
    // READY competitor. Core needs_quantum considers affinity and current CPU.
    let need=try q.needs_quantum((*d).engine,cpu);
+   stage(cpu,TIMER);
    if user_bridge_timer(cpu as u64,need as u64)!=0{return error.Held;}
-   try ud.unlock(d,cpu);return frame;
+   stage(cpu,UNLOCK);try ud.unlock(d,cpu);return frame;
   }
   if cpu!=0||(*p).token!=(*c).token||(*p).incarnation!=(*c).incarnation{return error.Held;}
   try ud.selected_kernel(d,cpu);let process=(*d).processes+slot;
@@ -101,28 +191,33 @@ unsafe fn choose(d:*ud.Domain,cpu:usize)!u64{unsafe{
   (*counter).calls+=1;(*counter).last_event=(*p).event;(*counter).last_op=operation;
   if (*p).event==257&&operation==0x60{(*counter).pci+=1;}
   if (*p).event==257&&operation==0x73{(*counter).clock+=1;}
+  stage(cpu,SERVICE_BEFORE);
   if policy==0{(*counter).full+=2;let before=try ud.barrier_begin(d,cpu);try ud.barrier_wait(d,cpu,before,try deadline(d,cpu));}
   else{(*counter).skipped+=2;}
+  stage(cpu,SERVICE);
   let status=user_bridge_service(slot as u64,(*p).event,(*process).frame);(*ACTIVE).calls+=1;
-  if status!=0{return error.Held;}
+  if status!=0{record_failure(cpu,PROGRESS[cpu].entry,PROGRESS[cpu].vector,0x060b_0011,status);return error.Held;}
+  stage(cpu,SERVICE_AFTER);
   if policy==0{let after=try ud.barrier_begin(d,cpu);try ud.barrier_wait(d,cpu,after,try deadline(d,cpu));}
   // The callback may have retired this token through retire_begin/finish.
   if (*process).token==serviced_token{
-   try ud.release(d,cpu,q.BLOCKED);
+   stage(cpu,RELEASE);try ud.release(d,cpu,q.BLOCKED);
    try q.set_affinity((*d).engine,serviced_token,saved_affinity);
   }
   (*p).event=0;(*p).token=0;(*p).incarnation=0;(*p).affinity=0;
-  if user_bridge_project()!=0{return error.Held;}
+  stage(cpu,PROJECT);let projected=user_bridge_project();if projected!=0{
+   record_failure(cpu,PROGRESS[cpu].entry,PROGRESS[cpu].vector,0x060b_0011,projected);return error.Held;}
   attempts+=1;
  }
  return error.Held;
 }}
 unsafe fn capture(cpu:usize,frame:u64,event:u64)!u64{unsafe{
- let d=try checked(cpu);let c=(*d).cpus+cpu;if frame==0||(frame&7)!=0{return error.Invalid;}
+ let d=try checked(cpu);stage(cpu,CAPTURE);let c=(*d).cpus+cpu;if frame==0||(frame&7)!=0{return error.Invalid;}
  try ud.begin_entry(d,cpu);user_bridge_copy((*c).capture,frame,200);try ud.complete_entry(d,cpu);
  let header=*((*ACTIVE).headers+cpu) as *ep.Cpu;user_bridge_restore((*header).kernel_xstate);
- let limit=try deadline(d,cpu);let flushed=try ud.poll(d,cpu);try ud.acquire(d,cpu,limit);
- let copied=try ud.drain(d,cpu);
+ stage(cpu,DEADLINE);let limit=try deadline(d,cpu);stage(cpu,POLL);let flushed=try ud.poll(d,cpu);
+ stage(cpu,ACQUIRE);wait_start(cpu,limit);try ud.acquire(d,cpu,limit);wait_acquired(cpu);
+ stage(cpu,DRAIN);let copied=try ud.drain(d,cpu);stage(cpu,CAPTURE);
  // Retirement may have detached a delayed capture before this CPU gets BKL.
  if !copied&&(*c).token!=0{return error.Held;}
  if copied{
@@ -161,28 +256,32 @@ unsafe fn capture(cpu:usize,frame:u64,event:u64)!u64{unsafe{
    else if user_bridge_eoi(cpu as u64,event)!=0{return error.Held;}
   }
  }
- return try choose(d,cpu);
+ stage(cpu,CHOOSE);return try choose(d,cpu);
 }}
 pub export("dong_user_smp_event") fn event(cpu:usize,frame:u64,vector:u64)u64{unsafe{
- match capture(cpu,frame,vector){ok(next)=>{return next;},err(e)=>{return held();},}
+ begin_trace(cpu,1,vector);
+ match capture(cpu,frame,vector){ok(next)=>{return next;},err(e)=>{record_failure(cpu,1,vector,e,0);return held();},}
 }}
 pub export("dong_user_smp_idle") fn idle(cpu:usize,vector:u64)u64{unsafe{
- match idle_checked(cpu,vector){ok(next)=>{return next;},err(e)=>{return held();},}
+ begin_trace(cpu,2,vector);
+ match idle_checked(cpu,vector){ok(next)=>{return next;},err(e)=>{record_failure(cpu,2,vector,e,0);return held();},}
 }}
 unsafe fn idle_checked(cpu:usize,vector:u64)!u64{unsafe{
  let d=try checked(cpu);let c=(*d).cpus+cpu;
  if (*c).mode!=ud.IDLE&&(*c).mode!=ud.KERNEL{return error.Held;}
  if vector!=IDLE&&vector!=0x51&&vector!=0x5c&&vector!=0x60&&user_bridge_eoi(cpu as u64,vector)!=0{return error.Held;}
- let limit=try deadline(d,cpu);let flushed=try ud.poll(d,cpu);try ud.acquire(d,cpu,limit);
- let copied=try ud.drain(d,cpu);
+ stage(cpu,DEADLINE);let limit=try deadline(d,cpu);stage(cpu,POLL);let flushed=try ud.poll(d,cpu);
+ stage(cpu,ACQUIRE);wait_start(cpu,limit);try ud.acquire(d,cpu,limit);wait_acquired(cpu);
+ stage(cpu,DRAIN);let copied=try ud.drain(d,cpu);
  if vector==0x51||vector==0x5c||vector==0x60{if cpu!=0||user_bridge_interrupt(vector)!=0{return error.Held;}}
  if (*c).token!=0{try ud.release(d,cpu,q.READY);}
- return try choose(d,cpu);
+ stage(cpu,CHOOSE);return try choose(d,cpu);
 }}
 pub export("dong_user_smp_return") fn returning(cpu:usize)u64{unsafe{
- match commit(cpu){ok(done)=>{return done as u64;},err(e)=>{return held();},}
+ begin_trace(cpu,3,0);
+ match commit(cpu){ok(done)=>{return done as u64;},err(e)=>{record_failure(cpu,3,0,e,0);return held();},}
 }}
 unsafe fn commit(cpu:usize)!bool{unsafe{
- let d=try checked(cpu);if try ud.commit_user(d,cpu){return true;}
- try ud.cancel_return(d,cpu);let flushed=try ud.poll(d,cpu);return false;
+ let d=try checked(cpu);stage(cpu,COMMIT);if try ud.commit_user(d,cpu){return true;}
+ stage(cpu,CANCEL);try ud.cancel_return(d,cpu);stage(cpu,POLL);let flushed=try ud.poll(d,cpu);return false;
 }}

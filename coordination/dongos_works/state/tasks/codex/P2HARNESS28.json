@@ -1,0 +1,63 @@
+{
+  "assignment_owner": "codex",
+  "auto_dispatch": false,
+  "auto_verify": false,
+  "candidate": null,
+  "checks": [
+    "module:tests.test_user_smp_services"
+  ],
+  "claim_from_status": "todo",
+  "claimed_at": "2026-10-22T21:26:02+00:00",
+  "claimed_by": "codex-mcp-daece153b59c4bd5",
+  "completed_at": "2026-10-22T21:32:23+00:00",
+  "complexity": "standard",
+  "created_at": "2026-10-22T21:25:52+00:00",
+  "delivery": "codex-works/deliveries/P2HARNESS28.md",
+  "depends_on": [],
+  "description": "P2SMP27 独立作业 509fef4db16648e3af0557212591fe9d 的 diagnostics/entry 已通过，旧 test_user_smp_services 抽取新 services.enable_smp/project 后缺少 resources.Block/LargeStorage/large_poll/large_try 夹具依赖，解析即失败。仅更新该旧回归夹具：仍抽取真实生产 enable_smp/project/callbacks 和真实 Catalog/Domain/queue，保留十项真实坏源码、exit/fault/gui 场景和 BSP/BKL/Frame/退休前撤销约束；补真实 LargeTicket/LargeStorage/Context/large_poll 类型及受限、对齐、清零的 RAM resources.allocate 边界。LARGE 事务本回归不启用；任何请求/ready 非零须失败，回执明确该边界及不证明实际 LARGE/VM。不得改生产代码、公共probe、copy_graph或放宽独立预言/编译告警。采集源码/工具前后SHA、命令原始输出及对象/执行文件SHA，零skip。执行者不运行编译、测试、VM，由协调器独立复验后验收集成。",
+  "document": "codex-works/tasks/P2HARNESS28-board.md",
+  "historical": false,
+  "id": "codex:P2HARNESS28",
+  "integration_note": "授权3文件已真实在主工作树，独立复验后指纹逐项相同，按已审真实fixture范围登记集成；不commit/push，不扩大为Large事务或P2整体完成。",
+  "legacy_hash": "6eefa413cfcf02d63c60ca61e91f7ae57aaf25720dcee1108adb7f09a3a4c106",
+  "number": "P2HARNESS28",
+  "owner": "codex",
+  "rev": 6,
+  "review_note": "根实际审查fixture完整提取生产enable_smp/project/large_poll/callback/retire、真实Catalog/Domain/queue和ABI，LargeStorage/Block/Context来自实际源码/编译布局；资源RAM仅作为显式owned aligned guarded zero-once边界，dormant Large三个拒绝/注册/真实poll覆盖且不宣称事务执行。10真坏源+6debug/release场景=22实际编译/26native控制，不将synthetic硬件声称AP实测。独立28d623bb3fac4d468a05c2a7a870998d 1test0skip286.672s/source stable/进程stopped exited；根逐核当前3文件SHA与回执相同。仅服务夹具范围验收；新Large真实负载/observer接线继续由原B返修，不冒充通过。",
+  "status": "integrated",
+  "title": "更新实际 SMP 服务回归夹具以覆盖 LARGE 接线依赖",
+  "updated_at": "2026-10-22T22:14:10+00:00",
+  "verification": {
+    "checks": [
+      {
+        "cancelled": false,
+        "elapsed_seconds": 286.672,
+        "execution_exited": true,
+        "passed": true,
+        "process_stopped": true,
+        "returncode": 0,
+        "skips": 0,
+        "spec": "module:tests.test_user_smp_services",
+        "tests": 1,
+        "timed_out": false
+      }
+    ],
+    "execution_exited": true,
+    "fingerprint": {
+      "codex-works/deliveries/P2HARNESS28.md": "2fed1f45ff7447a2f7fa25ddc7a27be0bb2923a641e88908061683465fd24962",
+      "docs/p2-smp-service-fixture.md": "af19546f3c4a30a6632b5708321c92f67bd7d393829cfa7f4b313e107d3e34cf",
+      "tests/test_user_smp_services.py": "c9366c29f250b21d4d177ed02c3838c11ab361cb19645ca3b1667e33200cf34d"
+    },
+    "finished_at": "2026-10-22T22:12:48+00:00",
+    "job": "28d623bb3fac4d468a05c2a7a870998d",
+    "passed": true,
+    "process_stopped": true,
+    "source_stable": true,
+    "summary": "定向复验通过，等待源码/契约审查"
+  },
+  "write_paths": [
+    "tests/test_user_smp_services.py",
+    "docs/p2-smp-service-fixture.md",
+    "codex-works/deliveries/P2HARNESS28.md"
+  ]
+}

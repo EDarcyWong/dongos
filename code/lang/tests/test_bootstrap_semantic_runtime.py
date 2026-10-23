@@ -377,10 +377,9 @@ class BootstrapSemanticRuntimeTests(unittest.TestCase):
         self.records.append(dict(test='flow-host-acceptance',cases=len(cases),modes=2,passed=True))
     def test_intrinsic_and_aggregate_never_flow(self):
         cases=self.cases(never_flow_cases())
-        # Terminating cleanup remains explicitly unsupported in the native
-        # subset, although the complete host accepts this program.
+        # A cleanup that never returns closes the function's normal path.
         source='module a;fn die()noreturn{loop{}}struct S{x:u64}fn f()u64{defer {let b=true&&(S{x:die()}.x==0);}}'
-        compile_source(source);cases.append(decl.case(source,8))
+        compile_source(source);cases.append(decl.case(source,0))
         for mode,exe in self.executables.items():self.run_cases(exe,cases,'never-flow-'+mode)
         self.records.append(dict(test='intrinsic-aggregate-never-flow',cases=len(cases),modes=2,host_acceptance_checked=True,passed=True))
 
@@ -598,14 +597,14 @@ class BootstrapSemanticRuntimeTests(unittest.TestCase):
         for mode,exe in self.executables.items():self.run_cases(exe,cases,'packed-flow-'+mode)
         self.records.append(dict(test='packed-flow-all-byte-patterns-exact-and-one-short',cases=len(cases),modes=2,host_acceptance_checked=True,passed=True))
 
-    def test_unsupported_and_workspace_limits_are_explicit(self):
+    def test_tagged_cleanup_support_and_workspace_limits_are_explicit(self):
         cases=[decl.case('module a;fn f()void{}',2,pool=i,cap=0) for i in range(24,29)]
-        unsupported=['enum E{A,B}fn f(e:E)u64{match e{E.A=>{return 1;},E.B=>{return 2;}}}',
-                     'fn die()noreturn{loop{}}fn f()u64{defer die();}',
-                     'error Oops=1;fn f()void{}']
-        for body in unsupported:compile_source('module a;'+body);cases.append(decl.case('module a;'+body,8))
+        supported=['enum E{A,B}fn f(e:E)u64{match e{E.A=>{return 1;},E.B=>{return 2;}}}',
+                   'fn die()noreturn{loop{}}fn f()u64{defer die();}',
+                   'error Oops=1;fn f()void{}']
+        for body in supported:compile_source('module a;'+body);cases.append(decl.case('module a;'+body,0))
         for mode,exe in self.executables.items():self.run_cases(exe,cases,'limits-'+mode)
-        self.records.append(dict(test='explicit-unsupported-and-capacity',cases=len(cases),invalid_preflights_per_case=20,modes=2,passed=True))
+        self.records.append(dict(test='tagged-cleanup-support-and-capacity',cases=len(cases),invalid_preflights_per_case=20,modes=2,passed=True))
     def test_z_actual_bad_type_and_branch_intersection_are_rejected(self):
         source=(self.snapshot/'bootstrap/semantic_types.dg').read_text(encoding='utf-8')
         variants=[('coercion','return rt_fail(c,TYPE,id,target as u64);','(*info).typ=target;return target;',decl.case('module a;fn f(x:u64)bool{return x;}',3)),

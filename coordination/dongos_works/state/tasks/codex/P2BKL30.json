@@ -1,0 +1,82 @@
+{
+  "assignment_owner": "codex",
+  "auto_dispatch": false,
+  "auto_verify": false,
+  "candidate": null,
+  "checks": [
+    "module:tests.test_user_bkl",
+    "module:tests.test_user_domain"
+  ],
+  "claim_from_status": "rework",
+  "claimed_at": "2026-10-22T22:09:35+00:00",
+  "claimed_by": "codex-mcp-daece153b59c4bd5",
+  "completed_at": "2026-10-22T22:12:22+00:00",
+  "complexity": "standard",
+  "created_at": "2026-10-22T21:39:05+00:00",
+  "delivery": "codex-works/deliveries/P2BKL30.md",
+  "depends_on": [],
+  "description": "P2实际R9/R10/R11已读到获取BKL Timeout且持锁者可不同，当前TAS无公平保证；不能把未定首因说成已证。实现独立sched.user_bkl组件以提供一次绑定Domain的FIFO票据acquire/unlock，后续另项接入Bridge，本项不修改Bridge/Domain/boot/ASM。保持Domain120/Cpu120/Bridge/Header ABI、lock0/1与owner语义，original ud.acquire(d,cpu,same absolute limit)和ud.unlock仍执行。bind在旧GS只核结构且lock0/ownerNONE/barrier0，一次永久绑定。CAS分配next票在MAX前拒绝溢出；每CPU wait需原子claim防重入；排队期间持续真实ud.poll/pause，不能挡legacy/new all-tag ACK/pollhook，不续期或按sequence/owner变化清超时。到head再调用原acquire；已排队且原limit过期不能利用原空闲fastpath成功，原head等待bootstrap持锁仍保原Domain.Timeout，新FIFO排队超时用唯一新码。original acquire失败/已有failed/超时不清票不推进serving，由调用者原Bridgeheld封闭全域；组件不得自行复活状态。unlock先核sidecar票/owner及Domain，允许LOCKED或RETURNING，先成功原ud.unlock，清本wait与sidecar owner后最后release-store serving；避免旧主覆盖新主。ud.poll不验证foreign CR3，不能宣称它证明root，真正head原acquire必须原样核root。新增真实DG/C/Python原生多线程门禁，TLS CPU/root/IF0、实际原子try_lock/unlock与clock硬件边界；强制定票0/1/2后旧主重入票3，验FIFO及唯一owner；票0真实barrier_begin/wait，票1/2实际poll写ACK；bootstrap直接Domain锁首票、空队列/重复轮次/RETURNING及idle解锁、重复CPU/foreignDomain/IF0/root/queued absolute deadline/原head timeout/unlock失败不handoff/MAX等。独立C oracle对真实坏DG去FIFO/跳poll/先推进serving/续期/吞acquire失败/溢出等必须失败且不能以编译错替代，debug/release，保持告警错误。完整source/tool前后SHA、raw命令输出、对象/EXE哈希，零skip。执行者仅静态修改所声明文件，不编译测试/VM/提交推送或验收。FIFO仅防barging，不证明长持锁或WHPX停顿消失，actual AP/PCID门禁仍须后续freshbuild复验。",
+  "document": "codex-works/tasks/P2BKL30-board.md",
+  "historical": false,
+  "id": "codex:P2BKL30",
+  "integration_note": "授权6文件实际在主工作树并逐SHA与独立回执一致，登记此独立组件真实文件集成；保持Bridge/Domain生产入口未接线与受限证据范围，不commit/push、不扩阶段通过。",
+  "legacy_hash": "22e5c588e3131fd8a6779e30ed01b86fed795b03d909ffa8160ad7182a37be8a",
+  "number": "P2BKL30",
+  "owner": "codex",
+  "rev": 9,
+  "review_note": "根与两独立只读审查已逐读实际FIFO sidecar/原Domain契约及C/DG/Python真坏源：once bind、原CPU/IF0/root核、保原绝对limit、queued-expired-free拒、原head Timeout保留、poll ACK、fail-held不取消、先原unlock清wait/owner最后serving原子发布、MAX前拒wrap均一致。R1编译失败保留；R2仅修!void坏体转发，panic独立prefix/97与常规C oracle1分离。独立d7273818c35049bd8b9f95bb627af90b 3test0skip/source stable/stopped/exited；根实核24真实DG编译、debug/release各19normal rc0+11真坏DG native oracle rc1=60进程，110命令/756产物SHA无差异；当前6文件逐SHA一致。真实线程/FIFO/ACK仅宿主硬件边界，Bridge尚未接线，不声称解决WHPX超时或AP/PCID/P2整体通过。",
+  "status": "integrated",
+  "title": "保留绝对期限及 ACK 轮询的 FIFO 内核锁 sidecar",
+  "updated_at": "2026-10-22T22:18:42+00:00",
+  "verification": {
+    "checks": [
+      {
+        "cancelled": false,
+        "elapsed_seconds": 54.797,
+        "execution_exited": true,
+        "passed": true,
+        "process_stopped": true,
+        "returncode": 0,
+        "skips": 0,
+        "spec": "module:tests.test_user_bkl",
+        "tests": 1,
+        "timed_out": false
+      },
+      {
+        "cancelled": false,
+        "elapsed_seconds": 69.766,
+        "execution_exited": true,
+        "passed": true,
+        "process_stopped": true,
+        "returncode": 0,
+        "skips": 0,
+        "spec": "module:tests.test_user_domain",
+        "tests": 2,
+        "timed_out": false
+      }
+    ],
+    "execution_exited": true,
+    "fingerprint": {
+      "codex-works/deliveries/P2BKL30.md": "8244babe698ac85cc58777d885b08d7f89805a483e4e4f6b6d4b81a58cc48ed4",
+      "docs/p2-fair-bkl.md": "fce8d8b1179c55edcaec22d47d4323e1fb43e015c1c4bab77caa723c05232a1d",
+      "kernel/sched/user_bkl.dg": "05122417a361fada817b1c4c1c84d6dee89ba9226da6f42c8a3b5581473f88f4",
+      "tests/test_user_bkl.py": "7fb97d1b1c5409f2d450963fe1b6710863c294675643c8e8a7675bc172383914",
+      "tests/user_bkl_probe.c": "efcd61846d282ac24f2f53a8f4b539c3c0d587ee4dd07d058508419d42664409",
+      "tests/user_bkl_probe.dg": "623f1eb0e7c07c9fd93b098a310d52f8456a6007c09555dc33b130a97b8ad76b"
+    },
+    "finished_at": "2026-10-22T22:17:38+00:00",
+    "job": "d7273818c35049bd8b9f95bb627af90b",
+    "passed": true,
+    "process_stopped": true,
+    "source_stable": true,
+    "summary": "定向复验通过，等待源码/契约审查"
+  },
+  "write_paths": [
+    "kernel/sched/user_bkl.dg",
+    "tests/user_bkl_probe.dg",
+    "tests/user_bkl_probe.c",
+    "tests/test_user_bkl.py",
+    "docs/p2-fair-bkl.md",
+    "codex-works/deliveries/P2BKL30.md"
+  ]
+}

@@ -1,6 +1,48 @@
 # DongOS 整体任务图
 
-## 新开发机恢复与收尾（2026-10-22T09:18:41+08:00）
+## P2 优先，随后 P5（2026-10-23T02:55:00+08:00）
+
+用户最新顺序：先完成 P2，再完成 P5。P2FLUSH11 已 integrated rev6，
+正式独立作业64cf4d5d11454dfebd38a28ec54136b8通过3项、零skip；190原始
+产物SHA及三正/三真坏ASM独审通过。P2仍partial：调度后多根大页/EXEC/WC
+消费者、支持环境的AP PCIDE=1及物理WC性能仍须完成。普通多根变更协议和
+BSP/逐CPU PCID已有实现，既有11项P2任务不重复派发。
+
+P2PCID12、P2ROOT13、P2WC14和进度接续P2SYNC15在途，未提前验收。
+ROOT13首轮因快照期间源变化而未执行测试，已保留记录并准备重排。
+本检查点190项=161 integrated+24 accepted+4 in_progress+1 paused；
+实时以MCP为准。G6PREP1宿主22项0skip已integrated6，未运行新G6来宾；
+G6DOC1按用户优先级paused2。P5尚未开始本轮实现。没有运行OS/VM或提交推送。
+
+详见[当前P2检查点](codex-works/reviews/2026-10-23-P2-current.md)。
+以下带日期的数量、候选和“当前”均保留各自历史范围。
+
+
+## G5 完成与主线集成（2026-10-23T01:34:42+08:00）
+
+G5FULL1 integrated rev16、G5CLOSURE1 integrated rev21、G5INT1 rev24；
+G5METHODFIX1、G5DOC1、G5DOC2均integrated rev6。七生产模块已按
+accepted字节实际写入本地主线，永久测试、旧契约回归和文档同步完成。
+当前协调器活动任务 **183项：159 integrated、24 accepted**，
+0 todo/in_progress/submitted/rework。状态与代码完成范围分别判断，
+24个accepted不等于24个尚未实现组件。
+
+| 当前门禁 | 结论 |
+| --- | --- |
+| G5完整语言/NASM宿主门禁 | 已完成；51项/27组、scope_complete=true |
+| G5完整编译器闭包 | 已完成；四ELF逐字节相同，每份2,046,376B，56MiB/64KiB/2MiB预算保持 |
+| 主线独立集成复验 | 正式0856作业51+1+18共70项，零skip、源稳定、退出/停止确认，原始产物独审通过 |
+| L3整体 | 继续partial：扩大编译器新G6客体自编译/FLUSH/同盘双启 |
+| L3A更广纯ELF | 继续partial：内建assembler无XMM/atomic/受限asm等编码，NASM覆盖不等于通用纯ELF覆盖 |
+| 历史L3C | 原head/runtime5/49模块profile继续已完成，不外推本轮2,046,376B产物 |
+| P2/P5/P6/P7/P8/P9及KVM/真机 | 保留各自既有完成与真实余项，本轮不扩张 |
+
+详见[完成回执](codex-works/reviews/2026-10-22-G5-completion.md)、
+[完整门禁](../../code/docs/g5-differential.md)与[roadmap.json](roadmap.json)。
+候选交付、旧失败和中断全部保留；下方164项及八类gap为历史快照，
+不再代表当前待办。本轮未运行OS/VM/AI CLI，未提交/推送。
+
+## 历史检查点：新开发机恢复与收尾（2026-10-22T09:18:41+08:00）
 
 本轮17份缺失任务书、CX6同号异义和CX14/CX15旧状态均已处理完成。CX14 integrated rev7，CX15 integrated rev8；CX6 integrated rev9，已恢复读取器契约，分离5条原NASM事件，耗时恢复为1轮/265秒，原始事件全部保留。协调器issues=0；核对时间2026-10-22T09:18:41+08:00。
 

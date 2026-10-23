@@ -7,7 +7,6 @@
     "module:tests.test_compiler_job_launch"
   ],
   "claim_from_status": "todo",
-  "claim_token": "412058971cba4ad9aab02a0c645515e8",
   "claimed_at": "2026-10-20T09:26:40+00:00",
   "claimed_by": "codex-mcp-d76b66689d824a70",
   "completed_at": "2026-10-22T01:01:52+00:00",
@@ -21,14 +20,14 @@
   "historical": false,
   "id": "codex:CX14",
   "integration_note": "实际主线kernel/user/compiler_job.dg、services/compiler/controller.dg、services gate/ASM/build/runner/契约与迁移交付全部已落盘，逐项与本轮9项正式验收指纹一致；当前实现已随4e1fede存在，补建交付只登记本轮事实，没有覆盖现有实现。正式3tests零skip及原G6限定profile后继证据已审查，登记真实既有文件集成；新机未运行VM，完整G5与其它阶段待办保持。",
-  "legacy_hash": "7ea053634013ba8f89999f55283f2d78b9d5f2cb0732d6864358689b89d1a004",
+  "legacy_hash": "5f9f3ae4783ac1d594440ba6e263562d075e4774bdaa159a48d693ce44f84b79",
   "number": "CX14",
   "owner": "codex",
-  "rev": 7,
+  "rev": 8,
   "review_note": "已实际审查当前compiler_job/controller/syscall gate、恢复的原契约与有效负控，关联8文件与G6 f54c35c的LF内容一致，真实compiler gate逐字符一致。正式隔离d1dd123835f04bedbbd8dfb903054ace：3tests/0skip/29.210秒，source_stable/process_stopped/execution_exited均true，当前9声明文件指纹相符。原独立生命周期审查与后继G6 run39467503226限定runtime5/49模块真实同盘双启/完整ELF及物理独审相互补足；本轮只做新宿主复验，不宣称新机重跑VM或raw产物已迁移。按用户授权补记既有受限profile交付，不扩大为完整G5。完整依据reviews/2026-10-22-task-recovery/CX14-formal-review.json。",
   "status": "integrated",
   "title": "[L3] 受限客体编译启动与持久化控制服务",
-  "updated_at": "2026-10-22T01:12:39+00:00",
+  "updated_at": "2026-10-22T14:38:35+00:00",
   "verification": {
     "checks": [
       {

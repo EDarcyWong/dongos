@@ -168,6 +168,14 @@ unsafe fn discover()!void{unsafe{
     }
     RAW=abi.EMPTY_DEVICE;RAW.kind=abi.I8042;try ledger.register(TABLE,&RAW,&VIEW);ENUMERATED=true;
 }return;}
+// Trusted BSP/IF0 boot preflight after old workers drained, before publishing
+// the user-SMP domain. Only complete discovery seals ENUMERATED; this creates
+// no user capability, device-role binding or DMA lease. Runtime enumeration
+// still revalidates each returned PCI identity against real hardware.
+pub unsafe fn preflight_discovery()!void{unsafe{
+    if TABLE==null||(*TABLE).initialized!=1{return error.abi.Invalid;}
+    try discover();
+}return;}
 pub unsafe fn enumerate(cursor:u64)!void{unsafe{
     try discover();try ledger.enumerate(TABLE,cursor,&VIEW);
     if VIEW.kind==abi.PCI&&(VIEW.flags&abi.REVOKED)==0{

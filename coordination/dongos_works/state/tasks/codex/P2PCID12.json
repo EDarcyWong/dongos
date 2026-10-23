@@ -1,0 +1,112 @@
+{
+  "assignment_owner": "codex",
+  "auto_dispatch": false,
+  "auto_verify": false,
+  "candidate": null,
+  "checks": [
+    "module:tests.test_p2_pcid",
+    "module:tests.test_p2_pcid_build",
+    "module:tests.test_user_smp_oracle",
+    "module:tests.test_user_smp_worker"
+  ],
+  "claim_from_status": "rework",
+  "claimed_at": "2026-10-22T19:44:57+00:00",
+  "claimed_by": "codex-mcp-daece153b59c4bd5",
+  "completed_at": "2026-10-22T19:51:20+00:00",
+  "complexity": "standard",
+  "created_at": "2026-10-22T18:30:41+00:00",
+  "delivery": "codex-works/deliveries/P2PCID12.md",
+  "depends_on": [
+    "codex:P2ALIAS8"
+  ],
+  "description": "用户要求先完成P2再P5。当前per-CPU PCID实现存在，但永久current runner只identity-only，snapshot/positive seal未实现，TCG历史不能证明AP PCIDE1。本项增新的有限P2 PCID硬件门禁，保留旧planning/identity-only API，不伪装构建或把host fixtures当实际guest。可新增独立builder/runner/oracle模块，复用ProcessGuest真实QMP只读/当前workload、source-manifest和完整页表验证；源码新快照真实runtime7构建+busy五worker（私有overlay不改生产worker/编译器），每CPU实际CR4.PCIDE、Header enabled、CR3 tag/root、Seen root/incarnation、switch/retained计数与暖固定VA跨代复用、全读者ACK/退休必须绑定同一source/artifacts/raw dump。--require-pcid严格拒绝任何CPU fallback/无retained/AP未运行；fallback可单独证明但不得标PCID通过。新增--execute明确区分仅prepare/identity，不允许test自动启动VM；执行者仅实现和host检查，协调者在准备可审查后按用户P2授权单独实际执行并记录，源码/工具/磁盘前后SHA及所有进程停止必需。正/负记录必须由原始寄存器/PTE/CPU header/metrics和worker实际probe重算，不凭布尔flag seal。host正反例涵盖BSP-only误放行、CR4或tag不符、代际继承、缺AP/零retained/无raw manifest/篡改源/清理失败；不存在真实通过不得关闭P2。禁止提交推送/AI CLI；普通执行者不运行OS/VM。",
+  "document": "codex-works/tasks/P2PCID12-board.md",
+  "historical": false,
+  "id": "codex:P2PCID12",
+  "integration_note": "已在主工作区真实集成6声明源码/文档，root核当前文件与b893…冻结指纹及current-r3的声明覆盖相等；33独立host测试0skip通过，fresh真实构建与identity通过。登记集成的是PCID严格验收入口组件；WHPX实际固件#GP失败留存，未伪称AP PCID运行或P2整体完成，不包含在途B/C/D实现。",
+  "legacy_hash": "f0953db4626d12ccd3215a3eb2254db348158fabfa324961502cd9cd6b6dd9b0",
+  "number": "P2PCID12",
+  "owner": "codex",
+  "rev": 13,
+  "review_note": "源码/契约/有效测试实际审查完成，含独立agent只读launch/replay复审。独立作业 b893487745444470ada6ec46686c7f0a：16+9+7+1=33测试0skip，所有rc0、process_stopped/execution_exited/source_stable true。新增显式WHPX interrupt backend不放宽真实逐CPU CR4/Header/retained/timer/root/tag/代际/raw门禁。current-r3为固定pre-P2LARGE16生产1493文件+7声明覆盖的新副本，无复用产物；实际fresh runtime7构建rc0、kernel.bin 1994448 B，独立identity CLI rc0；root重核全部280产物和7覆盖SHA。协调者实际WHPX --cpu host --kernel-irqchip off避开最初nested请求，但固件PlatformPei发生#GP、未出现DONGOS_P7_DESKTOP_READY，实际runner rc1/Timeout，inputs_unchanged true，owned QEMU stopped/cleanup true、alive false、qemu_returncode0，原始serial/stderr/result保留。仅验收严格入口与身份组件；真实AP PCIDE1正负硬件门禁仍未通过，P2整体不得标完成，physical WC亦未关闭。",
+  "status": "integrated",
+  "title": "P2当前源码逐CPU PCID硬件验收入口与严格回执",
+  "updated_at": "2026-10-22T19:57:59+00:00",
+  "verification": {
+    "checks": [
+      {
+        "cancelled": false,
+        "elapsed_seconds": 0.407,
+        "execution_exited": true,
+        "passed": true,
+        "process_stopped": true,
+        "returncode": 0,
+        "skips": 0,
+        "spec": "module:tests.test_p2_pcid",
+        "tests": 16,
+        "timed_out": false
+      },
+      {
+        "cancelled": false,
+        "elapsed_seconds": 5.766,
+        "execution_exited": true,
+        "passed": true,
+        "process_stopped": true,
+        "returncode": 0,
+        "skips": 0,
+        "spec": "module:tests.test_p2_pcid_build",
+        "tests": 9,
+        "timed_out": false
+      },
+      {
+        "cancelled": false,
+        "elapsed_seconds": 0.625,
+        "execution_exited": true,
+        "passed": true,
+        "process_stopped": true,
+        "returncode": 0,
+        "skips": 0,
+        "spec": "module:tests.test_user_smp_oracle",
+        "tests": 7,
+        "timed_out": false
+      },
+      {
+        "cancelled": false,
+        "elapsed_seconds": 7.609,
+        "execution_exited": true,
+        "passed": true,
+        "process_stopped": true,
+        "returncode": 0,
+        "skips": 0,
+        "spec": "module:tests.test_user_smp_worker",
+        "tests": 1,
+        "timed_out": false
+      }
+    ],
+    "execution_exited": true,
+    "fingerprint": {
+      "codex-works/deliveries/P2PCID12.md": "75c1d3b24ff546f3804b36332ac0a9cc3876851792878c39c2eb1ff92b24a1ca",
+      "docs/p2-pcid.md": "f39a18e625fecd10a95b43a1d8c3cddaba52abf3d02cc213a7d3056664d9ff4b",
+      "tests/p2_pcid_build.py": "a34f46f355bb193e05f61a58b7392cae39cfe5ef8bdf95877a973b325fc6ad77",
+      "tests/p2_pcid_oracle.py": "549ff66f425345ebe0e55a20faa8c8ec0eaa608a747bae803fd67d5b8b0c3480",
+      "tests/run_p2_pcid_qemu.py": "c20c67ff55a10bb7de91a988053ede09c9aea71583ff38246b3519ebf56e372d",
+      "tests/test_p2_pcid.py": "104a2596ae61144a48c7d7ba67845a0f1ab03f80d485460ce960d70b8dec31d7",
+      "tests/test_p2_pcid_build.py": "51febbfbd663bd5acb5c10645612c4d237c87050a2640af3ed8e728b68065d5b"
+    },
+    "finished_at": "2026-10-22T19:51:54+00:00",
+    "job": "b893487745444470ada6ec46686c7f0a",
+    "passed": true,
+    "process_stopped": true,
+    "source_stable": true,
+    "summary": "定向复验通过，等待源码/契约审查"
+  },
+  "write_paths": [
+    "tests/p2_pcid_build.py",
+    "tests/p2_pcid_oracle.py",
+    "tests/run_p2_pcid_qemu.py",
+    "tests/test_p2_pcid.py",
+    "tests/test_p2_pcid_build.py",
+    "docs/p2-pcid.md",
+    "codex-works/deliveries/P2PCID12.md"
+  ]
+}

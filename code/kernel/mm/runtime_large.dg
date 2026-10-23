@@ -1,0 +1,276 @@
+// Post-scheduler, WB/RW/NX-only owner of the adjacent PDE. The old sealed
+// large_memory lease and its entire original mapping remain untouched.
+module mm.runtime_large;
+import mm.paging as pg;
+import mm.runtime_roots as forest;
+import mm.phys_buddy as buddy;
+import sched.user_domain as ud;
+pub const OLD:u64=0xffff_a800_0000_0000;
+pub const WINDOW:u64=OLD+0x20_0000;
+pub const BYTES:u64=0x20_0000;
+pub error Invalid=0x0621_0001;pub error Authority=0x0621_0002;
+pub error Forest=0x0621_0003;pub error Held=0x0621_0004;
+pub error Reader=0x0621_0005;pub error Deadline=0x0621_0006;
+const MAX:u64=0xffff_ffff_ffff_ffff;
+pub struct Environment{pub cpu:u64,pub if0:u64,pub root:u64,pub cr4:u64}
+pub struct Sample{pub cpu:u64,pub root:u64,pub cr4:u64,pub value:u64}
+pub type Hardware=unsafe fn(out:*Environment)void;
+pub type Load=unsafe fn(virtual:u64,out:*Sample)void;
+pub type Check=unsafe fn(cookie:u64)u64;
+pub type Window=unsafe fn(active:u64)void;
+pub type Digest=unsafe fn(virtual:u64,bytes:u64)u64;
+pub struct ReaderReport{pub request:u64,pub acknowledged:u64,pub count:u64,
+ pub warm:Sample,pub replaced:Sample,pub restored:Sample,pub merged:Sample}
+pub struct Report{pub version:u64,pub attempted:u64,pub complete:u64,pub poison:u64,
+ pub error_code:u64,pub operation:u64,pub steps:u64,pub state:u64,pub root:u64,
+ pub physical:u64,pub online:u64,pub root_count:u64,pub tables_before:u64,
+ pub tables_after:u64,pub pre_sequence:u64,pub post_sequence:u64,pub barriers:u64,
+ pub retired:u64,pub reclaimed:u64,pub reader_sequence:u64,pub reader_round:u64,
+ pub expected:u64,pub old_checksum:u64,pub final_checksum:u64,pub merge_error:u64,
+ pub old_entry:u64,pub new_entry:u64,pub roots_pointer:u64,pub readers_pointer:u64}
+// All large storage is caller-owned, normally service arena pages. No BSS
+// arrays or function frame carries the 512 linear retirement receipts.
+pub align(64) struct Context{pub report:Report,pub domain:*ud.Domain,pub space:*pg.Space,
+ pub allocator:*const buddy.Allocator,pub cookie:u64,pub check:Check,pub hardware:Hardware,
+ pub load:Load,pub window:Window,pub digest:Digest,pub deadline_ticks:u64,pub ready:u64,pub busy:u64,
+ pub roots:[16]forest.Root,pub aliases:[64]forest.Alias,pub scratch:forest.Scratch,
+ pub forest_report:forest.Report,pub receipts:[512]pg.Retired,pub readers:[16]ReaderReport,
+ pub saved_pt:[512]u64}
+fn region(p:u64,n:u64,a:u64)bool{return p!=0&&(p&(a-1))==0&&n<=MAX-p;}
+fn overlaps(a:u64,n:u64,b:u64,m:u64)bool{return a<b+m&&b<a+n;}
+unsafe fn poison(c:*Context,code:u64)void{unsafe{
+ (*c).report.poison=1;(*c).report.error_code=code;atomic_store(&(*(*c).domain).failed,1);
+}return;}
+unsafe fn authority(c:*Context)!void{unsafe{
+ let d=(*c).domain;
+ if (*c).ready!=1||(*c).report.poison!=0||d==null||(*d).ready!=1||(*d).failed!=0
+  ||(*d).lock!=1||(*d).owner!=0||(*((*d).cpus)).mode!=ud.LOCKED||(*d).barrier!=0
+  ||(*d).kernel_root!=(*c).report.root||(*d).online!=(*c).report.online{return error.Authority;}
+ var e=Environment{cpu:0,if0:0,root:0,cr4:0};(*c).hardware(&e);
+ if e.cpu!=0||e.if0!=1||e.root!=(*d).kernel_root||(e.cr4&128)!=0{return error.Authority;}
+ if (*c).check((*c).cookie)!=0{return error.Authority;}
+ try buddy.allocated_block((*c).allocator,(*c).report.physical,9);
+}return;}
+unsafe fn directory(c:*Context,out:*pg.PoolView)!*const pg.Table{unsafe{
+ try pg.inspect((*c).space,out);let v=*out;var physical=v.physical;var level:u64=0;
+ while level<2{
+  if physical<v.physical||physical-v.physical>=v.count as u64*4096||(physical&4095)!=0{return error.Forest;}
+  let table=v.tables+((physical-v.physical)/4096) as usize;
+  let entry=(*table).entries[((WINDOW>>(39-level*9))&511) as usize];
+  if (entry&1)==0||(entry&128)!=0{return error.Forest;}physical=entry&v.address_mask;level+=1;
+ }
+ if physical<v.physical||physical-v.physical>=v.count as u64*4096||(physical&4095)!=0{return error.Forest;}
+ return v.tables+((physical-v.physical)/4096) as usize;
+}}
+unsafe fn shape(c:*Context)!void{unsafe{
+ var view=pg.PoolView{tables:null,metadata:null,count:0,physical:0,address_mask:0,used:0,nx:false};
+ let pd=try directory(c,&view);let old=(*pd).entries[0];let entry=(*pd).entries[1];
+ let nx:u64=0x8000_0000_0000_0000;let base=(*c).report.physical;let state=(*c).report.state;
+ if (old&~(96 as u64))!=(base|nx|131){return error.Forest;}
+ if state==0{if entry!=0{return error.Forest;}}
+ else if state==1{if (entry&~(96 as u64))!=(base|nx|131){return error.Forest;}}
+ else if state==2||state==3{
+  if (entry&~(view.address_mask|32))!=7{return error.Forest;}
+  let physical=entry&view.address_mask;
+  if physical<view.physical||physical-view.physical>=view.count as u64*4096{return error.Forest;}
+  let pt=view.tables+((physical-view.physical)/4096) as usize;var i:usize=0;
+  while i<512{var offset=i as u64;if state==3&&i==5{offset=6;}
+   if ((*pt).entries[i]&~(96 as u64))!=(base+offset*4096|nx|3){return error.Forest;}i+=1;
+  }
+ }else{return error.Forest;}
+ (*c).report.old_entry=old;(*c).report.new_entry=entry;
+}return;}
+unsafe fn tree(c:*Context)!void{unsafe{
+ let count=(*c).report.root_count as usize;
+ if count>16{return error.Forest;}
+ let code=forest.audit((*c).space,(*c).roots[..count],(*c).report.physical,BYTES,
+  (*c).aliases[..],&(*c).forest_report,&(*c).scratch);
+ if code!=forest.OK{return error.Forest;}
+ var old:usize=0;var i:usize=0;
+ while i<(*c).forest_report.aliases as usize{let a=(*c).aliases[i];
+  if a.identity!=forest.KERNEL_ID||a.generation!=0||a.root!=(*c).report.root||a.flags!=pg.WRITE{return error.Forest;}
+  if a.virtual==OLD{
+   if a.physical!=(*c).report.physical||a.bytes!=BYTES||a.leaf_bytes!=BYTES{return error.Forest;}
+   old+=1;
+  }else if a.virtual<WINDOW||a.virtual>=WINDOW+BYTES||a.bytes>WINDOW+BYTES-a.virtual{return error.Forest;}
+  i+=1;
+ }
+ if old!=1{return error.Forest;}
+ try shape(c);
+}return;}
+unsafe fn checksum(c:*Context)u64{unsafe{
+ return (*c).digest(OLD,BYTES);
+}}
+unsafe fn page_table(c:*Context)!*const pg.Table{unsafe{
+ var view=pg.PoolView{tables:null,metadata:null,count:0,physical:0,address_mask:0,used:0,nx:false};try pg.inspect((*c).space,&view);
+ var table=view.physical;var level:u64=0;
+ while level<3{
+  if table<view.physical||table-view.physical>=view.count as u64*4096||(table&4095)!=0{return error.Forest;}
+  let source=view.tables+((table-view.physical)/4096) as usize;
+  let entry=(*source).entries[((WINDOW>>(39-level*9))&511) as usize];
+  if (entry&1)==0||(entry&128)!=0{return error.Forest;}table=entry&view.address_mask;level+=1;
+ }
+ if table<view.physical||table-view.physical>=view.count as u64*4096||(table&4095)!=0{return error.Forest;}
+ return view.tables+((table-view.physical)/4096) as usize;
+}}
+unsafe fn unchanged(c:*Context)!void{unsafe{
+ var m=pg.Mapping{physical:0,flags:0};try pg.query((*c).space,OLD+5*4096,&m);
+ if m.physical!=(*c).report.physical+5*4096||m.flags!=pg.WRITE{return error.Held;}
+ var a=Sample{cpu:0,root:0,cr4:0,value:0};(*c).load(OLD+5*4096,&a);
+ if a.value!=0x1122_3344_0000_0005{return error.Held;}
+ (*c).load(OLD+6*4096,&a);if a.value!=0x1122_3344_0000_0006{return error.Held;}
+}return;}
+unsafe fn limit(c:*Context)!u64{unsafe{
+ let now=ud.user_smp_arch_clock();if (*c).deadline_ticks==0||now>MAX-(*c).deadline_ticks{return error.Deadline;}
+ return now+(*c).deadline_ticks;
+}}
+unsafe fn barrier(c:*Context,post:bool)!void{unsafe{
+ let d=(*c).domain;if (*d).sequence==MAX{return error.Authority;}
+ let expected=(*d).sequence+1;
+ // Publish diagnostic identity before barrier_begin can kick an immediate
+ // remote observer. The returned sequence must still match the real Domain.
+ if post{(*c).report.post_sequence=expected;}else{(*c).report.pre_sequence=expected;}
+ let sequence=try ud.barrier_begin(d,0);if sequence!=expected{return error.Authority;}
+ try ud.barrier_wait(d,0,sequence,try limit(c));(*c).report.barriers+=1;
+ // ACKed CPUs cannot return to users while CPU0 owns BKL. This explicitly
+ // rejects an unrecaptured RETURNING boundary even if its ACK was forged.
+ var id:usize=0;while id<16{if ((*d).online&(1<<id as u64))!=0{
+  let cpu=(*d).cpus+id;
+  if ((*cpu).mode!=ud.IDLE&&(*cpu).mode!=ud.KERNEL&&(*cpu).mode!=ud.LOCKED)
+   ||(*cpu).acknowledged!=sequence{return error.Authority;}
+ }id+=1;}
+}return;}
+pub unsafe fn bind(c:*Context,d:*ud.Domain,space:*pg.Space,allocator:*const buddy.Allocator,
+ roots:[]const forest.Root,physical:u64,cookie:u64,check:Check,hardware:Hardware,
+ load:Load,window:Window,digest:Digest,ticks:u64)!void{unsafe{
+ if !region(c as u64,sizeof(Context) as u64,64)||d==null||space==null||allocator==null
+  ||ticks==0||roots.len>16
+  ||(roots.len!=0&&!region(roots.ptr as u64,roots.len as u64*sizeof(forest.Root) as u64,8))
+  ||physical==0||(physical&(BYTES-1))!=0||physical>0x1_0000_0000-BYTES{return error.Invalid;}
+ if read_unaligned((&check) as *const u64)==0||read_unaligned((&hardware) as *const u64)==0
+  ||read_unaligned((&load) as *const u64)==0||read_unaligned((&window) as *const u64)==0
+  ||read_unaligned((&digest) as *const u64)==0{return error.Invalid;}
+ if (*c).ready!=0||overlaps(c as u64,sizeof(Context) as u64,d as u64,sizeof(ud.Domain) as u64)
+  ||overlaps(c as u64,sizeof(Context) as u64,roots.ptr as u64,roots.len as u64*sizeof(forest.Root) as u64)
+  ||overlaps(c as u64,sizeof(Context) as u64,space as u64,sizeof(pg.Space) as u64){return error.Invalid;}
+ let root=try pg.root_physical(space);try buddy.allocated_block(allocator,physical,9);
+ // The old PDE must already exist in this exact parent. This owner never
+ // allocates or propagates a PML4/PDPT branch to existing private roots.
+ var view=pg.PoolView{tables:null,metadata:null,count:0,physical:0,address_mask:0,used:0,nx:false};
+ try pg.inspect(space,&view);let l4=(*view.tables).entries[((OLD>>39)&511) as usize];
+ if (l4&1)==0{return error.Invalid;}
+ (*c).domain=d;(*c).space=space;(*c).allocator=allocator;(*c).cookie=cookie;
+ (*c).check=check;(*c).hardware=hardware;(*c).load=load;(*c).window=window;(*c).digest=digest;(*c).deadline_ticks=ticks;
+ (*c).report.version=1;(*c).report.root=root;(*c).report.physical=physical;(*c).report.online=(*d).online;
+ (*c).report.root_count=roots.len as u64;(*c).report.roots_pointer=&(*c).roots[0] as u64;
+ (*c).report.readers_pointer=&(*c).readers[0] as u64;
+ var i:usize=0;while i<roots.len{(*c).roots[i]=roots[i];i+=1;}
+ compiler_fence();(*c).ready=1;try authority(c);try tree(c);
+ var absent=pg.Mapping{physical:0,flags:0};
+ match pg.query(space,WINDOW,&absent){ok=>{return error.Invalid;},err(e)=>{if e!=0x0203_0002{return error.Invalid;}},}
+ (*c).report.tables_before=(try pg.used_tables(space)) as u64;
+ (*c).report.old_checksum=checksum(c);(*c).report.final_checksum=(*c).report.old_checksum;
+}return;}
+// Invoked only by user_domain.poll after complete entry/capture on the local
+// kernel root. This performs a real volatile load, never an ACK-by-flush-count.
+pub unsafe fn poll(c:*Context,d:*ud.Domain,id:usize)u64{unsafe{
+ if c==null||(*c).ready!=1||(*c).domain!=d||id>=16||((*d).online&(1<<id as u64))==0{return 1;}
+ if (*c).report.poison!=0{return 1;}let r=&(*c).readers[id];
+ var e=Environment{cpu:0,if0:0,root:0,cr4:0};(*c).hardware(&e);
+ let local=(*d).cpus+id;
+ if e.cpu!=id as u64||e.if0!=1||e.root!=(*d).kernel_root||(e.cr4&128)!=0
+  ||((*local).mode!=ud.IDLE&&(*local).mode!=ud.KERNEL&&(*local).mode!=ud.LOCKED){return 1;}
+ // Validate every quiesce ACK's raw controls even when no load is requested;
+ // the legacy arch_root accessor deliberately normalizes the CR3 tag.
+ let request=atomic_load(&(*r).request);if request<=atomic_load(&(*r).acknowledged){return 0;}
+ if request!=(*c).report.reader_sequence||(*c).report.reader_round==0||(*c).report.reader_round>4{return 1;}
+ var sample=Sample{cpu:0,root:0,cr4:0,value:0};(*c).load(WINDOW+5*4096,&sample);
+ // Keep the actual failed load as evidence as well. It never earns an ACK.
+ if (*c).report.reader_round==1{(*r).warm=sample;}
+ else if (*c).report.reader_round==2{(*r).replaced=sample;}
+ else if (*c).report.reader_round==3{(*r).restored=sample;}else{(*r).merged=sample;}
+ if sample.cpu!=id as u64||sample.root!=(*d).kernel_root||sample.cr4!=e.cr4
+  ||sample.value!=(*c).report.expected{return 1;}
+ (*r).count+=1;compiler_fence();atomic_store(&(*r).acknowledged,request);return 0;
+}}
+pub unsafe fn readers(c:*Context,round:u64,expected:u64)!void{unsafe{
+ try authority(c);if (*c).report.state==0||round==0||round>4||(*c).report.reader_sequence==MAX{return error.Invalid;}
+ (*c).report.reader_round=round;(*c).report.expected=expected;(*c).report.reader_sequence+=1;
+ let sequence=(*c).report.reader_sequence;let until=try limit(c);var id:usize=0;
+ while id<16{if ((*c).report.online&(1<<id as u64))!=0{
+  atomic_store(&(*c).readers[id].request,sequence);
+  if id!=0&&ud.user_smp_arch_kick(id as u64)!=0{return error.Reader;}
+ }id+=1;}
+ while true{let progress=try ud.poll((*c).domain,0);var done:bool=true;id=0;
+  while id<16{if ((*c).report.online&(1<<id as u64))!=0&&atomic_load(&(*c).readers[id].acknowledged)!=sequence{done=false;}id+=1;}
+  if done{return;}if ud.user_smp_arch_clock()>=until{return error.Deadline;}ud.user_smp_arch_pause();
+ }
+}}
+unsafe fn operation(c:*Context,kind:u64)!void{unsafe{
+ try authority(c);try tree(c);try unchanged(c);
+ let state=(*c).report.state;
+ if (kind==1&&state!=0)||(kind==2&&state!=1)||(kind==3&&state!=2)
+  ||(kind==4&&state!=3)||(kind==5&&state!=3)||(kind==6&&state!=2)||(kind==7&&state!=2)
+  ||kind==0||kind>7{return error.Invalid;}
+ try barrier(c,false);try authority(c);try tree(c);try unchanged(c);
+ (*c).report.operation=kind;var receipts:usize=0;
+ if kind==1{try pg.map_large_live((*c).space,WINDOW,(*c).report.physical,pg.WRITE);(*c).report.state=1;}
+ else if kind==2{try pg.split_large_live((*c).space,WINDOW);(*c).report.state=2;}
+ else if kind==3{
+  // Warm AFTER this transaction's quiesce flush. No later CR3 write or
+  // unrelated barrier may hide omission of the replacement post-flush.
+  try readers(c,1,0x1122_3344_0000_0005);
+  try pg.replace_live((*c).space,WINDOW+5*4096,(*c).report.physical+6*4096,pg.WRITE);(*c).report.state=3;
+ }
+ else if kind==4{
+  (*c).receipts[0]=pg.EMPTY_RETIRED;
+  let before=try pg.used_tables((*c).space);
+  let pt=try page_table(c);var entry:usize=0;while entry<512{(*c).saved_pt[entry]=(*pt).entries[entry];entry+=1;}
+  let refused=pg.merge_large_live((*c).space,WINDOW,&(*c).receipts[0]);
+  match refused{ok=>{return error.Held;},err(code)=>{(*c).report.merge_error=code;},}
+  if (*c).report.merge_error!=0x0203_0007||(try pg.used_tables((*c).space))!=before
+   ||pg.retired_tables(&(*c).receipts[0])!=0{return error.Held;}
+  entry=0;while entry<512{if (*c).saved_pt[entry]!=(*pt).entries[entry]{return error.Held;}entry+=1;}
+ }else if kind==5{try pg.replace_live((*c).space,WINDOW+5*4096,(*c).report.physical+5*4096,pg.WRITE);(*c).report.state=2;}
+ else if kind==6{
+  (*c).receipts[0]=pg.EMPTY_RETIRED;try pg.merge_large_live((*c).space,WINDOW,&(*c).receipts[0]);receipts=1;(*c).report.state=1;
+ }else{
+  var index:usize=0;while index<512{
+   (*c).receipts[index]=pg.EMPTY_RETIRED;
+   try pg.unmap_live((*c).space,WINDOW+index as u64*4096,&(*c).receipts[index]);index+=1;
+  }receipts=512;(*c).report.state=0;
+ }
+ var i:usize=0;while i<receipts{(*c).report.retired+=pg.retired_tables(&(*c).receipts[i]) as u64;i+=1;}
+ // Only this owner's replacement post-barrier is marked for the isolated bad
+ // assembly build. Production Window merely publishes a diagnostic flag.
+ if kind==3{(*c).window(1);}
+ try barrier(c,true);
+ if kind==3{(*c).window(0);}
+ // Linear Retired objects remain metadata=2 until the complete all-tag ACK.
+ i=0;while i<receipts{let count=pg.retired_tables(&(*c).receipts[i]);
+  try pg.reclaim((*c).space,&(*c).receipts[i]);(*c).report.reclaimed+=count as u64;i+=1;
+ }
+ try authority(c);try tree(c);try unchanged(c);
+ (*c).report.tables_after=(try pg.used_tables((*c).space)) as u64;
+ (*c).report.steps|=1<<(kind-1);
+}return;}
+pub unsafe fn step(c:*Context,kind:u64)!void{unsafe{
+ if c==null||(*c).ready!=1||(*c).busy!=0||(*c).report.poison!=0{return error.Invalid;}
+ (*c).busy=1;let result=operation(c,kind);(*c).busy=0;
+ match result{ok=>{},err(code)=>{poison(c,code);return result;},}
+}return;}
+pub unsafe fn run(c:*Context)!void{unsafe{
+ if c==null||(*c).report.attempted!=0{return error.Invalid;}(*c).report.attempted=1;
+ let result=lifecycle(c);match result{ok=>{(*c).report.complete=1;},err(code)=>{poison(c,code);return result;},}
+}return;}
+unsafe fn lifecycle(c:*Context)!void{unsafe{
+ try step(c,1);
+ try step(c,2);try step(c,3);try readers(c,2,0x1122_3344_0000_0006);
+ try step(c,4);try step(c,5);try readers(c,3,0x1122_3344_0000_0005);
+ try step(c,6);try readers(c,4,0x1122_3344_0000_0005);
+ try step(c,2);try step(c,7);
+ (*c).report.final_checksum=checksum(c);
+ if (*c).report.steps!=127||(*c).report.state!=0||(*c).report.retired!=2||(*c).report.reclaimed!=2
+  ||(*c).report.tables_after!=(*c).report.tables_before||(*c).report.barriers!=16
+  ||(*c).report.final_checksum!=(*c).report.old_checksum{return error.Held;}
+}return;}

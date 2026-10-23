@@ -220,7 +220,7 @@ import dep as x;
 pub fn leak()u64 { return x.secret; }
 '''
 
-EXTERN_BAD = 'module extbad;\nextern "sysv64" fn foreign(value:u64)u64;\npub fn call_foreign()u64 { unsafe { return foreign(1); } }\n'
+EXTERN_SOURCE = 'module extbad;\nextern "sysv64" fn foreign(value:u64)u64;\npub fn call_foreign()u64 { unsafe { return foreign(1); } }\n'
 
 
 def label(module: str, name: str) -> str:
@@ -386,8 +386,11 @@ class L3AGlobalsTests(unittest.TestCase):
     def observe(cls, obj: Path, name, body: str, declarations: str):
         source = obj.parent / (name + ".c")
         source.write_text(
-            "#include <stdint.h>\n#include <stdio.h>\n#include <string.h>\n"
+            "#include <stdint.h>\n#include <stdio.h>\n#include <stdlib.h>\n#include <string.h>\n"
             "typedef uint64_t U;\n#define ABI __attribute__((sysv_abi))\n"
+            "void ABI __attribute__((noreturn)) __dong_panic(uint32_t k,uint32_t line,const void*p,U n){"
+            "fprintf(stderr,\"unexpected target panic kind=%u line=%u file=\",k,line);"
+            "fwrite(p,1,(size_t)n,stderr);fputc('\\n',stderr);exit(93);}\n"
             + declarations + "\nint main(void){\n" + body + "\n}\n", encoding="utf-8")
         exe = obj.parent / (name + ".exe")
         cls.command([cls.cc, "-std=c11", "-D_GNU_SOURCE", "-D__USE_MINGW_ANSI_STDIO=1", "-O2", "-Wall",
@@ -521,7 +524,7 @@ class L3AGlobalsTests(unittest.TestCase):
         self.assertIn("frontend status=", p.stderr)
         self.assertEqual(out.read_bytes(), b"unchanged")
 
-    def test_mainline_global_case_is_positive_and_extern_stays_rejected(self):
+    def test_mainline_global_and_external_calls_execute(self):
         directory = self.work / "mainline"
         directory.mkdir(exist_ok=True)
         positive = directory / "global_ok.dg"
@@ -531,14 +534,17 @@ class L3AGlobalsTests(unittest.TestCase):
         obj = self.assemble(asm, "mainline-global")
         dec = [f'extern U ABI f_read(void) __asm__("{label("globalok","read")}");']
         self.observe(obj, "mainline-global-observer", 'if(f_read()!=1) return 1;\nprintf("global positive ok\\n");\nreturn 0;', "\n".join(dec))
-        negative = directory / "extern.dg"
-        negative.write_text(EXTERN_BAD, encoding="utf-8")
+        external = directory / "extern.dg"
+        external.write_text(EXTERN_SOURCE, encoding="utf-8")
         out = directory / "extern.asm"
         out.write_bytes(b"unchanged")
-        p = self.command([self.drivers["good"], negative, "extbad.dg", out, "0"], "extern-reject", expect=None)
-        self.assertEqual(p.returncode, 11, p.stderr)
-        self.assertIn("lower status=3", p.stderr)
-        self.assertEqual(out.read_bytes(), b"unchanged")
+        self.command([self.drivers["good"], external, "extbad.dg", out, "0"], "extern-supported")
+        self.assertIn("extern $foreign\n", out.read_text())
+        self.assertNotIn("$foreign:", out.read_text())
+        obj = self.assemble(out, "mainline-extern")
+        declarations = 'U ABI foreign(U n){return 41+n;}\n'
+        declarations += f'extern U ABI call_foreign(void) __asm__("{label("extbad","call_foreign")}");'
+        self.observe(obj, "mainline-extern-observer", 'return call_foreign()!=42;', declarations)
 
     def test_three_real_bad_dong_bodies_execute_and_are_rejected(self):
         # Good side first: the same inputs must build, link and pass.

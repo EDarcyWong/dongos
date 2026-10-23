@@ -46,8 +46,11 @@ unsafe fn jump(s:*State,b:usize,id:usize)void{unsafe{emit(s,ir.JUMP,sem.VOID,0,0
 unsafe fn slot(s:*State,t:usize,id:usize)usize{unsafe{
  let words=ir.words((*s).g,t);if words==NONE{ return fail(s,UNSUPPORTED,id,t);}
  if words==0{return 0;}let n=words*8;
+ // A type can be a huge static aggregate. Reject an oversized local before
+ // adding its size to the cursor or alignment; even that sum may overflow.
+ if n>4080{return fail(s,FRAME,id,n);}
  if ir.aggregate((*s).g,t){let a=(*(*s).g).layouts[t].alignment;if a>(*s).alignment{(*s).alignment=a;}(*s).cursor=((*s).cursor+n+a-1)/a*a-n;}
- if n>4080||(*s).cursor>4080-n{return fail(s,FRAME,id,(*s).cursor+n);}
+ if (*s).cursor>4080-n{return fail(s,FRAME,id,(*s).cursor+n);}
  (*s).cursor+=n;if (*s).cursor>(*s).maximum{(*s).maximum=(*s).cursor;}return (*s).cursor;
 }}
 unsafe fn bind(s:*State,id:usize)bool{unsafe{

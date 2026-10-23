@@ -130,18 +130,43 @@ class NativeSysVTests(unittest.TestCase):
         check = escaped.EscapedSymbolTests()
         try:
             for mode in (0, 1):
-                _, asm = self.emit('native-alias-container', [('defs.dg', DEFINITIONS)], mode)
+                source = DEFINITIONS + 'export("__dong_panic")fn panic(k:u32,line:u32,p:*const u8,n:usize)noreturn{loop{}}\n'
+                _, asm = self.emit('native-alias-container', [('defs.dg', source)], mode)
+                self.assertIn('global $__dong_panic\n', asm.read_text())
+                self.assertNotIn('extern $__dong_panic\n', asm.read_text())
                 status, image, result = check.assemble('release' if mode else 'debug', asm.read_text(), entry=bridge.label('defs', 'local'))
                 self.assertEqual(status, 0, (result.line, result.detail))
                 self.assertEqual(check.execute(image), 204)
         finally:
             escaped.EscapedSymbolTests.tearDownClass()
 
-    def test_win64_and_foreign_pair_rejections_keep_output(self):
+    def test_win64_definitions_and_declarations_execute(self):
         cases = [
-            ('win-definition', 'module bad;pub extern "win64" fn f()u64{return 7;}', 11),
-            ('win-declaration', 'module bad;extern "win64" fn x()u64;pub fn f()u64{return 7;}', 11),
-            ('legacy-win-declaration', 'module unsupported; extern "win64" fn f()u64;', 11),
+            ('win-definition', 'bad', 'module bad;pub extern "win64" fn f()u64{return 7;}',
+             'extern U __attribute__((ms_abi)) f(void) __asm__("' + bridge.label('bad', 'f') + '");',
+             'return f()!=7;', None),
+            ('win-declaration', 'bad', 'module bad;extern "win64" fn x()u64;pub fn f()u64{unsafe{return x();}}',
+             'U __attribute__((ms_abi)) x(void){return 11;}\n'
+             'extern U ABI f(void) __asm__("' + bridge.label('bad', 'f') + '");',
+             'return f()!=11;', 'x'),
+            ('legacy-win-declaration', 'unsupported',
+             'module unsupported;extern "win64" fn f()u64;pub fn invoke()u64{unsafe{return f();}}',
+             'U __attribute__((ms_abi)) f(void){return 13;}\n'
+             'extern U ABI invoke(void) __asm__("' + bridge.label('unsupported', 'invoke') + '");',
+             'return invoke()!=13;', 'f'),
+        ]
+        for mode in (0, 1):
+            for name, module, source, declarations, body, external in cases:
+                with self.subTest(mode=mode, name=name):
+                    _, asm = self.emit(name, [(module + '.dg', source)], mode)
+                    if external:
+                        self.assertIn('extern $' + external + '\n', asm.read_text())
+                        self.assertNotIn('$' + external + ':', asm.read_text())
+                    obj = self.h.assemble(asm, name + '-' + str(mode))
+                    self.h.observe(obj, name + '-observer-' + str(mode), body, declarations)
+
+    def test_foreign_pair_and_invalid_link_names_keep_output(self):
+        cases = [
             ('foreign-pair', 'module bad;extern "sysv64" fn x(s:[]u8)u64;pub fn f()u64{return 7;}', 10),
             ('bad-linker', 'module bad;extern "sysv64"("bad-name") fn x()u64;pub fn f()u64{return 7;}', 10),
         ]
@@ -153,13 +178,10 @@ class NativeSysVTests(unittest.TestCase):
                     src, out = directory / 'bad.dg', directory / 'module.asm'
                     src.write_text(source)
                     out.write_bytes(b'preserved-output')
-                    path = 'unsupported.dg' if name == 'legacy-win-declaration' else 'bad.dg'
-                    p = self.h.command([self.h.drivers['good'], src, path, out, mode], name + '-reject-' + str(mode), status)
+                    p = self.h.command([self.h.drivers['good'], src, 'bad.dg', out, mode], name + '-reject-' + str(mode), status)
                     self.assertEqual(out.read_bytes(), b'preserved-output')
                     self.assertEqual(src.read_text(), source)
                     self.assertIn('status=', p.stderr)
-                    if status == 11:
-                        self.assertIn('lower status=3', p.stderr)
 
     def test_mutated_dong_link_target_rejected_by_value_oracle(self):
         old = 'return put(s,"$")&&put(s,names.text((*g).sources,(*g).units,(*g).tokens,sy.unit,sy.name_token));'
@@ -179,12 +201,14 @@ class NativeSysVTests(unittest.TestCase):
             p = self.h.command([exe], 'bad-link-value-' + str(mode), 17)
             self.assertIn('wrong-external-target', p.stderr)
 
-    def test_g5_transitions_only_sysv_fixture_to_supported(self):
+    def test_g5_sysv_and_win64_fixtures_execute(self):
+        first = len(self.runner.cases)
         with patch.dict(g5.GAPS, {k: v for k, v in g5.GAPS.items() if k.startswith('extern-')}, clear=True):
             self.runner.known_gaps()
-        self.assertEqual([(c['name'], c['mode']) for c in self.runner.cases], [('extern-sysv', 'debug'), ('extern-sysv', 'release')])
-        self.assertEqual([(c['name'], c['mode']) for c in self.runner.gaps], [('extern-win64', 'debug'), ('extern-win64', 'release')])
-        for case in self.runner.cases:
+        self.assertEqual([(c['name'], c['mode']) for c in self.runner.cases[first:]],
+                         [(name, mode) for name in ('extern-sysv', 'extern-win64') for mode in ('debug', 'release')])
+        self.assertEqual(self.runner.gaps, [])
+        for case in self.runner.cases[first:]:
             g5.validate_path(case)
         g5.write(self.runner.work / 'sysv-coverage.json', dict(supported=self.runner.cases, gaps=self.runner.gaps, commands=self.runner.records))
 

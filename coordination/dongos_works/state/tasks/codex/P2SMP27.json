@@ -1,0 +1,108 @@
+{
+  "assignment_owner": "codex",
+  "auto_dispatch": false,
+  "auto_verify": false,
+  "candidate": null,
+  "checks": [
+    "module:tests.test_user_smp_failure",
+    "module:tests.test_user_smp_entry",
+    "module:tests.test_user_smp_services",
+    "module:tests.test_user_smp_barrier"
+  ],
+  "claim_from_status": "rework",
+  "claimed_at": "2026-10-22T21:28:22+00:00",
+  "claimed_by": "codex-mcp-daece153b59c4bd5",
+  "completed_at": "2026-10-22T21:34:30+00:00",
+  "complexity": "standard",
+  "created_at": "2026-10-22T21:00:55+00:00",
+  "delivery": "codex-works/deliveries/P2SMP27.md",
+  "depends_on": [],
+  "description": "实际WHPX R8使用已验收Discovery22新完整构建到达DESKTOP_READY，但所有AP user_entries/timers/switches仍0、Domain/Bridge failed，只有通用Header USER_ENTRY_ERR，不能确认具体失败原因。保留此真实失败；实现严格有限的生产诊断字段来定位真实Bridge错误及阶段，不放宽任何成功条件/timeout/PCID/ACK/BKL/fail-held、不改Domain/Cpu/Bridge/Header既有ABI或原异常恢复。建议每真实cpu一固定Failure槽，仅自身当前CPU写且只首次错误发布，记录实际stage,error_code,clock,raw_root,Domain sequence/owner/lock/mode/requested/ack；读者须published=1。首次出错前明确阶段标记checked/poll/acquire/drain/choose/commit，不能在每个轮询中无限日志、不得字符串/串口热点，保持失败返回MAX和held逻辑完全相同。原本err(e)被held丢失应记录真实e再调用原held；诊断自身不调用Domain acquire/poll/flush/alloc，不改变requested/ACK/队列/Frame/注册。仅附加独立BSS小字段，禁止巨型局部或扩大budget；无ACTIVE/invalidCPU时必须安全最小记录或拒，不能解引用坏指针。补有效host真实DG/native控制核超时/硬件错误/checked失败的实际code与stage、首错不覆盖、CPU归属/guard、失败返回不变，保留既有entry/services/barrier检查。新实际guest由root后续freshbuild读原始字段才判原因，host不宣称AP成功。实现者只声明路径，不编译测试VM/提交推送/状态/验收集成。",
+  "document": "codex-works/tasks/P2SMP27-board.md",
+  "historical": false,
+  "id": "codex:P2SMP27",
+  "integration_note": "六个受审实现/测试/文档文件已真实处于主目录对应路径，非只记录报告；coordinator指纹与独立受测版本一致，root已核实际native artifacts和新guest原始布局。登记本地诊断组件集成，保留R9-12失败与observer可能原因，不关闭P2其它门禁；未提交或推送。",
+  "legacy_hash": "08e19ccc0b429b3431d9375e302f082dcfd4e2d0434faeede805fc898051385e",
+  "number": "P2SMP27",
+  "owner": "codex",
+  "rev": 9,
+  "review_note": "root实际审查6路径诊断代码/ABI/独立C预言及真实坏DG，原锁/ACK/绝对limit/held未改变；正式326a3816570445f08a69f2c87658e27a完整4模块均passed、0skip、source_stable/process_stopped/execution_exited=true。root复算新诊断134命令/46原生结果/420artifact SHA均一致；原有entry/services/barrier全部通过，旧services缺项已由HARNESS28声明夹具修复。实际fresh full runtime7=1966480B，R12读到Failure v2三时间字段并核544raw SHA/length；R13连续2s首次stop后禁止resume，548raw核对、全根池审计通过且无首错/Domainfailed0/APentries161/168/213，说明旧stop/cont有观察者扰动，未认定生产锁首因。仅验收精确只读诊断组件，不声明AP timer/PCID/事务或P2阶段通过。",
+  "status": "integrated",
+  "title": "P2真实AP首次进入失败的精确只读诊断回执",
+  "updated_at": "2026-10-22T21:51:58+00:00",
+  "verification": {
+    "checks": [
+      {
+        "cancelled": false,
+        "elapsed_seconds": 66.687,
+        "execution_exited": true,
+        "passed": true,
+        "process_stopped": true,
+        "returncode": 0,
+        "skips": 0,
+        "spec": "module:tests.test_user_smp_failure",
+        "tests": 1,
+        "timed_out": false
+      },
+      {
+        "cancelled": false,
+        "elapsed_seconds": 104.469,
+        "execution_exited": true,
+        "passed": true,
+        "process_stopped": true,
+        "returncode": 0,
+        "skips": 0,
+        "spec": "module:tests.test_user_smp_entry",
+        "tests": 1,
+        "timed_out": false
+      },
+      {
+        "cancelled": false,
+        "elapsed_seconds": 283.172,
+        "execution_exited": true,
+        "passed": true,
+        "process_stopped": true,
+        "returncode": 0,
+        "skips": 0,
+        "spec": "module:tests.test_user_smp_services",
+        "tests": 1,
+        "timed_out": false
+      },
+      {
+        "cancelled": false,
+        "elapsed_seconds": 12.578,
+        "execution_exited": true,
+        "passed": true,
+        "process_stopped": true,
+        "returncode": 0,
+        "skips": 0,
+        "spec": "module:tests.test_user_smp_barrier",
+        "tests": 1,
+        "timed_out": false
+      }
+    ],
+    "execution_exited": true,
+    "fingerprint": {
+      "codex-works/deliveries/P2SMP27.md": "44b1e5e3913ade1c360fafad0bb75596a9d5e92a75f0394f58ba7e267350f14c",
+      "docs/p2-smp-failure-diagnostics.md": "84dd04ba030b5e0521f8804b24be50e8fcee2cfc376f73bc3fc62efec1fea564",
+      "kernel/sched/user_bridge.dg": "eb25e153ab4462b70b45a568b6dee8144921faed0151e103c4a42da6963ff6d4",
+      "tests/test_user_smp_failure.py": "a2fbb6f83f03ce712a2d8977ee230ed189c53d7f6e94098239ee6133f8aba8fc",
+      "tests/user_smp_failure_probe.c": "e62825e3469a760c649bd213f0f00a2ae699041a048be2c9d411895ada0532f4",
+      "tests/user_smp_failure_probe.dg": "8f1fb17afb885dca9415f250d9df6007efdd89b19c72eac776d4b81aaa0f6ce0"
+    },
+    "finished_at": "2026-10-22T21:45:28+00:00",
+    "job": "326a3816570445f08a69f2c87658e27a",
+    "passed": true,
+    "process_stopped": true,
+    "source_stable": true,
+    "summary": "定向复验通过，等待源码/契约审查"
+  },
+  "write_paths": [
+    "kernel/sched/user_bridge.dg",
+    "tests/user_smp_failure_probe.dg",
+    "tests/user_smp_failure_probe.c",
+    "tests/test_user_smp_failure.py",
+    "docs/p2-smp-failure-diagnostics.md",
+    "codex-works/deliveries/P2SMP27.md"
+  ]
+}

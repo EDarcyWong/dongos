@@ -22,10 +22,10 @@ On INVALID preflight failure, no supplied memory is changed, including Result. A
 
 This is intentionally not general NASM. Leading/trailing whitespace and semicolon comments are ignored. It accepts the compiler's lowercase, explicit dialect:
 
-- `bits 64`, `default rel`, `section .text`, `section .rodata`, and `global name` declarations.
-- Named labels and aliases, including labels followed by an instruction or data directive. Names start with an ASCII letter or underscore; interior letters, digits, underscores and dots are supported. NASM local-label scoping, macros and external symbols are not implemented.
-- Power-of-two `align` values from 1 through 4096. Padding bytes are 0x90, in both supported sections. Section-relative alignment is applied independently to text and data.
-- Numeric `db`, `dw`, `dd`, `dq` lists in rodata, and `times count db value`. Integers are decimal or `0x` hexadecimal, optionally signed. Narrow data accepts unsigned bit patterns or a signed value in range; values are not silently truncated. Symbol-valued `dq` produces an absolute 64-bit image address. String literals and general expressions are not supported.
+- `bits 64`, `default rel`, `section .text`, `section .rodata`, `section .data`, and `global name` declarations.
+- Named labels and aliases, including labels followed by an instruction or data directive. Names start with an ASCII letter or underscore; interior letters, digits, underscores and dots are supported. NASM local-label scoping and macros are not implemented. An `extern name` declaration is accepted only when the same final text actually defines that symbol; even unused declarations must resolve. There is no external loader or dynamic linking.
+- Power-of-two `align` values from 1 through 4096. Padding bytes are 0x90 in text/rodata and zero in writable data. Section-relative alignment is applied independently to text and data.
+- Numeric `db`, `dw`, `dd`, `dq` lists in rodata/data, and `times count db value`. Integers are decimal or `0x` hexadecimal, optionally signed. Narrow data accepts unsigned bit patterns or a signed value in range; values are not silently truncated. Symbol-valued `dq` produces an absolute 64-bit image address. String literals and general expressions are not supported.
 - The exact final compiler-generated `%ifidn __OUTPUT_FORMAT__,elf64` / `section .note.GNU-stack noalloc noexec nowrite progbits` / `%endif` metadata sequence. It creates no loadable bytes and is not a general preprocessor.
 - General-purpose integer registers at 8/16/32/64-bit widths, including R8–R15 and SPL/BPL/SIL/DIL, but not legacy high-byte registers.
 - Register, immediate, register-indirect displacement and `[rel symbol]` operands, with explicit `byte`, `word`, `dword`, or `qword` where needed. An optional displacement must include its sign. Indexed addressing is restricted to 64-bit LEA with `[base+index*scale+displacement]`, scale 1/2/4/8 and index other than RSP.
@@ -57,3 +57,11 @@ segments on the host and executes an independent return-value check. It does
 not boot an OS or run a VM.
 
 For the large compiler dialect check, set `DONG_ASSEMBLER_FULL_INPUT` to a native compiler `.asm` and optionally `DONG_ASSEMBLER_FULL_ENTRY` (default `dong_frontend_check`). It is assembled and kernel-validated in both modes, but not executed: that function is not an OS entry stub. These tests do not build or boot an OS/VM and do not claim native compiler execution or a native machine-code fixed point merely from successful assembly.
+
+The G5 full gate validates the language-to-NASM path with real assembly and
+applicable CPU/diagnostic oracles. This built-in assembler still lacks XMM/
+movdqu, atomic instruction and inline-asm whitelist encodings. Selected native
+ELF and the complete 49-module compiler fixed point validate its implemented
+dialect; they do not imply arbitrary full-language ELF generation. The current
+G5FULL1/G5CLOSURE1 implementations are integrated in the mainline; see
+[completion evidence](../../../coordination/dongos_works/codex-works/reviews/2026-10-22-G5-completion.md).

@@ -1,0 +1,64 @@
+{
+  "assignment_owner": "codex",
+  "auto_dispatch": false,
+  "auto_verify": false,
+  "candidate": null,
+  "checks": [
+    "module:lang.tests.test_g5_runner_entry"
+  ],
+  "claim_from_status": "todo",
+  "claimed_at": "2026-10-22T15:52:56+00:00",
+  "claimed_by": "codex-mcp-daece153b59c4bd5",
+  "completed_at": "2026-10-22T15:55:00+00:00",
+  "complexity": "standard",
+  "created_at": "2026-10-22T15:52:56+00:00",
+  "delivery": "codex-works/deliveries/G5METHODFIX1.md",
+  "depends_on": [
+    "codex:G5FULL1",
+    "codex:G5CLOSURE1"
+  ],
+  "description": "G5INT1集成审查发现test_l3_method_native仍调用已拆分的旧Win64拒绝方法并期待五个已关闭gap。仅更新永久方法测试的G5完整路径断言及SysV测试调用，保留全部真实CPU/坏体oracle。由G5INT1完整51项冷复验和集成聚合门禁实际执行同一借用方法；本任务另用runner入口检查确认主线可加载，不重复冷构建。独立审查后结合G5INT1正式结果登记验收及集成。用户范围内必要关联修复，不新增功能，不运行OS/VM。",
+  "document": "codex-works/tasks/G5METHODFIX1-board.md",
+  "historical": false,
+  "id": "codex:G5METHODFIX1",
+  "integration_note": "源文件已真实在code主线，G5INT1正式70项和原始产物独审通过，本任务2入口及两个方法实际借用执行通过，登记本地集成。",
+  "legacy_hash": "c1d7181b16a6a7d888f40c73c53360f622147c6b41bfb0b7e6f8a57f12005fd3",
+  "number": "G5METHODFIX1",
+  "owner": "codex",
+  "rev": 6,
+  "review_note": "独立入口job0a36604f04f3445b97a9ee36a8200c38通过2项0skip/source stable；另G5INT1正式0856 legacy18实际调用本文件两受影响方法，对本轮冷编译器完成完整gap双模式、真实Win64定义/外调和非法foreign pair/link原子拒绝；独审方法调用/源指纹4dd...及本轮执行记录通过，无oracle弱化。",
+  "status": "integrated",
+  "title": "G5主线方法回归调用链同步完整支持契约",
+  "updated_at": "2026-10-22T17:24:17+00:00",
+  "verification": {
+    "checks": [
+      {
+        "cancelled": false,
+        "elapsed_seconds": 0.453,
+        "execution_exited": true,
+        "passed": true,
+        "process_stopped": true,
+        "returncode": 0,
+        "skips": 0,
+        "spec": "module:lang.tests.test_g5_runner_entry",
+        "tests": 2,
+        "timed_out": false
+      }
+    ],
+    "execution_exited": true,
+    "fingerprint": {
+      "codex-works/deliveries/G5METHODFIX1.md": "cc55d2383faf0d07135dfcac8865497e982601af7c433a8c94d0c0cdcf865e06",
+      "lang/tests/test_l3_method_native.py": "4ddda62399dfcd1156ed932c27dd5b81d40f812fb5633ec4a86137cd52bfa47b"
+    },
+    "finished_at": "2026-10-22T15:58:14+00:00",
+    "job": "0a36604f04f3445b97a9ee36a8200c38",
+    "passed": true,
+    "process_stopped": true,
+    "source_stable": true,
+    "summary": "定向复验通过，等待源码/契约审查"
+  },
+  "write_paths": [
+    "lang/tests/test_l3_method_native.py",
+    "codex-works/deliveries/G5METHODFIX1.md"
+  ]
+}

@@ -30,17 +30,21 @@ class MainlineCompatibilityTests(unittest.TestCase):
             obj = self.g.assemble(asm, 'old-global-'+str(mode))
             self.g.observe(obj, 'old-global-'+str(mode), 'if(f()!=1||f()!=1){return 2;}\nreturn 0;', declarations)
 
-    def test_extern_still_fails_closed_in_both_modes(self):
+    def test_original_extern_declaration_links_and_executes_in_both_modes(self):
         source = self.g.work/'old-extern.dg'
-        source.write_text('module unsupported; extern "sysv64" fn f()u64;')
+        original = 'module unsupported; extern "sysv64" fn f()u64;pub fn invoke()u64{unsafe{return f();}}'
+        source.write_text(original)
         for mode in (0, 1):
             output = self.g.work/('old-extern-'+str(mode)+'.asm')
             output.write_bytes(b'unchanged')
-            p = self.g.command([self.g.drivers['good'], source, 'unsupported.dg', output, mode],
-                               'old-extern-'+str(mode), expect=None)
-            self.assertEqual(p.returncode, 11, p.stdout+p.stderr)
-            self.assertIn('lower status=3', p.stderr)
-            self.assertEqual(output.read_bytes(), b'unchanged')
+            self.g.command([self.g.drivers['good'], source, 'unsupported.dg', output, mode],
+                           'old-extern-'+str(mode))
+            self.assertEqual(source.read_text(), original)
+            self.assertIn('extern $f\n', output.read_text())
+            obj = self.g.assemble(output, 'old-extern-'+str(mode))
+            declarations = 'U ABI f(void){return 73;}\n'
+            declarations += f'extern U ABI invoke(void) __asm__("{globals_bridge.label("unsupported","invoke")}");'
+            self.g.observe(obj, 'old-extern-observer-'+str(mode), 'return invoke()!=73;', declarations)
 
     def test_data_bytes_execute_and_bad_sections_remain_rejected(self):
         # This executes a real writable data update from the exact 0x400000

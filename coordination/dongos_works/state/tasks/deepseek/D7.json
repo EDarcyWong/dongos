@@ -14,11 +14,11 @@
   ],
   "historical": true,
   "id": "deepseek:D7",
-  "legacy_hash": "90ab7b47d14e4e4cb8fbd8f4b3e4566fce57f89992ec06297deb417c78f69ce8",
+  "legacy_hash": "f819f1fe41a1444d18c3a94bf590f8e00ff6d0ac2119b1d1b1af90b076c5dee0",
   "legacy_schema": 2,
   "number": "D7",
   "owner": "deepseek",
-  "rev": 7,
+  "rev": 8,
   "review_note": "",
   "state_reconciliation": {
     "at": "2026-10-19T11:42:09+00:00",
@@ -41,7 +41,7 @@
   },
   "status": "accepted",
   "title": "特权级硬件探针",
-  "updated_at": "2026-10-20T01:32:42+00:00",
+  "updated_at": "2026-10-22T14:38:34+00:00",
   "verification": null,
   "write_paths": [
     "lang/tests/std_arch_ring0.dg",

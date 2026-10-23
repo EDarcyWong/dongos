@@ -19,10 +19,10 @@
   "historical": false,
   "id": "claude:C29",
   "integration_note": "生产.dg/.md按验收hash真实集成到code/lang/bootstrap，永久测试仅适配路径/唯一产物目录。主线同10组件及扩展shift_select_call组合1项共11项0skip通过，72.813秒；真实Dong RIP符号取址接入已集成移位→条件选择→间接调用，两模式各12向量。生产/永久测试/相关编译器来源稳定、ELF64/COFF均组装；实际文件与回执已独立核对。见reviews/2026-10-18-C29-CR16-CR19-integration.md。C29快照重提和CR16原R1均闭合，完整L3仍未完成。",
-  "legacy_hash": "b24eff3bfd227f1e47bf363e49026faa4c7cf3b2d116eb4a67fab621e48e7ccb",
+  "legacy_hash": "64a221ceb31b92e411c885eabd6887419756058fa845f87d7615c7a5a40e17e6",
   "number": "C29",
   "owner": "claude",
-  "rev": 15,
+  "rev": 16,
   "review_note": "独立源码/完整任务契约与全定向测试审查通过。本次快照重提实际完成4项0skip，源码/说明/测试hash与前次已审查首交相同，真实只读名字/完整别名、独立C符号地址、数据guard及其它寄存器/flags观察有效；LEA→MOV真实地址数值负控与提前out保留。debug/release原生、ELF64/COFF组装、来源稳定。接下来真实集成并复验主线永久测试。",
   "state_reconciliation": {
     "at": "2026-10-19T11:42:09+00:00",
@@ -45,7 +45,7 @@
   },
   "status": "integrated",
   "title": "RIP相对内部符号地址发射",
-  "updated_at": "2026-10-20T01:32:41+00:00",
+  "updated_at": "2026-10-22T14:38:33+00:00",
   "verification": {
     "checks": [
       {

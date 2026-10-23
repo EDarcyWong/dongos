@@ -213,9 +213,8 @@ int main(void)''')
         first = len(self.runner.cases)
         self.runner.known_gaps()
         self.assertEqual({(c['name'], c['mode']) for c in self.runner.cases[first:]},
-            {(n, m) for n in ('method', 'defer', 'extern-sysv', 'for-range', 'for-array', 'for-slice', 'bool-match') for m in ('debug', 'release')})
-        self.assertEqual({(c['name'], c['mode']) for c in self.runner.gaps},
-            {(n, m) for n in ('enum', 'error', 'try', 'orelse', 'extern-win64') for m in ('debug', 'release')})
+            {(n, m) for n in g5.GAPS for m in ('debug', 'release')})
+        self.assertEqual(self.runner.gaps, [])
 
     def test_existing_native_scalar_aggregate_global_and_sysv_regressions(self):
         # Run the unchanged SysV observations through these freshly built
@@ -226,7 +225,8 @@ int main(void)''')
         check.test_explicit_definitions_aliases_narrow_stack_and_pointer()
         check.test_external_imports_execute_real_host_functions()
         check.test_same_source_name_distinct_module_link_names()
-        check.test_win64_and_foreign_pair_rejections_keep_output()
+        check.test_win64_definitions_and_declarations_execute()
+        check.test_foreign_pair_and_invalid_link_names_keep_output()
         from lang.tests import test_bootstrap_native_compiler as audit
         from lang.tests.test_dongc import nasm_flags
         self.runner.abi = self.runner.work / 'abi.asm'

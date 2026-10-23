@@ -28,6 +28,7 @@ if not (ROOT / 'lang').is_dir() and (WORKS / 'project.json').is_file():
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from tools import compiler_job as host_job
 from lang.dongc import compile_file
 from lang.tests.test_dongc import tool, nasm_flags
 
@@ -45,6 +46,7 @@ ENTRY_F = '__dong_m' + b'a'.hex() + '_n' + b'f'.hex()
 # Locals + branch/loop + cross-function call (matches CLI emit-asm coverage shape).
 SAMPLE = (
     'module a;'
+    'export("__dong_panic")fn panic(k:u32,line:u32,p:*const u8,n:usize)noreturn{loop{}}'
     'fn helper(x:u64)u64{return x*2;}'
     'pub fn f(x:u64)u64{'
     'var n:u64=0;var i:u64=0;'
@@ -61,7 +63,7 @@ def expected_f(n: int) -> int:
     return total
 
 
-UNSUPPORTED_SRC = 'module a;var state:u64=7;fn f()u64{return state;}'
+GLOBAL_SRC = 'module a;var state:u64=7;fn f()u64{return state;}'
 
 WRAPPER = '''module probe.guest_compile_image_export;
 import bootstrap.guest_compile_image as m;
@@ -332,7 +334,8 @@ int main(void){
  uint8_t*before=malloc(cap);if(!before)exit(95);memcpy(before,arena,cap);
  uint8_t*storage=alloc_guard(4<<20),*text=alloc_guard(1<<20),*out=alloc_guard(1<<20);
  Workspace base={{alloc_guard(128*32),128},{alloc_guard(512*8),512},{alloc_guard(1<<20),1<<20},{alloc_guard(1<<20),1<<20}};
- EmitLimits el={64,4096,2048,1<<20,2048,64,128};const char*entry="__dong_m61_n66";
+ /* Force a real EMIT capacity failure after readonly Graph preflight. */
+ EmitLimits el={64,4096,2048,1<<20,1023,64,128};const char*entry="__dong_m61_n66";
  for(unsigned i=0;i<12;i++){
   Workspace w=base;uint8_t*sp=storage,*tp=text,*op=out;ImageResult result,*rp=&result;memset(&result,0xa5,sizeof result);
   uint8_t sources_before[sizeof sources],path_before[sizeof path],body_before[sizeof body];
@@ -352,7 +355,7 @@ int main(void){
    default:break;
   }
   uint64_t rc=dong_guest_compile_image(&fr.graph,&el,0,sp,4<<20,tp,1<<20,(const uint8_t*)entry,strlen(entry),&w,op,1<<20,rp);
-  uint64_t expected=i==11?3:1;
+  uint64_t expected=i==11?2:1;
   if(rc!=expected||memcmp(arena,before,cap)||memcmp(sources,sources_before,sizeof sources)||memcmp(path,path_before,sizeof path)||memcmp(body,body_before,sizeof body)){
    fprintf(stderr,"graph readonly preflight %u failed rc=%llu\n",i,(unsigned long long)rc);return 90;
   }
@@ -367,9 +370,25 @@ int main(void){
    fprintf(stderr,"empty alignment preflight %u failed rc=%llu\n",z,(unsigned long long)rc);return 90;
   }free(old_storage);free(old_text);
  }
- puts("11 graph/source aliases + valid control + 2 empty-alignment checks passed");return 0;
+ puts("11 graph/source aliases + emit-capacity control + 2 empty-alignment checks passed");return 0;
 }
 """
+
+def execution_harness():
+    if os.name != 'nt':
+        return HARNESS
+    text = HARNESS.replace('int main(void){',
+        'int main(int argc,char**argv){(void)argc;(void)argv;', 1)
+    allocation = ' void*base=VirtualAlloc((void*)(uintptr_t)lo,(SIZE_T)span,MEM_COMMIT|MEM_RESERVE,PAGE_READWRITE);'
+    if text.count(allocation) != 1:
+        raise AssertionError('unique ELF mapping boundary')
+    text = text.replace(allocation, ' g5_host_release_elf_window();\n' + allocation)
+    release = 'VirtualFree(base,0,MEM_RELEASE);'
+    if text.count(release) != 4:
+        raise AssertionError('all ELF unmap paths retain the reserved window')
+    text = text.replace(release, release + 'g5_host_reserve_elf_window();')
+    return host_job.host_harness(text)
+
 
 class GuestCompileImageTests(unittest.TestCase):
     @classmethod
@@ -379,10 +398,10 @@ class GuestCompileImageTests(unittest.TestCase):
             raise unittest.SkipTest('native guest compile image gate requires NASM/GCC')
         cls.work = ROOT / 'build/test/guest-integration/GUEST4' / ('run-' + uuid.uuid4().hex[:12])
         cls.work.mkdir(parents=True)
-        (cls.work / 'probe.c').write_text(HARNESS, encoding='utf-8')
+        (cls.work / 'probe.c').write_text(execution_harness(), encoding='utf-8')
         cls.records = []
         cls.inputs = {str(p): hashlib.sha256(p.read_bytes()).hexdigest()
-                      for p in [SOURCE, SOURCE.with_suffix('.md'), Path(__file__)]}
+                      for p in [SOURCE, SOURCE.with_suffix('.md'), Path(__file__), Path(host_job.__file__)]}
         cls.snapshot = cls.work / 'snapshot'
         for directory in ('bootstrap', 'std'):
             shutil.copytree(ROOT / 'lang' / directory, cls.snapshot / 'lang' / directory)
@@ -417,7 +436,8 @@ class GuestCompileImageTests(unittest.TestCase):
             cls.command([cls.nasm, '-O0', '-f', fmt, *nasm_flags(cls.nasm), '-o', output, asm], name + '-' + fmt)
         with ThreadPoolExecutor(max_workers=2) as pool:
             list(pool.map(assemble,('elf64','win64')))
-        cls.command([cls.cc, '-std=c11', '-O2', '-Wall', '-Wextra', '-Werror',
+        cls.command([cls.cc, '-std=c11', '-D__USE_MINGW_ANSI_STDIO=1', '-O2', '-Wall', '-Wextra', '-Werror',
+                     *host_job.host_link_flags(),
                      cls.work / 'probe.c', obj, '-o', exe], name + '-link')
         return exe
 
@@ -426,7 +446,7 @@ class GuestCompileImageTests(unittest.TestCase):
         if not hasattr(cls, 'work'):
             return
         assert cls.inputs == {str(p): hashlib.sha256(p.read_bytes()).hexdigest() for p in
-                              [SOURCE, SOURCE.with_suffix('.md'), Path(__file__)]}, 'inputs changed'
+                              [SOURCE, SOURCE.with_suffix('.md'), Path(__file__), Path(host_job.__file__)]}, 'inputs changed'
         files = {p.relative_to(cls.work).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest()
                  for p in cls.work.rglob('*') if p.is_file()}
         (cls.work / 'summary.json').write_text(json.dumps(dict(
@@ -504,6 +524,7 @@ class GuestCompileImageTests(unittest.TestCase):
         cases = [
             self.case('sample-debug', SAMPLE, mode=0),
             self.case('sample-release', SAMPLE, mode=1),
+            self.case('global-storage', GLOBAL_SRC, call=7),
         ]
         results = self.run_both(cases, 'success')
         # Same emit mode must be bit-identical across seed debug/release builds.
@@ -517,9 +538,6 @@ class GuestCompileImageTests(unittest.TestCase):
 
     def test_emit_failures_leave_elf_untouched(self):
         cases = [
-            # Module-level state is rejected by lower_program (not nasm emit).
-            self.case('unsupported-global', UNSUPPORTED_SRC, status=UNSUPPORTED,
-                      result=dict(status=UNSUPPORTED, stage=LOWER, text=0, written=0)),
             # Shrunk emit text/piece limits still allocate the arena, then emit hits CAPACITY.
             self.case('emit-capacity', SAMPLE, kind=1, status=CAPACITY,
                       result=dict(status=CAPACITY, stage=EMIT, text=0, written=0)),
@@ -571,7 +589,7 @@ class GuestCompileImageTests(unittest.TestCase):
         def probe(name, expected):
             obj = self.work / (name + '.o')
             exe = self.work / (name + '-graph-alias' + ('.exe' if os.name == 'nt' else ''))
-            self.command([self.cc, '-std=c11', '-O2', '-Wall', '-Wextra', '-Werror',
+            self.command([self.cc, '-std=c11', '-D__USE_MINGW_ANSI_STDIO=1', '-O2', '-Wall', '-Wextra', '-Werror',
                           '-Wno-unused-function', c, obj, '-o', exe], name + '-graph-link')
             r = subprocess.run([str(exe)], capture_output=True, timeout=120)
             (self.work / (name + '-graph.stdout')).write_bytes(r.stdout)
@@ -619,8 +637,8 @@ class GuestCompileImageTests(unittest.TestCase):
              ' var i:usize=0;while i<16&&i<out.len{out[i]=0xcc;i+=1;}\n'
              ' return publish(r,OK,ASSEMBLE,0,MAX as usize,MAX as usize,0,er.used,er.written,16);\n',
              good, 'elf-validate|call-entry|return-value|status'),
-            # Treat unsupported emit as success without assembling.
-            ('bad-unsupported-as-ok',
+            # Treat a real EMIT capacity failure as success without assembling.
+            ('bad-failed-emit-as-ok',
              ' if emit!=OK{\n'
              '  // Emit failed: never call the assembler; keep ELF capacity untouched.\n'
              '  return publish(r,er.status,er.stage,er.code,er.unit,er.node,er.detail,er.used,0,0);\n'
@@ -628,8 +646,8 @@ class GuestCompileImageTests(unittest.TestCase):
              ' if emit!=OK{\n'
              '  return publish(r,OK,ASSEMBLE,0,MAX as usize,MAX as usize,0,er.used,0,0);\n'
              ' }\n',
-             [self.case('unsupported-global', UNSUPPORTED_SRC, status=UNSUPPORTED,
-                        result=dict(status=UNSUPPORTED, stage=LOWER, text=0, written=0))],
+             [self.case('emit-capacity', SAMPLE, kind=1, status=CAPACITY,
+                        result=dict(status=CAPACITY, stage=EMIT, text=0, written=0))],
              'status'),
         ]
         for name, old, new, cases, reason in controls:

@@ -1,0 +1,897 @@
+{
+  "schema": 1,
+  "checkpoint": "2026-10-23T05:42:00+08:00",
+  "project": "dongos",
+  "sequence": [
+    "P2",
+    "P5"
+  ],
+  "p2_status": "partial",
+  "p5_current_run_started": false,
+  "source_head": "db4ea7c9a74839d95a5e80a0bbf8468a4bfa0d73",
+  "working_tree_dirty": true,
+  "committed": false,
+  "pushed": false,
+  "tasks": [
+    {
+      "id": "codex:P2SIZE23",
+      "rev": 4,
+      "status": "submitted",
+      "job": "17210f23966143d098950d2a4a119714",
+      "passed": true,
+      "checks": [
+        {
+          "spec": "module:tests.test_kernel_storage_profile",
+          "tests": 3,
+          "skips": 0,
+          "passed": true
+        },
+        {
+          "spec": "module:tests.test_p2_pcid_build",
+          "tests": 10,
+          "skips": 0,
+          "passed": true
+        },
+        {
+          "spec": "module:tests.test_p2_pcid",
+          "tests": 17,
+          "skips": 0,
+          "passed": true
+        },
+        {
+          "spec": "module:tests.test_private_pool_oracle",
+          "tests": 5,
+          "skips": 0,
+          "passed": true
+        },
+        {
+          "spec": "module:tests.test_process_lifecycle_qemu",
+          "tests": 13,
+          "skips": 0,
+          "passed": true
+        },
+        {
+          "spec": "module:tests.test_p2_alias_guest",
+          "tests": 6,
+          "skips": 0,
+          "passed": true
+        },
+        {
+          "spec": "module:tests.test_p2_wc_benchmark",
+          "tests": 5,
+          "skips": 0,
+          "passed": true
+        },
+        {
+          "spec": "module:tests.test_virtio_reset_guest",
+          "tests": 9,
+          "skips": 0,
+          "passed": true
+        },
+        {
+          "spec": "module:tests.test_gui_clients_qemu",
+          "tests": 12,
+          "skips": 0,
+          "passed": true
+        },
+        {
+          "spec": "module:tests.test_usb_runtime_qemu",
+          "tests": 19,
+          "skips": 0,
+          "passed": true
+        }
+      ],
+      "source_stable": true,
+      "process_stopped": true,
+      "execution_exited": true
+    },
+    {
+      "id": "codex:P2LARGE16",
+      "rev": 13,
+      "status": "submitted",
+      "job": "1edb5da569a54e5a8ff2a067e2ac1ee9",
+      "passed": true,
+      "checks": [
+        {
+          "spec": "module:tests.test_runtime_large",
+          "tests": 1,
+          "skips": 0,
+          "passed": true
+        },
+        {
+          "spec": "module:tests.test_p2_runtime_large",
+          "tests": 24,
+          "skips": 0,
+          "passed": true
+        },
+        {
+          "spec": "module:tests.test_user_domain",
+          "tests": 2,
+          "skips": 0,
+          "passed": true
+        },
+        {
+          "spec": "module:tests.test_user_smp_barrier",
+          "tests": 1,
+          "skips": 0,
+          "passed": true
+        },
+        {
+          "spec": "module:tests.test_buddy",
+          "tests": 1,
+          "skips": 0,
+          "passed": true
+        },
+        {
+          "spec": "module:tests.test_paging",
+          "tests": 2,
+          "skips": 0,
+          "passed": true
+        }
+      ],
+      "source_stable": true,
+      "process_stopped": true,
+      "execution_exited": true
+    },
+    {
+      "id": "codex:P2SMP27",
+      "rev": 6,
+      "status": "submitted"
+    },
+    {
+      "id": "codex:P2HARNESS24",
+      "rev": 6,
+      "status": "integrated",
+      "job": "1e1aca5ebfee495f83d984acb615f038",
+      "passed": true,
+      "checks": [
+        {
+          "spec": "module:tests.test_user_smp_gui_control",
+          "tests": 11,
+          "skips": 0,
+          "passed": true
+        },
+        {
+          "spec": "module:tests.test_user_smp_oracle",
+          "tests": 7,
+          "skips": 0,
+          "passed": true
+        }
+      ],
+      "source_stable": true,
+      "process_stopped": true,
+      "execution_exited": true
+    },
+    {
+      "id": "codex:P2HARNESS28",
+      "rev": 3,
+      "status": "submitted"
+    },
+    {
+      "id": "codex:P2GOP29",
+      "rev": 2,
+      "status": "in_progress"
+    },
+    {
+      "id": "codex:P2BKL30",
+      "rev": 2,
+      "status": "in_progress"
+    },
+    {
+      "id": "codex:G6DOC1",
+      "rev": 2,
+      "status": "paused"
+    }
+  ],
+  "diagnostic_acceptance": false,
+  "raw_read_lengths_and_sha256_root_verified": true,
+  "doc_sha256": {
+    "PLAN.md": "1fc3e8df5b555c3b83513d27fa958ea1ac510dba5a4de74d5b80e715ff04df4c",
+    "docs/p2-acceptance.md": "dcbb99d289d9ba1f5ffede1f4eb9661acd096be35207a73e58e5ac86614c1f12",
+    "docs/p2-extensions.md": "28b74f479d70342266491b22a31059e6f86622d66f4c3e012c11636c72b18f17",
+    "docs/p2-alias-consumers.md": "f2262a121369974c7990da378816f369f07ec207ac36b0b24cda8fdb44ca023e",
+    "docs/remaining-plan.md": "67993172509554652b75779f4648c9a5058f45e8b60ef6353041241b78d71a8e",
+    "docs/progress-map.md": "497a56fde10a93b450c3777f3d68b8e821458e415d91f665a0f857b4a99b83da"
+  },
+  "diagnostics": [
+    {
+      "name": "actual-whpx-r9",
+      "path": "D:\\projects\\2026\\dongos\\code\\build\\test\\p2-smp27-review\\actual-whpx-r9",
+      "passed": false,
+      "acceptance": false,
+      "diagnostic_only": true,
+      "inputs_unchanged": true,
+      "result_sha256": "5a6406c1b622e2f401508905972f9aed6a2bce573ce76428ccbf295c11a10a06",
+      "diagnostics_sha256": "22ff6591659f10969d665b1cc8c8aedfb29621faf3f4065f918c659508e6d8bf",
+      "physical_manifest_sha256": "193d073cb4033c45f99d9bfc638d3c1589b0e9fd19921e068da2cce32b5a2f15",
+      "physical_reads": 519,
+      "first_failures": [
+        {
+          "cpu": 0,
+          "stage": 5,
+          "error_code": 101253125,
+          "clock": 46237199395,
+          "owner": 3,
+          "sequence": 1922,
+          "barrier": 0,
+          "completed": 1922
+        },
+        {
+          "cpu": 1,
+          "stage": 5,
+          "error_code": 101253125,
+          "clock": 46237029107,
+          "owner": 3,
+          "sequence": 1922,
+          "barrier": 0,
+          "completed": 1922
+        },
+        {
+          "cpu": 2,
+          "stage": 5,
+          "error_code": 101253125,
+          "clock": 46237029027,
+          "owner": 3,
+          "sequence": 1922,
+          "barrier": 0,
+          "completed": 1922
+        },
+        {
+          "cpu": 3,
+          "stage": 20,
+          "error_code": 101253124,
+          "clock": 46237083431,
+          "owner": 3,
+          "sequence": 1922,
+          "barrier": 0,
+          "completed": 1922
+        }
+      ],
+      "metrics": [
+        {
+          "switches": 3671,
+          "user_entries": 3671,
+          "user_timers": 77
+        },
+        {
+          "switches": 0,
+          "user_entries": 0,
+          "user_timers": 0
+        },
+        {
+          "switches": 0,
+          "user_entries": 0,
+          "user_timers": 0
+        },
+        {
+          "switches": 0,
+          "user_entries": 0,
+          "user_timers": 0
+        }
+      ],
+      "cleanup": {
+        "actual_qemu_executed": true,
+        "qemu_stopped": true,
+        "qemu_returncode": 0,
+        "process_alive": false,
+        "cleanup_completed": true
+      },
+      "script_sha256": "418db7e1d50509f8eb1e5d783f0899986d038dc3508452c8a59bd57c7ce3684a"
+    },
+    {
+      "name": "actual-whpx-r10",
+      "path": "D:\\projects\\2026\\dongos\\code\\build\\test\\p2-smp27-review\\actual-whpx-r10",
+      "passed": false,
+      "acceptance": false,
+      "diagnostic_only": true,
+      "inputs_unchanged": true,
+      "result_sha256": "e929d12b8e04c6e77e1edde0673221c3a0254551f0384be585ea5149cad48996",
+      "diagnostics_sha256": "df55e21fc57bf33cd55ad5d24db6a05d17280099d371035822d99dcfb6c3c366",
+      "physical_manifest_sha256": "ef8b70edb2ba1fd00c3fefe99e9a63e6e3938f61e8dc1baaf77766466f415b09",
+      "physical_reads": 538,
+      "first_failures": [
+        {
+          "cpu": 1,
+          "stage": 5,
+          "error_code": 101253125,
+          "clock": 50781141370,
+          "owner": 0,
+          "sequence": 1931,
+          "barrier": 0,
+          "completed": 1931
+        },
+        {
+          "cpu": 2,
+          "stage": 5,
+          "error_code": 101253125,
+          "clock": 50781141376,
+          "owner": 0,
+          "sequence": 1931,
+          "barrier": 0,
+          "completed": 1931
+        },
+        {
+          "cpu": 3,
+          "stage": 5,
+          "error_code": 101253125,
+          "clock": 50781141470,
+          "owner": 0,
+          "sequence": 1931,
+          "barrier": 0,
+          "completed": 1931
+        }
+      ],
+      "metrics": [
+        {
+          "switches": 3670,
+          "user_entries": 3670,
+          "user_timers": 64
+        },
+        {
+          "switches": 0,
+          "user_entries": 0,
+          "user_timers": 0
+        },
+        {
+          "switches": 0,
+          "user_entries": 0,
+          "user_timers": 0
+        },
+        {
+          "switches": 0,
+          "user_entries": 0,
+          "user_timers": 0
+        }
+      ],
+      "cleanup": {
+        "actual_qemu_executed": true,
+        "qemu_stopped": true,
+        "qemu_returncode": 0,
+        "process_alive": false,
+        "cleanup_completed": true
+      },
+      "script_sha256": "f1ef48bf794ae1d32b004eea6cebca21a27be6a676739f7ea3fbf7e831aba356"
+    },
+    {
+      "name": "actual-large-whpx-r11",
+      "path": "D:\\projects\\2026\\dongos\\code\\build\\test\\p2-smp27-review\\actual-large-whpx-r11",
+      "passed": false,
+      "acceptance": false,
+      "diagnostic_only": true,
+      "inputs_unchanged": true,
+      "result_sha256": "61bd8bf6469b1fae46f5b5f9fc62336b5f6395f8316882e669b6fe928c015126",
+      "diagnostics_sha256": "32423af34796bd612aa984c9f059fa7a683c60aff3c2b8e766c4e555a75935f7",
+      "physical_manifest_sha256": "6e8fd92b4960142dcc592d4b3046213166ba101c658da67c8b965135affc3ba9",
+      "physical_reads": 543,
+      "first_failures": [
+        {
+          "cpu": 1,
+          "stage": 5,
+          "error_code": 101253125,
+          "clock": 56457685483,
+          "owner": 0,
+          "sequence": 1933,
+          "barrier": 0,
+          "completed": 1933
+        },
+        {
+          "cpu": 2,
+          "stage": 5,
+          "error_code": 101253124,
+          "clock": 56457832877,
+          "owner": 0,
+          "sequence": 1933,
+          "barrier": 0,
+          "completed": 1933
+        },
+        {
+          "cpu": 3,
+          "stage": 5,
+          "error_code": 101253125,
+          "clock": 56457688475,
+          "owner": 0,
+          "sequence": 1933,
+          "barrier": 0,
+          "completed": 1933
+        }
+      ],
+      "metrics": [
+        {
+          "switches": 3645,
+          "user_entries": 3645,
+          "user_timers": 40
+        },
+        {
+          "switches": 0,
+          "user_entries": 0,
+          "user_timers": 0
+        },
+        {
+          "switches": 0,
+          "user_entries": 0,
+          "user_timers": 0
+        },
+        {
+          "switches": 0,
+          "user_entries": 0,
+          "user_timers": 0
+        }
+      ],
+      "cleanup": {
+        "actual_qemu_executed": true,
+        "qemu_stopped": true,
+        "qemu_returncode": 0,
+        "process_alive": false,
+        "cleanup_completed": true
+      },
+      "script_sha256": "2040af4030abc9a97524c7ef7874ebf9d049293d4e4fb88bda11c850b9369c89",
+      "budget_observations": {
+        "kernel_space": {
+          "pool": 18446603336225390592,
+          "pool_count": 128,
+          "pool_physical": 4194304,
+          "metadata": 18446744071563521032,
+          "address_mask": 70368744173568,
+          "used_total": 68
+        },
+        "service_plan": [
+          2121822208,
+          4096,
+          2047447040,
+          31608832,
+          1913229312,
+          134217728
+        ],
+        "service_next_page": 8175,
+        "budget": "ValueError: empty process retained Space/root identity"
+      }
+    },
+    {
+      "name": "actual-timing-whpx-r12",
+      "path": "D:\\projects\\2026\\dongos\\code\\build\\test\\p2-smp27-review\\actual-timing-whpx-r12",
+      "passed": false,
+      "acceptance": false,
+      "diagnostic_only": true,
+      "inputs_unchanged": true,
+      "result_sha256": "3ea80218a00141b4b9da9eda4b39a2e4a5556d27be01e8fcec086fcc2eb49d98",
+      "diagnostics_sha256": "7114978cfa971a9a7e9117fc7e74aa1536bb0ab5688491d3000152344b20e6ca",
+      "physical_manifest_sha256": "f4e94753c674a4d3f6885e0bcb4d651e13945fac0a9025192998fa634239cc61",
+      "physical_reads": 544,
+      "first_failures": [
+        {
+          "version": 2,
+          "cpu": 1,
+          "stage": 5,
+          "error_code": 101253124,
+          "clock": 51672092442,
+          "owner": 0,
+          "sequence": 1935,
+          "barrier": 0,
+          "completed": 1935,
+          "wait_started": 35258173235,
+          "deadline": 38675962135,
+          "acquired": 0
+        },
+        {
+          "version": 2,
+          "cpu": 2,
+          "stage": 5,
+          "error_code": 101253125,
+          "clock": 51671724024,
+          "owner": 0,
+          "sequence": 1935,
+          "barrier": 0,
+          "completed": 1935,
+          "wait_started": 35258346866,
+          "deadline": 38676134483,
+          "acquired": 0
+        },
+        {
+          "version": 2,
+          "cpu": 3,
+          "stage": 5,
+          "error_code": 101253125,
+          "clock": 51671723812,
+          "owner": 0,
+          "sequence": 1935,
+          "barrier": 0,
+          "completed": 1935,
+          "wait_started": 35258473075,
+          "deadline": 38676261578,
+          "acquired": 0
+        }
+      ],
+      "progress": [
+        {
+          "entry": 1,
+          "vector": 256,
+          "stage": 12,
+          "wait_started": 35257462518,
+          "deadline": 38675252567,
+          "acquired": 35257537011
+        },
+        {
+          "entry": 2,
+          "vector": 244,
+          "stage": 5,
+          "wait_started": 35258173235,
+          "deadline": 38675962135,
+          "acquired": 0
+        },
+        {
+          "entry": 2,
+          "vector": 244,
+          "stage": 5,
+          "wait_started": 35258346866,
+          "deadline": 38676134483,
+          "acquired": 0
+        },
+        {
+          "entry": 2,
+          "vector": 244,
+          "stage": 5,
+          "wait_started": 35258473075,
+          "deadline": 38676261578,
+          "acquired": 0
+        }
+      ],
+      "domain": {
+        "ready": 1,
+        "failed": 1,
+        "lock": 1,
+        "owner": 0,
+        "online": 15,
+        "sequence": 1935,
+        "barrier": 0,
+        "expected": 0,
+        "completed": 1935,
+        "kernel_root": 4194304,
+        "engine": 18446695695230484608,
+        "cpus": 18446695695230497600,
+        "processes": 18446695695230499520,
+        "arena": 18446695695230484480,
+        "bytes": 65536
+      },
+      "metrics": [
+        {
+          "switches": 3655,
+          "user_entries": 3655,
+          "user_timers": 34
+        },
+        {
+          "switches": 0,
+          "user_entries": 0,
+          "user_timers": 0
+        },
+        {
+          "switches": 0,
+          "user_entries": 0,
+          "user_timers": 0
+        },
+        {
+          "switches": 0,
+          "user_entries": 0,
+          "user_timers": 0
+        }
+      ],
+      "cleanup": {
+        "actual_qemu_executed": true,
+        "qemu_stopped": true,
+        "qemu_returncode": 0,
+        "process_alive": false,
+        "cleanup_completed": true
+      },
+      "script_sha256": "dbf9f52ec70e7487fd1f4bae2cfa01894edc53e9715cbaab3de4fa810cf5ee79",
+      "script_archived_sha256": "dbf9f52ec70e7487fd1f4bae2cfa01894edc53e9715cbaab3de4fa810cf5ee79",
+      "budget_observations": {
+        "kernel_space": {
+          "pool": 18446603336225390592,
+          "pool_count": 128,
+          "pool_physical": 4194304,
+          "metadata": 18446744071563525128,
+          "address_mask": 70368744173568,
+          "used_total": 68
+        },
+        "service_plan": [
+          2121822208,
+          4096,
+          2047455232,
+          31600640,
+          1913237504,
+          134217728
+        ],
+        "service_next_page": 8162,
+        "budget": "ValueError: empty process retained Space/root identity"
+      },
+      "uninterrupted_seconds_before_first_pause": null,
+      "no_resume_after_first_pause": null
+    },
+    {
+      "name": "uninterrupted-whpx-r13",
+      "path": "D:\\projects\\2026\\dongos\\code\\build\\test\\p2-smp27-review\\uninterrupted-whpx-r13",
+      "passed": false,
+      "acceptance": false,
+      "diagnostic_only": true,
+      "inputs_unchanged": true,
+      "result_sha256": "6be36f4360ea789c6f7fd3f91e6b048124a19272595847fa8fd1c9e065fb1000",
+      "diagnostics_sha256": "ac1403ae1c3218f806f10a49e6f518cbe9da4f37379c5aba387703962c1c6c95",
+      "physical_manifest_sha256": "9ec8c68c36869440cb7ccdda3042b454686530c34c1e21483d4281f94af028a5",
+      "physical_reads": 548,
+      "first_failures": [],
+      "progress": [
+        {
+          "entry": 1,
+          "vector": 256,
+          "stage": 13,
+          "wait_started": 40803920633,
+          "deadline": 44221690044,
+          "acquired": 40803921009
+        },
+        {
+          "entry": 2,
+          "vector": 244,
+          "stage": 5,
+          "wait_started": 40804160345,
+          "deadline": 44221928630,
+          "acquired": 0
+        },
+        {
+          "entry": 2,
+          "vector": 244,
+          "stage": 5,
+          "wait_started": 40804289668,
+          "deadline": 44222058013,
+          "acquired": 0
+        },
+        {
+          "entry": 2,
+          "vector": 244,
+          "stage": 5,
+          "wait_started": 40804419472,
+          "deadline": 44222187989,
+          "acquired": 0
+        }
+      ],
+      "domain": {
+        "ready": 1,
+        "failed": 0,
+        "lock": 1,
+        "owner": 0,
+        "online": 15,
+        "sequence": 5238,
+        "barrier": 5238,
+        "expected": 15,
+        "completed": 5237,
+        "kernel_root": 4194304,
+        "engine": 18446695695230484608,
+        "cpus": 18446695695230497600,
+        "processes": 18446695695230499520,
+        "arena": 18446695695230484480,
+        "bytes": 65536
+      },
+      "metrics": [
+        {
+          "switches": 8016,
+          "user_entries": 8016,
+          "user_timers": 159
+        },
+        {
+          "switches": 161,
+          "user_entries": 161,
+          "user_timers": 0
+        },
+        {
+          "switches": 168,
+          "user_entries": 168,
+          "user_timers": 0
+        },
+        {
+          "switches": 213,
+          "user_entries": 213,
+          "user_timers": 0
+        }
+      ],
+      "cleanup": {
+        "actual_qemu_executed": true,
+        "qemu_stopped": true,
+        "qemu_returncode": 0,
+        "process_alive": false,
+        "cleanup_completed": true
+      },
+      "script_sha256": "eaf945773115623ba6d4a849b12ab5d8a1af7ec4b344459c85432e4d99a2e299",
+      "script_archived_sha256": "eaf945773115623ba6d4a849b12ab5d8a1af7ec4b344459c85432e4d99a2e299",
+      "budget_observations": {
+        "kernel_space": {
+          "pool": 18446603336225390592,
+          "pool_count": 128,
+          "pool_physical": 4194304,
+          "metadata": 18446744071563525128,
+          "address_mask": 70368744173568,
+          "used_total": 74
+        },
+        "service_plan": [
+          2121822208,
+          4096,
+          2047455232,
+          31600640,
+          1913237504,
+          134217728
+        ],
+        "service_next_page": 10423,
+        "budget": {
+          "arena": {
+            "physical": 1913237504,
+            "bytes": 134217728,
+            "next_page": 10423
+          },
+          "pools": [
+            {
+              "root": 2107109376,
+              "pages": 32,
+              "used": 11,
+              "shared_root_slots": 511,
+              "slot": 0,
+              "generation": 1,
+              "kind": "static"
+            },
+            {
+              "root": 1917435904,
+              "pages": 32,
+              "used": 13,
+              "shared_root_slots": 511,
+              "slot": 1,
+              "generation": 1,
+              "kind": "arena"
+            },
+            {
+              "root": 1918046208,
+              "pages": 32,
+              "used": 11,
+              "shared_root_slots": 511,
+              "slot": 2,
+              "generation": 1,
+              "kind": "arena"
+            },
+            {
+              "root": 1918394368,
+              "pages": 128,
+              "used": 34,
+              "shared_root_slots": 511,
+              "slot": 3,
+              "generation": 1,
+              "kind": "arena"
+            },
+            {
+              "root": 1919463424,
+              "pages": 32,
+              "used": 12,
+              "shared_root_slots": 511,
+              "slot": 4,
+              "generation": 1,
+              "kind": "arena"
+            },
+            {
+              "root": 1944776704,
+              "pages": 32,
+              "used": 8,
+              "shared_root_slots": 511,
+              "slot": 5,
+              "generation": 1,
+              "kind": "arena"
+            },
+            {
+              "root": 1946046464,
+              "pages": 32,
+              "used": 8,
+              "shared_root_slots": 511,
+              "slot": 6,
+              "generation": 1,
+              "kind": "arena"
+            },
+            {
+              "root": 1946435584,
+              "pages": 32,
+              "used": 16,
+              "shared_root_slots": 511,
+              "slot": 7,
+              "generation": 1,
+              "kind": "arena"
+            },
+            {
+              "root": 1947422720,
+              "pages": 32,
+              "used": 16,
+              "shared_root_slots": 511,
+              "slot": 8,
+              "generation": 1,
+              "kind": "arena"
+            },
+            {
+              "root": 1948409856,
+              "pages": 32,
+              "used": 16,
+              "shared_root_slots": 511,
+              "slot": 9,
+              "generation": 1,
+              "kind": "arena"
+            },
+            {
+              "root": 1949396992,
+              "pages": 32,
+              "used": 15,
+              "shared_root_slots": 511,
+              "slot": 10,
+              "generation": 1,
+              "kind": "arena"
+            }
+          ],
+          "kernel_space": {
+            "pool": 18446603336225390592,
+            "pool_count": 128,
+            "pool_physical": 4194304,
+            "metadata": 18446744071563525128,
+            "address_mask": 70368744173568,
+            "used_total": 74
+          }
+        }
+      },
+      "uninterrupted_seconds_before_first_pause": 2.0,
+      "no_resume_after_first_pause": true
+    }
+  ],
+  "limitations": [
+    "All AP user entries/timers/switches remain zero in R9/R10/R11.",
+    "Common complete pool audit rejected empty process retained Space/root identity.",
+    "Diagnostic v1 lacks wait begin/deadline/acquired timing; cause remains unproven.",
+    "No physical WC throughput; prior machine availability question unanswered."
+  ],
+  "checkpoint_markdown_sha256": "f854d8ddc4a1107f1937eb5fd2312759ad6065de9a01c18cee4c7af64345cb2a",
+  "builds": [
+    {
+      "case": "normal",
+      "bytes": 1962384,
+      "loader_margin": 134768,
+      "kernel_bin_sha256": "2906f46ff0f7fcd67fa6e07e5314093b2a057bc23ba3a695d714240d874f5d33",
+      "artifact_count": 285,
+      "strict_identity_root_recomputed": true
+    },
+    {
+      "case": "omit-ap-flush",
+      "bytes": 1962384,
+      "loader_margin": 134768,
+      "kernel_bin_sha256": "fc4fc7b1ef484f9ce5d0afa578ebd0bb783694292a706cdc4b0420f1c6d74484",
+      "artifact_count": 285,
+      "strict_identity_root_recomputed": true
+    }
+  ],
+  "wc_build_bytes": 1974672,
+  "wc_loader_margin": 122480,
+  "latest_addendum": "2026-10-23T05:55:00+08:00",
+  "status_updates": {
+    "codex:P2SIZE23": {
+      "status": "integrated",
+      "rev": 6
+    },
+    "codex:P2SMP27": {
+      "status": "integrated",
+      "rev": 9
+    },
+    "codex:P2GOP29": {
+      "status": "submitted",
+      "rev": 3
+    },
+    "codex:P2LARGE16": {
+      "status": "submitted",
+      "rev": 13
+    }
+  },
+  "observer_risk": "settings constructor stops for many QMP reads, then ProcessGuest.settle resumes; WHPX absolute deadline endpoints may include long observer pause. Production cause not established.",
+  "new_timing_build": {
+    "bytes": 1966480,
+    "loader_margin": 130672,
+    "artifact_count": 285,
+    "source_root_job": "326a3816570445f08a69f2c87658e27a",
+    "entry_sha256": "50b61f652b6b13f60c5f3f8bc93f4703f2ac086f3471975adc3edbfcf691608b",
+    "strict_identity_before_after": true
+  }
+}

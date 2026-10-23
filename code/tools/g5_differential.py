@@ -6,6 +6,7 @@ No fallback, target IR construction, VM, or coordinator mutation is permitted.
 """
 from __future__ import annotations
 import argparse
+import functools
 import hashlib
 import json
 import os
@@ -30,13 +31,31 @@ from lang.tests import test_l3a_globals as bridge
 from lang.tests import test_l3a_native_regression as native
 from lang.tests import test_bootstrap_native_compiler as audit
 from lang.tests.test_dongc import nasm_flags
+nasm_flags=functools.lru_cache(maxsize=8)(nasm_flags)
 BASE_DRIVER=bridge.DRIVER
-DEFAULT_BUILD=ROOT/'build/test/G5' if WORKS==ROOT else WORKS/'deepseek-works/build/L3'
+DEFAULT_BUILD=ROOT/'build/test/G5-full'
+CANDIDATE=HERE.parent/'src/bootstrap' if HERE.parent.name=='g5-full' else ROOT/'lang/bootstrap'
+CANDIDATES=('semantic_types.dg','program_ir.dg','lower_program.dg','nasm_program.dg','frontend_diagnostics.dg','native_assembler.dg')
 
 def sha(p):return hashlib.sha256(Path(p).read_bytes()).hexdigest()
 def write(p,data):Path(p).write_text(json.dumps(data,indent=2)+'\n',encoding='utf-8')
 def require(ok,message):
     if not ok:raise AssertionError(message)
+
+def bounded_driver(text):
+    # These are caller-owned pools, sized above this matrix's largest input.
+    # Retain every exact-minus-one, alias, guard and read-only assertion while
+    # avoiding repeated hashes of hundreds of MiB of unused scratch per case.
+    sizes={'alloc(64*1024*1024,1)':'alloc(8*1024*1024,1)',
+           'alloc(524288,sizeof(Instruction))':'alloc(16384,sizeof(Instruction))',
+           'alloc(131072,sizeof(Argument))':'alloc(8192,sizeof(Argument))',
+           'alloc(262144,8)':'alloc(8192,8)',
+           'alloc(32*1024*1024,1)':'alloc(2*1024*1024,1)',
+           'alloc(16*1024*1024,1)':'alloc(2*1024*1024,1)'}
+    for old,new in sizes.items():
+        require(text.count(old)==1,'unique caller workspace '+old)
+        text=text.replace(old,new)
+    return text
 
 def diagnostic_driver():
     # Read the real frontend's checked Unit/Node/Token records. This is only
@@ -120,6 +139,7 @@ class Runner:
     def __init__(self,output=None):
         self.work=Path(output or DEFAULT_BUILD/('run-'+uuid.uuid4().hex[:12])).resolve()
         self.work.mkdir(parents=True,exist_ok=False)
+        self.bindings={}
         self.records=[];self.cases=[];self.gaps=[];self.negatives=[];self.runtime=[];self.diagnostic_cases=[]
         self.inputs={str(p):sha(p) for base in [ROOT/'lang/bootstrap',ROOT/'lang/dongc'] for p in base.rglob('*') if p.is_file() and p.suffix in ('.py','.dg')}
         for p in [Path(__file__),Path(bridge.__file__),Path(native.__file__),Path(audit.__file__)]:self.inputs[str(p)]=sha(p)
@@ -139,12 +159,55 @@ class Runner:
     def boot(self):
         # Reuse only reviewed host allocation/ABI utilities. The compiler under
         # test is rebuilt from current production Dong sources, with provenance.
+        self.saved_flags=bridge.nasm_flags
+        bridge.nasm_flags=nasm_flags
+        self.saved_bridge=(bridge.CAND,bridge.CANDIDATES,bridge.BUILD,bridge.DRIVER,bridge.stage_compiler,bridge.L3AGlobalsTests.__dict__['build_driver'])
         bridge.BUILD=self.work/'compiler'
-        bridge.CAND=ROOT/'lang/bootstrap'
-        bridge.DRIVER=diagnostic_driver()
+        bridge.CAND=CANDIDATE
+        bridge.CANDIDATES=CANDIDATES
+        original_stage=bridge.stage_compiler
+        def stage(work,wrapper=bridge.WRAPPER,mutations=None,extra=('exec.elf',)):
+            if mutations is None:
+                wrapper=native.WRAPPER.replace('module probe.l3a_native;','module probe.l3a_pipeline;')
+            wrapper=wrapper.replace('module probe.l3a_pipeline;','module probe.l3a_pipeline;\nimport bootstrap.frontend_diagnostics as diagnostic;')
+            return original_stage(work,wrapper,mutations,extra)
+        bridge.stage_compiler=stage
+        driver=diagnostic_driver()
+        driver=driver.replace('extern U ABI native_lower(', 'extern U ABI dong_frontend_diagnostic(const Source*,U,const FrontResult*,void*,U,U*);\nextern U ABI native_lower(')
+        driver=driver.replace('if(rc){fprintf(stderr,"frontend status=',
+            'if(rc){REQUIRE(!fr.graph.arena.n&&!fr.graph.units.n&&!fr.graph.nodes.n&&!fr.graph.types.n&&!fr.graph.info.n);'
+            'char diagnostic[4096];U dn=0;REQUIRE(dong_frontend_diagnostic(catalog,sources,&fr,diagnostic,sizeof diagnostic,&dn)==0);'
+            'fwrite(diagnostic,1,dn,stderr);fprintf(stderr,"frontend status=')
+        bridge.DRIVER=bounded_driver(driver)
         bridge.L3AGlobalsTests.setUpClass()
         self.g=bridge.L3AGlobalsTests()
+        original_build=self.saved_bridge[-1].__func__
+        mutations=[
+            ('else{immediate(s,0,(*x).value);}','else{immediate(s,0,(*x).value^1);}'),
+            ('i=0;while i<10{put(s,"movdqu xmm");','i=0;while i<9{put(s,"movdqu xmm");'),
+            ('addr.emit(0,(*s).frame_base,-((*x).a as i64)','addr.emit(0,(*s).frame_base,-((*x).a as i64)+8'),
+            ('immediate(s,7,kind);','immediate(s,7,kind^1);'),
+            ('if op==ir.STATIC_ADDRESS{put(s,"lea rax, [rel ");symbol(s,(*x).value);put(s,"]\\n");return slotstore(s,0,(*x).destination);}',
+             'if op==ir.STATIC_ADDRESS{put(s,"lea rax, [rel ");symbol(s,(*x).value);if (*g).symbols[(*x).value].kind==names.GLOBAL{put(s,"+8");}put(s,"]\\n");return slotstore(s,0,(*x).destination);}'),
+            ('else{store(s,0,11,0,ir.width(g,t));}return (*s).status==0;','else{store(s,0,11,0,64);}return (*s).status==0;')]
+        original=(CANDIDATE/'nasm_program.dg').read_bytes().decode('utf-8');bad=original
+        for old,new in mutations:
+            require(bad.count(old)==1,'unique combined mutant site')
+            bad=bad.replace(old,new)
+        aliases={'bad-tag','bad-xmm','bad-address','bad-kind','bad-static-address','bad-store'}
+        def build_combined(cls,tag,requested=None):
+            if tag not in aliases:return original_build(cls,tag,requested)
+            if requested:
+                require(requested.get('nasm_program.dg') in mutations,'unreviewed mutant request')
+            driver=original_build(cls,'combined-mutant',{'nasm_program.dg':(original,bad)})
+            cls.drivers[tag]=driver
+            cls.provenance[tag]=cls.provenance['combined-mutant']
+            return driver
+        bridge.L3AGlobalsTests.build_driver=classmethod(build_combined)
+        self.mutant_sites=[dict(old=a,new=b) for a,b in mutations]
         self.nasm,self.cc=self.g.nasm,self.g.cc
+        self.inputs.update(self.g.inputs)
+        self.bindings={}
         objcopy=Path(self.cc).with_name('objcopy.exe' if os.name=='nt' else 'objcopy')
         for program in (self.nasm,self.cc,objcopy):self.command([program,'--version'],'tool-version')
         self.command([sys.executable,'--version'],'python-version')
@@ -181,6 +244,7 @@ class Runner:
         listing=directory/'sources.list';listing.write_text(''.join(p.name+'='+str(p)+'\n' for p in sources))
         asm=directory/(tag+'-'+mode+'.asm');asm.write_bytes(b'unchanged')
         p=self.command([self.g.drivers[tag],listing,'multi',asm,int(mode=='release')],directory.name+'-'+tag+'-'+mode,expect=None)
+        self.bindings[str(asm)]=dict(compiler_path='dong-frontend-lower-nasm',driver_sha256=sha(self.g.drivers[tag]),driver_path=str(self.g.drivers[tag]),native_compile_returncode=p.returncode,emitted_sha256=sha(asm),variant=tag)
         return asm,p
 
     def observe(self,asm,observer,name,abi=False,expect=0):
@@ -231,7 +295,12 @@ void __attribute__((sysv_abi)) __dong_panic(uint32_t kind,uint32_t line,const vo
         exe=source.with_suffix('.exe')
         self.command([self.cc,'-std=c11','-D__USE_MINGW_ANSI_STDIO=1','-O2','-Wall','-Wextra','-Werror',source,asm.with_suffix('.obj'),*([self.abi_obj] if abi else []),'-o',exe],name+'-link')
         p=self.command([exe],name+'-observe',expect)
-        return dict(path='actual-native-execution',exe=str(exe),assembly_path=str(asm),assembly_sha256=sha(asm),object_sha256=sha(asm.with_suffix('.obj')),exe_sha256=sha(exe),returncode=p.returncode,stdout=p.stdout,stderr=p.stderr)
+        result=dict(path='actual-native-execution',exe=str(exe),assembly_path=str(asm),assembly_sha256=sha(asm),object_sha256=sha(asm.with_suffix('.obj')),exe_sha256=sha(exe),returncode=p.returncode,stdout=p.stdout,stderr=p.stderr)
+        binding=self.bindings.get(str(asm))
+        if binding:
+            require(binding['native_compile_returncode']==0 and binding['emitted_sha256']==sha(asm),'actual native compile path/output changed')
+            result.update(binding)
+        return result
 
     def supported(self):
         audit_source=audit.AUDIT+'\npub fn returned_slice(s:[]const u8)[]const u8{return s;}\n'
@@ -255,10 +324,11 @@ void __attribute__((sysv_abi)) __dong_panic(uint32_t kind,uint32_t line,const vo
             for case in ('add','sub','neg-one','neg-max','neg-min','neg8','narrow','bounds','shift','divide','divide-zero'):
                 guarded=mode=='debug' or case in ('bounds','shift','divide','divide-zero')
                 seed=self.command([item['seed']['exe'],case,int(mode=='release')],mode+'-seed-runtime-'+case,85 if guarded else 0)
-                native_run=self.command([item['native']['exe'],case,int(mode=='release')],mode+'-dong-runtime-'+case,(86 if os.name=='nt' else -4) if guarded else 0)
+                native_run=self.command([item['native']['exe'],case,int(mode=='release')],mode+'-dong-runtime-'+case,85 if guarded else 0)
                 if guarded:
                     require(re.search(r'PANIC \d+ \d+',seed.stderr) is not None,'seed source guard diagnostic missing')
-                    if os.name=='nt':require('NATIVE_UD2_GUARD' in native_run.stderr,'native guard was not an exact observed UD2')
+                    left=re.search(r'PANIC (\d+) (\d+)',seed.stderr);right=re.search(r'PANIC (\d+) (\d+)',native_run.stderr)
+                    require(right is not None and left.groups()==right.groups(),'native panic category/source line differs from seed')
                 self.runtime.append(dict(case=case,mode=mode,guarded=guarded,seed_returncode=seed.returncode,native_returncode=native_run.returncode,seed_diagnostic=seed.stderr,native_diagnostic=native_run.stderr))
         # Generated numeric vectors use a fixed PRNG seed, independent values.
         import random
@@ -286,7 +356,7 @@ void __attribute__((sysv_abi)) __dong_panic(uint32_t kind,uint32_t line,const vo
             for mode in ('debug','release'):
                 seed=self.observe(self.seed(directory,mode),obs,name+'-seed-'+mode)
                 asm,p=self.dong(directory,mode)
-                if name in ('method','defer','extern-sysv','for-range','for-array','for-slice','bool-match'):
+                if name in GAPS:
                     require(p.returncode==0,name+' supported path regressed; no seed fallback')
                     target=self.observe(asm,obs,name+'-dong-'+mode)
                     target.update(compiler_path='dong-frontend-lower-nasm',driver_sha256=sha(self.g.drivers['good']))
@@ -322,42 +392,109 @@ void __attribute__((sysv_abi)) __dong_panic(uint32_t kind,uint32_t line,const vo
             self.diagnostic_cases.append(dict(name='private-module-global',mode=mode,status='diagnostic-pass',seed=seed,native=p.stderr))
 
     def negative_controls(self):
-        variants=[('bad-address','if op==ir.STATIC_ADDRESS{put(s,"lea rax, [rel ");symbol(s,(*x).value);put(s,"]\\n");return slotstore(s,0,(*x).destination);}',
+        variants=[('bad-static-address','if op==ir.STATIC_ADDRESS{put(s,"lea rax, [rel ");symbol(s,(*x).value);put(s,"]\\n");return slotstore(s,0,(*x).destination);}',
                    'if op==ir.STATIC_ADDRESS{put(s,"lea rax, [rel ");symbol(s,(*x).value);if (*g).symbols[(*x).value].kind==names.GLOBAL{put(s,"+8");}put(s,"]\\n");return slotstore(s,0,(*x).destination);}'),
                   ('bad-store','else{store(s,0,11,0,ir.width(g,t));}return (*s).status==0;',
                    'else{store(s,0,11,0,64);}return (*s).status==0;')]
+        store_source='module narrow;pub unsafe fn write(p:*u8)void{unsafe{*p=0x5a;}}'
+        store_directory=self.source_directory('narrow-mutant',[('narrow.dg',store_source)])
+        store_observer='#include <stdint.h>\n#include <stdio.h>\nextern void __attribute__((sysv_abi)) f(unsigned char*) __asm__("'+bridge.label('narrow','write')+'");\nint main(void){unsigned char b[16];for(int i=0;i<16;i++)b[i]=0xa7;f(b+4);for(int i=0;i<16;i++){if(b[i]!=(i==4?0x5a:0xa7)){fputs("narrow-store-canary\\n",stderr);return 2;}}return 0;}'
         for tag,old,new in variants:
             self.g.build_driver(tag,{'nasm_program.dg':(old,new)})
             for mode in ('debug','release'):
-                asm,p=self.dong(self.work/'globals',mode,tag);require(p.returncode==0,'bad Dong must compile normally')
-                observed=self.observe(asm,global_observer(),tag+'-'+mode,expect=2)
-                reason='wrong-global-address' if tag=='bad-address' else 'narrow-store-canary'
+                directory=self.work/'globals' if tag=='bad-static-address' else store_directory
+                observer=global_observer() if tag=='bad-static-address' else store_observer
+                if tag=='bad-store':
+                    self.observe(self.seed(directory,mode),observer,'narrow-seed-'+mode)
+                    good,p=self.dong(directory,mode);require(p.returncode==0,'narrow good compile')
+                    self.observe(good,observer,'narrow-good-'+mode)
+                asm,p=self.dong(directory,mode,tag);require(p.returncode==0,'bad Dong must compile normally')
+                observed=self.observe(asm,observer,tag+'-'+mode,expect=2)
+                reason='wrong-global-address' if tag=='bad-static-address' else 'narrow-store-canary'
                 require(reason in observed['stderr'],'exact semantic oracle did not reject bad Dong')
                 self.negatives.append(dict(name=tag,mode=mode,status='rejected-semantic',observed=observed,reason=reason))
-        # A functioning bad runner body actually attempts fallback on a real
-        # rejected extern case. Provenance validation must reject its output.
-        rejected=self.gaps[-1]
-        forged=self.work/'fallback-bad.py'
-        forged.write_text('import json\nr=json.loads('+repr(json.dumps(rejected))+')\nr["native"]=r["seed"]\nr["status"]="supported-pass"\nprint(json.dumps(r))\n')
-        p=self.command([sys.executable,forged],'actual-bad-runner-fallback')
-        fake=json.loads(p.stdout)
-        try:validate_path(fake)
-        except AssertionError as e:self.negatives.append(dict(name='seed-fallback',status='rejected-provenance',reason=str(e),body_sha256=sha(forged)))
-        else:raise AssertionError('bad seed fallback was accepted')
+        # Exercise a real native CAPACITY failure on a valid same-source case.
+        # Only the C caller's instruction pool is shortened; target compiler
+        # bytes and all target source remain unchanged.
+        stage=Path(self.g.drivers['good']).parent
+        c=stage/'capacity-driver.c';text=(stage/'driver.c').read_text()
+        needle='alloc(16384,sizeof(Instruction))'
+        require(text.count(needle)==1,'unique real instruction pool capacity')
+        c.write_text(text.replace(needle,'alloc(0,sizeof(Instruction))'))
+        exe=stage/'capacity-driver.exe'
+        self.command([self.cc,'-std=c11','-D_GNU_SOURCE','-D__USE_MINGW_ANSI_STDIO=1','-O2','-Wall','-Wextra','-Werror',c,stage/'wrapper.obj','-o',exe],'capacity-driver-link')
+        self.g.drivers['capacity']=exe
+        for mode in ('debug','release'):
+            asm,failed=self.dong(self.work/'globals',mode,'capacity')
+            require(failed.returncode==11 and 'lower status=2' in failed.stderr and asm.read_bytes()==b'unchanged','real native capacity rejection missing')
+            seed=next(x['seed'] for x in self.cases if x['name']=='globals' and x['mode']==mode)
+            rejected=dict(name='real-native-capacity',mode=mode,status='failure',seed=seed,native=dict(returncode=failed.returncode,stderr=failed.stderr))
+            forged=self.work/('fallback-bad-'+mode+'.py')
+            forged.write_text('import json\nr=json.loads('+repr(json.dumps(rejected))+')\nr["native"]=r["seed"]\nr["status"]="supported-pass"\nprint(json.dumps(r))\n')
+            p=self.command([sys.executable,forged],'actual-bad-runner-fallback-'+mode)
+            fake=json.loads(p.stdout)
+            try:validate_path(fake)
+            except AssertionError as e:self.negatives.append(dict(name='seed-fallback',mode=mode,status='rejected-provenance',reason=str(e),body_sha256=sha(forged),real_native_failure=rejected['native']))
+            else:raise AssertionError('bad seed fallback was accepted')
 
     def native_container(self):
-        native.BUILD=self.work/'container';native.CAND=ROOT/'lang/bootstrap'
-        native.L3ANativeRegressionTests.setUpClass();n=native.L3ANativeRegressionTests()
+        # Relink a second independent C caller against this run's exact cold
+        # compiler object, which exports native_assemble and kernel_validate.
+        cls=native.L3ANativeRegressionTests
+        stage=Path(self.g.drivers['good']).parent
+        cls.work=self.work/'container';cls.work.mkdir()
+        cls.nasm,cls.cc=self.nasm,self.cc
+        cls.stage=stage;cls.provenance=self.g.provenance['good'];cls.inputs=dict(self.g.inputs);cls.records=[]
+        c=cls.work/'driver.c'
+        raw_failure='if(rc!=0){return 0;}'
+        require(native.DRIVER.count(raw_failure)==1,'unique raw failure check')
+        checked=native.DRIVER.replace(raw_failure,'if(rc!=0){for(U k=0;k<out.n;k++)REQUIRE(((unsigned char*)out.p)[k]==0xa5);printf("RAW-REJECT unchanged=1\\n");return 0;}')
+        c.write_text(checked)
+        cls.driver=cls.work/'driver.exe'
+        obj=stage/('wrapper.obj' if os.name=='nt' else 'wrapper.elf.o')
+        cls.command([self.cc,'-std=c11','-D_GNU_SOURCE','-D__USE_MINGW_ANSI_STDIO=1','-O2','-Wall','-Wextra','-Werror',* ([] if os.name=='nt' else ['-no-pie']),c,obj,'-o',cls.driver],'driver-link')
+        mapper=cls.work/'mapper.c';mapper.write_text(native.MAPPER)
+        cls.mapper=cls.work/('mapper.exe' if os.name=='nt' else 'mapper')
+        cls.command([self.cc,'-std=c11','-D_GNU_SOURCE','-D__USE_MINGW_ANSI_STDIO=1','-O2','-Wall','-Wextra','-Werror',* (['-Wl,--image-base=0x100000000'] if os.name=='nt' else []),mapper,'-o',cls.mapper],'mapper-link')
+        n=cls()
         try:
-            n.test_fixed_address_static_pointer_initializers_execute()
-            self.container=dict(passed=True,path=str(n.work),execution='real native_assembler ELF at original 0x400000, static pointers unchanged')
-        finally:native.L3ANativeRegressionTests.tearDownClass()
+            source='module native;\nexport("__dong_panic")fn panic(k:u32,line:u32,p:*const u8,n:usize)noreturn{loop{}}\npub const fixed:[3]u16=[0x11,0x2233,0x4455];\npub var values:[4]u16=[3,5,7,11];pub struct Bag{pub tag:u8,pub word:u32}\npub var bag:Bag=Bag{tag:0xaa,word:0x12345678};pub var p:*u16=&values[2];pub var q:*u32=&bag.word;\npub var r:*const u16=&fixed[1];pub var obs:[8]u64=[0;8];\npub fn probe()*u64{unsafe{obs[0]=*p as u64;obs[1]=*q as u64;obs[2]=*r as u64;*p=0xbeef;*q=0xaabbccdd;\nobs[3]=values[2]as u64;obs[4]=bag.word as u64;obs[5]=*r as u64;\nif p==&values[2]{obs[6]=4;}else{obs[6]=999;}if q==&bag.word{obs[7]=4;}else{obs[7]=999;}}\nreturn &obs[0];}\n'
+            target_dir,asm,elf,_=n.pipeline(source,bridge.label('native','probe'),'g5-fixed-pointers')
+            text=asm.read_text()
+            require('extern $__dong_panic' not in text and 'global $__dong_panic' in text,'target-provided panic definition was not linked internally')
+            for name,offset in [('values',4),('bag',4),('fixed',2)]:require('dq '+bridge.label('native',name)+'+'+str(offset) in text,'static relocation changed')
+            require(n.command([n.driver,'validate',elf],'full-kernel-validate').stdout.strip()=='VALIDATE 0','kernel ELF validation failed')
+            actual=n.execute(elf,'400000',8)
+            require(actual==[7,0x12345678,0x2233,0xbeef,0xaabbccdd,0x2233,4,4],'native ELF pointer/data oracle differs')
+            for name,body,success in [
+                ('resolved-extern','extern supplied\nsection .text\nglobal _start\n_start:\ncall supplied\nret\nsupplied:\nmov rax, 37\nret\n',True),
+                ('unresolved-extern','extern supplied\nsection .text\nglobal _start\n_start:\nmov rax, 37\nret\n',False)]:
+                raw=cls.work/(name+'.asm');raw.write_text('bits 64\n'+body)
+                output=raw.with_suffix('.elf');output.write_bytes(b'unchanged')
+                report=n.command([n.driver,'raw',raw,'_start',output],name).stdout
+                if success:
+                    require('RAW status=0 ' in report and output.read_bytes()[:4]==b'\x7fELF','resolved runtime definition rejected')
+                    require('RAW-CAP status=2 written=0 unchanged=1' in report,'resolved runtime capacity atomicity')
+                else:
+                    require('RAW status=4 ' in report and 'RAW-REJECT unchanged=1' in report,'unresolved declaration did not reject atomically')
+                    require(output.read_bytes()==b'unchanged','unresolved ELF published')
+            source_path=target_dir/'native.dg'
+            require(source_path.read_text()==source,'native target source changed')
+            require(hashlib.sha256(source_path.read_text().encode()).hexdigest()==hashlib.sha256(source.encode()).hexdigest(),'native target source changed')
+            self.inputs[str(source_path)]=sha(source_path)
+            self.container=dict(passed=True,path=str(n.work),compiler_object_sha256=sha(obj),assembly_sha256=sha(asm),elf_sha256=sha(elf),observations=actual,execution='real native_assembler ELF at original 0x400000, same cold compiler object, target runtime linked, static pointers unchanged')
+        finally:
+            native.L3ANativeRegressionTests.tearDownClass()
 
     def finish(self):
-        self.g.tearDownClass()
-        after=self.assert_inputs()
+        try:
+            self.g.tearDownClass()
+            after=self.assert_inputs()
+        finally:
+            bridge.CAND,bridge.CANDIDATES,bridge.BUILD,bridge.DRIVER,bridge.stage_compiler,bridge.L3AGlobalsTests.build_driver=self.saved_bridge
+            bridge.nasm_flags=self.saved_flags
         compiler=dict(path=str(self.g.drivers['good']),sha256=sha(self.g.drivers['good']),provenance=self.g.provenance,bootstrap_commands=self.g.records)
-        result=dict(runner_scope_passed=True,scope_complete=False,remaining=sorted({case['name'] for case in self.gaps}),supported_pass=self.cases,runtime_checks=self.runtime,diagnostic_pass=self.diagnostic_cases,known_gap=self.gaps,negative_controls=self.negatives,failure=[],skip=[],native_container=self.container,source_before=self.inputs,source_after=after,source_stable=True,environment=self.environment,compiler=compiler,commands=self.records)
+        result=dict(runner_scope_passed=True,scope_complete=False,remaining=sorted({case['name'] for case in self.gaps}),supported_pass=self.cases,runtime_checks=self.runtime,diagnostic_pass=self.diagnostic_cases,known_gap=self.gaps,negative_controls=self.negatives,combined_mutant_sites=self.mutant_sites,failure=[],skip=[],native_container=getattr(self,'container',dict(passed=False)),source_before=self.inputs,source_after=after,source_stable=True,environment=self.environment,compiler=compiler,commands=self.records)
         write(self.work/'coverage.json',result);return result
 
     def run(self):

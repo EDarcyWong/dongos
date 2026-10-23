@@ -1,0 +1,98 @@
+{
+  "assignment_owner": "codex",
+  "auto_dispatch": false,
+  "auto_verify": false,
+  "candidate": null,
+  "checks": [
+    "module:tests.test_runtime_roots",
+    "module:tests.test_paging_view",
+    "module:tests.test_paging"
+  ],
+  "claim_from_status": "rework",
+  "claimed_at": "2026-10-22T19:09:01+00:00",
+  "claimed_by": "codex-mcp-daece153b59c4bd5",
+  "completed_at": "2026-10-22T19:12:41+00:00",
+  "complexity": "standard",
+  "created_at": "2026-10-22T18:35:14+00:00",
+  "delivery": "codex-works/deliveries/P2ROOT13.md",
+  "depends_on": [
+    "codex:P2VIEW6",
+    "codex:P2ALIAS8"
+  ],
+  "description": "用户先完成P2再P5；为真实调度后多根事务补必要闭包组件，不放宽旧shared_paging/EXEC/WC owner。新增只读有界runtime_roots模块，直接读取pg.inspect产生的真实kernel/最多16用户Space PoolView；按生产load_candidate精确规则核每个用户root的PML4[1..511]逐项等于唯一kernel root对应分支（仅允许硬件A/D合法变化），只遍历各用户私有slot0，kernel完整树只遍历一次。核所有private child在自己pool/唯一parent/无cycle，metadata与reachable/used一致；foreign引用只准root共享分支，不能任意放行外部PA。物理及虚拟pool/metadata/描述符/输出存储需无冲突、边界/溢出/对齐预检，输出失败原子；pending退休metadata2无完整线性receipt时明确拒绝并保持隔离。对指定持有物理区间枚举实际kernel/USER别名及有效权限/缓存/2MiB交叠；隐藏额外别名必须出现在结果中，不能只检查调用方两条列表。此模块审计给定可信枚举集合，不能单凭数组证明已枚举所有memory/Catalog/domain根；信任边界及后续真实消费者集成义务须明确。本项不把组件当P2整体验收。\n永久host测试实际编译新模块+生产paging，debug/release用真实Space建立kernel及多用户private树，再复制真实shared1..511；C独立raw oracle和guard验证别名、parent/A-D/overflow/capacity/同PA多根/坏root/private foreign/cycle/metadata2保持、输出重叠拒绝。真实坏Dong忽略共享分支/foreign私有指针/忽略隐藏别名须正常编译执行并精确拒绝；不能只grep。保存原始源/命令/receipt/SHA/0skip稳定。普通执行者不运行测试/OS/VM/CLI/commit/push；协调器独立复验+源码契约实审后真实主目录集成。",
+  "document": "codex-works/tasks/P2ROOT13-board.md",
+  "historical": false,
+  "id": "codex:P2ROOT13",
+  "integration_note": "五个实际文件已在真实本地主线工作树，主线SHA与688d4e65正式指纹逐项一致；非候选副本，登记本地集成。仅只读forest组件完成，P2调度后owner/完整根身份绑定/AP PCID/WC硬件门禁仍未关闭；无OS/VM/commit/push。",
+  "legacy_hash": "96c8d4ae3481c3fe9d35c924abde114df4513f166960924795fa3d2d76bec6a7",
+  "number": "P2ROOT13",
+  "owner": "codex",
+  "rev": 15,
+  "review_note": "已实际审查runtime_roots生产walker/有效权限/WX/PCID无关语义、全部shared1..511（仅A位差异、零项精确）、private0/池唯一父/环/foreign/accounting/pending/容量与5056B align64 caller Scratch预检；C独立原始walk有效，完整根枚举/BKL/lease由调用方承担，组件不授权变更。正式688d4e6524cc4711b057277f22cba22e三模块4tests/0skip，25.218/5.484/6.375秒，stable/stopped/exited=true。root复算72产物/输入SHA、32命令，debug/release两正向各39场景2002320断言；漏shared、private foreign放行、隐藏别名遗漏6次真坏源码均正常rc1精确拒绝。原快照失败、E0601及C-Werror失败全部保留；4KiB帧上限未改。",
+  "status": "integrated",
+  "title": "P2调度后内核共享分支与用户私有根闭包审计",
+  "updated_at": "2026-10-22T19:14:30+00:00",
+  "verification": {
+    "checks": [
+      {
+        "cancelled": false,
+        "elapsed_seconds": 25.218,
+        "execution_exited": true,
+        "passed": true,
+        "process_stopped": true,
+        "returncode": 0,
+        "skips": 0,
+        "spec": "module:tests.test_runtime_roots",
+        "tests": 1,
+        "timed_out": false
+      },
+      {
+        "cancelled": false,
+        "elapsed_seconds": 5.484,
+        "execution_exited": true,
+        "passed": true,
+        "process_stopped": true,
+        "returncode": 0,
+        "skips": 0,
+        "spec": "module:tests.test_paging_view",
+        "tests": 1,
+        "timed_out": false
+      },
+      {
+        "cancelled": false,
+        "elapsed_seconds": 6.375,
+        "execution_exited": true,
+        "passed": true,
+        "process_stopped": true,
+        "returncode": 0,
+        "skips": 0,
+        "spec": "module:tests.test_paging",
+        "tests": 2,
+        "timed_out": false
+      }
+    ],
+    "execution_exited": true,
+    "fingerprint": {
+      "codex-works/deliveries/P2ROOT13.md": "14f95317dca8c5e79bd02ec6b00fb9bd1046786e5ef267286ccffc0d5c4e496e",
+      "docs/runtime-roots.md": "a80b976601bbf730a2b3ea1ababf778424d1e6cd09abebba615f586fdf010a23",
+      "kernel/mm/runtime_roots.dg": "202c6b4b95fda6a42dcede89535731ce22d9228d568191063f40523341d8de5f",
+      "tests/runtime_roots_probe.c": "00689a16bac78a3b9ddce686b2a4213ace358823b761101a1c00448249cd2067",
+      "tests/runtime_roots_probe.dg": "756454283849349dfd1a49710a2264dbc036ef193f20296dcdf4983ddff8b95e",
+      "tests/test_runtime_roots.py": "974a3a313cb2db39e976ffa7a8454364b14d543eb836c11c20cdcb457e568526"
+    },
+    "finished_at": "2026-10-22T19:13:39+00:00",
+    "job": "688d4e6524cc4711b057277f22cba22e",
+    "passed": true,
+    "process_stopped": true,
+    "source_stable": true,
+    "summary": "定向复验通过，等待源码/契约审查"
+  },
+  "write_paths": [
+    "kernel/mm/runtime_roots.dg",
+    "tests/runtime_roots_probe.dg",
+    "tests/runtime_roots_probe.c",
+    "tests/test_runtime_roots.py",
+    "docs/runtime-roots.md",
+    "codex-works/deliveries/P2ROOT13.md"
+  ]
+}

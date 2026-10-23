@@ -1,6 +1,6 @@
 """Actual source -> Dong frontend -> typed IR -> Dong NASM -> native execution."""
 from __future__ import annotations
-import hashlib,json,os,shutil,signal,subprocess,unittest,uuid
+import hashlib,json,os,shutil,subprocess,unittest,uuid
 from pathlib import Path
 from lang.dongc import compile_file
 from lang.tests.test_dongc import tool,nasm_flags
@@ -198,6 +198,17 @@ int main(int argc,char**argv){
 # Turn the explicit independent declarations into exact Dong mangled symbols.
 import re
 AUDIT_OBSERVER=re.sub(r'DECL\(([^,]+),(\w+),(\([^;]+)\);',lambda m:f'extern {m[1]} {m[2]} {m[3]} __asm__("{label("audit",m[2])}");',AUDIT_OBSERVER)
+# Keep the shared AUDIT_OBSERVER unchanged: the G5 runner supplies its own
+# runtime. This separate observer translation unit belongs to this POSIX gate.
+PANIC_RUNTIME=r'''
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+void __attribute__((sysv_abi,noreturn)) __dong_panic(uint32_t kind,uint32_t line,const void*file,uint64_t n){
+ fprintf(stderr,"PANIC kind=%u line=%u file=%.*s\n",kind,line,(int)n,(const char*)file);
+ exit(85);
+}
+'''
 ABI_PROBE=r'''bits 64
 section .text
 global abi_probe
@@ -263,7 +274,7 @@ class NativeCompilerTests(unittest.TestCase):
   cls.work=ROOT/'build/test/bootstrap-native-compiler'/('run-'+uuid.uuid4().hex[:12]);cls.work.mkdir(parents=True)
   cls.records=[];cls.drivers={};cls.closure_inputs={}
   cls.inputs={str(p.relative_to(ROOT)):hashlib.sha256(p.read_bytes()).hexdigest() for p in [*sorted((ROOT/'lang/bootstrap').glob('*.dg')),*sorted((ROOT/'lang/dongc').glob('*.py')),Path(__file__)]}
-  (cls.work/'probe').mkdir();(cls.work/'probe/native_compiler.dg').write_text(WRAPPER);(cls.work/'driver.c').write_text(DRIVER);(cls.work/'observer.c').write_text(OBSERVER);(cls.work/'audit.dg').write_text(AUDIT);(cls.work/'audit.c').write_text(AUDIT_OBSERVER);(cls.work/'abi.asm').write_text(ABI_PROBE)
+  (cls.work/'probe').mkdir();(cls.work/'probe/native_compiler.dg').write_text(WRAPPER);(cls.work/'driver.c').write_text(DRIVER);(cls.work/'observer.c').write_text(OBSERVER);(cls.work/'audit.dg').write_text(AUDIT);(cls.work/'audit.c').write_text(AUDIT_OBSERVER);(cls.work/'abi.asm').write_text(ABI_PROBE);(cls.work/'panic-runtime.c').write_text(PANIC_RUNTIME)
   cls.command([cls.nasm,'-f','elf64',*nasm_flags(cls.nasm),'-o',cls.work/'abi.o',cls.work/'abi.asm'],'abi-assemble')
  @classmethod
  def command(cls,args,name):
@@ -300,22 +311,28 @@ class NativeCompilerTests(unittest.TestCase):
    report=json.loads(self.command([exe,ROOT/'lang/bootstrap/artifact_compare.dg','bootstrap/artifact_compare.dg',asm,int(mode=='release')],mode+'-compile-artifact'))
    self.assertEqual(report['functions'],4)
    obj=asm.with_suffix('.o');self.command([self.nasm,'-f','elf64',*nasm_flags(self.nasm),'-o',obj,asm],mode+'-artifact-assemble')
-   observed=self.work/(mode+'-observed.exe');self.command([self.cc,'-std=c11','-O2','-Wall','-Wextra','-Werror','-no-pie',self.work/'observer.c',obj,'-o',observed],mode+'-observer-link')
+   observed=self.work/(mode+'-observed.exe');self.command([self.cc,'-std=c11','-O2','-Wall','-Wextra','-Werror','-no-pie',self.work/'observer.c',self.work/'panic-runtime.c',obj,'-o',observed],mode+'-observer-link')
    result=json.loads(self.command([observed],mode+'-observe'));self.assertEqual(result['vectors'],1000)
  def generated(self,mode,source,path,name,observer,driver=None):
   asm=self.work/(name+'.asm');report=json.loads(self.command([driver or self.driver(mode),source,path,asm,int(mode=='release')],name+'-compile'))
   for fmt,suffix in [('elf64','.o'),('win64','.obj')]:self.command([self.nasm,'-f',fmt,*nasm_flags(self.nasm),'-o',asm.with_suffix(suffix),asm],name+'-'+fmt)
-  exe=self.work/(name+'.exe');self.command([self.cc,'-std=c11','-O2','-Wall','-Wextra','-Werror','-no-pie',observer,asm.with_suffix('.o'),*([self.work/'abi.o'] if observer.name=='audit.c' else []),'-o',exe],name+'-link')
+  exe=self.work/(name+'.exe');self.command([self.cc,'-std=c11','-O2','-Wall','-Wextra','-Werror','-no-pie',observer,self.work/'panic-runtime.c',asm.with_suffix('.o'),*([self.work/'abi.o'] if observer.name=='audit.c' else []),'-o',exe],name+'-link')
   return exe,report
  def test_source_operations_abi_and_traps(self):
+  sites={'add':(2,'overflow'),'sub':(2,'sub'),'neg-one':(2,'negu'),'neg-max':(2,'negu'),
+         'neg-min':(2,'negi'),'neg8':(2,'neg8'),'narrow':(2,'narrow_add'),
+         'bounds':(1,'readindex'),'shift':(4,'shift'),'divide':(5,'signed_div'),'divide-zero':(3,'signed_div')}
   for mode in ('debug','release'):
    exe,report=self.generated(mode,self.work/'audit.dg','audit.dg',mode+'-audit',self.work/'audit.c')
    result=json.loads(self.command([exe,'normal',int(mode=='release')],mode+'-audit-values'));self.assertEqual(result['abi_words'],20)
    for case in ('add','sub','neg-one','neg-max','neg-min','neg8','narrow','bounds','shift','divide','divide-zero'):
     p=subprocess.run([str(exe),case,str(int(mode=='release'))],capture_output=True,text=True,timeout=10)
-    expected=-signal.SIGILL if mode=='debug' or case in ('bounds','shift','divide','divide-zero') else 0
-    self.records.append({'name':mode+'-'+case,'returncode':p.returncode,'expected':expected,'stderr':p.stderr})
+    guarded=mode=='debug' or case in ('bounds','shift','divide','divide-zero');expected=85 if guarded else 0
+    kind,site=sites[case];line=next(i for i,text in enumerate(AUDIT.splitlines(),1) if 'fn '+site+'(' in text)
+    diagnostic=f'PANIC kind={kind} line={line} file=audit.dg\n' if guarded else ''
+    self.records.append({'name':mode+'-'+case,'returncode':p.returncode,'expected':expected,'stderr':p.stderr,'expected_diagnostic':diagnostic})
     self.assertEqual(p.returncode,expected,(mode,case,p.stdout,p.stderr))
+    self.assertEqual(p.stderr,diagnostic,(mode,case,p.stdout,p.stderr))
  def test_aggregate_strings_static_slices(self):
   source=self.work/'aggregate.dg';source.write_text(r'''module aggregate;
 struct Small{a:u8,b:u64,c:[3]u16}
@@ -353,24 +370,39 @@ int main(int argc,char**argv){
    self.command([exe],mode+'-aggregate-values')
    for case in ('reversed','past-end'):
     p=subprocess.run([str(exe),case],capture_output=True,text=True,timeout=10)
-    self.records.append({'name':mode+'-subslice-'+case,'returncode':p.returncode,'expected':-signal.SIGILL,'stderr':p.stderr})
-    self.assertEqual(p.returncode,-signal.SIGILL,(mode,case,p.stdout,p.stderr))
+    line=next(i for i,text in enumerate(source.read_text().splitlines(),1) if 'fn range_probe(' in text)
+    diagnostic=f'PANIC kind=1 line={line} file=aggregate.dg\n'
+    self.records.append({'name':mode+'-subslice-'+case,'returncode':p.returncode,'expected':85,'stderr':p.stderr,'expected_diagnostic':diagnostic})
+    self.assertEqual(p.returncode,85,(mode,case,p.stdout,p.stderr));self.assertEqual(p.stderr,diagnostic)
  def test_global_storage_is_supported(self):
   source=self.work/'global-supported.dg';source.write_text('module unsupported; var x:u64=1; pub fn f()u64{return x;}')
   observer=self.work/'global-supported.c';observer.write_text('#include <stdint.h>\nextern uint64_t f(void) __asm__("'+label('unsupported','f')+'");\nint main(void){return f()!=1;}\n')
   for mode in ('debug','release'):
    exe,_=self.generated(mode,source,'unsupported.dg',mode+'-global-supported',observer)
    self.command([exe],mode+'-global-supported-observe')
- def test_unsupported_source_fails_closed(self):
-  sources={
-   'extern':'module unsupported; extern "win64" fn f()u64;',
-  }
+ def test_win64_external_and_callback_are_supported(self):
+  source=self.work/'win64.dg';source.write_text('''module win;
+extern "win64" fn firmware(x:u64)u64;
+export("callback") extern "win64" fn callback(x:u64)u64{unsafe{return firmware(x)+3;}}
+pub fn invoke(x:u64)u64{return callback(x);}
+''')
+  observer=self.work/'win64.c';observer.write_text('''#include <stdint.h>
+extern uint64_t __attribute__((ms_abi)) callback(uint64_t);
+extern uint64_t invoke(uint64_t) __asm__("'''+label('win','invoke')+'''");
+uint64_t __attribute__((ms_abi)) firmware(uint64_t x){return x*2;}
+int main(void){return callback(7)!=17||invoke(9)!=21;}
+''')
+  for mode in ('debug','release'):
+   exe,_=self.generated(mode,source,'win.dg',mode+'-win64',observer)
+   self.command([exe],mode+'-win64-observe')
+ def test_oversized_frame_fails_closed(self):
+  sources={'frame':'module unsupported;fn f()void{var storage:[512]u64=[0;512];}'}
   for mode in ('debug','release'):
    for case,text in sources.items():
     source=self.work/('unsupported-'+case+'.dg');source.write_text(text);out=self.work/('unsupported-'+case+'.asm');out.write_bytes(b'unchanged')
     p=subprocess.run([str(self.driver(mode)),str(source),'unsupported.dg',str(out),str(int(mode=='release'))],capture_output=True,text=True,timeout=30)
     self.records.append({'name':mode+'-unsupported-'+case,'returncode':p.returncode,'stderr':p.stderr})
-    self.assertEqual(p.returncode,11,p.stderr);self.assertIn('lower status=3',p.stderr);self.assertEqual(out.read_bytes(),b'unchanged')
+    self.assertEqual(p.returncode,11,p.stderr);self.assertIn('lower status=4',p.stderr);self.assertEqual(out.read_bytes(),b'unchanged')
  def test_real_dong_mutations_are_rejected(self):
   original=(ROOT/'lang/bootstrap/lower_program.dg').read_text();needle='(*(*s).g).field_offsets[t.first+i]';self.assertEqual(original.count(needle),1)
   root=self.work/'mutant';shutil.copytree(ROOT/'lang/bootstrap',root/'bootstrap')

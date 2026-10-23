@@ -1,4 +1,13 @@
 {
+  "assignment_history": [
+    {
+      "at": "2026-10-22T14:46:44+00:00",
+      "from_owner": "codex",
+      "note": "用户明确授权本会话接续；协调者已核验本机无外部编辑/构建进程且两项无活动作业，通过confirm_pause记录停止依据。保留原任务、候选、所有失败与原领取历史，转至本会话重新领取。",
+      "previous_claimed_by": "codex-mcp-a56c25d7f28e4bc4",
+      "to_owner": "codex"
+    }
+  ],
   "assignment_owner": "codex",
   "auto_dispatch": false,
   "auto_verify": false,
@@ -6,11 +15,10 @@
   "checks": [
     "discover:codex-works/tests:test_g5_closure_native.py"
   ],
-  "claim_from_status": "todo",
-  "claim_token": "120d84dc859f48afb046ac075d91f0a0",
-  "claimed_at": "2026-10-22T08:35:33+00:00",
-  "claimed_by": "codex-mcp-a56c25d7f28e4bc4",
-  "completed_at": null,
+  "claim_from_status": "rework",
+  "claimed_at": "2026-10-22T15:34:57+00:00",
+  "claimed_by": "codex-mcp-daece153b59c4bd5",
+  "completed_at": "2026-10-22T15:39:14+00:00",
   "complexity": "standard",
   "created_at": "2026-10-22T08:35:02+00:00",
   "delivery": "codex-works/deliveries/G5CLOSURE1.md",
@@ -21,15 +29,45 @@
   "document": "codex-works/tasks/G5CLOSURE1-board.md",
   "historical": false,
   "id": "codex:G5CLOSURE1",
+  "integration_note": "已按accepted原字节真实复制生产实现到code主线，候选冻结原文未改。G5INT1主线独立正式0856三check70项0skip及本轮原始源码/产物独审通过；7生产逐字节一致，closure四ELF2046376B SHA2bda587a6842913879eb6bf0445202066adb68baef06d06593ff0f3ee787defa；G5INT1已integrated rev24。登记实际本地集成，不把宿主G5外推新G6客体。",
   "legacy_hash": "0734a2764d6a0ce081cf00598a9e8b11fb1bd86acb458a3962f3fc45c43922c2",
   "number": "G5CLOSURE1",
   "owner": "codex",
-  "rev": 2,
-  "review_note": "",
-  "status": "in_progress",
+  "pause_note": "用户明确授权本会话继续完成并独立复验集成；任务为迁移前客户端领取，本机无相关构建/编译进程，协调器无活动作业。请求暂停旧领取，随后按受支持停止确认流程恢复本会话领取，保留原候选与失败历史。",
+  "rev": 21,
+  "review_note": "实际审查pure job完整49模块/阶段分区、56MiB arena/64KiB guarded stack/2MiB ELF、panic真实链接与目标启动桥及测试有效性。正式jobcbf9efdf4bda4b3b9892141d4baa6dbe为1test/0skip/321.047s，source_stable/process_stopped/execution_exited全部true。另一独立代理逐字节复算debug/release stage1/2四份ELF完全一致2046376B/SHA2bda587a6842913879eb6bf0445202066adb68baef06d06593ff0f3ee787defa；RX/RW两段、无BSS扩张，真实mapped extent2048000<=2MiB，entry5ece81。两source blob491683B/SHA b0765f411038f62f5fde132b6d31f0050d8f144d6695709e39d6b1768cdaa732逐记录解包49模块一致；156冻结输入现场hash、4候选指纹、G5FULL6模块与host工具当前/隔离均匹配。两个mode原始stdout seed/native0/3/0/0，32原子预检、原生语义/后端容量拒绝及RCX poison/R10启动桥通过；每mode5命令全rc0/stderr空。旧映射失败完整保留，宿主修复HOST1/HOST2分别已独审集成；仅宿主完整闭包通过，尚待主线实际集成/G5INT1，不扩大旧G6客体范围。",
+  "status": "integrated",
   "title": "G5 最终编译器闭包在56MiB pure job预算内的回归修复",
-  "updated_at": "2026-10-22T08:35:33+00:00",
-  "verification": null,
+  "updated_at": "2026-10-22T17:24:13+00:00",
+  "verification": {
+    "checks": [
+      {
+        "cancelled": false,
+        "elapsed_seconds": 321.047,
+        "execution_exited": true,
+        "passed": true,
+        "process_stopped": true,
+        "returncode": 0,
+        "skips": 0,
+        "spec": "discover:codex-works/tests:test_g5_closure_native.py",
+        "tests": 1,
+        "timed_out": false
+      }
+    ],
+    "execution_exited": true,
+    "fingerprint": {
+      "codex-works/deliveries/G5CLOSURE1.md": "373cbd968f8609763306672dd52ae56859f5d24aa40637c0f8f7024f2d3bde17",
+      "codex-works/g5-closure/docs/closure.md": "b6549fa9b222bc4983313635ffde38cc86ddbfe8134538e8bbc39de6136b29e1",
+      "codex-works/g5-closure/src/bootstrap/compiler_job.dg": "607ae68731ff13a6ad3302f927ad3a262dcfddb30dc3993fe086ba37571a43fb",
+      "codex-works/tests/test_g5_closure_native.py": "8de98a70d79c1eda9ca66188edbd605b65ee96b8fe54768ae834d80c36124c2d"
+    },
+    "finished_at": "2026-10-22T15:44:45+00:00",
+    "job": "cbf9efdf4bda4b3b9892141d4baa6dbe",
+    "passed": true,
+    "process_stopped": true,
+    "source_stable": true,
+    "summary": "定向复验通过，等待源码/契约审查"
+  },
   "write_paths": [
     "codex-works/g5-closure/src/bootstrap/compiler_job.dg",
     "codex-works/tests/test_g5_closure_native.py",

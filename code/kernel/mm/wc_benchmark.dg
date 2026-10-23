@@ -1,0 +1,82 @@
+// Bounded observation only. The caller owns the real mapping/cache transition,
+// quiesces other writers, and supplies readable backup/report storage.
+module mm.wc_benchmark;
+import mm.paging as pg;
+pub const LIMIT:u64=65536;pub const TRIALS:usize=7;
+pub const PATTERN:u64=0x9e37_79b9_7f4a_7c15;
+pub const INVALID:u64=0x0613_0001;pub const MAPPING:u64=0x0613_0002;
+pub const RESTORE:u64=0x0613_0003;pub const TIMER:u64=0x0613_0004;
+const MAX:u64=0xffff_ffff_ffff_ffff;
+const LOW:u64=0x7361_7665_2d6c_6f77;const HIGH:u64=0x7361_7665_6869_6768;
+pub struct Config{pub space:*pg.Space,pub virtual:u64,pub physical:u64,pub bytes:u64,
+ pub tsc_hz:u64,pub flags:u64,pub backup:*u8,pub capacity:usize}
+pub struct Sample{pub version:u64,pub phase:u64,pub error_code:u64,pub root:u64,
+ pub virtual:u64,pub physical:u64,pub bytes:u64,pub tsc_hz:u64,pub flags:u64,
+ pub backup:u64,pub capacity:u64,pub pattern:u64,pub restored:u64,
+ pub guard_low:u64,pub guard_high:u64,pub cycles:[7]u64,pub leaf_count:u64,pub leaves:[17]u64}
+pub const EMPTY:Sample=Sample{version:0,phase:0,error_code:0,root:0,virtual:0,physical:0,
+ bytes:0,tsc_hz:0,flags:0,backup:0,capacity:0,pattern:0,restored:0,guard_low:0,guard_high:0,cycles:[0;7],leaf_count:0,leaves:[0;17]};
+pub struct Pair{pub version:u64,pub phase:u64,pub alias_report:u64,pub domain:u64,
+ pub count:u64,pub gop_base:u64,pub gop_bytes:u64,pub uc_pat:u64,pub wc_pat:u64,
+ pub uc:Sample,pub wc:Sample}
+pub var REPORT:Pair=Pair{version:0,phase:0,alias_report:0,domain:0,count:0,gop_base:0,gop_bytes:0,
+ uc_pat:0,wc_pat:0,uc:EMPTY,wc:EMPTY};
+unsafe extern "sysv64" fn wc_benchmark_trial(dst:u64,bytes:u64,pattern:u64)u64;
+unsafe extern "sysv64" fn wc_benchmark_restore(dst:u64,src:u64,bytes:u64)void;
+fn span(a:u64,n:u64)bool{return a!=0&&n!=0&&a<=MAX-n;}
+fn overlap(a:u64,n:u64,b:u64,m:u64)bool{return a<b+m&&b<a+n;}
+pub unsafe fn measure(config:*const Config,out:*Sample)u64{unsafe{
+ let cp=config as u64;let op=out as u64;
+ if !span(cp,sizeof(Config) as u64)||!span(op,sizeof(Sample) as u64)||(cp&7)!=0||(op&7)!=0
+  ||overlap(cp,sizeof(Config) as u64,op,sizeof(Sample) as u64){return INVALID;}
+ let c=*config;let bp=c.backup as u64;let sp=c.space as u64;
+ if c.bytes==0||c.bytes>LIMIT||(c.bytes&7)!=0||(c.virtual&7)!=0||(c.physical&7)!=0
+  ||!span(c.virtual,c.bytes)||!span(c.physical,c.bytes)||c.tsc_hz<1000||c.tsc_hz>16000000000
+  ||(c.flags!=(pg.WRITE|pg.UNCACHED)&&c.flags!=(pg.WRITE|pg.WRITE_COMBINING))
+  ||c.capacity<c.bytes as usize+16||!span(bp,c.capacity as u64)||(bp&7)!=0
+  ||!span(sp,sizeof(pg.Space) as u64)||(sp&7)!=0{return INVALID;}
+ if overlap(c.virtual,c.bytes,bp,c.capacity as u64)||overlap(c.virtual,c.bytes,op,sizeof(Sample) as u64)
+  ||overlap(c.virtual,c.bytes,cp,sizeof(Config) as u64)||overlap(c.virtual,c.bytes,sp,sizeof(pg.Space) as u64)
+  ||overlap(bp,c.capacity as u64,op,sizeof(Sample) as u64)||overlap(bp,c.capacity as u64,cp,sizeof(Config) as u64)
+  ||overlap(bp,c.capacity as u64,sp,sizeof(pg.Space) as u64)||overlap(op,sizeof(Sample) as u64,sp,sizeof(pg.Space) as u64){return INVALID;}
+ var view=pg.PoolView{tables:null,metadata:null,count:0,physical:0,address_mask:0,used:0,nx:false};
+ match pg.inspect(c.space,&view){ok=>{},err(e)=>{return MAPPING;},}
+ let tables=view.tables as u64;let metadata=view.metadata as u64;let table_bytes=(view.count as u64)*4096;
+ if overlap(c.virtual,c.bytes,tables,table_bytes)||overlap(bp,c.capacity as u64,tables,table_bytes)
+  ||overlap(op,sizeof(Sample) as u64,tables,table_bytes)||overlap(c.virtual,c.bytes,metadata,view.count as u64)
+  ||overlap(bp,c.capacity as u64,metadata,view.count as u64)||overlap(op,sizeof(Sample) as u64,metadata,view.count as u64){return INVALID;}
+ var offset:u64=0;var leaves:[17]u64=[0;17];var leaf_count:usize=0;
+ while offset<c.bytes{
+  var m=pg.Mapping{physical:0,flags:0};match pg.query(c.space,c.virtual+offset,&m){ok=>{},err(e)=>{return MAPPING;},}
+  if m.physical!=c.physical+offset||m.flags!=c.flags{return MAPPING;}
+  var table=view.physical;var shift:u64=39;var entry:u64=0;
+  while true{
+   if table<view.physical||table>=view.physical+table_bytes||(table&4095)!=0{return MAPPING;}
+   let index=((table-view.physical)/4096) as usize;
+   if *(view.metadata+index)!=1{return MAPPING;}
+   entry=(*(view.tables+index)).entries[(((c.virtual+offset)>>shift)&511) as usize];
+   if (entry&1)==0{return MAPPING;}if shift==12{break;}
+   if (entry&128)!=0{return MAPPING;}table=entry&view.address_mask;shift-=9;
+  }
+  if leaf_count>=17{return MAPPING;}leaves[leaf_count]=entry;leaf_count+=1;
+  let step=4096-((c.virtual+offset)&4095);if step>c.bytes-offset{offset=c.bytes;}else{offset+=step;}
+ }
+ // No writes, including report/backup writes, precede complete validation.
+ *out=EMPTY;(*out).version=1;(*out).phase=1;(*out).root=view.physical;
+ (*out).virtual=c.virtual;(*out).physical=c.physical;(*out).bytes=c.bytes;(*out).tsc_hz=c.tsc_hz;
+ (*out).flags=c.flags;(*out).backup=bp;(*out).capacity=c.capacity as u64;(*out).pattern=PATTERN;
+ (*out).leaf_count=leaf_count as u64;var leaf:usize=0;while leaf<leaf_count{(*out).leaves[leaf]=leaves[leaf];leaf+=1;}
+ *(bp as *u64)=LOW;*((bp+c.bytes+8) as *u64)=HIGH;
+ var i:u64=0;while i<c.bytes{*((bp+8+i) as *u8)=volatile_load((c.virtual+i) as *const u8);i+=1;}
+ var trial:usize=0;while trial<TRIALS{
+  let cycles=wc_benchmark_trial(c.virtual,c.bytes,PATTERN);
+  wc_benchmark_restore(c.virtual,bp+8,c.bytes);
+  i=0;var same=true;while i<c.bytes{
+   if volatile_load((c.virtual+i) as *const u8)!=*((bp+8+i) as *const u8){same=false;}i+=1;
+  }
+  (*out).guard_low=*(bp as *const u64);(*out).guard_high=*((bp+c.bytes+8) as *const u64);
+  if !same||(*out).guard_low!=LOW||(*out).guard_high!=HIGH{(*out).error_code=RESTORE;return RESTORE;}
+  (*out).restored+=1;if cycles==0{(*out).error_code=TIMER;return TIMER;}
+  (*out).cycles[trial]=cycles;trial+=1;
+ }(*out).phase=2;return 0;
+}}

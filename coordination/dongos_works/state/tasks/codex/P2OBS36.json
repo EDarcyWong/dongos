@@ -1,0 +1,121 @@
+{
+  "assignment_owner": "codex",
+  "auto_dispatch": false,
+  "auto_verify": false,
+  "candidate": null,
+  "checks": [
+    "module:tests.test_p2_bulk_capture",
+    "module:tests.test_p2_pcid",
+    "module:tests.test_user_smp_gui_control",
+    "module:tests.test_p2_historical_capture"
+  ],
+  "claim_from_status": "rework",
+  "claimed_at": "2026-10-23T05:33:52+00:00",
+  "claimed_by": "codex-mcp-daece153b59c4bd5",
+  "completed_at": "2026-10-23T05:46:45+00:00",
+  "complexity": "standard",
+  "created_at": "2026-10-22T23:48:41+00:00",
+  "delivery": "codex-works/deliveries/P2OBS36.md",
+  "depends_on": [
+    "codex:P2OBS34"
+  ],
+  "description": "用户最终顺序P2全部软件/本机→P5全部软件/本机→真机待验留档→完整代码GitHub提交推送→关机，执行中不询问。OBS34 v2 integrated6/正式36；795 R6 B完整37零skip与两份新1108source/286artifacts构建通过，但实际normal-r4首ps超时且输入不变/ownedVM退出/final_disk_verified真。root独立6bulk+424slice闭合；真实stop确认0ms、6bulk235ms、暂停内Python审计4453ms、总4688ms；424派生文件在cont后250ms落盘，明确不能放宽原1s guest期限。修复最小真实paused阶段stop/query→六原始bulk→四CPU只读HMP→封存E及serial边界→runner显式cont/query。重型constructor BootInfo/ELF/privatepool验证、PCID/B组装/解码只在真实运行或owned退出后针对独立CapturedImage(E)执行。live PcidGuest.pause/physical/kernel/current_epoch/hmp始终真实paused-only；历史view不能持QMP/UART/控制入口、不能伪造stopped或把历史PA数据冒当前读取。明示source epoch/observed seal time/真实derived queued time/file materialization time与running或exit批次；v2 queued<=resume约束不能偷放宽/回填，须独立v3 profile/方法，旧v1/v2各用旧immutable runner，显式拒错profile。历史slice仍完整canonical file/len/SHA/PA/bulk_id/offset；最终owned退出后fresh所有磁盘hash/parentbytes/metadata/serial/timeline，late tamper/repeatedflush/xboverwrite/主异常/失败cont全原门保留。不新增pmemsave、RAM/reg/TSC/clock/deadline/ACK写。bootstrap重审计由base明确overridable hook拆开，默认其它runner原流程不变，历史审核后明确校验并只回传必要初始化字段；禁止全局monkeypatch或泛化proxy暴露controller。GUI使用明确历史snapshot receipt+新鲜epoch/token/实际fresh ps/kill回执，不把历史Catalog缓存接作当前Guest.catalog；slot/incarnation/root复用和sync/disk顺序保持。B由原任务R7四路径接续同API，before→五真实ordinary UART launch→after→laterPCID顺序严格，serial_offset在cont前固定，不取运行后len(raw)。先提出跨task窄API给root/B负责人再实现。原bulk17/pcid19/GUI控制不删弱，新增真实production边界控制重型审计发生在cont之后、view无controller/活Guest运行读拒、历史派生真实时间/跨epoch拒/运行中无RAMfallback/晚期篡改拒、GUI身份fresh和实际UART、失败捕获/cont/预算/cleanup保留。实现者不编译测试VM；root冻结后独立检查四模块、B Host兼容+原完整37；新sourcegraph再fresh构建和quiet WHPX正常/精确负控。若最小采集仍超过原期限，继续held/observer-disturbed，不改生产deadline，另设resident历史trace。",
+  "document": "codex-works/tasks/P2OBS36-board.md",
+  "historical": false,
+  "id": "codex:P2OBS36",
+  "legacy_hash": "aed9e4327b9352c553b3ffe6f297e6a0c299f695cc45b4fc2b495da5dc164864",
+  "number": "P2OBS36",
+  "owner": "codex",
+  "rev": 27,
+  "review_note": "R7仅四路径：tests/run_p2_pcid_qemu.py、tests/test_p2_pcid.py、docs/p2-observer-capture.md、本delivery；R6历史测试保持冻结。R6submit23已root独立140/11.490s/0skip预检通过，必要AP早拒代码/6新控全部保留，独审a47a2f90...；尚无formal或actual新pass，不把它改记通过。\n新证据旧冻结b6d5 omit-r10-wire1 result56789033...仍false/1boot/2epoch/无B，owned10392exit0/stable。透明QMP记录首STOP事件0→stop return1343ms→query-status0，真实慢段在STOP之后；独立root445raw全部核验，符合QEMU停核后drain/flush位置，但不独占排除host调度/发送。prelaunch HMPflush三rw backend诊断a22d809b...仅attempt，各0ms但启动后STOP766ms，不能采纳该方案；running HMPflush持BQL可阻断WHPX进展，诊断4只写build未执行，不采用。\nroot仅mutableOVMF_VAR cache=writethrough受控诊断5：额外build-only harness ee6962421e954b085e9b21300107ad4719826bb5f2d9f9bc466ecd2cd25c1065，source/tools输入稳定、owned33760exit0、terminalfirststop后不cont、acceptancefalse；first-stop-diagnostic.json SHA5384bbfdf961abd9efba137c25d987767d7c9d34c1308801ef129626d6d47a06。before/after argv仅index17 VARS字符串新增cache=writethrough。首cont前真实query-block：pflash1.rofalse/writebackfalse/directfalse/no-flushfalse；data.rofalse/writebacktrue/directfalse/no-flushfalse；CODE pflash0 readonlytrue及ESP保持原；首次STOPevent0/return0（15.625ms量化非零耗时保证）。这只是候选配置诊断，未完整capture/cont/GUI/B/双boot，不计实际验收/保证。官方QEMU raw→file pflash同步blk写在writecachefalse下FUA/仿真flush将真实持久化移固件阶段，原stop final drain/flush保留。CODE readonly/ESP/data/writeback均不改；仅针对WHPX可写VARS，TCG/KVM旧行为保持。\n必须在Pcid本地launch_command做纯argv窄适配及严格verify：WHPX实际命令必须恰双pflash（唯一readonly CODE、唯一可写OVMF_VARS.fd）及唯一id=data cache=writeback可写，拒缺失/重复/歧义、重复/错误cache、cache.no-flush等覆盖或全局-snapshot、改CODE可写/缓存、data readonly/unsafe/丢writeback。只允许唯一mutableVARS新增cache=writethrough，已正确值可幂等用于verify，错误旧值/unsafe等不得自动洗白。verify必须拒被移除cache（不能补后直接视为原命令同一）、重新哈希坏argv不通过。所有非VARS参数字节保持，正确处理QEMU逗号转义文件路径，不naive split破坏文件尾；保持base builder真实启动路径，不改tools/build.py/B生产/PGE/所有guestABI/期限/时钟/ACK/初始hash。现PCID两个及BHost一个最简无drive toy argv需补完整合法双pflash/data/ESP fixture并保留原断言；BHost路径由B R11负责人适配，不偷改。本项只改本四路径，和B冻结接口协作。\n新增有效Host控制包括真实adapter幂等/唯一变更、file逗号保留、错误/重复cache、VARS只读/CODE可写、dataunsafe/writeback丢失、missing/duplicate drives/global snapshot拒、verify拒去cache/重新hash坏argv；不得以找不到pflash便跳过严格WHPX门保持toy测试。既有R6全部102控和PCID/negative/IO/cleanup门不删弱。无新运行中QMPflush，无关闭durability，无新增Clock/客体写。作者不编译测试VM/状态/Git；实现静态冻结SHA交root/独审，root独立预检/正式OBS全矩阵+B全54或新增总数、新源normal+omit镜像/各双boot/strict finalreplay+raw独审后才accepted/integrated。P2partial/P5未实施，尚未push/关机。",
+  "status": "submitted",
+  "title": "P2 显式历史 CapturedImage 与暂停外原始审计",
+  "updated_at": "2026-10-23T05:47:24+00:00",
+  "verification": {
+    "checks": [
+      {
+        "cancelled": false,
+        "elapsed_seconds": 5.734,
+        "execution_exited": true,
+        "passed": true,
+        "process_stopped": true,
+        "returncode": 0,
+        "skips": 0,
+        "spec": "module:tests.test_p2_bulk_capture",
+        "tests": 29,
+        "timed_out": false
+      },
+      {
+        "cancelled": false,
+        "elapsed_seconds": 0.64,
+        "execution_exited": true,
+        "passed": true,
+        "process_stopped": true,
+        "returncode": 0,
+        "skips": 0,
+        "spec": "module:tests.test_p2_pcid",
+        "tests": 33,
+        "timed_out": false
+      },
+      {
+        "cancelled": false,
+        "elapsed_seconds": 0.422,
+        "execution_exited": true,
+        "passed": true,
+        "process_stopped": true,
+        "returncode": 0,
+        "skips": 0,
+        "spec": "module:tests.test_user_smp_gui_control",
+        "tests": 15,
+        "timed_out": false
+      },
+      {
+        "cancelled": false,
+        "elapsed_seconds": 3.906,
+        "execution_exited": true,
+        "passed": true,
+        "process_stopped": true,
+        "returncode": 0,
+        "skips": 0,
+        "spec": "module:tests.test_p2_historical_capture",
+        "tests": 28,
+        "timed_out": false
+      }
+    ],
+    "execution_exited": true,
+    "fingerprint": {
+      "codex-works/deliveries/P2OBS36.md": "fa4f4725d15ea2bd3d258b3455246fec4d896d90f80839c873bcaed97c93cc4d",
+      "docs/p2-observer-capture.md": "1795e31026f544acbd404e184f98bcf17a4efc25d74365d814bc922b4241d2f1",
+      "tests/p2_bulk_capture.py": "4bf720a0e30d555365ec41b5c4139f00057672e8f4ca09ef1bc80466ee19797a",
+      "tests/p2_pcid_oracle.py": "d7c4443dadde048e0499fa499f63d8c92d550270bd6420534bf5d6fd50c4f418",
+      "tests/run_current_user_smp_qemu.py": "ed319c5a60841caaa240d81e7b19593d20e4f407712f0c53b964cb426ff6323f",
+      "tests/run_desktop_settings_qemu.py": "7c35a4cb2ac99fe3dc362cbf40d7ee9ad063aaf646e1a02453bb0f03bb8ce661",
+      "tests/run_p2_pcid_qemu.py": "fea3a57d320cad5a3d2ae7933a42653e869bd920709c22676cb6904bb3795d92",
+      "tests/run_process_lifecycle_qemu.py": "b1ff4a101f8295c5643919da0daeb204a7f679a66d6c2685c3c24ec354dcea84",
+      "tests/test_p2_bulk_capture.py": "d97e2f6dab856c4707d4387b4aa780ea7342265f44c7c43564e9d4d35f5428a3",
+      "tests/test_p2_historical_capture.py": "18f357e72699d61dd3f3c94b3128430da39e5bab6a92bd0129dffbaf7424b8eb",
+      "tests/test_p2_pcid.py": "9e9d9d4d59ee6637939b0cbe106f99f82eab8c8d537f9f521af43ad102f830a1",
+      "tests/test_user_smp_gui_control.py": "11ab7e36493c6cf38e77f18f22e1952d248a4dfa4398ce370c4db1929e9959b3"
+    },
+    "finished_at": "2026-10-23T05:47:24+00:00",
+    "job": "aacbfb1bf6e0464fab534f784317e93b",
+    "passed": true,
+    "process_stopped": true,
+    "source_stable": true,
+    "summary": "定向复验通过，等待源码/契约审查"
+  },
+  "write_paths": [
+    "tests/run_desktop_settings_qemu.py",
+    "tests/run_process_lifecycle_qemu.py",
+    "tests/run_current_user_smp_qemu.py",
+    "tests/run_p2_pcid_qemu.py",
+    "tests/p2_bulk_capture.py",
+    "tests/p2_pcid_oracle.py",
+    "tests/test_p2_bulk_capture.py",
+    "tests/test_p2_pcid.py",
+    "tests/test_user_smp_gui_control.py",
+    "tests/test_p2_historical_capture.py",
+    "docs/p2-observer-capture.md",
+    "codex-works/deliveries/P2OBS36.md"
+  ]
+}

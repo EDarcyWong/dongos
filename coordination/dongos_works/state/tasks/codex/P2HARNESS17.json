@@ -1,0 +1,65 @@
+{
+  "assignment_owner": "codex",
+  "auto_dispatch": false,
+  "auto_verify": false,
+  "candidate": null,
+  "checks": [
+    "module:tests.test_user_smp_oracle"
+  ],
+  "claim_from_status": "todo",
+  "claimed_at": "2026-10-22T19:18:18+00:00",
+  "claimed_by": "codex-mcp-daece153b59c4bd5",
+  "completed_at": "2026-10-22T19:19:12+00:00",
+  "complexity": "standard",
+  "created_at": "2026-10-22T19:18:16+00:00",
+  "delivery": "codex-works/deliveries/P2HARNESS17.md",
+  "depends_on": [
+    "codex:P2ROOT13"
+  ],
+  "description": "正式PCID12作业37cd7ec1c22d4ed0818864377086d869中新增14+4tests/0skip均过，但既有test_user_smp_oracle七项在新隔离副本的test_completed_test_build...因ROOT/build/test不存在而TemporaryDirectory报WinError3，未进入来源断言。只修该旧测试在使用自身临时目录前mkdir(parents=True,exist_ok=True)，保持全部oracle/生产源码/来源门槛不变，不靠其它测试顺序建目录、不复制旧build产物。新增本轮P2审查进度记录，保留ROOT13正式4tests/0skip integrated15、WC14宿主4pass但真实build后identity缺receipt返修、PCID18pass但旧harness失败以及P2整体partial/先P2后P5顺序。独立新隔离7tests/0skip且源码稳定审查后集成；无OS/VM/AI CLI/commit/push。",
+  "document": "codex-works/tasks/P2HARNESS17-board.md",
+  "historical": false,
+  "id": "codex:P2HARNESS17",
+  "integration_note": "tests/test_user_smp_oracle.py一行及新检查点已在真实本地主线工作树，字节与2676654e正式指纹一致，登记本地集成；原旧失败未删除，无commit/push，P2仍partial。",
+  "legacy_hash": "8d4def842f609bc20531de0a74060f4094fbbbb0fb292abd925d0d2f564a076f",
+  "number": "P2HARNESS17",
+  "owner": "codex",
+  "rev": 6,
+  "review_note": "实际diff仅旧来源测试自建其TemporaryDirectory父目录一行，原source/manifest/artifact篡改断言未改；独立2676654ed39c4bd8ad28e4484a4b62db七项/0skip/rc0/0.422秒，source_stable/process_stopped/execution_exited=true，全新副本无旧build依赖。03:20检查点保留当时在途状态/失败真实边界、3条文档链接存在，不冒充现在实时状态。后续PCID544e重新32tests也全部过；WC771f新5tests及实际四核raw另在WC14登记。",
+  "status": "integrated",
+  "title": "P2独立隔离SMP来源回归的临时目录自建修复",
+  "updated_at": "2026-10-22T19:35:23+00:00",
+  "verification": {
+    "checks": [
+      {
+        "cancelled": false,
+        "elapsed_seconds": 0.422,
+        "execution_exited": true,
+        "passed": true,
+        "process_stopped": true,
+        "returncode": 0,
+        "skips": 0,
+        "spec": "module:tests.test_user_smp_oracle",
+        "tests": 7,
+        "timed_out": false
+      }
+    ],
+    "execution_exited": true,
+    "fingerprint": {
+      "codex-works/deliveries/P2HARNESS17.md": "f2895678df46f2882f3a98b323656136afaa6f1ca18f0d8a107140dca46a54f3",
+      "codex-works/reviews/2026-10-23-P2-preparation.md": "f176b9de314aac3ba6542c3225cf4f8190d36ca8ee1774c7f733b4df4d3fdeb4",
+      "tests/test_user_smp_oracle.py": "7f93236fcd9ba88977eb24da6ab2bf6b3b9339a3775fc36553926d13ee66a809"
+    },
+    "finished_at": "2026-10-22T19:32:38+00:00",
+    "job": "2676654ed39c4bd8ad28e4484a4b62db",
+    "passed": true,
+    "process_stopped": true,
+    "source_stable": true,
+    "summary": "定向复验通过，等待源码/契约审查"
+  },
+  "write_paths": [
+    "tests/test_user_smp_oracle.py",
+    "codex-works/reviews/2026-10-23-P2-preparation.md",
+    "codex-works/deliveries/P2HARNESS17.md"
+  ]
+}

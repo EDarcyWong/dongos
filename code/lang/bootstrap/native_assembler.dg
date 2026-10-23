@@ -154,7 +154,10 @@ unsafe fn line(s:*State)bool{unsafe{
  if equal(name,"section"){let section=word(s);if equal(section,".text"){(*s).section=1;}else if equal(section,".rodata"){(*s).section=2;}else if equal(section,".data"){(*s).section=3;}
   else if equal(section,".note.GNU"){return fail(s,SYNTAX,38);}else{return fail(s,SYNTAX,39);}if !end(s){return fail(s,SYNTAX,40);}return true;
  }
- if equal(name,"global"){let label=word(s);let label_start=(*s).at-label.len;if !identifier(label)||!end(s){return fail(s,SYNTAX,41);}if (*s).pass!=0&&lookup(s,label_start,label.len,false)==NONE{return fail(s,SYMBOL,42);}return true;}
+ // A target runtime may resolve an emitted extern inside the same final
+ // assembly. This assembler has no external loader: every declaration must
+ // have a real definition collected in pass zero, even if otherwise unused.
+ if equal(name,"global")||equal(name,"extern"){let label=word(s);let label_start=(*s).at-label.len;if !identifier(label)||!end(s){return fail(s,SYNTAX,41);}if (*s).pass!=0&&lookup(s,label_start,label.len,false)==NONE{return fail(s,SYMBOL,42);}return true;}
  if equal(name,"align"){var alignment:u64=0;if !number(s,&alignment)||alignment==0||alignment>4096||(alignment&(alignment-1))!=0||!end(s){return fail(s,SYNTAX,43);}
   var at=(*s).text;if (*s).section==2||(*s).section==3{at=(*s).data;}let pad=(alignment-at%alignment)%alignment;var fill:u8=0x90;if (*s).section==3{fill=0;}var i:usize=0;while i<pad{if !value_bytes(s,fill as u64,1){return false;}i+=1;}return true;
  }

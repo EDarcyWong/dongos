@@ -153,3 +153,31 @@ permanent real debug/release pure-job fixedpoint test. It rebalances backend
 appends an actual target nonreturning panic runtime only when externally
 declared. Current cold closure run `code/build/test/G5-closure/run-cf86f8579747`
 is pending. No fixedpoint success or overall G5 completion is claimed yet.
+
+## 2026-10-22 本机迁移后接续
+
+用户明确授权继续完成G5FULL1/G5CLOSURE1并独立复验后真实集成主线。
+已按协调器停止确认/转派/领取流程接手，原任务与失败历史保留。
+当前候选为6个bootstrap模块、完整差分runner、47项测试/27个要求组。
+本机没有迁移前ignored构建产物，旧记录的pending不作为当前运行或成功证据。
+本轮尚未运行测试，现将已有候选提交协调器重新冷构建独立复验；未宣告G5完成。
+
+### 本机独立审查返修
+
+首轮job8be2598af35f4ca5b346e7b3020b8be2在冷构建期经协调器暂停并确认
+进程退出；闭包排队job344a3691271f4082885f30b0447188cf同时取消，均不计通过。
+独立源码审查发现并修复跨模块const enum FIELD误作构造、optional/result
+payload缺合法只读指针转换、已知error try缺终止路径标记。新增真实同源
+seed/native回归；另明确原近u64数组超出MAX_SIZE而非已证明slot溢出，
+前移超大local容量检查并验证合法大布局以FRAME失败且不发布输出。
+完整矩阵更新为51项/27要求组，下一轮协调器独立复验结果待填。
+
+
+## AI交付 2026-10-22T14:47:40+00:00 · codex-mcp-daece153b59c4bd5
+
+迁移后本会话接续。原候选与失败历史保留，已核对当前源码/测试/预算并更新交付说明；尚未在本机运行测试，提交到协调器独立副本重新冷构建复验。未运行OS/VM，未修改主线，未提交或推送；通过后须独立源码审查及真实主线集成。
+
+
+## AI交付 2026-10-22T14:53:26+00:00 · codex-mcp-daece153b59c4bd5
+
+独立审查返修已完成；G5FULL修复跨模块静态枚举、tagged payload const转换、known-error try终止，并补4项回归（合计51/27组），局部大布局早拒保留对象上限。首轮冷构建中断/排队取消不计成功。本轮完整测试尚未执行，提交冻结候选至协调器正式独立复验；未改主线、未运行OS/VM、未提交推送。

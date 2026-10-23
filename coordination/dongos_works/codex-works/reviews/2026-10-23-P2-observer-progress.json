@@ -1,0 +1,769 @@
+{
+  "schema": 1,
+  "checkpoint": "2026-10-23T06:32:00+08:00",
+  "project": "dongos",
+  "task": "codex:P2SYNC33",
+  "task_rev": 2,
+  "sequence": [
+    "P2",
+    "P5"
+  ],
+  "p2_status": "partial",
+  "p5_current_run_started": false,
+  "source_head": "db4ea7c9a74839d95a5e80a0bbf8468a4bfa0d73",
+  "working_tree_dirty": true,
+  "committed": false,
+  "pushed": false,
+  "task_status_source": "Read-only coordination-tasks MCP snapshots; no project-wide count inferred.",
+  "tasks": [
+    {
+      "id": "codex:P2SYNC31",
+      "status": "integrated",
+      "rev": 9,
+      "document": "coordination/dongos_works/codex-works/tasks/P2SYNC31-board.md",
+      "delivery": "coordination/dongos_works/codex-works/deliveries/P2SYNC31.md",
+      "verification_job": "6993211594444628822ab2e36b4b19d4",
+      "current_round_independently_verified": true
+    },
+    {
+      "id": "codex:P2GOP29",
+      "status": "integrated",
+      "rev": 6,
+      "document": "coordination/dongos_works/codex-works/tasks/P2GOP29-board.md",
+      "delivery": "coordination/dongos_works/codex-works/deliveries/P2GOP29.md",
+      "verification_job": "6e1f20d8758f4eca972db0e0f64997d7",
+      "current_round_independently_verified": true
+    },
+    {
+      "id": "codex:P2HARNESS28",
+      "status": "integrated",
+      "rev": 6,
+      "document": "coordination/dongos_works/codex-works/tasks/P2HARNESS28-board.md",
+      "delivery": "coordination/dongos_works/codex-works/deliveries/P2HARNESS28.md",
+      "verification_job": "28d623bb3fac4d468a05c2a7a870998d",
+      "current_round_independently_verified": true
+    },
+    {
+      "id": "codex:P2BKL30",
+      "status": "integrated",
+      "rev": 9,
+      "document": "coordination/dongos_works/codex-works/tasks/P2BKL30-board.md",
+      "delivery": "coordination/dongos_works/codex-works/deliveries/P2BKL30.md",
+      "verification_job": "d7273818c35049bd8b9f95bb627af90b",
+      "current_round_independently_verified": true
+    },
+    {
+      "id": "codex:P2OBS32",
+      "status": "submitted",
+      "rev": 3,
+      "document": "coordination/dongos_works/codex-works/tasks/P2OBS32-board.md",
+      "delivery": "coordination/dongos_works/codex-works/deliveries/P2OBS32.md",
+      "verification_job": null,
+      "current_round_independently_verified": false
+    },
+    {
+      "id": "codex:P2LARGE16",
+      "status": "submitted",
+      "rev": 16,
+      "document": "coordination/dongos_works/codex-works/tasks/P2LARGE16-board.md",
+      "delivery": "coordination/dongos_works/codex-works/deliveries/P2LARGE16.md",
+      "verification_job": null,
+      "current_round_independently_verified": false
+    }
+  ],
+  "formal_receipts": [
+    {
+      "job": "6993211594444628822ab2e36b4b19d4",
+      "path": "coordination/dongos_works/.local/runs/6993211594444628822ab2e36b4b19d4/result.json",
+      "sha256": "0893738fc9f98fa4b50ad8124b59480bdd2efb74915517f00ad573c782cfc2e9",
+      "passed": true,
+      "checks": [
+        {
+          "spec": "module:tests.test_user_smp_barrier",
+          "passed": true,
+          "tests": 1,
+          "skips": 0,
+          "returncode": 0,
+          "cancelled": false,
+          "timed_out": false,
+          "process_stopped": true,
+          "execution_exited": true,
+          "elapsed_seconds": 12.906
+        }
+      ],
+      "source_stable": true,
+      "process_stopped": true,
+      "execution_exited": true,
+      "finished_at": "2026-10-23T06:04:05+08:00"
+    },
+    {
+      "job": "6e1f20d8758f4eca972db0e0f64997d7",
+      "path": "coordination/dongos_works/.local/runs/6e1f20d8758f4eca972db0e0f64997d7/result.json",
+      "sha256": "faf3fdcf8a998cc38f33c085e8722dfc0b340f8e0a9532bce7e34908da93f6c0",
+      "passed": true,
+      "checks": [
+        {
+          "spec": "module:tests.test_framebuffer_gate",
+          "passed": true,
+          "tests": 1,
+          "skips": 0,
+          "returncode": 0,
+          "cancelled": false,
+          "timed_out": false,
+          "process_stopped": true,
+          "execution_exited": true,
+          "elapsed_seconds": 18.875
+        },
+        {
+          "spec": "module:tests.test_runtime_cache",
+          "passed": true,
+          "tests": 1,
+          "skips": 0,
+          "returncode": 0,
+          "cancelled": false,
+          "timed_out": false,
+          "process_stopped": true,
+          "execution_exited": true,
+          "elapsed_seconds": 141.734
+        },
+        {
+          "spec": "module:tests.test_panic_binding",
+          "passed": true,
+          "tests": 1,
+          "skips": 0,
+          "returncode": 0,
+          "cancelled": false,
+          "timed_out": false,
+          "process_stopped": true,
+          "execution_exited": true,
+          "elapsed_seconds": 1.422
+        }
+      ],
+      "source_stable": true,
+      "process_stopped": true,
+      "execution_exited": true,
+      "finished_at": "2026-10-23T06:07:07+08:00"
+    },
+    {
+      "job": "28d623bb3fac4d468a05c2a7a870998d",
+      "path": "coordination/dongos_works/.local/runs/28d623bb3fac4d468a05c2a7a870998d/result.json",
+      "sha256": "31d77de89132a44b84171352850e681041158d8f5f9134a6528799b856806df3",
+      "passed": true,
+      "checks": [
+        {
+          "spec": "module:tests.test_user_smp_services",
+          "passed": true,
+          "tests": 1,
+          "skips": 0,
+          "returncode": 0,
+          "cancelled": false,
+          "timed_out": false,
+          "process_stopped": true,
+          "execution_exited": true,
+          "elapsed_seconds": 286.672
+        }
+      ],
+      "source_stable": true,
+      "process_stopped": true,
+      "execution_exited": true,
+      "finished_at": "2026-10-23T06:12:48+08:00"
+    },
+    {
+      "job": "d7273818c35049bd8b9f95bb627af90b",
+      "path": "coordination/dongos_works/.local/runs/d7273818c35049bd8b9f95bb627af90b/result.json",
+      "sha256": "fa7f2868fbb34093252eac07ede0668f56d588b1a8c3c3211acb0f6efafdb394",
+      "passed": true,
+      "checks": [
+        {
+          "spec": "module:tests.test_user_bkl",
+          "passed": true,
+          "tests": 1,
+          "skips": 0,
+          "returncode": 0,
+          "cancelled": false,
+          "timed_out": false,
+          "process_stopped": true,
+          "execution_exited": true,
+          "elapsed_seconds": 54.797
+        },
+        {
+          "spec": "module:tests.test_user_domain",
+          "passed": true,
+          "tests": 2,
+          "skips": 0,
+          "returncode": 0,
+          "cancelled": false,
+          "timed_out": false,
+          "process_stopped": true,
+          "execution_exited": true,
+          "elapsed_seconds": 69.766
+        }
+      ],
+      "source_stable": true,
+      "process_stopped": true,
+      "execution_exited": true,
+      "finished_at": "2026-10-23T06:17:38+08:00"
+    },
+    {
+      "job": "3be554a207994b029e7a60feffdce896",
+      "path": "coordination/dongos_works/.local/runs/3be554a207994b029e7a60feffdce896/result.json",
+      "sha256": "7e1351a633268c2842b064614d2515282c0ed914ae35a9fb9e380c3375608b86",
+      "passed": false,
+      "checks": [
+        {
+          "spec": "module:tests.test_user_bkl",
+          "passed": false,
+          "tests": 1,
+          "skips": 0,
+          "returncode": 1,
+          "cancelled": false,
+          "timed_out": false,
+          "process_stopped": true,
+          "execution_exited": true,
+          "elapsed_seconds": 17.578
+        }
+      ],
+      "source_stable": true,
+      "process_stopped": true,
+      "execution_exited": true,
+      "finished_at": "2026-10-23T06:07:43+08:00"
+    },
+    {
+      "job": "1edb5da569a54e5a8ff2a067e2ac1ee9",
+      "path": "coordination/dongos_works/.local/runs/1edb5da569a54e5a8ff2a067e2ac1ee9/result.json",
+      "sha256": "1c2712c49e72f562b0dfc7856501febeaee5e0a74d35d057fda303829ef2c5a8",
+      "passed": true,
+      "checks": [
+        {
+          "spec": "module:tests.test_runtime_large",
+          "passed": true,
+          "tests": 1,
+          "skips": 0,
+          "returncode": 0,
+          "cancelled": false,
+          "timed_out": false,
+          "process_stopped": true,
+          "execution_exited": true,
+          "elapsed_seconds": 75.063
+        },
+        {
+          "spec": "module:tests.test_p2_runtime_large",
+          "passed": true,
+          "tests": 24,
+          "skips": 0,
+          "returncode": 0,
+          "cancelled": false,
+          "timed_out": false,
+          "process_stopped": true,
+          "execution_exited": true,
+          "elapsed_seconds": 601.36
+        },
+        {
+          "spec": "module:tests.test_user_domain",
+          "passed": true,
+          "tests": 2,
+          "skips": 0,
+          "returncode": 0,
+          "cancelled": false,
+          "timed_out": false,
+          "process_stopped": true,
+          "execution_exited": true,
+          "elapsed_seconds": 67.562
+        },
+        {
+          "spec": "module:tests.test_user_smp_barrier",
+          "passed": true,
+          "tests": 1,
+          "skips": 0,
+          "returncode": 0,
+          "cancelled": false,
+          "timed_out": false,
+          "process_stopped": true,
+          "execution_exited": true,
+          "elapsed_seconds": 11.406
+        },
+        {
+          "spec": "module:tests.test_buddy",
+          "passed": true,
+          "tests": 1,
+          "skips": 0,
+          "returncode": 0,
+          "cancelled": false,
+          "timed_out": false,
+          "process_stopped": true,
+          "execution_exited": true,
+          "elapsed_seconds": 2.672
+        },
+        {
+          "spec": "module:tests.test_paging",
+          "passed": true,
+          "tests": 2,
+          "skips": 0,
+          "returncode": 0,
+          "cancelled": false,
+          "timed_out": false,
+          "process_stopped": true,
+          "execution_exited": true,
+          "elapsed_seconds": 4.703
+        }
+      ],
+      "source_stable": true,
+      "process_stopped": true,
+      "execution_exited": true,
+      "finished_at": "2026-10-23T05:37:20+08:00"
+    },
+    {
+      "job": "326a3816570445f08a69f2c87658e27a",
+      "path": "coordination/dongos_works/.local/runs/326a3816570445f08a69f2c87658e27a/result.json",
+      "sha256": "4eac93f4b0dd8c0b726ce0d65112615d3e958f51cb5362079d720813c6f67ad0",
+      "passed": true,
+      "checks": [
+        {
+          "spec": "module:tests.test_user_smp_failure",
+          "passed": true,
+          "tests": 1,
+          "skips": 0,
+          "returncode": 0,
+          "cancelled": false,
+          "timed_out": false,
+          "process_stopped": true,
+          "execution_exited": true,
+          "elapsed_seconds": 66.687
+        },
+        {
+          "spec": "module:tests.test_user_smp_entry",
+          "passed": true,
+          "tests": 1,
+          "skips": 0,
+          "returncode": 0,
+          "cancelled": false,
+          "timed_out": false,
+          "process_stopped": true,
+          "execution_exited": true,
+          "elapsed_seconds": 104.469
+        },
+        {
+          "spec": "module:tests.test_user_smp_services",
+          "passed": true,
+          "tests": 1,
+          "skips": 0,
+          "returncode": 0,
+          "cancelled": false,
+          "timed_out": false,
+          "process_stopped": true,
+          "execution_exited": true,
+          "elapsed_seconds": 283.172
+        },
+        {
+          "spec": "module:tests.test_user_smp_barrier",
+          "passed": true,
+          "tests": 1,
+          "skips": 0,
+          "returncode": 0,
+          "cancelled": false,
+          "timed_out": false,
+          "process_stopped": true,
+          "execution_exited": true,
+          "elapsed_seconds": 12.578
+        }
+      ],
+      "source_stable": true,
+      "process_stopped": true,
+      "execution_exited": true,
+      "finished_at": "2026-10-23T05:45:28+08:00"
+    }
+  ],
+  "bkl_r2": {
+    "passed": true,
+    "sources_unchanged": true,
+    "tools_unchanged": true,
+    "commands": 110,
+    "compilations": 24,
+    "native_executions": 60,
+    "artifact_count": 756,
+    "bridge_integrated": false,
+    "actual_ap_cpl3_executed": false,
+    "actual_qemu_executed": false,
+    "summary": {
+      "path": "coordination/dongos_works/.local/runs/d7273818c35049bd8b9f95bb627af90b/workspace/build/test/user-bkl/run-9148ba4306c6/validation-summary.json",
+      "sha256": "72e8dc43a732500fab7efa50578f79289d579dc926eea4f78fd7c7d954a7f597",
+      "bytes": 528868
+    },
+    "normal_scenarios_per_mode": 19,
+    "true_source_mutants_per_mode": 11,
+    "unexpected_panic_or_crash_accepted": false,
+    "scope": "Independent FIFO sidecar only; production Bridge remains unwired."
+  },
+  "bkl_r1": {
+    "job": "3be554a207994b029e7a60feffdce896",
+    "overall_passed": false,
+    "successful_debug_compilations_before_failure": 8,
+    "native_executions_before_failure": 26,
+    "normal_scenarios_completed": 19,
+    "mutants_completed": 7,
+    "failed_compile_variant": "clear-ticket-after-acquire-failure",
+    "failure": "!void success requires return;",
+    "release_executed": false,
+    "subsequent_domain_module_executed": false,
+    "original_archive_preserved": true
+  },
+  "large_history": {
+    "r3_job": "1edb5da569a54e5a8ff2a067e2ac1ee9",
+    "r3_tests": 31,
+    "r3_skips": 0,
+    "current_source_acceptance": false,
+    "builds": [
+      {
+        "case": "normal",
+        "bytes": 1962384,
+        "loader_margin": 134768,
+        "kernel_bin_sha256": "2906f46ff0f7fcd67fa6e07e5314093b2a057bc23ba3a695d714240d874f5d33",
+        "artifact_count": 285,
+        "strict_identity_root_recomputed": true
+      },
+      {
+        "case": "omit-ap-flush",
+        "bytes": 1962384,
+        "loader_margin": 134768,
+        "kernel_bin_sha256": "fc4fc7b1ef484f9ce5d0afa578ebd0bb783694292a706cdc4b0420f1c6d74484",
+        "artifact_count": 285,
+        "strict_identity_root_recomputed": true
+      }
+    ],
+    "timing_v2_build": {
+      "bytes": 1966480,
+      "loader_margin": 130672,
+      "artifact_count": 285,
+      "source_root_job": "326a3816570445f08a69f2c87658e27a",
+      "entry_sha256": "50b61f652b6b13f60c5f3f8bc93f4703f2ac086f3471975adc3edbfcf691608b",
+      "strict_identity_before_after": true
+    },
+    "build_evidence_path": "coordination/dongos_works/codex-works/reviews/2026-10-23-P2-lock-diagnostics.json"
+  },
+  "r13": {
+    "diagnostic_only": true,
+    "acceptance": false,
+    "passed": false,
+    "backend": "whpx",
+    "cpu_count": 4,
+    "actual_command_options": [
+      "-machine",
+      "q35,kernel-irqchip=off",
+      "-accel",
+      "whpx",
+      "-smp",
+      "4",
+      "-cpu",
+      "host,-vmx,-mpx,-sgx,-sgxlc"
+    ],
+    "uninterrupted_seconds_before_first_pause": 2,
+    "no_resume_after_first_pause": true,
+    "guest_memory_or_register_writes": false,
+    "domain_failed": 0,
+    "first_failure_present": false,
+    "domain_at_stop": {
+      "lock": 1,
+      "owner": 0,
+      "sequence": 5238,
+      "barrier": 5238,
+      "completed": 5237,
+      "interpretation": "Stopped during an active barrier; not an unacknowledged timeout verdict."
+    },
+    "full_pool_audit": {
+      "slots": 16,
+      "live_roots": 11,
+      "passed": true
+    },
+    "physical_reads": 548,
+    "metrics": [
+      {
+        "cpu": 0,
+        "switches": 8016,
+        "user_entries": 8016,
+        "retained": 2171,
+        "user_timers": 159,
+        "last_vector": 256,
+        "failed": 0,
+        "raw": {
+          "path": "code/build/test/p2-smp27-review/uninterrupted-whpx-r13/boot-1/physical-00503.bin",
+          "sha256": "dbf69625a8df5ff621bbb22509c98e8b9f4f75c2904e0f8479f5b0643fd877b7",
+          "bytes": 192
+        }
+      },
+      {
+        "cpu": 1,
+        "switches": 161,
+        "user_entries": 161,
+        "retained": 76,
+        "user_timers": 0,
+        "last_vector": 256,
+        "failed": 0,
+        "raw": {
+          "path": "code/build/test/p2-smp27-review/uninterrupted-whpx-r13/boot-1/physical-00509.bin",
+          "sha256": "edc929e55ed460797f5e873dd737cf99619b95a3e95676628030bfbb6ec2ed34",
+          "bytes": 192
+        }
+      },
+      {
+        "cpu": 2,
+        "switches": 168,
+        "user_entries": 168,
+        "retained": 80,
+        "user_timers": 0,
+        "last_vector": 256,
+        "failed": 0,
+        "raw": {
+          "path": "code/build/test/p2-smp27-review/uninterrupted-whpx-r13/boot-1/physical-00515.bin",
+          "sha256": "45a0344ca086d7e71a0c671db084d81d3bcd6e3b80821997193ba0eab84c0699",
+          "bytes": 192
+        }
+      },
+      {
+        "cpu": 3,
+        "switches": 213,
+        "user_entries": 213,
+        "retained": 103,
+        "user_timers": 0,
+        "last_vector": 256,
+        "failed": 0,
+        "raw": {
+          "path": "code/build/test/p2-smp27-review/uninterrupted-whpx-r13/boot-1/physical-00521.bin",
+          "sha256": "563c7694c4b11379dc4a46f600e8106895c7279b7bf8284c0c22a7b8ae8edaeb",
+          "bytes": 192
+        }
+      }
+    ],
+    "ap_last_snapshot": {
+      "mode": "IDLE",
+      "token": 0,
+      "slot": 16,
+      "lapic_lvtt": 65600,
+      "lapic_masked": true,
+      "lapic_initial_count": 0,
+      "lapic_current_count": 0,
+      "timer_hz": [
+        62679185,
+        62658010,
+        62630512
+      ]
+    },
+    "engine_raw_complete": false,
+    "historical_ready_competition_reconstructable": false,
+    "five_busy_workers_launched": false,
+    "proves_ap_user_timer_gate": false,
+    "proves_whpx_irqchip_limitation": false,
+    "proves_timer_initialization_omission": false,
+    "evidence": [
+      {
+        "path": "code/build/test/p2-smp27-review/uninterrupted-whpx-r13/diagnostic-result.json",
+        "sha256": "6be36f4360ea789c6f7fd3f91e6b048124a19272595847fa8fd1c9e065fb1000",
+        "bytes": 282783
+      },
+      {
+        "path": "code/build/test/p2-smp27-review/uninterrupted-whpx-r13/boot-1/smp-diagnostics.json",
+        "sha256": "ac1403ae1c3218f806f10a49e6f518cbe9da4f37379c5aba387703962c1c6c95",
+        "bytes": 336986
+      },
+      {
+        "path": "code/build/test/p2-smp27-review/uninterrupted-whpx-r13/boot-1/physical-manifest.json",
+        "sha256": "9ec8c68c36869440cb7ccdda3042b454686530c34c1e21483d4281f94af028a5",
+        "bytes": 120308
+      }
+    ],
+    "timer_source_binding": [
+      {
+        "path": "code/kernel/sched/user_entry.asm",
+        "sha256": "b1e9057b772bb9367ee2a2de2762cd59025c57761b062e41b129097bcaa8a325",
+        "r13_source_sha256": "b1e9057b772bb9367ee2a2de2762cd59025c57761b062e41b129097bcaa8a325",
+        "matches_r13": true
+      },
+      {
+        "path": "code/kernel/sched/user_bridge_arch.asm",
+        "sha256": "20f8c1039b5ef8fa05f1911752a1ccc3b30871e0f7f3616083b7c77538e9eeb3",
+        "r13_source_sha256": "20f8c1039b5ef8fa05f1911752a1ccc3b30871e0f7f3616083b7c77538e9eeb3",
+        "matches_r13": true
+      },
+      {
+        "path": "code/kernel/sched/user_bridge.dg",
+        "sha256": "eb25e153ab4462b70b45a568b6dee8144921faed0151e103c4a42da6963ff6d4",
+        "r13_source_sha256": "eb25e153ab4462b70b45a568b6dee8144921faed0151e103c4a42da6963ff6d4",
+        "matches_r13": true
+      },
+      {
+        "path": "code/kernel/sched/user_arch.asm",
+        "sha256": "2a20c93c4d37870c5088b1389266790194732d83929bd4b9b5a7f730c842682c",
+        "r13_source_sha256": "2a20c93c4d37870c5088b1389266790194732d83929bd4b9b5a7f730c842682c",
+        "matches_r13": true
+      },
+      {
+        "path": "code/kernel/sched/user_boot.dg",
+        "sha256": "98bf0251448ee7c131cc9db5e74ac4490041c8827dfe42ff6b1c0c4322614bd1",
+        "r13_source_sha256": "98bf0251448ee7c131cc9db5e74ac4490041c8827dfe42ff6b1c0c4322614bd1",
+        "matches_r13": true
+      },
+      {
+        "path": "code/kernel/sched/user_entry_plan.dg",
+        "sha256": "f014d3d0eba6e9f989565b3ca42c714f3b8d71fae3a87293bf7496a7d6f40457",
+        "r13_source_sha256": "f014d3d0eba6e9f989565b3ca42c714f3b8d71fae3a87293bf7496a7d6f40457",
+        "matches_r13": true
+      },
+      {
+        "path": "code/kernel/sched/multicore.dg",
+        "sha256": "ae9ccc94c32289d21af636a0c9a03d9424c2530891cdfc45b416d99d7311ba02",
+        "r13_source_sha256": "ae9ccc94c32289d21af636a0c9a03d9424c2530891cdfc45b416d99d7311ba02",
+        "matches_r13": true
+      },
+      {
+        "path": "code/include/user_entry.inc",
+        "sha256": "0521127a5af6ebc7e1f7a8358319611d57845b64b05915f7b248ac11a03d9728",
+        "r13_source_sha256": "0521127a5af6ebc7e1f7a8358319611d57845b64b05915f7b248ac11a03d9728",
+        "matches_r13": true
+      }
+    ]
+  },
+  "observer_rework": {
+    "task": "codex:P2OBS32",
+    "status": "submitted",
+    "rev": 3,
+    "independent_verification": null,
+    "goals": [
+      "Each actual stop/cont has an explicit epoch.",
+      "Bulk memory and per-CPU register transcripts bind to the same stopped epoch.",
+      "Strict bounded references and final on-disk SHA verification; no fallback across epochs.",
+      "Legacy host fixtures remain synthetic."
+    ],
+    "not_a_guest_positive_seal": true
+  },
+  "large_rework": {
+    "task": "codex:P2LARGE16",
+    "status": "submitted",
+    "rev": 16,
+    "independent_verification": null,
+    "scope": "Original task rework, not a second accepted component.",
+    "liveness_gap": "A single busy worker may provide no READY competitor; LARGE_REQUESTED was already set after the first committed child, but large_try waited for all AP user timers before the actual transaction, which could therefore never start.",
+    "intended_trigger": "Five ordinary cfg7..11 processes really committed by ordinary shell before the single request.",
+    "required_bindings": [
+      "caller shell/BKL and original child identity",
+      "independent Catalog token/incarnation/config generation",
+      "memory generation and actual root/Frame",
+      "continue scanning after an absent member",
+      "all five committed; no assumed cfg equals physical slot"
+    ],
+    "ap_user_timers_required": true,
+    "absolute_deadline_unchanged": true,
+    "precise_negative_oracle_unchanged": true
+  },
+  "local_observer_precheck": {
+    "coordinator_executed": true,
+    "independent_full_verification": false,
+    "tests": 29,
+    "skips": 0,
+    "elapsed_seconds": 3.083,
+    "checks": [
+      {
+        "module": "tests.test_p2_bulk_capture",
+        "tests": 10
+      },
+      {
+        "module": "tests.test_p2_pcid",
+        "tests": 19
+      }
+    ],
+    "cached_reads_without_extra_pmemsave": 500,
+    "late_disk_mutation_rejected": true,
+    "actual_vm_executed": false,
+    "raw_console_return_observed_by_coordinator": true,
+    "separate_persisted_log_available": false,
+    "evidence_report": {
+      "path": "coordination/dongos_works/codex-works/deliveries/P2OBS32.md",
+      "sha256": "eb2373838d78c04248fe0372494e76c36c563efd45768865bd5d122105d00cd4",
+      "bytes": 3744
+    },
+    "does_not_prove_ap_or_pcid_gate": true
+  },
+  "local_large_precheck": {
+    "coordinator_executed": true,
+    "independent_full_verification": false,
+    "tests": 20,
+    "skips": 0,
+    "request_gate": {
+      "tests": 1,
+      "elapsed_seconds": 36.57,
+      "summary": {
+        "path": "code/build/test/runtime-large-request/run-c8594a7955d0/validation-summary.json",
+        "sha256": "f4e6360a637775a5791590962dc11a30fb6dcdf723ad8a62556cd83696205926",
+        "bytes": 3544
+      },
+      "actual_dong_predicate": true,
+      "trusted_bridge_memory_geometry_adapted": true,
+      "actual_guest_executed": false,
+      "trusted_native_variants": 18,
+      "mode_count": 2,
+      "variants_per_mode": 9,
+      "normal_cases": 84,
+      "incremental_commit_phases": 5,
+      "normal_returncode": 0,
+      "mutant_returncode": 1,
+      "services_file": {
+        "path": "code/kernel/user/services.dg",
+        "sha256": "5d3e5ba6d5e0a1af7a52b2d25e0d5f48392e9cc8e9fe94aaa72d9fdb966bfe4f",
+        "bytes": 96634
+      },
+      "normalized_text_sha256": "899b255fe9b28d83c91305bc12522d68a3d097af943fddeb30f9d59350602b3c",
+      "source_hash_kind": "Summary source_sha256 is SHA256 of read_text UTF-8 with LF newline normalization; services_file is raw-byte SHA256."
+    },
+    "host_oracle": {
+      "tests": 19,
+      "elapsed_seconds": 0.097,
+      "returncode": 0,
+      "raw_console_return_observed_by_coordinator": true,
+      "separate_persisted_log_available": false,
+      "evidence_report": {
+        "path": "coordination/dongos_works/codex-works/deliveries/P2LARGE16.md",
+        "sha256": "91bddc12dcad436761878700d90f6c1c5f54202c3196bc6aed34305a185ca674",
+        "bytes": 21855
+      }
+    },
+    "full_35_test_check_executed": false,
+    "new_normal_and_negative_os_link_executed": false,
+    "actual_vm_executed": false
+  },
+  "open_gates": [
+    "Current-source independent host verification and fresh normal/negative builds after OBS/LARGE rework",
+    "Actual all-AP CPL3 user timer progress under five committed busy workers",
+    "Actual large-page transaction and precise omit-AP-flush negative",
+    "Production EXEC/controlled-PF/CACHE ledger and poll multiplexer wiring",
+    "All-alias WC to UC to WC and panic/NMI writer integration",
+    "Actual warm PCID on every CPU with strict fallback rejection",
+    "Physical WC evidence"
+  ],
+  "doc_sha256": {
+    "code/PLAN.md": "9cd04e5bdfd92c6831dac3f8f5dace488c2b0bedb0cc158b3618718d7c1ea177",
+    "code/docs/p2-acceptance.md": "cb15bea7ce73fa037c46c6d67b59a152dc0b03bb134e4eb37631b766d924323a",
+    "code/docs/p2-extensions.md": "98ef20aab10e4262f8ea9b85e391eb699fd86e66f34aff1f9915cfd48820c8b7",
+    "code/docs/p2-alias-consumers.md": "46e2a94add3c25f3f18f646e57efbab609e7990e6fe1ec05a98eff54736ddf5b",
+    "code/docs/remaining-plan.md": "34eefb78e12765f3aa71392f15d3a25e2a795240c4c84a4902e938ca76b77147",
+    "code/docs/progress-map.md": "0f4158810b0a33699774fa10fe8d5a46de0137d0cf9ea20600f8eb3da3061d8d"
+  },
+  "checkpoint_markdown": {
+    "path": "coordination/dongos_works/codex-works/reviews/2026-10-23-P2-observer-progress.md",
+    "sha256": "dafeafabcee5dcf57ea7415cdab4b35b28a0cd326b1f3cb73e59fbe67b455382"
+  },
+  "validation_scope": {
+    "static_json_and_bound_file_hashes": true,
+    "new_local_links_only": true,
+    "new_barrier_check_executed_by_author": false,
+    "compiler_executed_by_author": false,
+    "tests_executed_by_author": false,
+    "os_or_vm_executed_by_author": false,
+    "mcp_state_written_by_author": false,
+    "independent_review_pending": true
+  },
+  "hash_closure": "JSON binds six entry docs, checkpoint Markdown, immutable receipts and selected raw evidence. Delivery binds this JSON; self-hashes are omitted to avoid a cycle.",
+  "limitations": [
+    "Preserved 05:42 and 05:55 checkpoints describe their dated source scope.",
+    "Historical host tests, builds and R13 diagnostics do not complete P2 or start P5.",
+    "Unverified OBS sources and remaining LARGE implementation have no complete frozen fingerprint here; the services raw-byte SHA binds only the local request precheck.",
+    "No change to production locks, guest deadlines, timers, memory or registers in this documentation task."
+  ]
+}

@@ -1,32 +1,69 @@
-# 有限 G5 源码差分执行器
+# G5 完整语言差分门禁
 
-本任务验收runner及明确有限矩阵，`scope_complete=false`。method、enum、error、try、orelse、defer、extern SysV/Win64逐项实际证实的差集保留为known-gap，不能计作支持成功、xfail或skip。完整L3/G5阶段保持partial。
+G5 验证 Dong 原生 frontend → lower_program → nasm_program 对 v0.1
+语言及 ABI 的实际执行。Python seed 仅用于构建被测编译器和独立同源对照；
+被测程序不能回退到 seed，不在宿主构造目标 AST/IR，也不启动 OS/VM。
+标准库和系统功能按各自任务验收。
 
-## 两条实际目标路径
+本候选合并 G5TAG1、G5EXEC1、G5ALIGN1、G5PANIC1，以及原负责人
+L3EXTUNSAFE1 的无体 extern 默认 unsafe 修复。各组件已经独立复验并验收；
+候选组合、真实文件集成和集成后的复验分别登记，不以组件验收代替整体完成。
 
-同一只读源码目录、入口与debug/release模式分别交给Python种子编译器和真正Dong frontend→lower→nasm。Python仅编排、引导编译器及独立观察，目标IR/NASM由对应编译器生成；原生失败立即failclosed，无seed fallback。复用已验收L3A的有界C/SysV桥和快照工具，重新构建当前生产Dong源码，保留全部只读闭包/候选/命令/对象/进程结果。
+`requirements.json` 将规格要求映射到 51 个永久测试、27 个要求组。
+完整结果为每次新运行的 `full-coverage.json`；只有所有要求对应测试均实际
+通过、无 skip、无已知缺口、native ELF 通过且源文件稳定，才置
+`scope_complete=true`。测试异常、超时、取消及不受支持都不能算通过。
 
-两后端的符号编码和可见性不同：种子普通符号局部、`__dg_m…_f/g…`；Dong发射`__dong_m…_n…`。仅观察端翻译确定的符号名，objcopy暴露种子已有符号。保留原`.private.obj`与原始目标汇编，逐COFF节要求所有原指令/数据字节完全不变，只容许BFD在原节末补零对齐；禁止改目标汇编、指令、ELF或静态指针。真实汇编ELF64和COFF；本机执行为明确SysV桥，不能把COFF组装叫Win64函数ABI覆盖。
+覆盖包括整数/转换/检查/wrapping、指针和函数值、数组/结构体/全局及静态
+重定位、模块可见性、slice/optional/result/enum 的表示和 SysV pair ABI、
+方法选择与求值次序、初始化流、for/match/try/orelse/defer、noreturn 清理、
+Win64 shadow space/栈参数/非易失 GPR 与 XMM6–15/DF、对齐及总栈预算、
+各宽度 volatile/非对齐访问、四线程原子竞争、asm 白名单、panic 的精确
+种类/行号/文件及不执行清理、正式诊断和失败输出原子性。
 
-## 有限支持矩阵
+所有正向执行均使用真实 NASM 产物和独立 C/汇编观察器。完整 ELF 由同一次
+冷构建的 Dong native_assembler 生成，经 kernel ELF validator 验证并在原始
+0x400000 地址执行；目标源码显式提供 panic 实现，静态指针不重定位或修补。
 
-每模式执行audit、globals、多模块和固定PRNG种子20261022的12个数值向量，合计6条supported-pass记录。独立C固定数值/字节/canary/轨迹检查整数窄宽与符号、嵌套调用和20整数参数、slice双字整体返回/传参、全部6个callee-saved和RSP、单次求值lvalue、数组和结构体12字节padding、静态常量/可变全局量、跨模块同名符号、短路副作用与循环break/continue。两条路径完整观察相等外，还分别必须满足独立oracle。
+组件复验分别构建单一缺陷的坏编译器。最终组合测试另从本轮源码实际构建
+一个含六个明确缺陷的编译器，供六个互相隔离的输入复用：optional 标签、
+XMM15 恢复、局部地址、panic 种类、全局地址和窄写入。输入避免触发其它
+缺陷；每个独立 oracle 都须观察到预期的正常执行错误或精确 panic 差异。
+原始及变异源码、真实驱动/object 哈希、进程返回码和产物哈希均保存。
+另以缩小实际 C 调用者 instruction pool 制造真实 CAPACITY 失败，验证把
+seed 成功替代 native 失败的坏 runner 会被来源检查拒绝。
 
-另22条实际运行检查覆盖两模式checked/wrapping、负值溢出、窄运算、边界、非法移位和除法：seed由真实panic给出种类/源行，Dong由真实UD2守卫拒绝；Windows观察器只捕获异常码c000001d且故障字节恰为0f0b，打印精确标识并退出86，不能用其它崩溃冒作成功。release允许wrap的例子必须正常返回正确值，两模式本身的wrapping intrinsic均在正常oracle核验。两模式private global访问都必须由双方真实前端拒绝且原生输出不变。
+静态数组可以大于 4 KiB；类型的 word 数与局部存储的栈预算分开检查。
+局部 slot 分配仍拒绝超预算对象，静态全局量/常量及其索引、指针使用
+真实大数组执行回归，不能把静态对象错误地当作栈分配拒绝。
 
-## 缺口、负控与原生容器
+Windows 长路径和 CRLF 属于测试承载边界；测试使用短目录及文本/实际
+文件哈希各自一致的比较。失败证据保留。编译器自身闭包和 bounded pure
+compiler_job 固定点须另做实际回归；本文件不将尚未完成的检查声明为通过。
 
-8种构造每模式均由seed实际编译/原生执行或诊断，Dong实际记录精确frontend/lower阶段、status、detail、source/node/offset/line/column；前端定位来自真实Graph结果，lower定位只读取检查过的Unit/Node/Token数组。失败输出逐字保持，不合成目标图。16条known-gap和非空remaining单列，0测试退出不能关闭整个G5。
+G5FULL1 已经独立冷复验并验收：作业 `2619ead341924ea89cdcd4b955906d70`，51 项测试、27 组要求，零 skip，`scope_complete=true`，源码稳定。生产六模块、runner 和永久测试已实际写入主线；主线已重新冷复验并登记集成（G5INT1 rev24、G5FULL1 rev16）；最终证据见 [G5 完成回执](../../coordination/dongos_works/codex-works/reviews/2026-10-22-G5-completion.md)。
 
-两种唯一Dong发射语义坏体：GLOBAL错址+8、窄store误为64位。完全构建/链接并正常返回，由精确wrong-global-address/narrow-store-canary oracle以2拒绝，每模式均有同输入好体先通过；构建失败、崩溃或超时不计语义负控。另真正运行一个坏Python runner，把真实拒绝的原生路径替换成seed成功，必须被native编译器/driver产物来源拒绝。至少一个完整native_assembler ELF在原0x400000实际映射执行静态指针读写，借用已审查L3A固定地址桥，不修改ELF或指针。
+迁移后独立源码审查补充了跨模块常量枚举的tag/payload、包装前的只读指针
+转换、已知错误try的终止路径，以及超大合法局部布局的FRAME原子拒绝回归。
+静态枚举仅将绑定为ENUM_MEMBER的节点视作变体构造；普通常量引用继续
+递归序列化。初始近u64数组超出既有2^63-1对象上限，不能作为可达溢出证据；
+局部容量检查前移作为防御性边界整理，相关旧中断记录不算通过。
 
-## 证据与边界
+## 主线入口与证据
 
-每轮唯一目录保存源、原始和可见性调整对象、C/ASM桥、完整命令/版本、允许的NASM/CC环境（不含密钥）、进程退出/超时、工具和产物SHA、期望/实际/首次语义差异。任何当前编译器/只读闭包变化即失败。缺工具不skip，不运行OS/VM/AI CLI、不提交推送、不直接写协调状态。开发缓存只读当前Dong对象的实验不是正式验收，独立正式检查必须从冷快照重新引导全部编译器。
+在 `code/` 运行 `python -m unittest lang.tests.test_g5_full_native`。每次运行
+生成 `build/test/G5-full/run-*/full-coverage.json`，覆盖清单为
+`lang/tests/g5/requirements.json`。主线直接读取 `lang/bootstrap/`，不读取
+works 中的候选源码。CLI `python -m tools.g5_differential` 仍是基础矩阵，
+其 `scope_complete=false` 有意保留，不能代替上述 51 项完整门禁。
 
-开发轮run-222b7fae3df8已实际完成6条supported-pass、22运行检查、16条known-gap、2隐私诊断、4条正常返回坏Dong和1个真实fallback坏体拒绝，完整native容器固定地址静态指针实际执行也通过；source_stable=true。此轮复用已核对全部只读源的当前Dong对象以排查宿主桥，不计正式冷引导验收。最终实现另补明确主线/works根定位、完整工具版本和独立进程/产物路径绑定，正式3项门禁从冷快照重新执行全部矩阵。后续真实结果写入交付和协调验收回执；当前不自行宣布验收。
+闭包入口为 `python -m unittest lang.tests.test_g5_closure_native`，预算、
+固定点和宿主加载限制见 [G5 编译器闭包](g5-closure.md)。
+本次完整宿主语言覆盖不把历史 G6 客体证据外推到扩大后的编译器；
+新源码在 DongOS 上的自编译、持久化和同盘重启须另做 G6 回归。
 
-
-## 主动源稳定修复与最终门禁
-
-独审发现首次提交仅把生产/闭包输入纳入最终清单，目标fixture源并非全部从创建时登记；因此主动通过协调器暂停7b0221ae，确认Windows托管作业全部子进程退出，保留failed/日志，不计任何验收。官方resume/rework/claim后，创建每一源码目录即登记每个目标DG的SHA，在seed与Dong执行前及finish共同核对。独立永久测试实际把7改为8，assert_inputs/seed/dong全部在编译前精确拒绝，恢复原字节后通过，开发1test/0skip/0.136s。新完整门禁为4tests，仍从冷快照重新引导全部矩阵，不拿旧缓存或中断轮次作正式结果。
+主线正式作业 `0856b466a4d44a13be901c02f8acff46` 已通过 full51、
+closure1 和关联18共70项零skip/source stable，过程停止及退出均确认。
+257项完整矩阵冻结输入及真实坏体/产物已独立复算。Windows guest
+观察器复用已验收的宿主线程退出与自有ELF窗口持有桥；目标ELF和静态
+指针保持原字节，C格式严格检查及失败原子性未放宽。

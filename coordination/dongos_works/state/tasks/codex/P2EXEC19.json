@@ -1,0 +1,88 @@
+{
+  "assignment_owner": "codex",
+  "auto_dispatch": false,
+  "auto_verify": false,
+  "candidate": null,
+  "checks": [
+    "module:tests.test_runtime_exec",
+    "module:tests.test_paging"
+  ],
+  "claim_from_status": "rework",
+  "claimed_at": "2026-10-22T20:02:04+00:00",
+  "claimed_by": "codex-mcp-daece153b59c4bd5",
+  "completed_at": "2026-10-22T20:09:12+00:00",
+  "complexity": "standard",
+  "created_at": "2026-10-22T19:35:20+00:00",
+  "delivery": "codex-works/deliveries/P2EXEC19.md",
+  "depends_on": [
+    "codex:P2ROOT13",
+    "codex:P2FLUSH11",
+    "claude:P2EXEC1"
+  ],
+  "description": "用户先P2后P5，平行完成C核心组件；正常service/PF入口接线与受控VM另随B完成后统一声明并验收，不将本组件host通过当整体完成。本任务只新增文件，不碰P2LARGE16当前独占的memory/services/domain/build。新runtime_exec依赖paging/runtime_roots/user_domain/buddy，实现可信CPU0/IF0/kernel tag0/BKL/healthy domain/PGE0闭合事务，允许逐CPU PCIDE0/1只走全tag协议。Config完整caller roots+cookie身份recheck、held order0真实buddy审计、旧sealed EXEC锚不变；固定新alias=0xffffa90000002000与3000，同旧A/B parent，拒新顶层分支、隐藏HHDM/USER/large/任何第三方alias和非WB。所有Scratch/Retired/perCPU tickets caller arena，失败poison/domain failed保留frame/receipt，4KiB帧和2MiB装载预算不变。\n真实page map/write CODE42→撤所有写(RO/NX)→全CPU alltag ACK+逐CPU序列化→只授唯一EXEC(所有物理alias无write)→发布；allCPU真实执行返回42，撤所有EXEC→全tag/序列化→授RW并写CODE43→再次撤写/ACK/EXEC发布→allCPU43。最后全部撤权/unmap/全ACK后reclaim；是否释放frame必须新完整forest零alias证据与线性lease规则，否则保持held不冒称回收。每个授权/变更前后重check完整根身份与alias闭包，输出精确phase/seq/ack/actual root/CPU/cr0/cr4/值，不以flush计数冒硬件结果。\n新runtime_exec_reader.asm提供真实读/调用/受控写attempt和序列化，perCPU FaultTicket精确绑定cpu/request generation/rawkernelCR3/RIP/CR2/error3/CPL0+IF0；新增纯匹配/消费函数供后续user_entry窄PF分支调用，仅匹配固定owned probe instruction与after RIP，armed ticket恰好一次，任意其它fault必须拒绝。当前任务不改IDT gate或真实handler，不把未接线/未实际writefault说通过。未来真实负控只在撤写后省一个AP的真实flush，warmRW TLB紧贴prebarrier后/撤权前，不被额外CR3/flush掩盖，要求stale-write精确拒绝。\n永久host用真实DG/paging/完整forest与独立C raw oracle，debug/release、两格式、guards/原子前置拒绝；特权CPU边界明确mock，actualreader ASM只组装不执行特权。至少真实坏源码漏撤冲突alias/漏全ACK/提前EXEC grant或提前reclaim各精确拒绝，ticket mismatch/重放/别CPU/kernel非零tag/PGE/隐藏USER别名/过期身份反控。留全commands/raw/artifacts/source+tool stable/0skip回执。实现者不测试/compiler/OS/VM/AI CLI/commit/push、不改状态，由root独立审查复验和实际文件集成。",
+  "document": "codex-works/tasks/P2EXEC19-board.md",
+  "historical": false,
+  "id": "codex:P2EXEC19",
+  "integration_note": "6声明源码/文档已真实落入code主工作区，指纹与33aa…独立复验冻结输入一致；组件3tests0skip通过，guard/原生真坏源/产物与工具已核。登记仅组件代码集成，未接services/PF/build，下一独立任务接真实受控入口；实际AP执行与P2总门禁仍未完成。",
+  "legacy_hash": "cd406dce962cf436d754599b645a30b17fa0544041560aaccdebd25d0563a92b",
+  "number": "P2EXEC19",
+  "owner": "codex",
+  "rev": 12,
+  "review_note": "root实际源码/契约/有效测试审查，独立agent静态seed/ABI/符号闭包复核；修正PROBE被下次barrier洗掉、非nullable fn与重复extern、无请求poll的rawtag遗漏。正式33aa513f0cca4706b80adbfc2bac7105通过：runtime_exec1+真实paging2=3tests0skip；72.859/4.781sec，rc0、process_stopped/execution_exited/source_stable true。8真实DG debug/release生产+3坏源组，实际ASM双格式、C/native64命令38执行；每mode16真实native场景包括AP-only tag/fallback/PGE、3NULLcallback Context原子拒绝、stale-write模型精确CODE99+未消费票据；6真坏源码精确marker正常rc1，非泛崩溃。root核24个ELF/COFF/EXE SHA、所有命令raw stdout/stderr SHA与真实工具SHA。特权/execute/PF为显式host边界模型，真实ASM只组装，尚未接service/poll mux/真实PF入口/build，frame一直held；仅验收组件，不能关闭P2硬件/接线门禁。",
+  "status": "integrated",
+  "title": "P2调度后多根EXEC事务owner与精确硬件reader组件",
+  "updated_at": "2026-10-22T20:12:43+00:00",
+  "verification": {
+    "checks": [
+      {
+        "cancelled": false,
+        "elapsed_seconds": 72.859,
+        "execution_exited": true,
+        "passed": true,
+        "process_stopped": true,
+        "returncode": 0,
+        "skips": 0,
+        "spec": "module:tests.test_runtime_exec",
+        "tests": 1,
+        "timed_out": false
+      },
+      {
+        "cancelled": false,
+        "elapsed_seconds": 4.781,
+        "execution_exited": true,
+        "passed": true,
+        "process_stopped": true,
+        "returncode": 0,
+        "skips": 0,
+        "spec": "module:tests.test_paging",
+        "tests": 2,
+        "timed_out": false
+      }
+    ],
+    "execution_exited": true,
+    "fingerprint": {
+      "codex-works/deliveries/P2EXEC19.md": "a5d5f1379c879fcb8a249486cb76eb9a6ed18373888ffd67b0485ec4f463361c",
+      "docs/runtime-exec.md": "92c34d28ca2d851be56880f70cf1ab2bb78e208c26c04472962515284aa35aeb",
+      "kernel/mm/runtime_exec.dg": "5fc2cfb8df201c81c89e4686ad10eb4d587fc26ade8b4a23ea44290d390575ef",
+      "kernel/sched/runtime_exec_reader.asm": "fdf46898669a9cc83744168eb2e49ea9ee712893aefb65f0cb54734a53b0b128",
+      "tests/runtime_exec_probe.c": "3677618e70fb34f5b4dc2bbadff8cd775d158fb04dee519560d254e858a4c92e",
+      "tests/runtime_exec_probe.dg": "1860b19959243de2a71b8d27dba86981c5c2f045029351a3cc7f7b5b6c0226f9",
+      "tests/test_runtime_exec.py": "535dab1d45951412bbe0e692e749a9e0529767afed591bd9551f697c932fdbe1"
+    },
+    "finished_at": "2026-10-22T20:10:44+00:00",
+    "job": "33aa513f0cca4706b80adbfc2bac7105",
+    "passed": true,
+    "process_stopped": true,
+    "source_stable": true,
+    "summary": "定向复验通过，等待源码/契约审查"
+  },
+  "write_paths": [
+    "kernel/mm/runtime_exec.dg",
+    "kernel/sched/runtime_exec_reader.asm",
+    "tests/runtime_exec_probe.dg",
+    "tests/runtime_exec_probe.c",
+    "tests/test_runtime_exec.py",
+    "docs/runtime-exec.md",
+    "codex-works/deliveries/P2EXEC19.md"
+  ]
+}

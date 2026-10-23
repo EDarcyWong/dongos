@@ -1,13 +1,27 @@
 # Pure bounded compiler job
 
-Latest acceptance — 2026-10-21: G6 PASSED for the existing runtime5/compiler_job
+Current checkpoint — 2026-10-23: G5FULL1 and G5CLOSURE1 are integrated locally
+(rev16 and rev21); G5INT1 is integrated rev24. The independent mainline job
+`0856b466a4d44a13be901c02f8acff46` passed 70 tests with zero skips and stable
+sources. Its debug/release compiler fixed points are byte-identical: 2,046,376
+bytes, SHA256 `2bda587a6842913879eb6bf0445202066adb68baef06d06593ff0f3ee787defa`.
+The canonical 49-module source blob is 491,683 bytes, SHA256
+`b0765f411038f62f5fde132b6d31f0050d8f144d6695709e39d6b1768cdaa732`.
+See the [G5 completion receipt](../../coordination/dongos_works/codex-works/reviews/2026-10-22-G5-completion.md).
+The enlarged compiler needs a new G6 guest run. The host preparation test
+`python -m unittest tests.test_compiler_job_preparation` builds fresh fixture and
+production runtime5/compiler_job artifacts, binds their sources using the actual
+guest runner, and reads the seeded FAT files back without starting a VM. Its
+host receipt does not prove guest FLUSH, two boots, isolation or retirement.
+
+Historical acceptance — 2026-10-21: G6 PASSED for the existing runtime5/compiler_job
 profile and canonical 49-module closure. Run `39467503226` attempt1 on
 `f54c35c` actually booted twice; the same disk's SEED/STAGE1/STAGE2 ELF bytes
 equal the host fixed point (1,892,648 bytes, SHA256
 `e7f2424dc2010cf5b66e32c14faafec87f1f0f76051c04bd4e9eee050d34c9f2`). Two independent audits checked source/fixture binding,
 physical isolation, FLUSH and final retirement. PR11 code merged/synced at
 `19e1a1982de0d7ebc57eea0b851d968e01b40e07`, tree `394874cfe8ec7e4b0b4a9c857535781f88a957c6`. This is a code checkpoint; later documentation
-commits may advance HEAD. Full language G5 remains incomplete. See the
+commits may advance HEAD. This historical result covers that profile only. See the
 [execution and integration receipt](../../coordination/dongos_works/reviews/2026-10-21-g6-ci-execution.md).
 The Historical24-byte section below, including its pending-G6 sentences, records
 the earlier snapshot and does not describe current acceptance.
@@ -31,7 +45,7 @@ that an arbitrary pointer is actually mapped.
 
 After framing succeeds, the operation consumes the arena. Frontend uses its
 full 56 MiB. Graph compaction retains a prefix; backend occupies the remainder
-up to 47 MiB and emits assembly into 47..56 MiB. Once the graph and backend are
+up to 47.25 MiB and emits assembly into 47.25..56 MiB (8.75 MiB). Once the graph and backend are
 dead, assembler label/table/text/data occupy 0..8 MiB and the output ELF uses
 8..10 MiB. No old graph/backend alias remains live during reuse. Successful
 output is only `arena[result.offset .. result.offset+result.written]` after return.

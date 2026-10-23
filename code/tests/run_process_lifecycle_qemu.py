@@ -6,7 +6,7 @@ changes guest registers, or edits a running disk. APP.ELF is an explicitly
 recorded host input in a fresh ordinary FAT fixture before either boot.
 """
 from pathlib import Path
-import argparse,hashlib,json,re,struct,sys,time,uuid
+import argparse,copy,hashlib,json,re,struct,sys,time,uuid
 sys.path.insert(0,str(Path(__file__).resolve().parents[1]))
 from tools.build_usb import verify_build
 from tools.make_fat32_disk import create,SEED
@@ -23,6 +23,19 @@ MAX_EXEC_IMAGE=2*1024*1024
 NF=1<<63
 
 
+def audit_initial_process_image(image):
+    """Audit a controller-free historical image, returning only bootstrap data."""
+    settings.check(getattr(image,'historical_image',False) is True,'explicit historical image required')
+    image.initialize()
+    image.verify_elf()
+    settings.check(image.evidence.get('actual_processes')==7
+                   and image.evidence.get('all_elf_code_bytes_verified') is True
+                   and image.evidence.get('user_stack_guards_verified')==14,
+                   'historical bootstrap audit did not complete')
+    return copy.deepcopy({name:getattr(image,name) for name in
+        ('boot','processes','roots','bias','symbols','syms','pool_limits','static_pools','evidence')})
+
+
 def decode_catalog(raw):
     settings.check(len(raw)==CATALOG_BYTES,'catalog must have the completed exact ABI size')
     ready,count,sequence=struct.unpack_from('<3Q',raw)
@@ -34,7 +47,7 @@ def decode_catalog(raw):
         name=raw[offset+64:offset+96];reserved=raw[offset+96:offset+128]
         settings.check(version==1 and reserved==bytes(32),'config version/reserved field differs')
         if index<18:
-            expected_flags=7 if index in (0,1,3,6) else (5 if index<7 else (4 if index==13 else 8))
+            expected_flags=7 if index in (0,1,3,6) else (5 if index<7 else (4 if index==13 else (9 if index>=14 else 8)))
             settings.check(identifier==index and deps==DEPS[index] and image==index+1
                            and flags==expected_flags and retries==(3 if index in (0,1,3,6) else 0)
                            and timeout>0 and 0<length<=32 and name[:length]==NAMES[index].encode()
@@ -209,8 +222,9 @@ class ProcessGuest(fat.FatGuest):
 
     def verify_process(self,pid,name):
         self.refresh_processes();root=self.roots[pid];offset=pid*PROCESS_BYTES
+        self.validate_private_pools()
         settings.check(root>0 and root%4096==0,'live process root is invalid')
-        if pid<4 and self.pool_limits[pid]==32:
+        if self.uses_static_pool(pid):
             base=self.boot[15]+self.ksym('user.memory','TABLES')-storage.KERNEL
             settings.check(root==base+pid*32*4096,'fixed static pool moved')
         else:
@@ -242,7 +256,7 @@ class ProcessGuest(fat.FatGuest):
         for page in range(top-4*4096,top,4096):
             settings.check(self.pte(root,page)&0x800000000000001f==NF|7,'randomized stack page lost private RW/NX')
         return dict(pid=pid,image=name,root=root,bias=bias,stack_top=top,executable_bytes=executable,
-                    code_sha256=hashlib.sha256(data).hexdigest(),private_pool_kind='static' if pid<4 and self.pool_limits[pid]==32 else 'arena',private_pool_pages=self.pool_limits[pid])
+                    code_sha256=hashlib.sha256(data).hexdigest(),private_pool_kind='static' if self.uses_static_pool(pid) else 'arena',private_pool_pages=self.pool_limits[pid])
 
     def canary(self,image,expected):
         module='apps.'+image['image'].replace('-','_')

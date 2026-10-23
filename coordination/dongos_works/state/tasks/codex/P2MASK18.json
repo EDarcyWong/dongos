@@ -1,0 +1,97 @@
+{
+  "assignment_owner": "codex",
+  "auto_dispatch": false,
+  "auto_verify": false,
+  "candidate": null,
+  "checks": [
+    "module:tests.test_runtime_roots",
+    "module:tests.test_paging_view",
+    "module:tests.test_paging"
+  ],
+  "claim_from_status": "todo",
+  "claimed_at": "2026-10-22T19:30:50+00:00",
+  "claimed_by": "codex-mcp-daece153b59c4bd5",
+  "completed_at": "2026-10-22T19:39:33+00:00",
+  "complexity": "standard",
+  "created_at": "2026-10-22T19:30:47+00:00",
+  "delivery": "codex-works/deliveries/P2MASK18.md",
+  "depends_on": [
+    "codex:P2ROOT13"
+  ],
+  "description": "接P2LARGE16独立源码审查发现ROOT13已过同48位host但生产正常有异宽：boot.memory_startup使用真实CPUID physical_bits，user.memory私有Space固定48；runtime_roots目前要求所有address_mask相等会拒合法36/40/46/52bit环境。本项只修只读forest组件与独立C/DG测试/doc，不改生产root构建、编译器或旧owner权限。以可信canonical kernel Space.address_mask作为实际硬件物理上限，每个private Space另保留自身valid_mask并使用min(hardware_mask,space_mask)解析/检查所有table pool与present parent/leaf物理地址、reserved位、查询范围；不能只删除相等检查后接受超过硬件的PA。共享1..511仍精确canonical忽略A而非D，zero仍exact；private foreign/accounting/pending/失败原子/5056B Scratch/4KiB帧限制不变。增加真实kernel36/40/46/user48及kernel52/user48正向、超过hardware和超过private descriptor上限的pool/parent/leaf精确拒绝，C原始oracle独立重算，不制造host通过为VM。保留ROOT13 integrated15历史范围并说明新发现/新复验。实现者不运行test/compiler/OS/VM、改状态或commit/push；root独立三模块0skip/source stable后实际主线集成。",
+  "document": "codex-works/tasks/P2MASK18-board.md",
+  "historical": false,
+  "id": "codex:P2MASK18",
+  "integration_note": "五个真实文件已在本地主线工作树，与91bb571d新指纹逐项一致；登记替换ROOT13只读forest位宽兼容性实现。无OS/VM/commit/push；独立硬件根/BKL/lease/调度后consumer等仍由P2LARGE16及后续承担，P2整体partial。",
+  "legacy_hash": "961c0a10ecb458b8726853f8b348b5c189e7f6a273e355de6fa32bd5ce6b11b1",
+  "number": "P2MASK18",
+  "owner": "codex",
+  "rev": 6,
+  "review_note": "实际审查describe局部PoolView先核own valid_mask再取min(canonical硬件,own)并约束pool首尾；private walker所有parent/4KiB/2MiB reserved bits与PA/extent使用effective；共享1..511仍逐项canonical/A-only/零项exact，共享树只按hardware扫描，kernel52高共享parent+leaf不截到private48。未改实际root构建、4KiB帧或5056B Scratch、失败输出原子性。正式91bb571d06604d46a889b6ab8a1cd0ad三模块4tests/0skip、42.625/5.468/10.062秒，stable/stopped/exited=true；root独立复算108输入/产物SHA、48命令，12真native cases，两正向各67场景2956019断言，36/40/46/52+高canonical共享正向过，10次五类实际坏实现精确rc1拒绝。C limit重定义在正式前已修且独立Werror语法过；ROOT13原同48历史不外推。",
+  "status": "integrated",
+  "title": "P2根forest按真实硬件上限审计异宽用户Space",
+  "updated_at": "2026-10-22T19:43:20+00:00",
+  "verification": {
+    "checks": [
+      {
+        "cancelled": false,
+        "elapsed_seconds": 42.625,
+        "execution_exited": true,
+        "passed": true,
+        "process_stopped": true,
+        "returncode": 0,
+        "skips": 0,
+        "spec": "module:tests.test_runtime_roots",
+        "tests": 1,
+        "timed_out": false
+      },
+      {
+        "cancelled": false,
+        "elapsed_seconds": 5.468,
+        "execution_exited": true,
+        "passed": true,
+        "process_stopped": true,
+        "returncode": 0,
+        "skips": 0,
+        "spec": "module:tests.test_paging_view",
+        "tests": 1,
+        "timed_out": false
+      },
+      {
+        "cancelled": false,
+        "elapsed_seconds": 10.062,
+        "execution_exited": true,
+        "passed": true,
+        "process_stopped": true,
+        "returncode": 0,
+        "skips": 0,
+        "spec": "module:tests.test_paging",
+        "tests": 2,
+        "timed_out": false
+      }
+    ],
+    "execution_exited": true,
+    "fingerprint": {
+      "codex-works/deliveries/P2MASK18.md": "a63969f5f640bc2c57bda0c6b4f8d59dfb2cb2dca113c2fd5b221b6602aed291",
+      "docs/runtime-roots.md": "cee47fc3250ad297884756bbfef92c00fee57d2c58b4c49423ca4dcaa4cf56da",
+      "kernel/mm/runtime_roots.dg": "e70f1b1524db44e6a572e2e3be78b6339a1bc3c6f57153cd1e8c1ccef0ed59c0",
+      "tests/runtime_roots_probe.c": "3db04cc22924e0eaeaee07bfe3d67add42b9662214650ec3d283aae14d853cf0",
+      "tests/runtime_roots_probe.dg": "82a734980408f2228a7d2b4bc0afbeca582f04ac6935db688b773d6c86a728c0",
+      "tests/test_runtime_roots.py": "7beb425b724c2b2433bb2515315c86206317593081065470c7e84008ba153bc1"
+    },
+    "finished_at": "2026-10-22T19:42:45+00:00",
+    "job": "91bb571d06604d46a889b6ab8a1cd0ad",
+    "passed": true,
+    "process_stopped": true,
+    "source_stable": true,
+    "summary": "定向复验通过，等待源码/契约审查"
+  },
+  "write_paths": [
+    "kernel/mm/runtime_roots.dg",
+    "tests/runtime_roots_probe.dg",
+    "tests/runtime_roots_probe.c",
+    "tests/test_runtime_roots.py",
+    "docs/runtime-roots.md",
+    "codex-works/deliveries/P2MASK18.md"
+  ]
+}

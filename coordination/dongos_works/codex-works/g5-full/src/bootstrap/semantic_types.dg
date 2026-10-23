@@ -584,15 +584,14 @@ unsafe fn rt_accept(c:*Runtime,id:usize,target:usize)usize{unsafe{
  }
  let tk=rt_kind(c,target);let sk=rt_kind(c,source);
  if source==ERROR_TYPE&&tk==RESULT{(*info).typ=target;(*info).flags=((*info).flags&NEVER)|512|TAG;(*info).length=1;return target;}
- if source==NONE&&(tk==OPTIONAL||tk==RESULT){let payload=(*w).types[target].element;
-  if payload<8{rt_accept(c,id,payload);if (*s).status==0{return rt_wrap(c,id,target,tk==OPTIONAL);}}return NONE;
- }
  if source==NULL_TYPE&&tk==OPTIONAL{return rt_wrap(c,id,target,false);}
  if source==NULL_TYPE&&tk==POINTER{(*info).typ=target;return target;}
+ if tk==OPTIONAL||tk==RESULT{let payload=(*w).types[target].element;
+  if payload!=VOID{rt_accept(c,id,payload);if (*s).status==0{return rt_wrap(c,id,target,tk==OPTIONAL);}return NONE;}
+ }
  if source<(*s).type_count&&target<(*s).type_count{
   let a=(*w).types[source];let b=(*w).types[target];
   if sk==tk&&(tk==POINTER||tk==SLICE)&&(b.flags&1)!=0&&rt_same(c,a.element,b.element,0){(*info).typ=target;return target;}
-  if tk==OPTIONAL||tk==RESULT{if b.element!=VOID&&rt_same(c,source,b.element,0){return rt_wrap(c,id,target,tk==OPTIONAL);}}
  }
  return rt_fail(c,TYPE,id,target as u64);
 }}
@@ -731,6 +730,7 @@ unsafe fn rt_try(c:*Runtime,id:usize,depth:usize)usize{unsafe{
  let typ=rt_expr(c,n.a,NONE,true,depth+1);if (*s).status!=0{return NONE;}
  if rt_kind(c,typ)!=RESULT{return rt_fail(c,TYPE,id,81);}
  (*rt_info(c,id)).flags=(*rt_info(c,n.a)).flags&NEVER;
+ if rt_tag(c,(*c).unit,n.a,0)==1{(*rt_info(c,id)).flags|=NEVER;}
  return (*(*s).w).types[typ].element;
 }}
 // EXIT is deliberately reachable only as an orelse RHS. The caller selects

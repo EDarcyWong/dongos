@@ -8,7 +8,6 @@
     "discover:pool-works/tests:test_mcp_pool_config.py"
   ],
   "claim_from_status": "todo",
-  "claim_token": "b34339cecacf4d9a9a05158851af29f7",
   "claimed_at": "2026-10-20T04:43:36+00:00",
   "claimed_by": "cursor-mcp-415ed5783a554f4e",
   "completed_at": "2026-10-20T06:03:14+00:00",
@@ -22,14 +21,14 @@
   "historical": false,
   "id": "pool:MCPPOOL1",
   "integration_note": "已集成：候选 mcp_server.py/mcp_config.py/docs/MCP.md 按行尾约定回写 coordination/dongos_coordination；两项永久回归复制为 coordination/tests/test_mcp_pool.py、test_mcp_pool_config.py（改为针对正式包）；与 test_mcp 合计29项通过、0skip（98.2秒）。需重载客户端MCP连接或新建会话后新规则才生效；本次未改真实客户端配置。",
-  "legacy_hash": "01be4a09784f8333bb7da343f765689ddc8e6f22b4dd5a08bffb6709a6c16392",
+  "legacy_hash": "1a71793671d0252b94ef3a21d5dee113a69cd87f4e36ee6ae8d2d5fdb8156910",
   "number": "MCPPOOL1",
   "owner": "cursor",
-  "rev": 9,
+  "rev": 10,
   "review_note": "已实际审查共用MCP源码、配置生成及新规则文档：省略owner发布公共池、worker身份不可覆盖/不可升权、默认本人+公共池查询去重排序分页、稳定pool任务编号、领取释放与旧令牌保护。两份永久测试已适配正式隔离目录，只读服务依赖复制到临时包且前后指纹守卫，不碰生产状态。正式作业46bf8df03c054df1a168546082a90e48两项checks合计12tests/0skip/returncode0，process_stopped=true、source_stable=true，实际stdio/临时HTTP竞争与配置保留回归均通过。当前授权文件与正式指纹一致，登记验收，尚未将候选MCP代码集成正式服务。",
   "status": "integrated",
   "title": "MCP公共任务池适配：DeepSeek、Claude、Cursor自主领取",
-  "updated_at": "2026-10-22T00:59:08+00:00",
+  "updated_at": "2026-10-22T14:38:35+00:00",
   "verification": {
     "checks": [
       {

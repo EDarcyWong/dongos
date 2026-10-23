@@ -1,0 +1,78 @@
+{
+  "assignment_owner": "codex",
+  "auto_dispatch": false,
+  "auto_verify": false,
+  "candidate": null,
+  "checks": [
+    "module:tests.test_user_smp_normal_activation",
+    "module:tests.test_device_manager"
+  ],
+  "claim_from_status": "todo",
+  "claimed_at": "2026-10-22T20:30:59+00:00",
+  "claimed_by": "codex-mcp-daece153b59c4bd5",
+  "completed_at": "2026-10-22T20:42:50+00:00",
+  "complexity": "standard",
+  "created_at": "2026-10-22T20:30:58+00:00",
+  "delivery": "codex-works/deliveries/P2DISCOVERY22.md",
+  "depends_on": [],
+  "description": "用户先P2后P5。Root实际WHPX固定pre-B source current-r3，cpu host,-vmx,-mpx,-sgx,-sgxlc，q35 kernel-irqchip=off，真实已启动4CPU/PCIDE1但desktop前失败。R6/R7只读RAM/regs显示：oldTLB ECAM VA0xffffc00000080000单AP落后，全部AP在user_smp_fail halt，newDomain.failed=Bridge.failed=1，BSP BKL owner0 LOCKED CURRENT6设备管理器，AP IDLE/无用户入口、Header ready2/PCID1/Metrics.failed1，新域seq51全部ACK已完。源码discover在首次dev.ENUMERATE一次BKL syscall中全扫bus*32+multifn，AP acquire固定1秒；即使数万次legacy ACK进展，仍会超过现有绝对界。禁止扩大/不断刷新锁等待期限、跳ACK、禁用PCID/改timer或修改Domain/legacy/旧owner政策。本最小修复将一次完整可信硬件inventory发现在已初始化device_host.TABLE、旧parallel读者已真实drained、但新user Domain/Bridge/Header尚未创建或publish/AP用户交接之前完成。device_host新增明确unsafe内核preflight入口（调用实际discover，真实失败传播，不使用fixture伪造identity，不分配DMA、不提前授user设备权限）；user_boot.prepare在全部旧live/拓扑/drained条件后、新INFO/Domain构建前显式调用。后续enumerate仍使用现有完整ledger，PCI逐条真实hardware identity revalidation/bind/revoke不削弱；不把部分扫描标完成，不在hot path再全扫描，不放宽发现总线/多功能覆盖，原非SMP fallback语义保留。检查services.prepare已先initialize及真实entry调用顺序，避免别profile或无TABLE失败，拒默默fallback。仅3源码文档路径，不改B的services/memory/domain/build，不增加不必要模仿实现的tests；既有normal activation完整DG图/多级ASM policy和device_manager真实native正负回归保留。Root做实际fresh源构建和四核WHPX重跑，再判断是否消除该失败及PCID门禁，不凭host宣布修复完成。文档保留R6/R7 214原始物理读取与输入稳定/owned QEMU退出事实，区分已观测状态和首因推断；此为P2硬件验收前置修复，P5不启动。执行者仅读/写3声明路径，不编译/测试/VM/提交推送/改状态；最终冻结给root独立复验/真实集成。",
+  "document": "codex-works/tasks/P2DISCOVERY22-board.md",
+  "historical": false,
+  "id": "codex:P2DISCOVERY22",
+  "integration_note": "实现文件已实际位于主工作区 code/ 和声明 works 路径；协调器复核与本次独立复验 fingerprint 一致后登记本地集成。未创建提交或推送；实际 guest 门禁不由本项 host 通过替代。",
+  "legacy_hash": "fb4f0aa2194dbf649666eda07bf229a2c91df5ff9e692530b1dab552bbbac07f",
+  "number": "P2DISCOVERY22",
+  "owner": "codex",
+  "rev": 6,
+  "review_note": "实际审查 device_host/user_boot 调用顺序与契约：在新 INFO/Domain/Bridge/Header 分配发布之前完成原 discover 全 ECAM 枚举；保留原 Context复核、deadline、ACK、真实设备复核与 1/2CPU fallback。正式 c6d05731305847e599981387aaef81ea 为 5 tests / 0 skip，source_stable、process_stopped、execution_exited。root 复核 normal 20对象/25命令和 manager 38命令/14native执行，10个真实坏源正常返回1、4个生产执行返回0，原始输出及源码一致。验收仅 preflight实现/host契约；R7第一原因仍为证据支持的推断，fresh实际guest修复效果待后续验证。",
+  "status": "integrated",
+  "title": "P2设备发现提前至AP用户域交接前避免长BKL扫描",
+  "updated_at": "2026-10-22T20:49:34+00:00",
+  "verification": {
+    "checks": [
+      {
+        "cancelled": false,
+        "elapsed_seconds": 5.485,
+        "execution_exited": true,
+        "passed": true,
+        "process_stopped": true,
+        "returncode": 0,
+        "skips": 0,
+        "spec": "module:tests.test_user_smp_normal_activation",
+        "tests": 1,
+        "timed_out": false
+      },
+      {
+        "cancelled": false,
+        "elapsed_seconds": 19.25,
+        "execution_exited": true,
+        "passed": true,
+        "process_stopped": true,
+        "returncode": 0,
+        "skips": 0,
+        "spec": "module:tests.test_device_manager",
+        "tests": 4,
+        "timed_out": false
+      }
+    ],
+    "execution_exited": true,
+    "fingerprint": {
+      "codex-works/deliveries/P2DISCOVERY22.md": "e1b5c42274b5822a2d85fe5a2cdd29b0d94e52c23bf32c62c407decd04d82b9c",
+      "docs/p2-device-preflight.md": "70a316aa8f84643e5d52c9fba4ecd10d8a9a089c5db4a96e837d74ae11f6c904",
+      "kernel/sched/user_boot.dg": "98bf0251448ee7c131cc9db5e74ac4490041c8827dfe42ff6b1c0c4322614bd1",
+      "kernel/user/device_host.dg": "3c57c8101c89284a8d082f894d2255ba12322767dd2d8add46cb95dd80a4a4e4"
+    },
+    "finished_at": "2026-10-22T20:43:36+00:00",
+    "job": "c6d05731305847e599981387aaef81ea",
+    "passed": true,
+    "process_stopped": true,
+    "source_stable": true,
+    "summary": "定向复验通过，等待源码/契约审查"
+  },
+  "write_paths": [
+    "kernel/user/device_host.dg",
+    "kernel/sched/user_boot.dg",
+    "docs/p2-device-preflight.md",
+    "codex-works/deliveries/P2DISCOVERY22.md"
+  ]
+}

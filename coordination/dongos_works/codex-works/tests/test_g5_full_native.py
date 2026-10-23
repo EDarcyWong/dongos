@@ -200,6 +200,43 @@ pub fn pointer()u64{unsafe{return *selected;}}
 '''
         self.differential('large-static',source,tagged.observer([('read','U','U'),('change','U','U'),('pointer','U','void')],
             'CHECK(f_read(0)==7&&f_read(666)==7&&f_change(1023)==11&&f_pointer()==7);'))
+    def test_j_imported_constant_enum_preserves_tag_and_payload(self):
+        source='''module tagged;import dep as dep;
+pub var copied:dep.E=dep.original;
+pub var plain:dep.E=dep.empty;
+pub fn f()u64{match copied{dep.E.A=>{return 0;},dep.E.B(v)=>{return v;},}}
+pub fn a()u64{match plain{dep.E.A=>{return 7;},dep.E.B(v)=>{return v;},}}
+'''
+        dep='module dep;pub enum E{A,B(u64)}pub const original:E=E.B(19);pub const empty:E=E.A;'
+        self.differential('import-enum',[('tagged.dg',source),('dep.dg',dep)],
+            tagged.observer([('f','U','void'),('a','U','void')],'CHECK(f_f()==19&&f_a()==7);'))
+    def test_k_const_pointer_conversion_before_tagged_wrap(self):
+        source='''module tagged;
+pub fn optional(p:*u64)?*const u64{return p;}
+pub fn result(p:*u64)!*const u64{return p;}
+'''
+        self.differential('wrap-const-pointer',source,
+            tagged.observer([('optional','Pair','U*'),('result','Pair','U*')],
+                'U value=37;Pair a=f_optional(&value),b=f_result(&value);'
+                'CHECK(a.tag==1&&a.value==(U)(uintptr_t)&value&&b.tag==0&&b.value==(U)(uintptr_t)&value);'
+                'a=f_optional(0);b=f_result(0);CHECK(a.tag==1&&a.value==0&&b.tag==0&&b.value==0);'))
+    def test_l_known_error_try_is_a_terminating_path(self):
+        source='''module tagged;error Bad=1;
+pub fn f()!u64{const x:!u64=error.Bad;let value=try x;}
+'''
+        self.differential('known-error-try',source,
+            tagged.observer([('f','Pair','void')],'Pair x=f_f();CHECK(x.tag==1&&x.value==0);'))
+    def test_m_huge_local_capacity_rejects_without_output(self):
+        source='module tagged;pub fn f(x:u64)void{var a:[1152921504606846975]u64;}'
+        directory=self.runner.source_directory('huge-local',[('tagged.dg',source)])
+        from lang.dongc.model import CompileError
+        for mode in ('debug','release'):
+            with self.assertRaises(CompileError) as caught:self.runner.seed(directory,mode)
+            self.assertEqual(caught.exception.code,'E0601')
+            asm,p=self.runner.dong(directory,mode)
+            self.assertEqual(p.returncode,11,p.stderr)
+            self.assertIn('lower status=4',p.stderr)
+            self.assertEqual(asm.read_bytes(),b'unchanged')
 
 # Reuse the independent, already-reviewed oracles against this final compiler,
 # not their original candidate compilers or their old pass receipts.

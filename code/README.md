@@ -1,5 +1,24 @@
 # DongOS
 
+2026-10-23 G5 收尾：**G5FULL1 integrated rev16、G5CLOSURE1 integrated rev21，
+G5INT1 integrated rev24**。七个生产模块已真实写入本地主线工作树并独立复验；
+正式作业 `0856b466a4d44a13be901c02f8acff46` 的 51 项完整语言矩阵、1 项闭包和
+18 项关联回归共 **70 项全部通过，零 skip**，源码稳定、进程停止及退出均确认。
+完整矩阵覆盖 27 组要求，`scope_complete=true`；两模式四份编译器 ELF
+逐字节相同，每份 2,046,376 字节，56 MiB arena / 64 KiB 栈 / 2 MiB ELF
+预算保持。详细原始证据、失败历史及实际状态见 [完成回执](../coordination/dongos_works/codex-works/reviews/2026-10-22-G5-completion.md)，
+永久入口见 [G5 门禁](docs/g5-differential.md)。
+
+G5 完成范围为语言/ABI 的 frontend → lower → NASM 执行及宿主有界自编译
+闭包；内建汇编器仍有明确指令范围，Win64 XMM、原子及受限 asm 的完整
+NASM 覆盖不等于任意程序均可由它生成 ELF。扩大后的编译器须另做新 G6
+客体自编译、持久化和同盘双启；历史 G6 仍只绑定原 head / 49 模块 profile。
+因此 L3 整体及更广纯 ELF 后端继续保留各自余项，P2/P5/P6/P7/P8、KVM/
+真机和 P9 门禁不因本次完成而关闭。本轮未运行 OS/VM，未提交或推送。
+
+以下保留各自日期和源码范围的历史记录；旧 164 项数量、旧 G5 缺口和
+“当前/待完成”不再代表最新状态。实时任务数量见协调器及协作区整体任务图。
+
 本轮17份缺失任务书、CX6同号异义和CX14/CX15旧状态均已处理完成。CX14 integrated rev7，CX15 integrated rev8；CX6 integrated rev9，已恢复读取器契约，分离5条原NASM事件，耗时恢复为1轮/265秒，原始事件全部保留。协调器issues=0；核对时间2026-10-22T09:18:41+08:00。
 
 当前MCP快照共164项活动任务：19 accepted、140 integrated、3 submitted、1 in_progress、1 rework。本轮同时观测到其它客户端新增5项并行任务，其状态按实时MCP继续变化，本轮没有接管或改动它们。
@@ -163,7 +182,7 @@ P3已进入ACPI发现与持久拓扑阶段，下一步为LAPIC/IOAPIC与旧8259�
 
 P2 CPU 基础设施和终止异常诊断已通过 379 项宿主测试和 13 次 QEMU 启动，见 [docs/cpu-exceptions.md](docs/cpu-exceptions.md)。统一 `test` 入口包括八种真实 CPU 异常注入；可单独运行 `python tests/run_cpu_qemu.py --all`。
 
-L1 编译器、六个基础标准库和原内核探针已通过本地总验收，见 [复验记录](deepseek-works/reviews/2026-10-17-D5-D6-recheck.md)。D1～D11现已全部验收：14:19复验确认D10最后一处count后即时BG有效，永久2项通过、零skip，唯一旧坏写控制在debug/release均立即被拒绝，2拒绝/0漏检。原有限剩余全部关闭，见[最新验收](deepseek-works/reviews/2026-10-17-acceptance-1419.md)及[任务索引](deepseek-works/README.md)。本轮已另行完成活动内核集成，定时检查保持取消。
+L1 编译器、六个基础标准库和原内核探针已通过本地总验收，见 [复验记录](../coordination/dongos_works/deepseek-works/reviews/2026-10-17-D5-D6-recheck.md)。D1～D11现已全部验收：14:19复验确认D10最后一处count后即时BG有效，永久2项通过、零skip，唯一旧坏写控制在debug/release均立即被拒绝，2拒绝/0漏检。原有限剩余全部关闭，见[最新验收](../coordination/dongos_works/deepseek-works/reviews/2026-10-17-acceptance-1419.md)及[任务索引](../coordination/dongos_works/deepseek-works/README.md)。本轮已另行完成活动内核集成，定时检查保持取消。
 
 12:45/12:53历史进度与复验记录保留；主线回归不替代DeepSeek原任务负控验收。
 

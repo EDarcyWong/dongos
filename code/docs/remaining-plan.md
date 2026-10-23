@@ -1,4 +1,86 @@
+2026-10-23 09:40 +08:00 有界检查点（P2SYNC40，尚待独立文档门）：**P2软件仍partial，P5本轮未实施**。
+OBS36 submitted rev12：正式71项零skip；历史R5仅诊断observations_completed，acceptance/passed均false。
+B R8正式44项零skip、两份fresh各1109source/staged与286产物、kernel1966480B；
+实际normal-r8仍false（B已complete、后续service barrier pending），omit-r8首ps超时且未触发B，不是精准负控。
+**B R9 in_progress rev36，未测/未通过**；normal v2区分后续pending，negative原门保持，验收/集成待后续。
+C/D接线、PCID实际复用/wrongtag及真正WC仍未闭；P5CTX1/2旧组件保留。
+暂无真机，待验留档不阻断P2软件及本机门完成后进入P5；全部软件/本机复验后上传GitHub并关机，末端操作尚未执行。
+详见[09:40证据与边界](../../coordination/dongos_works/codex-works/reviews/2026-10-23-P2-historical-progress.md)、[来源JSON](../../coordination/dongos_works/codex-works/reviews/2026-10-23-P2-historical-progress.json)。
+以下07:50及更早正文逐字保留，仅代表当时范围，不被本检查点改写。
+
+---
+
 # 剩余计划、依赖与可并行边界
+
+2026-10-23 07:50 +08:00 检查点：最终范围为 **P2、P5 全部软件工作及本机复验**。
+暂无真机，物理 WC 等待验项留档；P2 软件及本机门完成后可进入 P5，不能写成真机通过。
+完成后完整代码上传 GitHub 并关机已获授权，末端操作尚未执行。
+**OBS32/SYNC33/OBS34 integrated rev6**；OBS34 正式 36 项零 skip，仅集成 IO 证据组件。
+LARGE16 的 R6 正式 37 项零 skip 与新源两构建通过，但实际 normal-r4 首个 ps 仍超时：
+暂停内审计 4453ms、总 stop→cont 4688ms；cont 后落盘有效，原 1 秒期限问题未闭。
+**LARGE16 in_progress rev26、OBS36 in_progress rev2**，接续历史镜像/R7 适配尚未测试。
+P2 软件仍 partial，P5 本轮只读准备、尚未开始实现；原失败和中断不覆盖。
+详见[有界进度与证据](../../coordination/dongos_works/codex-works/reviews/2026-10-23-P2-deferred-capture-progress.md)、
+[来源 JSON](../../coordination/dongos_works/codex-works/reviews/2026-10-23-P2-deferred-capture-progress.json)。
+下方 06:32/05:55/05:42 均为各自源码和授权范围的历史记录。
+
+2026-10-23 06:32 +08:00 检查点：**SYNC31 integrated rev9、GOP29 integrated rev6、
+HARNESS28 integrated rev6、BKL30 integrated rev9**，各正式独立回执均零 skip、
+源码稳定且进程已停止/退出。BKL R1 失败保留；R2 为 3 项通过，FIFO 组件尚未接入 Bridge。
+**OBS32 submitted rev3，LARGE16 submitted rev16**：修复采集 epoch 与五个忙进程
+实际提交后才发起一次 request 的活性条件；OBS 29 项、LARGE 20 项本机预检通过，
+完整独立复验未执行。
+旧 31 项及构建仅属各自历史源码。
+R13 的 AP 空闲/屏蔽计时快照不构成 AP 用户计时门通过，也不能据此认定硬件限制。
+P2 仍 **partial**，P5 本轮尚未开始；实际大页/EXEC/受控 PF/缓存接线、暖 PCID 与
+物理 WC 门继续保留。详见[本次状态与原始证据](../../coordination/dongos_works/codex-works/reviews/2026-10-23-P2-observer-progress.md)
+及[机器可读记录](../../coordination/dongos_works/codex-works/reviews/2026-10-23-P2-observer-progress.json)。下方 05:55/05:42 为历史快照。
+
+2026-10-23 05:55 +08:00 追加：**SIZE23 integrated rev6，SMP27 v2 integrated rev9**。
+R13 在首次暂停前连续运行2秒、之后不再恢复，Domain.failed=0、无首错，三个AP
+实际用户进入161/168/213次，完整16槽（11个live根）池审计通过。旧采集在大量
+QMP读取后恢复，存在WHPX绝对期限被观察过程扰动的风险；先修采集方法，不能
+直接归责生产锁。AP计时仍0，暖PCID及实际事务余项未关闭，P2仍partial，完成后
+再进入P5。详见[05:55追加与原始证据](../../coordination/dongos_works/codex-works/reviews/2026-10-23-P2-lock-diagnostics.md)，下方05:42状态为历史快照。
+
+2026-10-23 05:42 +08:00 检查点：继续按 **P2 → P5** 执行，P2 保持 partial，
+P5 本轮尚未开始。SIZE23 已正式独立 99 项零 skip，LARGE16 已正式独立 31 项
+零 skip；正常/负控两份实际构建均为 1,962,384B，但实际 WHPX 仍出现获取
+内核锁超时，AP 用户进入/计时/切换仍为零，故两任务尚未验收/集成。
+HARNESS24 已集成；SMP27 时间诊断 v2、HARNESS28 夹具、GOP29 永久绘图
+Gate、BKL30 FIFO 组件继续复验或实现。完整 C/D/ledger 接线、实际大页/受控
+PF/缓存迁移/暖 PCID 与物理 WC 门禁仍须通过。详见[锁诊断与当前状态](../../coordination/dongos_works/codex-works/reviews/2026-10-23-P2-lock-diagnostics.md)。
+下方旧检查点、任务数量及“当前/未运行”保留各自日期和源码范围，不覆盖本次状态。
+
+2026-10-23 执行顺序更新：**先完成 P2，P2 完成后再完成 P5**。
+P2 既有 11 项任务已集成；新增 P2FLUSH11 也已独立 3 项零 skip 并
+integrated rev6。PCID 与普通多根变更协议已有实现，剩余应具体记为调度后
+多根大页/EXEC/WC 消费者、AP PCIDE=1 的实际支持环境证明及物理 WC 性能。
+P2PCID12、P2ROOT13、P2WC14 及 MASK18、EXEC19、CACHE20 已分别完成
+组件验收；ENTRY21/DISCOVERY22 新近 integrated rev6。LARGE16 的完整复验和
+真实运行、SIZE23 内核预算、HARNESS24 采集修复及 C/D 正常接线继续推进，
+不提前记为阶段通过。最新证据见[运行进展](../../coordination/dongos_works/codex-works/reviews/2026-10-23-P2-runtime-progress.md)。
+G6PREP1 的宿主 22 项零 skip 已 integrated rev6；G6DOC1 按优先级 paused
+rev2，扩大编译器的新 G6 来宾仍未运行。以下旧数量和旧候选说法保留历史。
+
+2026-10-23 G5 收尾：**G5FULL1 integrated rev16、G5CLOSURE1 integrated rev21，
+G5INT1 integrated rev24**。七个生产模块已真实写入本地主线工作树并独立复验；
+正式作业 `0856b466a4d44a13be901c02f8acff46` 的 51 项完整语言矩阵、1 项闭包和
+18 项关联回归共 **70 项全部通过，零 skip**，源码稳定、进程停止及退出均确认。
+完整矩阵覆盖 27 组要求，`scope_complete=true`；两模式四份编译器 ELF
+逐字节相同，每份 2,046,376 字节，56 MiB arena / 64 KiB 栈 / 2 MiB ELF
+预算保持。详细原始证据、失败历史及实际状态见 [完成回执](../../coordination/dongos_works/codex-works/reviews/2026-10-22-G5-completion.md)，
+永久入口见 [G5 门禁](g5-differential.md)。
+
+G5 完成范围为语言/ABI 的 frontend → lower → NASM 执行及宿主有界自编译
+闭包；内建汇编器仍有明确指令范围，Win64 XMM、原子及受限 asm 的完整
+NASM 覆盖不等于任意程序均可由它生成 ELF。扩大后的编译器须另做新 G6
+客体自编译、持久化和同盘双启；历史 G6 仍只绑定原 head / 49 模块 profile。
+因此 L3 整体及更广纯 ELF 后端继续保留各自余项，P2/P5/P6/P7/P8、KVM/
+真机和 P9 门禁不因本次完成而关闭。本轮未运行 OS/VM，未提交或推送。
+
+以下保留各自日期和源码范围的历史记录；旧 164 项数量、旧 G5 缺口和
+“当前/待完成”不再代表最新状态。实时任务数量见协调器及协作区整体任务图。
 
 本轮17份缺失任务书、CX6同号异义和CX14/CX15旧状态均已处理完成。CX14 integrated rev7，CX15 integrated rev8；CX6 integrated rev9，已恢复读取器契约，分离5条原NASM事件，耗时恢复为1轮/265秒，原始事件全部保留。协调器issues=0；核对时间2026-10-22T09:18:41+08:00。
 

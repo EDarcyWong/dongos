@@ -18,17 +18,22 @@ pub struct Cpu{pub mode:u64,pub token:u64,pub incarnation:u64,pub slot:u64,
 pub struct Domain{pub ready:u64,pub failed:u64,pub lock:u64,pub owner:u64,pub online:u64,
  pub sequence:u64,pub barrier:u64,pub expected:u64,pub completed:u64,pub kernel_root:u64,
  pub engine:*q.Engine,pub cpus:*Cpu,pub processes:*Process,pub arena:u64,pub bytes:u64}
+// Optional trusted kernel observer. Registration is one-way under CPU0's BKL;
+// it adds no Domain/Cpu fields and never replaces the normal flush protocol.
+pub type PollHook=unsafe fn(domain:*Domain,cpu:usize)u64;
+unsafe fn inactive_poll(domain:*Domain,cpu:usize)u64{return 0;}
+var POLL_HOOK:PollHook=inactive_poll;var POLL_DOMAIN:*Domain=null;
 unsafe extern "sysv64" fn user_smp_arch_if0()u64;
 unsafe extern "sysv64" fn user_smp_arch_cpu()u64;
 unsafe extern "sysv64" fn user_smp_arch_root()u64;
 unsafe extern "sysv64" fn user_smp_arch_try_lock(pointer:*u64)u64;
 unsafe extern "sysv64" fn user_smp_arch_unlock(pointer:*u64)void;
-unsafe extern "sysv64" fn user_smp_arch_pause()void;
-unsafe extern "sysv64" fn user_smp_arch_clock()u64;
+pub unsafe extern "sysv64" fn user_smp_arch_pause()void;
+pub unsafe extern "sysv64" fn user_smp_arch_clock()u64;
 unsafe extern "sysv64" fn user_smp_arch_copy(dst:u64,src:u64,bytes:u64)void;
 unsafe extern "sysv64" fn user_smp_arch_save(pointer:u64)void;
 unsafe extern "sysv64" fn user_smp_arch_flush(cpu:u64)u64;
-unsafe extern "sysv64" fn user_smp_arch_kick(cpu:u64)u64;
+pub unsafe extern "sysv64" fn user_smp_arch_kick(cpu:u64)u64;
 unsafe extern "sysv64" fn user_smp_arch_switch(root:u64,tag:u64,retain:u64)u64;
 unsafe extern "sysv64" fn user_smp_arch_validate(frame:u64,root:u64)u64;
 unsafe extern "sysv64" fn user_domain_legacy_poll()u64;
@@ -46,6 +51,11 @@ unsafe fn owned(d:*Domain,cpu:usize)!void{unsafe{
  let c=try cpu_at(d,cpu);if (*d).lock!=1||(*d).owner!=cpu as u64||(*c).mode!=LOCKED{return error.State;}
 }return;}
 unsafe fn fail(d:*Domain)void{unsafe{atomic_store(&(*d).failed,1);}return;}
+pub unsafe fn register_poll(d:*Domain,hook:PollHook)!void{unsafe{
+ try owned(d,0);
+ if read_unaligned((&hook) as *const u64)==0||hook==inactive_poll||POLL_DOMAIN!=null||(*d).barrier!=0{return error.State;}
+ POLL_HOOK=hook;compiler_fence();POLL_DOMAIN=d;
+}return;}
 pub unsafe fn initialize(arena:u64,bytes:u64,online:u64,kernel_root:u64,out:**Domain)!void{unsafe{
  if user_smp_arch_if0()!=1||!aligned(arena,64)||bytes<required_bytes()||bytes>MAX-arena||online==0||(online&~0xffff)!=0
   ||!aligned(kernel_root,4096)||kernel_root>=0x1_0000_0000||out==null{return error.Invalid;}
@@ -70,6 +80,12 @@ pub unsafe fn initialize(arena:u64,bytes:u64,online:u64,kernel_root:u64,out:**Do
 pub unsafe fn poll(d:*Domain,cpu:usize)!bool{unsafe{
  let c=try cpu_at(d,cpu);
  if user_smp_arch_root()==(*d).kernel_root&&user_domain_legacy_poll()!=0{fail(d);return error.Hardware;}
+ // Readers must make progress even without a TLB request while another CPU
+ // holds BKL. ENTERING/RETURNING/USER and foreign roots cannot call the hook.
+ if POLL_DOMAIN==d&&user_smp_arch_root()==(*d).kernel_root
+  &&((*c).mode==IDLE||(*c).mode==KERNEL||(*c).mode==LOCKED){
+  if POLL_HOOK(d,cpu)!=0{fail(d);return error.Hardware;}
+ }
  let requested=atomic_load(&(*c).requested);
  if requested<=atomic_load(&(*c).acknowledged){return false;}
  if (*c).mode!=IDLE&&(*c).mode!=KERNEL&&(*c).mode!=LOCKED{return false;}

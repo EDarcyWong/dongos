@@ -298,7 +298,8 @@ unsafe fn static_value(s:*State,u:usize,id:usize,t:usize,depth:usize)bool{unsafe
   let ref=(*g).refs[global];let sy=(*g).symbols[ref.target];let value=(*g).values[(*g).units[sy.unit].node_start+sy.declaration];
   put(s,"dq ");number(s,(*g).limbs[value.first]as u64);return put(s,",0\n");
  }
- if typ.kind==sem.ENUM&&(n.kind==ast.FIELD||n.kind==ast.CALL){
+ if typ.kind==sem.ENUM&&((n.kind==ast.FIELD&&(*g).refs[global].kind==binding.ENUM_MEMBER)
+  ||(n.kind==ast.CALL&&(*g).refs[(*g).units[u].node_start+n.a].kind==binding.ENUM_MEMBER)){
   put(s,"dq ");number(s,info.length);put(s,"\n");if size==8{return true;}
   if n.kind!=ast.CALL||n.b==NONE{return zeros(s,8);}let payload=(*g).info[(*g).units[u].node_start+n.b].typ;
   if !static_value(s,u,n.b,payload,depth+1){return false;}return zeros(s,8-(*g).layouts[payload].size);

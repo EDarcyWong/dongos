@@ -1,0 +1,75 @@
+{
+  "assignment_owner": "codex",
+  "auto_dispatch": false,
+  "auto_verify": false,
+  "candidate": null,
+  "checks": [
+    "module:tests.test_user_smp_barrier"
+  ],
+  "claim_from_status": "rework",
+  "claimed_at": "2026-10-22T21:55:34+00:00",
+  "claimed_by": "codex-mcp-daece153b59c4bd5",
+  "completed_at": "2026-10-22T21:58:39+00:00",
+  "complexity": "standard",
+  "created_at": "2026-10-22T21:40:50+00:00",
+  "delivery": "codex-works/deliveries/P2SYNC31.md",
+  "depends_on": [],
+  "description": "同步本轮P2继续、P2完成后P5的执行顺序和真实进展，保持P2partial/P5本轮未开始/G6DOC1 paused。新增冻结日期checkpoint Markdown+JSON，列明SIZE23正式99零skip/source stable、LARGE16正式31零skip及两285artifact真实normal/bad build、raw1962384B/余134768B，WC1974672B/余122480B；R9/R10/R11 WHPX真实Timeout、不同owner、AP user_entries/timers/switches零及ownedVM真实停止rc0、每份raw length/SHA核对和限制。实际R11 kernelSpace used68/128、arena NEXT8175/32768，但common完整pool审计因部分root0的Space非空拒绝，不写healthy runtime pass，不把67 reachable当free metadata；R9/R10/R11诊断恒passed=false。记SMP27v2与HARNESS28、GOP29、FIFO BKL30的真实latest rev/状态和未运行边界，未验组件不写集成；ENTRY/Discovery/HARNESS24已集成仍按各自scope保留。C/D/ledger/poll/build/actual PF/cache/AP-PCID/full positive/precise negative/physical WC余项保留，物理机问题未答不能假定已有环境。前检查点和失败历史不重写；PLAN及五文档顶部追加明确日期链接，不关闭阶段checkbox。不修改协作数据库/index/shared progress-map/roadmap。root实际查状态、source/contracts、原始证据并核docs links/JSON/doc SHA，后独立定向检查再验收；该代码测试不冒充文档语义审查或stage pass。",
+  "document": "codex-works/tasks/P2SYNC31-board.md",
+  "historical": false,
+  "id": "codex:P2SYNC31",
+  "integration_note": "授权文件已实际落于D:\\projects\\2026\\dongos主工作树；独立复验后逐文件SHA与回执完全一致，真实审查及范围见验收note。仅登记已完成文件集成，不进行commit/push，不扩展为P2整体验收。",
+  "legacy_hash": "2939b65985cdfb5bcf67fd4a2f261bff460f8975fc55ab4f79988bbdb7689275",
+  "number": "P2SYNC31",
+  "owner": "codex",
+  "rev": 9,
+  "review_note": "根实际语义审查六主文档、锁诊断MD/JSON及交付：05:42历史与05:55新增R13分开，SIZE23 integrated6/SMP27 integrated9准确；99/31项历史回执、R9-R12失败、R13无首错/AP161/168/213/11live完整审计/预算保持严格范围，P2 partial/P5未开始和物理门禁未关闭。JSON/本地19links/六doc及MD/script/archive SHA已实核。独立6993211594444628822ab2e36b4b19d4 1test/0skip/stable/实际进程停止退出；当前9文件逐SHA与回执相同。文档语义由真实审查提供，barrier单测不冒称文档语义证明。",
+  "status": "integrated",
+  "title": "同步 P2 实际锁超时、99/31项复验和后续接线状态",
+  "updated_at": "2026-10-22T22:10:45+00:00",
+  "verification": {
+    "checks": [
+      {
+        "cancelled": false,
+        "elapsed_seconds": 12.906,
+        "execution_exited": true,
+        "passed": true,
+        "process_stopped": true,
+        "returncode": 0,
+        "skips": 0,
+        "spec": "module:tests.test_user_smp_barrier",
+        "tests": 1,
+        "timed_out": false
+      }
+    ],
+    "execution_exited": true,
+    "fingerprint": {
+      "PLAN.md": "1fc3e8df5b555c3b83513d27fa958ea1ac510dba5a4de74d5b80e715ff04df4c",
+      "codex-works/deliveries/P2SYNC31.md": "23e736095132cb62e59fa3e3ab6bda2683e3716ce1d07cb917f30fe31145bb37",
+      "codex-works/reviews/2026-10-23-P2-lock-diagnostics.json": "89e52ea5eb95967f127c83961b05b4699a095e4b161b3cc8aacb291824c4073a",
+      "codex-works/reviews/2026-10-23-P2-lock-diagnostics.md": "f854d8ddc4a1107f1937eb5fd2312759ad6065de9a01c18cee4c7af64345cb2a",
+      "docs/p2-acceptance.md": "dcbb99d289d9ba1f5ffede1f4eb9661acd096be35207a73e58e5ac86614c1f12",
+      "docs/p2-alias-consumers.md": "f2262a121369974c7990da378816f369f07ec207ac36b0b24cda8fdb44ca023e",
+      "docs/p2-extensions.md": "28b74f479d70342266491b22a31059e6f86622d66f4c3e012c11636c72b18f17",
+      "docs/progress-map.md": "497a56fde10a93b450c3777f3d68b8e821458e415d91f665a0f857b4a99b83da",
+      "docs/remaining-plan.md": "67993172509554652b75779f4648c9a5058f45e8b60ef6353041241b78d71a8e"
+    },
+    "finished_at": "2026-10-22T22:04:05+00:00",
+    "job": "6993211594444628822ab2e36b4b19d4",
+    "passed": true,
+    "process_stopped": true,
+    "source_stable": true,
+    "summary": "定向复验通过，等待源码/契约审查"
+  },
+  "write_paths": [
+    "PLAN.md",
+    "docs/p2-acceptance.md",
+    "docs/p2-extensions.md",
+    "docs/p2-alias-consumers.md",
+    "docs/remaining-plan.md",
+    "docs/progress-map.md",
+    "codex-works/reviews/2026-10-23-P2-lock-diagnostics.md",
+    "codex-works/reviews/2026-10-23-P2-lock-diagnostics.json",
+    "codex-works/deliveries/P2SYNC31.md"
+  ]
+}

@@ -34,6 +34,10 @@ import lib.pci_inventory_abi as pci_inventory_abi;
 import user.shared_objects as shared;
 import lib.shared_abi as shared_abi;
 import lib.cap_notify_abi as capabi;
+import mm.runtime_large as runtime_large;
+import boot.memory_startup as memory_startup;
+import smp.large_memory as old_large;
+import sched.user_entry_plan as smp_entry;
 pub error InvalidCall=0x050b_0001;
 pub error Protocol=0x050b_0002;
 pub error UserFailure=0x050b_0003;
@@ -65,6 +69,21 @@ var XSTATES:[COUNT]XState=[XState { bytes:[0;1024] };COUNT];
 var KERNEL_XSTATE:XState=XState { bytes:[0;1024] };
 var CURRENT:usize=0;
 var SMP_ENABLED:bool=false;
+// This is a monotonic arena allocation made before AP user admission. Only
+// its pointer lives in BSS; no 512-receipt/forest workspace is on the stack.
+struct LargeTicket{snapshot:memory.RootSnapshot,configuration:[16]u64,
+ incarnation:[16]u64,config_generation:[16]u64,owner:[16]u64,
+ queue_token:[16]u64,frame:[16]u64,root:[16]u64}
+align(64) struct LargeStorage{context:runtime_large.Context,ticket:LargeTicket}
+pub var RUNTIME_LARGE:*runtime_large.Context=null;
+var LARGE_STORAGE:*LargeStorage=null;
+// One-way production request: only a committed ordinary launch by the live
+// slot-zero shell arms the post-scheduler owner. Boot/GUI/kill do not arm it.
+var LARGE_REQUESTED:bool=false;
+unsafe extern "sysv64" fn runtime_large_environment(out:*runtime_large.Environment)void;
+unsafe extern "sysv64" fn runtime_large_load(virtual:u64,out:*runtime_large.Sample)void;
+unsafe extern "sysv64" fn runtime_large_window(active:u64)void;
+unsafe extern "sysv64" fn runtime_large_digest(virtual:u64,bytes:u64)u64;
 // Trusted role mask for the explicit ordinary busy-workload XSAVE bad build.
 // GUI clients may reuse the same physical slots and must never be selected.
 var SMP_TEST_SLOTS:u64=0;
@@ -519,6 +538,80 @@ unsafe fn launch(id:usize,expected:u64,argument:u64,image:[]const u8)!void{unsaf
     STATES[slot].waiting=0;STATES[slot].started=0;CANCELED[slot]=0;
     if PRELOADED[slot]{PRELOADED[slot]=false;}
 }return;}
+unsafe fn large_request()!void{unsafe{
+    if !SMP_ENABLED||CURRENT!=0||LARGE_REQUESTED{return;}
+    let cfg=SNAPSHOT.configuration;if cfg<7||cfg>12{return;}
+    if CATALOG==null||(*CATALOG).ready!=1||(*CATALOG).count!=procs.CONFIGS
+        ||procs.current(CATALOG,0)!=0||(*CATALOG).slot[0]!=0
+        ||((*CATALOG).configs[cfg as usize].flags&proc.ORDINARY)==0{
+        LAUNCH_FAILED=true;return error.Protocol;
+    }
+    let shell=(*CATALOG).states[0];let incarnation=(*CATALOG).incarnation[0];
+    let pid=SNAPSHOT.process&255;
+    if incarnation==0||incarnation>0x0fff_ffff||shell.configuration!=0||shell.state!=proc.READY
+        ||shell.generation==0||shell.process!=((incarnation<<8)|1)||pid==0||pid>COUNT as u64{
+        LAUNCH_FAILED=true;return error.Protocol;
+    }
+    let slot=(pid-1) as usize;let child=(*CATALOG).states[cfg as usize];
+    let child_incarnation=(*CATALOG).incarnation[slot];
+    let b=smp_bridge.pointer();if b==null||(*b).ready!=1||(*b).failed!=0{LAUNCH_FAILED=true;return error.Protocol;}
+    let d=(*b).domain;if d==null||(*d).ready!=1||(*d).failed!=0||(*d).owner!=0||(*d).lock!=1
+        ||(*d).cpus==null||(*d).processes==null||(*d).engine==null{LAUNCH_FAILED=true;return error.Protocol;}
+    let cpu=(*d).cpus;let caller=(*d).processes;
+    let engine=(*d).engine;let thread=&(*engine).threads[0];
+    // Queue generation, Catalog configuration generation and slot incarnation
+    // are distinct namespaces. Only the Domain/Thread pair shares this token.
+    if (*cpu).mode!=smp_domain.LOCKED||(*cpu).slot!=0||(*cpu).token!=(*caller).token||(*cpu).incarnation!=incarnation
+        ||(*caller).token==0||((*caller).token&255)!=1||(*caller).token>>8==0||(*caller).incarnation!=incarnation
+        ||(*engine).ready!=1||(*engine).online!=(*d).online||((*d).online&1)==0||(*engine).cpus[0].current!=0
+        ||(*thread).generation!=(*caller).token>>8||(*thread).state!=smp_queue.RUNNING||(*thread).cpu!=0
+        ||(*thread).frame!=(&(*process(0)).frame) as u64
+        ||(*caller).root!=(*process(0)).root||(*caller).frame!=(&(*process(0)).frame) as u64
+        ||(*process(0)).ready!=1||(*process(0)).root==0||(*process(0)).frame.cr3!=(*process(0)).root
+        ||slot<7||slot==13||child_incarnation==0||child_incarnation>0x0fff_ffff
+        ||(*CATALOG).slot[cfg as usize]!=slot as u64||procs.current(CATALOG,slot)!=cfg
+        ||SNAPSHOT.version!=1||SNAPSHOT.state!=proc.STARTING||SNAPSHOT.status!=0||SNAPSHOT.generation==0
+        ||SNAPSHOT.process!=((child_incarnation<<8)|pid)||child.configuration!=cfg
+        ||child.process!=SNAPSHOT.process||child.generation!=SNAPSHOT.generation||child.state!=SNAPSHOT.state
+        ||child.status!=SNAPSHOT.status||child.sequence!=SNAPSHOT.sequence||child.argument!=SNAPSHOT.argument
+        ||(*process(slot)).ready!=1||(*process(slot)).root==0||(*process(slot)).frame.cr3!=(*process(slot)).root{
+        LAUNCH_FAILED=true;return error.Protocol;
+    }
+    // One busy app need not have an eligible READY competitor on every AP,
+    // so it cannot establish the existing actual-user-timer progress gate.
+    // Bind five real committed ordinary configurations before requesting B.
+    // The final child may not be admitted to Domain until smp_project below.
+    var complete:bool=true;var used:u64=1;var ordinary:usize=7;
+    while ordinary<12{
+        let item=(*CATALOG).states[ordinary];let config=(*CATALOG).configs[ordinary];
+        if config.id!=ordinary as u64||config.flags!=proc.ORDINARY
+            ||item.version!=1||item.configuration!=ordinary as u64{
+            LAUNCH_FAILED=true;return error.Protocol;
+        }
+        if item.state!=proc.STARTING&&item.state!=proc.READY{
+            if item.state>proc.KILLED||item.process!=0||(*CATALOG).slot[ordinary]!=procs.NONE{
+                LAUNCH_FAILED=true;return error.Protocol;
+            }
+            complete=false;
+        }else{
+            let number=item.process&255;
+            if number==0||number>COUNT as u64{LAUNCH_FAILED=true;return error.Protocol;}
+            let member=(number-1) as usize;let epoch=(*CATALOG).incarnation[member];
+            if member<7||member==13||(used&(1<<member as u64))!=0
+                ||epoch==0||epoch>0x0fff_ffff||item.process!=((epoch<<8)|number)
+                ||item.generation==0||item.status!=0
+                ||(*CATALOG).slot[ordinary]!=member as u64||procs.current(CATALOG,member)!=ordinary as u64
+                ||(*process(member)).ready!=1||(*process(member)).root==0
+                ||(*process(member)).frame.cr3!=(*process(member)).root||memory.generation(member)==0{
+                LAUNCH_FAILED=true;return error.Protocol;
+            }
+            used|=1<<member as u64;
+        }
+        ordinary+=1;
+    }
+    if !complete{return;}
+    LARGE_REQUESTED=true;
+}return;}
 unsafe fn process_call(frame:*abi.Frame)!usize{unsafe{
     let code=(*frame).rax;
     if code==proc.RUNTIME{
@@ -589,6 +682,9 @@ unsafe fn process_call(frame:*abi.Frame)!usize{unsafe{
             try launch(12,(*CATALOG).states[12].generation,(*frame).r10,slice_from_raw_parts(EXECUTABLE as *const u8,bytes as usize));
         }
         try memory.copy_out(CURRENT,(*frame).r8,slice_from_raw_parts((&SNAPSHOT) as *const u8,sizeof(proc.Snapshot)));
+        // manager(PROCESS_MANAGER, WRITE), launch and reply copy all succeeded.
+        // The child is committed; project() admits it before large_try runs.
+        try large_request();
         (*frame).rax=0;return CURRENT;
     }
     if code==proc.WAIT{
@@ -1211,7 +1307,94 @@ unsafe fn shared_call(frame:*abi.Frame)!usize{unsafe{
 pub unsafe fn enable_smp()!void{unsafe{
     let b=smp_bridge.pointer();if b==null||(*b).ready!=1||(*b).failed!=0||SMP_ENABLED||CATALOG==null{return error.Protocol;}
     let d=(*b).domain;if (*d).owner!=0||(*d).lock!=1{return error.Protocol;}
+    var held=resources.Block{physical:0,virtual:0,pages:0};
+    try resources.allocate((sizeof(LargeStorage)+4095)/4096,1,&held);
+    LARGE_STORAGE=held.virtual as *LargeStorage;RUNTIME_LARGE=&(*LARGE_STORAGE).context;
+    try smp_domain.register_poll(d,large_poll);
     CURRENT=NONE;SMP_ENABLED=true;
+}return;}
+unsafe fn large_poll(d:*smp_domain.Domain,cpu:usize)u64{unsafe{
+ if RUNTIME_LARGE==null||(*RUNTIME_LARGE).ready==0{return 0;}
+ return runtime_large.poll(RUNTIME_LARGE,d,cpu);
+}}
+// Bind distinct generation namespaces. Catalog restart generation, owner
+// incarnation, memory-root generation and queue generation are never equated.
+unsafe fn large_identity(ticket:*const LargeTicket,frozen:bool)!void{unsafe{
+ let b=smp_bridge.pointer();if b==null||(*b).failed!=0||CATALOG==null||(*CATALOG).ready!=1{return error.Protocol;}
+ let d=(*b).domain;if (*d).failed!=0||(*d).lock!=1||(*d).owner!=0{return error.Protocol;}
+ try smp_queue.audit((*d).engine);try memory.recheck_roots(&(*ticket).snapshot);
+ var slot:usize=0;var active_mask:u64=0;
+ while slot<16{
+  let p=(*d).processes+slot;let cfg=(*CATALOG).configuration[slot];let incarnation=(*CATALOG).incarnation[slot];
+  let frame=(&(*process(slot)).frame) as u64;let root=(*process(slot)).root;
+  if frozen&&(cfg!=(*ticket).configuration[slot]||incarnation!=(*ticket).incarnation[slot]
+   ||(*p).token!=(*ticket).queue_token[slot]||root!=(*ticket).root[slot]||frame!=(*ticket).frame[slot]){return error.Protocol;}
+  if cfg!=procs.NONE{
+   if cfg>=(*CATALOG).count as u64||(*CATALOG).slot[cfg as usize]!=slot as u64||incarnation==0{return error.Protocol;}
+   let state=(*CATALOG).states[cfg as usize];let owner=(incarnation<<8)|(slot as u64+1);
+   if state.process!=owner||state.configuration!=cfg||state.generation==0||(state.state!=proc.STARTING&&state.state!=proc.READY)
+    ||(frozen&&(state.generation!=(*ticket).config_generation[slot]||owner!=(*ticket).owner[slot])){return error.Protocol;}
+  }else if frozen&&((*ticket).config_generation[slot]!=0||(*ticket).owner[slot]!=0){return error.Protocol;}
+  if (*p).token!=0{
+   if cfg==procs.NONE||(*p).incarnation!=incarnation||(*p).root!=root||(*p).frame!=frame||(*p).xstate!=(&XSTATES[slot].bytes[0]) as u64
+    ||(*p).retiring!=0||root==0||(*process(slot)).ready!=1||(*process(slot)).frame.cr3!=root
+    ||((*p).token&255)!=slot as u64+1||(*(*d).engine).threads[slot].generation!=(*p).token>>8
+    ||(*(*d).engine).threads[slot].frame!=frame{return error.Protocol;}
+   active_mask|=1<<slot as u64;
+  }else if (*(*d).engine).threads[slot].state!=smp_queue.UNUSED{return error.Protocol;}
+  slot+=1;
+ }
+ var owners:u64=0;var cpu:usize=0;
+ while cpu<16{let c=(*d).cpus+cpu;if ((*d).online&(1<<cpu as u64))!=0&&(*c).token!=0{
+  if (*c).slot>=16{return error.Protocol;}let id=(*c).slot as usize;let p=(*d).processes+id;
+  if (active_mask&(1<<id as u64))==0||(owners&(1<<id as u64))!=0||(*c).token!=(*p).token
+   ||(*c).incarnation!=(*p).incarnation||(*(*d).engine).threads[id].state!=smp_queue.RUNNING
+   ||(*(*d).engine).threads[id].cpu!=cpu as u64{return error.Protocol;}
+  owners|=1<<id as u64;
+ }cpu+=1;}
+ slot=0;while slot<16{if ((*(*d).engine).threads[slot].state==smp_queue.RUNNING)!=((owners&(1<<slot as u64))!=0){return error.Protocol;}slot+=1;}
+}return;}
+unsafe fn large_check(cookie:u64)u64{unsafe{
+ if LARGE_STORAGE==null||cookie!=(&(*LARGE_STORAGE).ticket) as u64||RUNTIME_LARGE!=&(*LARGE_STORAGE).context{return 1;}
+ let ticket=&(*LARGE_STORAGE).ticket;
+ match large_identity(ticket,true){ok=>{},err(code)=>{return code;},}
+ if (*RUNTIME_LARGE).report.root_count!=(*ticket).snapshot.count as u64{return 1;}
+ var i:usize=0;while i<(*ticket).snapshot.count{
+  let a=(*RUNTIME_LARGE).roots[i];let e=(*ticket).snapshot.roots[i];
+  if a.space!=e.space||a.identity!=e.identity||a.generation!=e.generation{return 1;}i+=1;
+ }return 0;
+}}
+unsafe fn large_try()!void{unsafe{
+ if RUNTIME_LARGE==null||LARGE_STORAGE==null{return error.Protocol;}
+ if (*RUNTIME_LARGE).report.attempted!=0{return;}
+ if !LARGE_REQUESTED{return;}
+ let b=smp_bridge.pointer();let d=(*b).domain;
+ // Ordinary production scheduling reaches this gate. Every online AP must
+ // already have entered users, switched roots and taken an actual user timer.
+ var cpu:usize=1;while cpu<16{if ((*d).online&(1<<cpu as u64))!=0{
+  let header=*((*b).headers+cpu) as *smp_entry.Cpu;
+  if header==null||(*header).ready!=2||(*header).domain!=d as u64||(*header).logical_id!=cpu as u64{return error.Protocol;}
+  let metrics=((header as u64)+5632) as *const smp_entry.Metrics;
+  if (*metrics).user_entries==0||(*metrics).user_timers==0||(*metrics).switches==0{return;}
+ }cpu+=1;}
+ let ticket=&(*LARGE_STORAGE).ticket;try memory.snapshot_roots(&(*ticket).snapshot);
+ var slot:usize=0;while slot<16{
+  let cfg=(*CATALOG).configuration[slot];(*ticket).configuration[slot]=cfg;
+  (*ticket).incarnation[slot]=(*CATALOG).incarnation[slot];(*ticket).config_generation[slot]=0;(*ticket).owner[slot]=0;
+  if cfg!=procs.NONE{
+   if cfg>=(*CATALOG).count as u64{return error.Protocol;}
+   (*ticket).config_generation[slot]=(*CATALOG).states[cfg as usize].generation;
+   (*ticket).owner[slot]=(*CATALOG).states[cfg as usize].process;
+  }
+  (*ticket).queue_token[slot]=(*((*d).processes+slot)).token;
+  (*ticket).frame[slot]=(&(*process(slot)).frame) as u64;(*ticket).root[slot]=(*process(slot)).root;slot+=1;
+ }
+ try large_identity(ticket,true);var physical:u64=0;try old_large.borrow_held(&physical);
+ let header=*((*b).headers) as *smp_entry.Cpu;
+ try runtime_large.bind(RUNTIME_LARGE,d,memory_startup.space_pointer(),memory_startup.allocator_pointer(),
+  (*ticket).snapshot.roots[..(*ticket).snapshot.count],physical,ticket as u64,large_check,
+  runtime_large_environment,runtime_large_load,runtime_large_window,runtime_large_digest,(*header).deadline_ticks);
+ try runtime_large.run(RUNTIME_LARGE);
 }return;}
 unsafe fn runtime_pcid_metric(index:u64)u64{unsafe{
     if SMP_ENABLED{return services_smp_pcid_metric(index);}return services_pcid_metric(index);
@@ -1245,6 +1428,7 @@ export("dong_user_smp_project") fn smp_project()u64{unsafe{
         }else if (*p).token!=0{return 0x060b_0011;}
         slot+=1;
     }
+    let large=large_try();match large{ok=>{},err(e)=>{(*b).failed=1;atomic_store(&(*d).failed,1);return e;},}
     INFO.frames=memory.frame_count() as u64;INFO.process_count=(*(*d).engine).count;return 0;
 }}
 // This hint is calculated only by BSP from the authoritative saved Frame and

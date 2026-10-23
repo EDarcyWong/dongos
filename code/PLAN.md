@@ -1,4 +1,75 @@
+2026-10-23 09:40 +08:00 有界检查点（P2SYNC40，尚待独立文档门）：**P2软件仍partial，P5本轮未实施**。
+OBS36 submitted rev12：正式71项零skip；历史R5仅诊断observations_completed，acceptance/passed均false。
+B R8正式44项零skip、两份fresh各1109source/staged与286产物、kernel1966480B；
+实际normal-r8仍false（B已complete、后续service barrier pending），omit-r8首ps超时且未触发B，不是精准负控。
+**B R9 in_progress rev36，未测/未通过**；normal v2区分后续pending，negative原门保持，验收/集成待后续。
+C/D接线、PCID实际复用/wrongtag及真正WC仍未闭；P5CTX1/2旧组件保留。
+暂无真机，待验留档不阻断P2软件及本机门完成后进入P5；全部软件/本机复验后上传GitHub并关机，末端操作尚未执行。
+详见[09:40证据与边界](../coordination/dongos_works/codex-works/reviews/2026-10-23-P2-historical-progress.md)、[来源JSON](../coordination/dongos_works/codex-works/reviews/2026-10-23-P2-historical-progress.json)。
+以下07:50及更早正文逐字保留，仅代表当时范围，不被本检查点改写。
+
+---
+
 # DongOS：x86-64 汇编 PC 操作系统架构与推进计划
+
+2026-10-23 07:50 +08:00 检查点：最终范围为 **P2、P5 全部软件工作及本机复验**。
+暂无真机，物理 WC 等待验项留档；P2 软件及本机门完成后可进入 P5，不能写成真机通过。
+完成后完整代码上传 GitHub 并关机已获授权，末端操作尚未执行。
+**OBS32/SYNC33/OBS34 integrated rev6**；OBS34 正式 36 项零 skip，仅集成 IO 证据组件。
+LARGE16 的 R6 正式 37 项零 skip 与新源两构建通过，但实际 normal-r4 首个 ps 仍超时：
+暂停内审计 4453ms、总 stop→cont 4688ms；cont 后落盘有效，原 1 秒期限问题未闭。
+**LARGE16 in_progress rev26、OBS36 in_progress rev2**，接续历史镜像/R7 适配尚未测试。
+P2 软件仍 partial，P5 本轮只读准备、尚未开始实现；原失败和中断不覆盖。
+详见[有界进度与证据](../coordination/dongos_works/codex-works/reviews/2026-10-23-P2-deferred-capture-progress.md)、
+[来源 JSON](../coordination/dongos_works/codex-works/reviews/2026-10-23-P2-deferred-capture-progress.json)。
+下方 06:32/05:55/05:42 均为各自源码和授权范围的历史记录。
+
+2026-10-23 06:32 +08:00 检查点：**SYNC31 integrated rev9、GOP29 integrated rev6、
+HARNESS28 integrated rev6、BKL30 integrated rev9**，各正式独立回执均零 skip、
+源码稳定且进程已停止/退出。BKL R1 失败保留；R2 为 3 项通过，FIFO 组件尚未接入 Bridge。
+**OBS32 submitted rev3，LARGE16 submitted rev16**：修复采集 epoch 与五个忙进程
+实际提交后才发起一次 request 的活性条件；OBS 29 项、LARGE 20 项本机预检通过，
+完整独立复验未执行。
+旧 31 项及构建仅属各自历史源码。
+R13 的 AP 空闲/屏蔽计时快照不构成 AP 用户计时门通过，也不能据此认定硬件限制。
+P2 仍 **partial**，P5 本轮尚未开始；实际大页/EXEC/受控 PF/缓存接线、暖 PCID 与
+物理 WC 门继续保留。详见[本次状态与原始证据](../coordination/dongos_works/codex-works/reviews/2026-10-23-P2-observer-progress.md)
+及[机器可读记录](../coordination/dongos_works/codex-works/reviews/2026-10-23-P2-observer-progress.json)。下方 05:55/05:42 为历史快照。
+
+2026-10-23 05:55 +08:00 追加：**SIZE23 integrated rev6，SMP27 v2 integrated rev9**。
+R13 在首次暂停前连续运行2秒、之后不再恢复，Domain.failed=0、无首错，三个AP
+实际用户进入161/168/213次，完整16槽（11个live根）池审计通过。旧采集在大量
+QMP读取后恢复，存在WHPX绝对期限被观察过程扰动的风险；先修采集方法，不能
+直接归责生产锁。AP计时仍0，暖PCID及实际事务余项未关闭，P2仍partial，完成后
+再进入P5。详见[05:55追加与原始证据](../coordination/dongos_works/codex-works/reviews/2026-10-23-P2-lock-diagnostics.md)，下方05:42状态为历史快照。
+
+2026-10-23 05:42 +08:00 检查点：继续按 **P2 → P5** 执行，P2 保持 partial，
+P5 本轮尚未开始。SIZE23 已正式独立 99 项零 skip，LARGE16 已正式独立 31 项
+零 skip；正常/负控两份实际构建均为 1,962,384B，但实际 WHPX 仍出现获取
+内核锁超时，AP 用户进入/计时/切换仍为零，故两任务尚未验收/集成。
+HARNESS24 已集成；SMP27 时间诊断 v2、HARNESS28 夹具、GOP29 永久绘图
+Gate、BKL30 FIFO 组件继续复验或实现。完整 C/D/ledger 接线、实际大页/受控
+PF/缓存迁移/暖 PCID 与物理 WC 门禁仍须通过。详见[锁诊断与当前状态](../coordination/dongos_works/codex-works/reviews/2026-10-23-P2-lock-diagnostics.md)。
+下方旧检查点、任务数量及“当前/未运行”保留各自日期和源码范围，不覆盖本次状态。
+
+2026-10-23 G5 收尾：**G5FULL1 integrated rev16、G5CLOSURE1 integrated rev21，
+G5INT1 integrated rev24**。七个生产模块已真实写入本地主线工作树并独立复验；
+正式作业 `0856b466a4d44a13be901c02f8acff46` 的 51 项完整语言矩阵、1 项闭包和
+18 项关联回归共 **70 项全部通过，零 skip**，源码稳定、进程停止及退出均确认。
+完整矩阵覆盖 27 组要求，`scope_complete=true`；两模式四份编译器 ELF
+逐字节相同，每份 2,046,376 字节，56 MiB arena / 64 KiB 栈 / 2 MiB ELF
+预算保持。详细原始证据、失败历史及实际状态见 [完成回执](../coordination/dongos_works/codex-works/reviews/2026-10-22-G5-completion.md)，
+永久入口见 [G5 门禁](docs/g5-differential.md)。
+
+G5 完成范围为语言/ABI 的 frontend → lower → NASM 执行及宿主有界自编译
+闭包；内建汇编器仍有明确指令范围，Win64 XMM、原子及受限 asm 的完整
+NASM 覆盖不等于任意程序均可由它生成 ELF。扩大后的编译器须另做新 G6
+客体自编译、持久化和同盘双启；历史 G6 仍只绑定原 head / 49 模块 profile。
+因此 L3 整体及更广纯 ELF 后端继续保留各自余项，P2/P5/P6/P7/P8、KVM/
+真机和 P9 门禁不因本次完成而关闭。本轮未运行 OS/VM，未提交或推送。
+
+以下保留各自日期和源码范围的历史记录；旧 164 项数量、旧 G5 缺口和
+“当前/待完成”不再代表最新状态。实时任务数量见协调器及协作区整体任务图。
 
 - 最新任务恢复核对：2026-10-22T09:18:41+08:00。
 - 本轮17份缺失任务书、CX6同号异义和CX14/CX15旧状态均已处理完成。CX14 integrated rev7，CX15 integrated rev8；CX6 integrated rev9，已恢复读取器契约，分离5条原NASM事件，耗时恢复为1轮/265秒，原始事件全部保留。协调器issues=0；核对时间2026-10-22T09:18:41+08:00。
@@ -410,13 +481,20 @@ P1 已验证正常启动、载荷篡改、镜像截短和镜像缺失；后三�
 
 #### P2扩展（机制验证与正常消费者接入分别验收）
 
-- [x] 动态执行别名策略（跨别名W^X与撤权顺序已实现；QEMU双CPU实测过期TLB、SHOOTDOWN后消除、两CPU执行新生成代码；活动API仍拒绝USER/EXEC，P4接入，见 `docs/p2-extensions.md`）：原属P2扩展，先建立物理别名W^X/所有权及撤权同步契约，P4代码加载前复核；活动API当前仍拒绝USER/EXEC
-- [x] 大页/拆分机制：`mm.paging` 原生2MiB叶子、live拆分/合并/回收及UEFI根QEMU验证已完成。P2LIVE1保持ABI的active事务已在正常私有根/AP启动前完成真实buddy order9演练，成功后恢复4KiB树；旧2096720B/余432B产物及超限失败保留。P2SIZE2函数节及链接GC释放106496B，完整release四核桌面回归通过。P2SMP3接入AP在线共享内核根，真实1/4核客体和完整物理转储复算验证了转换应答、临时表回收及最终WB/RW/NX封存大页持有视图；任务正式验收/集成以协调器为准，见 `docs/p2-shared-large.md`。调度器接管后的任意多CR3动态修改、EXEC及图形WC继续保留独立义务。
-- [ ] PCID生命周期与精确失效：关联P4既有多地址空间/tag/精确失效契约，不重复另造机制；能力门控、tag复用和真实支持CPU证明按P4范围验收。本项P2LIVE1启动演练保持PCIDE/PGE关闭
-- [x] SMP shootdown：runtime6 四核共享内核根，BSP 单写者等待全部 AP IPI 应答后回收；真实陈旧映射反例通过，PCID/PGE 关闭
-- [x] PAT写合并（`mm.paging` WRITE_COMBINING、PAT/MTRR、按Intel SDM Table 14-7逐格的有效类型与迁移顺序，QEMU实测PAT第4项WC及映射，见 `docs/p2-extensions.md`）：本次明确排期为图形阶段使用WC前完成，先验证PAT/MTRR、缓存类型迁移及冲突别名；当前保留WB/UC、不改PAT
+2026-10-23 当前接续：ROOT13/MASK18、PCID12/WC14 准备、EXEC19/CACHE20
+组件已各自独立集成；ENTRY21 精确受控入口和 DISCOVERY22 枚举预处理均
+integrated rev6。LARGE16 及实际采集修复、runtime7 预算和完整服务接线继续
+推进。P2 整体仍 partial，实际 AP/PF/缓存迁移与物理 WC 门禁未关闭；完成 P2
+后再推进 P5。详见 `coordination/dongos_works/codex-works/reviews/2026-10-23-P2-runtime-progress.md`
+（工作区相对路径）。
 
-大页、动态执行别名与PAT机制已有独立原生/历史探针证据；P2LIVE1及P2SMP3分别覆盖AP前BSP生命周期和AP在线、调度前共享内核根事务。P2SMP3完成后该owner永久封存，长期保留原租约，不能据此声称任意多地址空间动态修改已完成。图形WC、通用动态EXEC及P4/PCID相应证明继续承担交付义务，不因核心阶段通过而删除。原单一阶段标准仍为“故意缺页显示panic屏，保护位全开”；范围及依赖见 `docs/p2-acceptance.md`。以下带日期的既有阶段记录保留其历史时点。
+- [x] 动态执行别名策略：跨别名W^X、撤权顺序及历史双CPU探针已有实测；P2EXEC1组件integrated18、正常启动P2ALIAS8 integrated6，所有读者写保护及生成代码42→43、漏AP失效精确负控已验。原active数据API仍拒绝USER/EXEC；调度后多根EXEC消费者须另验，见 `docs/p2-alias-consumers.md`
+- [x] 大页/拆分机制：`mm.paging` 原生2MiB叶子、live拆分/合并/回收及UEFI根QEMU验证已完成。P2LIVE1保持ABI的active事务已在正常私有根/AP启动前完成真实buddy order9演练，成功后恢复4KiB树；旧2096720B/余432B产物及超限失败保留。P2SIZE2函数节及链接GC释放106496B，完整release四核桌面回归通过。P2SMP3接入AP在线共享内核根，真实1/4核客体和完整物理转储复算验证了转换应答、临时表回收及最终WB/RW/NX封存大页持有视图；任务正式验收/集成以协调器为准，见 `docs/p2-shared-large.md`。调度器接管后的任意多CR3动态修改、EXEC及图形WC继续保留独立义务。
+- [ ] PCID生命周期与精确失效：BSP与逐CPU能力门控、tag/root/incarnation、首次刷新、no-flush及全tag屏障已实现；普通服务多根变更/退休已有接线。BSP VMware证明与AP TCG回退分别保留，支持环境中的AP PCIDE=1暖tag/跨代复用仍待P2PCID12实际门禁；P2FLUSH11原生3项零skip已集成，但不算INVPCID硬件执行。PGE当前明确拒绝
+- [x] SMP shootdown：runtime6 四核共享内核根，BSP 单写者等待全部 AP IPI 应答后回收；真实陈旧映射反例通过，PCID/PGE 关闭
+- [x] PAT写合并：`mm.paging`、PAT/MTRR有效类型及迁移顺序已有机制验收；P2WC1组件integrated10、正常启动P2ALIAS8 integrated6，完整GOP别名撤销/全核缓存维护/PAT4实际写读/WC重映射与compositor消费者已验，漏PAT写入实际坏体精确拒绝。调度后缓存迁移和物理显示WC吞吐仍待独立验收，见 `docs/p2-alias-consumers.md`
+
+大页、动态执行别名与PAT机制已有独立原生/历史探针证据；P2LIVE1及P2SMP3分别覆盖AP前BSP生命周期和AP在线、调度前共享内核根事务。P2ALIAS8已将正常启动EXEC/GOP WC消费者独立验收并集成rev6；这些owner完成后永久seal并保留租约。调度后多根大页/EXEC/WC事务、AP PCIDE=1及物理WC性能继续承担独立义务，不因核心阶段通过而删除。2026-10-23按用户顺序先完成P2，再完成P5；根闭包/PCID入口/WC采集准备不提前关闭整体门禁。原单一阶段标准仍为“故意缺页显示panic屏，保护位全开”；范围及依赖见 `docs/p2-acceptance.md`。以下带日期的既有阶段记录保留其历史时点。
 
 P2 CPU 基础实现：私有高半区 GDT/TSS/IDT，三组各 16 KiB 的 IST；正常启动在 Dong 探针前输出 `DONGOS_P2_CPU_READY`。异常保存完整 184 字节上下文，经有界串口和最低 640×480 的 GOP panic 屏报告，生产版停机；测试版以 37 区分正常成功和引导失败。回溯只读已知栈区间，最多 16 帧，重入只给最简标记。早期独立故障构建验证 INT3、UD2、#GP、#PF、坏 RSP、真实 #DF、除零和坏 RBP；后续新树权限与保护页验收见 `docs/paging-activation.md`。IRQ递送、生产用户进程/可返回用户异常和多核尚未实现；隔离CPL3权限测试已完成。
 

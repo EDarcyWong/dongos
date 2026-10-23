@@ -1,0 +1,86 @@
+{
+  "assignment_owner": "codex",
+  "auto_dispatch": false,
+  "auto_verify": false,
+  "candidate": null,
+  "checks": [
+    "module:tests.test_runtime_exec_entry",
+    "module:tests.test_user_smp_entry"
+  ],
+  "claim_from_status": "todo",
+  "claimed_at": "2026-10-22T20:13:02+00:00",
+  "claimed_by": "codex-mcp-daece153b59c4bd5",
+  "completed_at": "2026-10-22T20:42:52+00:00",
+  "complexity": "standard",
+  "created_at": "2026-10-22T20:12:44+00:00",
+  "delivery": "codex-works/deliveries/P2ENTRY21.md",
+  "depends_on": [
+    "codex:P2EXEC19"
+  ],
+  "description": "用户先完成P2后P5。本项接续已独立通过的runtime_exec组件，只完成可审查的精确受控异常adapter/入口；services绑定和build导入后续统一接线，host不得声称真实PF完成。不碰B在途services/memory/domain/build，不修改IDT/异常帧ABI/一般异常、NMI/#DF或用户fault政策。仅user_entry现CPL0分支vector14/CS8/error3/IF0/正确GS来源/已注册固定probe RIP允许调用新adapter，除此保持原fail分派。默认未注册必须原fail，不引入任意RIP恢复。建议ASM提供一次trusted注册的callback+固定probe/after元数据（初始0，无新增未链接extern），新sched.runtime_exec_entry.dg记录已验证Context/Domain/Header身份，bind需真实CPU0/IF0/rawkernelCR3tag0/PGE0/BKL owner0/LOCKED/healthy domain，拒重复/坏callbackABI，后续service显式bind才能启用。adapter从ASM传入可信GS Header与raw CR3及原ExceptionContext，核合法原内核栈范围、无alias、cpu/domain/mode/active busy PROBE/currentrequest，构造Fault调用现handle_fault/consume_fault；任意失配/重放frame与ticket均不变，不ACK、不改CR3/flush、不改变权限。成功只获固定after，ASM精确核后只改saved RIP，完整pop CR2快照/GPR/vector+error后IRETQ恢复原RIP/CS/RFLAGS/RSP/SS；不能用raw+184推原RSP或ret，不硬编码SS。GS入口swapgs来源需记录并仅接受未交换的owned CPL0现场；成功不swapgs。不允许嵌套异常重新使用恢复栈。可通过所有精确门后使用已验证perCPU exception_top临时栈调用纯整数DG adapter，保留原frame指针恢复，不改IST；证明不碰SIMD/x87，不能用kernel_xstate覆盖实际现场。永久host真实DG+ASM双格式/独立C纯数据oracle，23qword原frame/guards、完整布局、成功恰好一次、逐字段破坏、栈范围/重叠/缺注册/别CPU/代际/原tag/IF错误精确拒绝；实际入口IRET/MSR/CR指令不在host执行。现有test_user_smp_entry保留并通过，避免新增未定义符号或改变旧实际字节测试。保留命令/raw/source/tool SHA/真实失败0skip回执。执行者不编译/测试/VM/提交推送/状态，由root独立复验和实际集成。",
+  "document": "codex-works/tasks/P2ENTRY21-board.md",
+  "historical": false,
+  "id": "codex:P2ENTRY21",
+  "integration_note": "实现文件已实际位于主工作区 code/ 和声明 works 路径；协调器复核与本次独立复验 fingerprint 一致后登记本地集成。未创建提交或推送；实际 guest 门禁不由本项 host 通过替代。",
+  "legacy_hash": "5b30f453dd25efb6db609b9f9231b362d658cd2a21fb7f243322633c14e1ed8d",
+  "number": "P2ENTRY21",
+  "owner": "codex",
+  "rev": 6,
+  "review_note": "实际审查 DG identity/fixed/dispatch 与 ASM register/claim/invoke/restore：精确未swapgs CPL0 PF gate、guard先于切栈、默认关闭、一次注册、仅saved RIP写回，保留原帧/全部GPR与SS/RSP，纯整数、不动CR3/ACK/权限。正式 f3f29865ca4b48ad9b946e65877f431e 为2 tests/0 skip，stable/stopped/exited。root复核55命令/110 raw输出SHA、32对象+8 EXE SHA、8真实DG变体/14native执行、2个真实wrongABI E0301，生成回调栈上界1120B。仅组件验收，服务/build与真实PF尚待接线和实际运行。",
+  "status": "integrated",
+  "title": "P2精确EXEC受控异常adapter与默认关闭的CPL0入口",
+  "updated_at": "2026-10-22T20:49:36+00:00",
+  "verification": {
+    "checks": [
+      {
+        "cancelled": false,
+        "elapsed_seconds": 108.25,
+        "execution_exited": true,
+        "passed": true,
+        "process_stopped": true,
+        "returncode": 0,
+        "skips": 0,
+        "spec": "module:tests.test_runtime_exec_entry",
+        "tests": 1,
+        "timed_out": false
+      },
+      {
+        "cancelled": false,
+        "elapsed_seconds": 90.781,
+        "execution_exited": true,
+        "passed": true,
+        "process_stopped": true,
+        "returncode": 0,
+        "skips": 0,
+        "spec": "module:tests.test_user_smp_entry",
+        "tests": 1,
+        "timed_out": false
+      }
+    ],
+    "execution_exited": true,
+    "fingerprint": {
+      "codex-works/deliveries/P2ENTRY21.md": "69eed21ade6663356bd2a39ceda1fdee9e79ccd58e3fbb7ea316f744cdbdab5c",
+      "docs/runtime-exec-entry.md": "5529668f4c0163703a1cf6305326456e05cdfc6b0862c99cb475e59d68490b77",
+      "kernel/sched/runtime_exec_entry.dg": "e4652f1dc86d5ef1e4dce61f4d4125a80b4e395cf120f6d8fd9bbb5cf374bf43",
+      "kernel/sched/user_entry.asm": "b1e9057b772bb9367ee2a2de2762cd59025c57761b062e41b129097bcaa8a325",
+      "tests/runtime_exec_entry_probe.c": "5f50d20bdf8ce9c36807fdf57dd385b64b2bb2a833e4a1001b86a2e5eada10a4",
+      "tests/runtime_exec_entry_probe.dg": "9dee0a4008e9ca89db6890dc5027720d97536a7080363f2c5a428b5e18cd7711",
+      "tests/test_runtime_exec_entry.py": "94551726d1e1dee18b48843fde3e4252c7b21077f52de643a8ba3834af942f76"
+    },
+    "finished_at": "2026-10-22T20:47:13+00:00",
+    "job": "f3f29865ca4b48ad9b946e65877f431e",
+    "passed": true,
+    "process_stopped": true,
+    "source_stable": true,
+    "summary": "定向复验通过，等待源码/契约审查"
+  },
+  "write_paths": [
+    "kernel/sched/user_entry.asm",
+    "kernel/sched/runtime_exec_entry.dg",
+    "tests/runtime_exec_entry_probe.dg",
+    "tests/runtime_exec_entry_probe.c",
+    "tests/test_runtime_exec_entry.py",
+    "docs/runtime-exec-entry.md",
+    "codex-works/deliveries/P2ENTRY21.md"
+  ]
+}

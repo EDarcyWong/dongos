@@ -1,0 +1,88 @@
+{
+  "assignment_owner": "codex",
+  "auto_dispatch": false,
+  "auto_verify": false,
+  "candidate": null,
+  "checks": [
+    "module:tests.test_runtime_cache",
+    "module:tests.test_paging"
+  ],
+  "claim_from_status": "rework",
+  "claimed_at": "2026-10-22T20:18:36+00:00",
+  "claimed_by": "codex-mcp-daece153b59c4bd5",
+  "completed_at": "2026-10-22T20:27:39+00:00",
+  "complexity": "standard",
+  "created_at": "2026-10-22T19:41:17+00:00",
+  "delivery": "codex-works/deliveries/P2CACHE20.md",
+  "depends_on": [
+    "codex:P2ROOT13",
+    "codex:P2FLUSH11",
+    "codex:P2WC14"
+  ],
+  "description": "用户先P2后P5。平行实现D核心组件，仅新增文件；正常memory framebuffer ledger、services poll multiplexer、panic/entry绘屏gate接线和真实VM另在B完成后统一声明并实际验收，本组件host通过不算运行期/物理WC通过。不修改旧cache_alias_owner PCIDE拒绝或永久seal，不伪造支持PGE。本最小迁移不写PAT，要求所有online CPU当前实际PAT4=WC/PAT3=UC及完整PAT/MTRR一致且全程不变，执行完整WC→UC→WC，最终USER恢复仍WC。\n新runtime_cache以可信kernel hardware Space+全用户roots+独立身份recheck callback、真实BootInfo raw GOP base/bytes及完整发布ledger为前提，forest按rounded物理整页枚举kernel HHDM与compositor USER等所有alias，不准caller子集冒完整列表；预检允许的ledger必须逐项与实际forest根/VA/PA/bytes/权限/代际对应，隐藏USER/额外别名/非WB兼容/PGE/过期身份/错误PAT/MTRR均拒。保留每alias USER与WRITE/NX，禁止EXEC；每次全forest闭包复核。证明HHDM kernel表池永久非GOP锚使撤尽GOP不detach共享PML4[256]，否则拒绝。每个私有slot0按自己Space真实操作，共享canonical树只改一次，不能用不安全外来table PA放宽旧walker。容量/receipt线性总页数事先全验，caller arena动态storage，不增大BSS/帧/2MiB预算。\n真实CPU0/IF0/rawkernelCR3/tag0/BKL/active healthy Domain/PGE0准入。先原子close framebuffer绘屏gate并排空active writers（NMI/panic必须可try-enter失败立即串口降级，不等BKL）；捕获全部用户，撤销全部GOPalias，第一全online alltag ACK后才回收Retired并做逐CPU SFENCE/WBINVD真实cache维护/硬件PAT/MTRR读回，按原VA/PA/USER恢复目标UC，第二全ACK并完整森林复审；再相同闭合事务恢复WC，最后成功才open gate/ledger commit。发布后任一步错误poison Domain failed，gate永久closed、lease/receipts held，不fallback/rollback或提前remap/reclaim/用户返回。booleans/flush次数不能代替perCPU action实际request-seq/root/cr0/cr4/PAT/MTRR readback。\n新增runtime_cache_reader.asm含未来真实特权动作、当前可native实测的atomic gate enter/leave/close/drain/open helper；不改IDT/NMI handler或把未接线说完成。Gate拒underflow/overflow/重放/错误open，close之后原active需drain才允许撤映射，失败close不因返回路径自动open。真实privileged动作只组装两格式不宿主执行。\n永久tests真实DG/paging/forest+独立C raw ledger/Retired/order oracle，debug/release/native guards及前置失败原子，硬件边界明确mock；至少真实坏源码遗漏USER别名撤销、漏ACK提前reclaim、未执行逐CPU维护/错误PAT读回、提前open gate各准确正常rc1拒绝，实际atomic gate并发或确定性interleaving检查closed期间不进入、原writers排空、失败保持closed。回执全commands/source/tool/artifacts/0skip。实现者不运行test/compiler/OS/VM/AI CLI/commit/push、不改任务状态；root独立审查正式复验和真实文件集成，物理显示性能仍另需真机。",
+  "document": "codex-works/tasks/P2CACHE20-board.md",
+  "historical": false,
+  "id": "codex:P2CACHE20",
+  "integration_note": "6声明源码/文档已真实集成code，当前指纹与ac7…正式冻结输入一致。组件3tests0skip及60产物/tool/命令已核，登记仅代码组件集成，生产入口和实际guest/physical WC仍待闭合，不据host清P2。",
+  "legacy_hash": "299f174263ac92d2c51f34bbf9fd40bfd8a13c1298681d3e4f71ac6a81d57ae9",
+  "number": "P2CACHE20",
+  "owner": "codex",
+  "rev": 9,
+  "review_note": "root实际源码/契约/有效测试审查完成，含命名空间修复、各代际独立绑定、线性receipt顺序、gate并发发布及实际原子ASM语义。正式ac7fe821d9b44c2b8bd854e30218d121：runtime_cache1+真实paging2=3tests0skip，133.484/5.375sec，rc0/source_stable/process_stopped/execution_exited true。12个真实DG debug/release生产+5坏源变体，110实际命令50native执行；真实ASM gate宿主执行，特权reader只双格式组装、硬件边界显式mock。root重核60个DG/reader ELF/COFF/EXE产物SHA、全部命令回执与tools SHA，50native的精确错误/guard和atomic close/drain/open一致。未接真实memory ledger/services mux/panic/NMI或guest，physical WC不在本项完成范围；仅验收组件。",
+  "status": "integrated",
+  "title": "P2调度后GOP全别名WC迁移与绘屏隔离组件",
+  "updated_at": "2026-10-22T20:35:26+00:00",
+  "verification": {
+    "checks": [
+      {
+        "cancelled": false,
+        "elapsed_seconds": 133.484,
+        "execution_exited": true,
+        "passed": true,
+        "process_stopped": true,
+        "returncode": 0,
+        "skips": 0,
+        "spec": "module:tests.test_runtime_cache",
+        "tests": 1,
+        "timed_out": false
+      },
+      {
+        "cancelled": false,
+        "elapsed_seconds": 5.375,
+        "execution_exited": true,
+        "passed": true,
+        "process_stopped": true,
+        "returncode": 0,
+        "skips": 0,
+        "spec": "module:tests.test_paging",
+        "tests": 2,
+        "timed_out": false
+      }
+    ],
+    "execution_exited": true,
+    "fingerprint": {
+      "codex-works/deliveries/P2CACHE20.md": "e5f7fa2c9aee44df95e8b8b957911c8c2ccd1907aaa44d6c3e110ebfd0ac2727",
+      "docs/runtime-cache.md": "4c9d5de24acc2d23bc21909f43be0c4b9c32b0e09dc96b5f5c7584512f5015b2",
+      "kernel/mm/runtime_cache.dg": "63ef5ac44bd573f05a06e77e3530e3151d1b5625711917959dbec63e59c44cd0",
+      "kernel/sched/runtime_cache_reader.asm": "fca3186cc21acdac9189d4791ac386cb7c27b51cc44c3bf234ddb0b0584de32c",
+      "tests/runtime_cache_probe.c": "580befae0d388210a45d69fb0751744f341bc4b2c229dd124d114fdc9bd158eb",
+      "tests/runtime_cache_probe.dg": "e1b169d284f6b956f73908ad4997d5b4a80a7496376f2d461914afd309dc9dda",
+      "tests/test_runtime_cache.py": "fb439747fa308d5f06568a6a7c46afc6da34728631ca6ca424dd5f84725bb67b"
+    },
+    "finished_at": "2026-10-22T20:31:26+00:00",
+    "job": "ac7fe821d9b44c2b8bd854e30218d121",
+    "passed": true,
+    "process_stopped": true,
+    "source_stable": true,
+    "summary": "定向复验通过，等待源码/契约审查"
+  },
+  "write_paths": [
+    "kernel/mm/runtime_cache.dg",
+    "kernel/sched/runtime_cache_reader.asm",
+    "tests/runtime_cache_probe.dg",
+    "tests/runtime_cache_probe.c",
+    "tests/test_runtime_cache.py",
+    "docs/runtime-cache.md",
+    "codex-works/deliveries/P2CACHE20.md"
+  ]
+}

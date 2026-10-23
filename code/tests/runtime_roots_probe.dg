@@ -1,0 +1,33 @@
+module runtime_roots_probe;
+import mm.runtime_roots as roots;
+import mm.paging as pg;
+export("rr_size") fn size(which:u64)usize{
+ if which==0{return sizeof(pg.Space);}if which==1{return sizeof(roots.Root);}if which==2{return sizeof(roots.Alias);}
+ if which==3{return sizeof(roots.Report);}if which==4{return sizeof(pg.PoolView);}if which==5{return sizeof(pg.Retired);}return sizeof(roots.Scratch);
+}
+export("rr_init") fn init(space:*pg.Space,pool:*pg.Table,count:usize,pa:u64,metadata:*u8)u64{unsafe{
+ *space=pg.EMPTY_SPACE;match pg.init(space,slice_from_raw_parts(pool,count),pa,slice_from_raw_parts(metadata,count),48,true){ok=>{return 0;},err(e)=>{return e;},}
+}}
+export("rr_init_width") fn init_width(space:*pg.Space,pool:*pg.Table,count:usize,pa:u64,metadata:*u8,bits:usize)u64{unsafe{
+ *space=pg.EMPTY_SPACE;match pg.init(space,slice_from_raw_parts(pool,count),pa,slice_from_raw_parts(metadata,count),bits,true){ok=>{return 0;},err(e)=>{return e;},}
+}}
+export("rr_map") fn map(space:*pg.Space,va:u64,pa:u64,flags:u64,large:u64)u64{unsafe{
+ if large!=0{match pg.map_large_live(space,va,pa,flags){ok=>{return 0;},err(e)=>{return e;},}}
+ match pg.map_live(space,va,pa,flags){ok=>{return 0;},err(e)=>{return e;},}
+}}
+export("rr_unmap") fn unmap(space:*pg.Space,va:u64,receipt:*pg.Retired)u64{unsafe{
+ *receipt=pg.EMPTY_RETIRED;match pg.unmap_live(space,va,receipt){ok=>{return 0;},err(e)=>{return e;},}
+}}
+export("rr_split") fn split(space:*pg.Space,va:u64)u64{unsafe{
+ match pg.split_large_live(space,va){ok=>{return 0;},err(e)=>{return e;},}
+}}
+export("rr_protect") fn protect(space:*pg.Space,va:u64,flags:u64)u64{unsafe{
+ match pg.protect_live(space,va,flags){ok=>{return 0;},err(e)=>{return e;},}
+}}
+export("rr_replace") fn replace(space:*pg.Space,va:u64,pa:u64,flags:u64)u64{unsafe{
+ match pg.replace_live(space,va,pa,flags){ok=>{return 0;},err(e)=>{return e;},}
+}}
+export("rr_audit") fn audit(kernel:*const pg.Space,users:*const roots.Root,count:usize,physical:u64,bytes:u64,
+ output:*roots.Alias,capacity:usize,report:*roots.Report,scratch:*roots.Scratch)u64{unsafe{
+ return roots.audit(kernel,slice_from_raw_parts(users,count),physical,bytes,slice_from_raw_parts(output,capacity),report,scratch);
+}}

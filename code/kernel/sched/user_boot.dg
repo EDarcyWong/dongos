@@ -13,6 +13,7 @@ import boot.memory_startup as startup;
 import mm.paging as paging;
 import runtime_probe as runtime;
 import user.services as services;
+import user.device_host as device_host;
 import irq.platform as irq;
 import arch.x86_64 as arch;
 pub error Invalid=0x060b_0020;pub error Held=0x060b_0021;
@@ -38,8 +39,15 @@ unsafe fn prepare()!void{unsafe{
  if old==null||evidence==null||(*evidence).phase!=6||(*evidence).error_code!=0||(*old).failed!=0||(*(*old).engine).count!=0
   ||(*original).cpu_count<3||(*original).cpu_count>16||(*original).steps!=31{return error.Invalid;}
  var platform=irq.EMPTY_REPORT;try irq.describe(&platform);let count=(*original).cpu_count as usize;
- let contexts=(*original).context_pointer as *const sc.Context;var id:usize=1;
- while id<count{if (*((*old).cpus+id)).current!=0||(*((*old).cpus+id)).timer_armed!=0{return error.Invalid;}id+=1;}
+ let contexts=(*original).context_pointer as *const sc.Context;var id:usize=0;
+ while id<count{
+  let context=contexts+id;if (*context).self!=context as u64||(*context).logical_id!=id as u64||(*context).state!=sc.ONLINE{return error.Invalid;}
+  if id!=0&&((*((*old).cpus+id)).current!=0||(*((*old).cpus+id)).timer_armed!=0){return error.Invalid;}id+=1;
+ }
+ // Full PCI discovery must not occupy the BKL while activated APs wait for
+ // it. The original online readers still ACK the real per-page TLB barriers.
+ // A failed preflight propagates before any new INFO/domain/bridge exists.
+ try device_host.preflight_discovery();
  var meta=resources.Block{physical:0,virtual:0,pages:0};try resources.allocate(1,1,&meta);INFO=meta.virtual as *Report;
  (*INFO).ready=0;(*INFO).failed=0;(*INFO).published=0;(*INFO).count=count as u64;(*INFO).online=(1<<count as u64)-1;
  (*INFO).headers=meta.virtual+256;(*INFO).contexts=contexts as u64;(*INFO).tsc_hz=platform.tsc_hz;

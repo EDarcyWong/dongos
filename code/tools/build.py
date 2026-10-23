@@ -320,7 +320,7 @@ def build(*, test: bool = False, stage: str = "p1", cpu_case: str | None = None,
                                            fmt="elf64", test=test, stage=stage, defines=defines))
         if runtime_level >= 5:
             for source in ("parallel", "parallel_probe", "parallel_live", "user_entry", "user_arch",
-                           "user_bridge_arch", "user_legacy", "user_boot"):
+                           "user_bridge_arch", "user_legacy", "user_boot", "runtime_large_reader"):
                 kernel_objects.append(assemble(ROOT / ("kernel/sched/" + source + ".asm"), output,
                                                fmt="elf64", test=test, stage=stage, defines=defines))
         if memory_case == "cache-unmap":

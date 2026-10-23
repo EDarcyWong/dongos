@@ -15,7 +15,7 @@ const PLACE:u64=1;
 struct Region{p:u64,n:usize}
 struct State{g:*const frontend.Graph,w:*const ir.Workspace,status:u64,unit:usize,error_node:usize,detail:u64,
  functions:usize,code:usize,args:usize,blocks:usize,cursor:usize,maximum:usize,locals:usize,
- returns:usize,mode:u64,break_block:usize,continue_block:usize,cleanup_head:usize,loop_cleanup:usize}
+ returns:usize,mode:u64,break_block:usize,continue_block:usize,cleanup_head:usize,loop_cleanup:usize,alignment:usize}
 fn span(p:u64,n:usize)bool{return n==0||(p!=0&&n<=NONE-p);}
 fn overlap(a:u64,n:usize,b:u64,m:usize)bool{return n!=0&&m!=0&&a<b+m&&b<a+n;}
 unsafe fn fail(s:*State,code:u64,id:usize,detail:u64)usize{unsafe{
@@ -46,8 +46,11 @@ unsafe fn jump(s:*State,b:usize,id:usize)void{unsafe{emit(s,ir.JUMP,sem.VOID,0,0
 unsafe fn slot(s:*State,t:usize,id:usize)usize{unsafe{
  let words=ir.words((*s).g,t);if words==NONE{ return fail(s,UNSUPPORTED,id,t);}
  if words==0{return 0;}let n=words*8;
- if ir.aggregate((*s).g,t){let a=(*(*s).g).layouts[t].alignment;if a>16{return fail(s,UNSUPPORTED,id,a);}(*s).cursor=((*s).cursor+n+a-1)/a*a-n;}
- if n>4080||(*s).cursor>4080-n{return fail(s,FRAME,id,(*s).cursor+n);}
+ // A type can be a huge static aggregate. Reject an oversized local before
+ // adding its size to the cursor or alignment; even that sum may overflow.
+ if n>4080{return fail(s,FRAME,id,n);}
+ if ir.aggregate((*s).g,t){let a=(*(*s).g).layouts[t].alignment;if a>(*s).alignment{(*s).alignment=a;}(*s).cursor=((*s).cursor+n+a-1)/a*a-n;}
+ if (*s).cursor>4080-n{return fail(s,FRAME,id,(*s).cursor+n);}
  (*s).cursor+=n;if (*s).cursor>(*s).maximum{(*s).maximum=(*s).cursor;}return (*s).cursor;
 }}
 unsafe fn bind(s:*State,id:usize)bool{unsafe{
@@ -70,21 +73,21 @@ unsafe fn collect_locals(s:*State,id:usize,depth:usize)bool{unsafe{
   return collect_locals(s,n.c,depth+1);
  }
  if n.kind==ast.MATCH{
-  if typ(s,n.a)!=8{fail(s,UNSUPPORTED,id,ast.MATCH);return false;}
   var arm=n.b;var steps:usize=0;while arm!=NONE{
    if steps>=(*(*s).g).nodes.len{fail(s,BAD_GRAPH,id,74);return false;}steps+=1;
-   let a=*node(s,arm);if !collect_locals(s,a.b,depth+1){return false;}arm=a.next;
+   let a=*node(s,arm);let p=*node(s,a.a);if p.b!=NONE&&!bind(s,p.b){return false;}
+   if !collect_locals(s,a.b,depth+1){return false;}arm=a.next;
   }return true;
  }
  if n.kind==ast.IF||n.kind==ast.WHILE{
   if !collect_locals(s,n.b,depth+1){return false;}
   if n.c!=NONE{return collect_locals(s,n.c,depth+1);}return true;
  }
- if n.kind==ast.RETURN||n.kind==ast.ASSIGN||n.kind==ast.EXPRESSION_STATEMENT||n.kind==ast.BREAK||n.kind==ast.CONTINUE{return true;}
+ if n.kind==ast.RETURN||n.kind==ast.ASSIGN||n.kind==ast.EXPRESSION_STATEMENT||n.kind==ast.BREAK||n.kind==ast.CONTINUE||n.kind==ast.ASM{return true;}
  fail(s,UNSUPPORTED,id,n.kind);return false;
 }}
 unsafe fn constant(s:*State,id:usize,destination:usize,t:usize)bool{unsafe{
- let g=gid(s,id);if (*(*s).g).value_states[g]!=2{return false;}let v=(*(*s).g).values[g];
+ let g=gid(s,id);if (*(*s).g).value_states[g]!=2&&((*(*s).g).info[g].flags&256)==0{return false;}let v=(*(*s).g).values[g];
  if v.used>2||v.first>(*(*s).g).limbs.len||v.used>(*(*s).g).limbs.len-v.first{fail(s,UNSUPPORTED,id,30);return false;}
  var value:u64=0;if v.used>0{value=(*(*s).g).limbs[v.first]as u64;}
  if v.used>1{value|=((*(*s).g).limbs[v.first+1]as u64)<<32;}
@@ -124,13 +127,42 @@ unsafe fn method_target(s:*State,callee:usize,id:usize)usize{unsafe{
  if t.kind!=sem.FUNCTION{return fail(s,BAD_GRAPH,id,63);}
  var i:usize=0;while i<(*g).symbols.len{let sy=(*g).symbols[i];
   if sy.kind==names.METHOD&&sy.unit==t.unit&&sy.declaration==t.node{return i;}i+=1;
- }return fail(s,BAD_GRAPH,id,64);
+ }return NONE;
 }}
 unsafe fn expression(s:*State,id:usize,depth:usize)usize{unsafe{
  if !enter(s,id,depth){return NONE;}let n=*node(s,id);let t=typ(s,id);
+ let info=(*(*s).g).info[gid(s,id)];
+ if (info.flags&576)!=0{
+  let out=slot(s,t,id);let after=(*s).cursor;
+  if (info.flags&512)!=0{let tag=expression_raw(s,id,depth+1,0xffff_ffff_ffff_fffb);emit(s,ir.TAGGED,t,out,tag,0,0,3,id);}
+  else if n.kind==ast.NULL{emit(s,ir.TAGGED,t,out,0,0,0,NONE,id);}
+  else{let original=((info.flags>>32)as usize)-1;let value=expression_raw(s,id,depth+1,original);emit(s,ir.TAGGED,t,out,0,value,info.length,original,id);}
+  (*s).cursor=after;return out;
+ }
+ return expression_raw(s,id,depth,t);
+}}
+unsafe fn expression_raw(s:*State,id:usize,depth:usize,t:usize)usize{unsafe{
+ if !enter(s,id,depth){return NONE;}let n=*node(s,id);
  let out=slot(s,t,id);if (*s).status!=0{return NONE;}let after=(*s).cursor;
  if !ir.aggregate((*s).g,t)&&constant(s,id,out,t){(*s).cursor=after;return out;}
- if n.kind==ast.STRING{emit(s,ir.STRING,t,out,0,0,0,0,id);}
+ if n.kind==ast.ERROR{
+  let r=(*(*s).g).refs[gid(s,id)];let sy=(*(*s).g).symbols[r.target];let g=(*(*s).g).units[sy.unit].node_start+sy.declaration;
+  let v=(*(*s).g).values[g];let value=(*(*s).g).limbs[v.first]as u64;emit(s,ir.CONSTANT,t,out,0,0,value,0,id);
+ }else if n.kind==ast.FIELD&&(*(*s).g).refs[gid(s,id)].kind==binding.ENUM_MEMBER{emit(s,ir.TAGGED,t,out,0,0,(*(*s).g).info[gid(s,id)].length,NONE,id);}
+ else if n.kind==ast.TRY||n.kind==ast.ORELSE{
+  let value=expression(s,n.a,depth+1);let yes=block(s);let no=block(s);let end=block(s);
+  if n.kind==ast.TRY{emit(s,ir.BRANCH,8,0,value,0,no,yes,id);}else{emit(s,ir.BRANCH,8,0,value,0,yes,no,id);}
+  label(s,yes,id);if ir.words((*s).g,t)!=0{emit(s,ir.COPY,t,out,value-8,0,0,0,id);}jump(s,end,id);label(s,no,id);
+  if n.kind==ast.TRY{
+   let result=slot(s,(*s).returns,id);emit(s,ir.TAGGED,(*s).returns,result,value,0,0,NONE,id);
+   let locals=(*s).locals;(*s).locals=(*s).cursor;cleanups(s,NONE,depth+1);(*s).locals=locals;
+   emit(s,ir.RETURN,(*s).returns,0,result,0,0,0,id);
+  }else{let fallback=expression(s,n.b,depth+1);if ir.words((*s).g,t)!=0&&typ(s,n.b)!=sem.NORETURN{emit(s,ir.COPY,t,out,fallback,0,0,0,id);}}
+  label(s,end,id);
+ }else if n.kind==ast.EXIT{
+  if n.op==281{return_value(s,n.a,id,depth+1);}
+  else{var target=(*s).break_block;if n.op==280{target=(*s).continue_block;}cleanups(s,(*s).loop_cleanup,depth+1);jump(s,target,id);}
+ }else if n.kind==ast.STRING{emit(s,ir.STRING,t,out,0,0,0,0,id);}
  else if n.kind==ast.STRUCT||n.kind==ast.ARRAY||n.kind==ast.REPEAT{
   emit(s,ir.ZERO,t,out,0,0,0,0,id);let base=slot(s,3,id);emit(s,ir.ADDRESS,3,base,out,0,0,0,id);let stable=(*s).cursor;
   let ty=(*(*s).g).types[t];var p=n.a;if n.kind==ast.STRUCT{p=n.b;}var index:usize=0;var repeated:usize=NONE;
@@ -149,6 +181,7 @@ unsafe fn expression(s:*State,id:usize,depth:usize)usize{unsafe{
    let index=(*(*s).g).units[r.unit].node_start+r.target;let off=(*(*s).w).node_slots[index];
    if off==NONE{return fail(s,BAD_GRAPH,id,50);}emit(s,ir.COPY,t,out,off,0,0,0,id);
   }else if r.kind==binding.GLOBAL&&((*(*s).g).symbols[r.target].kind==names.CONST||(*(*s).g).symbols[r.target].kind==names.GLOBAL){let p=address(s,id,depth+1);emit(s,ir.LOAD,t,out,p,0,0,0,id);}
+  else if r.kind==binding.GLOBAL&&(*(*s).g).symbols[r.target].kind==names.FUNCTION{emit(s,ir.FUNCTION_ADDRESS,t,out,0,0,r.target,0,id);}
   else{return fail(s,UNSUPPORTED,id,51);}
  }else if n.kind==ast.FIELD{
   let bt=typ(s,n.a);let base_type=(*(*s).g).types[bt];
@@ -185,19 +218,32 @@ unsafe fn expression(s:*State,id:usize,depth:usize)usize{unsafe{
   }
  }else if n.kind==ast.CALL{
   let r=(*(*s).g).refs[gid(s,n.a)];
-  if r.kind==binding.INTRINSIC&&r.target==13{let a=expression(s,n.b,depth+1);let b=expression(s,(*node(s,n.b)).next,depth+1);emit(s,ir.PAIR,t,out,a,b,0,0,id);}
+  if r.kind==binding.INTRINSIC&&r.target>=4&&r.target<=12{
+   let first=(*s).args;var count:usize=0;var p=n.b;while p!=NONE{count+=1;p=(*node(s,p)).next;}
+   if count>(*(*s).w).arguments.len-first{return fail(s,CAPACITY,id,2);}(*s).args+=count;p=n.b;var i:usize=0;
+   while p!=NONE{let value=expression(s,p,depth+1);(*(*s).w).arguments[first+i]=ir.Argument{typ:typ(s,p),offset:value};i+=1;p=(*node(s,p)).next;}
+   var element:usize=0;if n.b!=NONE{element=(*(*s).g).types[typ(s,n.b)].element;}
+   emit(s,ir.MEMORY,t,out,first,count,r.target,element,id);
+  }else if r.kind==binding.ENUM_MEMBER{
+   var value:usize=0;var payload:usize=NONE;if n.b!=NONE{value=expression(s,n.b,depth+1);payload=typ(s,n.b);}
+   emit(s,ir.TAGGED,t,out,0,value,(*(*s).g).info[gid(s,id)].length,payload,id);
+  }else if r.kind==binding.INTRINSIC&&r.target==13{let a=expression(s,n.b,depth+1);let b=expression(s,(*node(s,n.b)).next,depth+1);emit(s,ir.PAIR,t,out,a,b,0,0,id);}
   else if r.kind==binding.INTRINSIC&&r.target>=1&&r.target<=3{
    let left=expression(s,n.b,depth+1);let second=(*node(s,n.b)).next;let right=expression(s,second,depth+1);
    var op:u64=1067;if r.target==2{op=1069;}else if r.target==3{op=1066;}
    emit(s,ir.BINARY,t,out,left,right,op,1,id);
   }else{
-   var target=r.target;var receiver:usize=NONE;
+   var target=r.target;var receiver:usize=NONE;var indirect:usize=0;let callee_type=typ(s,n.a);
    if r.kind==binding.METHOD_CANDIDATE||r.kind==binding.DEFERRED_MEMBER{
     target=method_target(s,n.a,id);if (*s).status!=0{return NONE;}
-    if r.kind==binding.DEFERRED_MEMBER{let field=*node(s,n.a);
+    if target==NONE{if r.kind==binding.METHOD_CANDIDATE{return fail(s,BAD_GRAPH,id,64);}indirect=expression(s,n.a,depth+1);}
+    else if r.kind==binding.DEFERRED_MEMBER{let field=*node(s,n.a);
      if field.kind!=ast.FIELD{return fail(s,BAD_GRAPH,id,65);}receiver=field.a;
     }
-   }else if r.kind!=binding.GLOBAL||(*(*s).g).symbols[r.target].kind!=names.FUNCTION{return fail(s,UNSUPPORTED,id,60);}
+   }else if r.kind!=binding.GLOBAL||(*(*s).g).symbols[r.target].kind!=names.FUNCTION{
+    if callee_type>=(*(*s).g).types.len||(*(*s).g).types[callee_type].kind!=sem.FUNCTION{return fail(s,BAD_GRAPH,id,60);}
+    indirect=expression(s,n.a,depth+1);
+   }
    let first=(*s).args;var count:usize=0;var p=n.b;if receiver!=NONE{count=1;}
    while p!=NONE{if count>=(*(*s).g).nodes.len{return fail(s,BAD_GRAPH,id,61);}count+=1;p=(*node(s,p)).next;}
    if count>(*(*s).w).arguments.len-first{return fail(s,CAPACITY,id,2);}(*s).args+=count;
@@ -207,7 +253,7 @@ unsafe fn expression(s:*State,id:usize,depth:usize)usize{unsafe{
    }
    while p!=NONE{let value=expression(s,p,depth+1);
     (*(*s).w).arguments[first+i]=ir.Argument{typ:typ(s,p),offset:value};i+=1;p=(*node(s,p)).next;
-   }emit(s,ir.CALL,t,out,first,count,target,0,id);
+   }if indirect!=0{emit(s,ir.INDIRECT_CALL,t,out,first,count,callee_type,indirect,id);}else{emit(s,ir.CALL,t,out,first,count,target,0,id);}
   }
  }else{return fail(s,UNSUPPORTED,id,n.kind);}
  (*s).cursor=after;return out;
@@ -229,6 +275,12 @@ unsafe fn cleanups(s:*State,stop:usize,depth:usize)bool{unsafe{
   let next=(*(*s).w).node_slots[gid(s,p)];
   if !statement(s,n.a,depth+1){return false;}p=next;
  }return (*s).status==0;
+}}
+unsafe fn return_value(s:*State,child:usize,id:usize,depth:usize)bool{unsafe{
+ var value:usize=0;if child!=NONE{value=expression(s,child,depth+1);}
+ else if ir.words((*s).g,(*s).returns)!=0{value=slot(s,(*s).returns,id);emit(s,ir.TAGGED,(*s).returns,value,0,0,0,NONE,id);}
+ let locals=(*s).locals;(*s).locals=(*s).cursor;cleanups(s,NONE,depth+1);(*s).locals=locals;
+ return emit(s,ir.RETURN,(*s).returns,0,value,0,0,0,id);
 }}
 unsafe fn for_statement(s:*State,id:usize,depth:usize)bool{unsafe{
  let n=*node(s,id);let source=*node(s,n.b);let control=(*(*s).w).node_slots[gid(s,id)];
@@ -268,11 +320,15 @@ unsafe fn match_statement(s:*State,id:usize,depth:usize)bool{unsafe{
  let n=*node(s,id);let value=expression(s,n.a,depth+1);let locals=(*s).locals;(*s).locals=(*s).cursor;
  let end=block(s);var arm=n.b;while arm!=NONE&&(*s).status==0{
   let a=*node(s,arm);let pattern=*node(s,a.a);let body=block(s);let next=block(s);
-  if pattern.op==286{emit(s,ir.BRANCH,8,0,value,0,body,next,id);}
-  else if pattern.op==287{emit(s,ir.BRANCH,8,0,value,0,next,body,id);}
-  else if pattern.a!=NONE&&equal(text(s,pattern.a),"_"){jump(s,body,id);}
-  else{fail(s,UNSUPPORTED,a.a,76);break;}
-  label(s,body,id);statement(s,a.b,depth+1);jump(s,end,id);label(s,next,id);arm=a.next;
+  let key=(*(*s).g).info[gid(s,a.a)].length;
+  let subject=typ(s,n.a);var result=false;if subject<(*(*s).g).types.len{result=(*(*s).g).types[subject].kind==sem.RESULT;}
+  if key==NONE{jump(s,body,id);}
+  else if result{if key==0{emit(s,ir.BRANCH,8,0,value,0,next,body,id);}else{emit(s,ir.BRANCH,8,0,value,0,body,next,id);}}
+  else{let expected=slot(s,3,id);let condition=slot(s,8,id);emit(s,ir.CONSTANT,3,expected,0,0,key,0,id);
+   emit(s,ir.BINARY,3,condition,value,expected,514,0,id);emit(s,ir.BRANCH,8,0,condition,0,body,next,id);}
+  label(s,body,id);if pattern.b!=NONE{let off=(*(*s).w).node_slots[gid(s,pattern.b)];var payload=value-8;if result&&key==1{payload=value;}
+   emit(s,ir.COPY,(*(*s).g).node_types[gid(s,pattern.b)],off,payload,0,0,0,id);}
+  statement(s,a.b,depth+1);jump(s,end,id);label(s,next,id);arm=a.next;
  }
  label(s,end,id);(*s).locals=locals;return (*s).status==0;
 }}
@@ -291,13 +347,15 @@ unsafe fn statement(s:*State,id:usize,depth:usize)bool{unsafe{
   var value=expression(s,n.b,depth+1);
   if n.op!=1085{let out=slot(s,t,id);emit(s,ir.BINARY,t,out,old,value,binary_assignment(n.op),0,id);value=out;}
   emit(s,ir.STORE,t,0,p,value,0,0,id);
- }else if n.kind==ast.RETURN{
-  var value:usize=0;if n.a!=NONE{value=expression(s,n.a,depth+1);}
-  // Cleanup calls may overwrite all caller-saved registers and their own
-  // temporaries. Reserve the complete evaluated return snapshot until RET.
-  let locals=(*s).locals;(*s).locals=(*s).cursor;cleanups(s,NONE,depth+1);(*s).locals=locals;
-  emit(s,ir.RETURN,(*s).returns,0,value,0,0,0,id);
+ }else if n.kind==ast.RETURN{return_value(s,n.a,id,depth+1);
  }else if n.kind==ast.EXPRESSION_STATEMENT{expression(s,n.a,depth+1);}
+ else if n.kind==ast.ASM{
+  let key=text(s,id);var operation:u64=NONE;
+  if equal(key,"cli"){operation=0;}else if equal(key,"sti"){operation=1;}else if equal(key,"hlt"){operation=2;}
+  else if equal(key,"pause"){operation=3;}else if equal(key,"int3"){operation=4;}else if equal(key,"lfence"){operation=5;}
+  else if equal(key,"sfence"){operation=6;}else if equal(key,"mfence"){operation=7;}
+  if operation==NONE{fail(s,BAD_GRAPH,id,97);}else{emit(s,ir.ASM,sem.VOID,0,0,0,operation,0,id);}
+ }
  else if n.kind==ast.FOR{for_statement(s,id,depth+1);}
  else if n.kind==ast.MATCH{match_statement(s,id,depth+1);}
  else if n.kind==ast.IF{
@@ -344,7 +402,7 @@ pub unsafe fn lower(g:*const frontend.Graph,w:*const ir.Workspace,mode:u64,r:*ir
  let empty=ir.Program{graph:null,functions:slice_from_raw_parts(null as *const ir.Function,0),
   instructions:slice_from_raw_parts(null as *const ir.Instruction,0),arguments:slice_from_raw_parts(null as *const ir.Argument,0),block_count:0,mode:mode};
  var s=State{g:g,w:w,status:0,unit:0,error_node:0,detail:0,functions:0,code:0,args:0,blocks:0,
-  cursor:0,maximum:0,locals:0,returns:sem.VOID,mode:mode,break_block:NONE,continue_block:NONE,cleanup_head:NONE,loop_cleanup:NONE};
+  cursor:0,maximum:0,locals:0,returns:sem.VOID,mode:mode,break_block:NONE,continue_block:NONE,cleanup_head:NONE,loop_cleanup:NONE,alignment:16};
  if (*g).units.len==0||(*g).refs.len!=(*g).nodes.len||(*g).info.len!=(*g).nodes.len||(*g).node_types.len!=(*g).nodes.len
   ||(*g).values.len!=(*g).nodes.len||(*g).value_states.len!=(*g).nodes.len||(*g).layouts.len!=(*g).types.len
   ||!names.valid_graph((*g).sources,(*g).units,(*g).tokens,(*g).nodes,(*g).edges){s.status=BAD_GRAPH;}
@@ -354,19 +412,19 @@ pub unsafe fn lower(g:*const frontend.Graph,w:*const ir.Workspace,mode:u64,r:*ir
   if sy.kind==names.GLOBAL{
    let t=(*g).node_types[(*g).units[sy.unit].node_start+sy.declaration];
    if ir.words(g,t)==NONE{fail(&s,UNSUPPORTED,sy.declaration,83);}
-  }else if sy.kind==names.ERROR||sy.kind==names.ENUM{fail(&s,UNSUPPORTED,sy.declaration,sy.kind);}
+  }else if sy.kind==names.ERROR||sy.kind==names.ENUM{ /* Semantic declarations own no code. */ }
   else if sy.kind==names.CONST{
    let t=(*g).node_types[(*g).units[sy.unit].node_start+sy.declaration];
-   if ir.words(g,t)!=1&&!ir.aggregate(g,t)&&(*g).types[t].kind!=sem.SLICE{fail(&s,UNSUPPORTED,sy.declaration,80);}
+   if ir.words(g,t)==NONE{fail(&s,UNSUPPORTED,sy.declaration,80);}
   }else if sy.kind==names.FUNCTION||sy.kind==names.METHOD{
    let n=*node(&s,sy.declaration);let t=(*g).types[(*g).node_types[gid(&s,sy.declaration)]];
    // Explicit sysv64 has the same checked signature and calling convention as
    // an ordinary Dong function. Win64 must never inherit that convention.
-   if (t.flags&1)!=0||ir.words(g,t.element)==NONE{fail(&s,UNSUPPORTED,sy.declaration,81);}
+   if ir.words(g,t.element)==NONE{fail(&s,UNSUPPORTED,sy.declaration,81);}
    else if n.c==NONE{ /* An external declaration owns no code or frame. */ }
    else if s.functions==(*w).functions.len{fail(&s,CAPACITY,sy.declaration,4);}
    else{
-    s.cursor=0;s.maximum=0;s.locals=0;s.returns=t.element;s.break_block=NONE;s.continue_block=NONE;s.cleanup_head=NONE;s.loop_cleanup=NONE;
+    s.cursor=0;s.maximum=0;s.locals=0;s.returns=t.element;s.break_block=NONE;s.continue_block=NONE;s.cleanup_head=NONE;s.loop_cleanup=NONE;s.alignment=16;
     let first=s.code;let parameter_first=s.args;var p=n.a;var count:usize=0;
     while p!=NONE&&s.status==0{
      if s.args==(*w).arguments.len{fail(&s,CAPACITY,p,2);break;}
@@ -376,6 +434,7 @@ pub unsafe fn lower(g:*const frontend.Graph,w:*const ir.Workspace,mode:u64,r:*ir
     if s.status==0{collect_locals(&s,n.c,0);s.locals=s.cursor;}
     let trap=block(&s);if s.status==0{statement(&s,n.c,0);}
     if s.status==0{if t.element==sem.VOID{emit(&s,ir.RETURN,sem.VOID,0,0,0,0,0,sy.declaration);}
+     emit(&s,ir.FRAME_ALIGNMENT,sem.VOID,0,0,0,s.alignment,0,sy.declaration);
      (*w).functions[s.functions]=ir.Function{symbol:i,first:first,count:s.code-first,parameter_first:parameter_first,
       parameter_count:count,frame_bytes:(s.maximum+15)/16*16,returns:t.element,trap_block:trap};s.functions+=1;
     }

@@ -1,0 +1,48 @@
+module runtime_large_probe;
+import mm.runtime_large as r;
+import mm.runtime_roots as forest;
+import mm.paging as pg;
+import mm.phys_buddy as buddy;
+import sched.user_domain as ud;
+export("rl_size") fn size(kind:u64)u64{
+ if kind==0{return sizeof(r.Context) as u64;}if kind==1{return sizeof(pg.Space) as u64;}
+ if kind==2{return sizeof(ud.Domain) as u64;}if kind==3{return sizeof(ud.Cpu) as u64;}
+ if kind==4{return sizeof(pg.Retired) as u64;}if kind==5{return sizeof(buddy.Allocator) as u64;}
+ return sizeof(buddy.PageMeta) as u64;
+}
+export("rl_init") fn initialize(s:*pg.Space,p:*pg.Table,meta:*u8,physical:u64)u64{unsafe{
+ *s=pg.EMPTY_SPACE;match pg.init(s,slice_from_raw_parts(p,32),physical,slice_from_raw_parts(meta,32),48,true){ok=>{return 0;},err(e)=>{return e;},}
+}}
+export("rl_map") fn map(s:*pg.Space,v:u64,p:u64,f:u64,large:u64)u64{unsafe{
+ if large!=0{match pg.map_large_live(s,v,p,f){ok=>{return 0;},err(e)=>{return e;},}}
+ match pg.map_live(s,v,p,f){ok=>{return 0;},err(e)=>{return e;},}
+}}
+export("rl_buddy") fn allocate(s:*buddy.Allocator,m:*buddy.PageMeta,out:*u64)u64{unsafe{
+ *s=buddy.EMPTY_ALLOCATOR;match buddy.init(s,0x1000_0000,1024,slice_from_raw_parts(m,1024)){ok=>{},err(e)=>{return e;},}
+ match buddy.add_usable(s,0,1024){ok=>{},err(e)=>{return e;},}
+ match buddy.alloc(s,9){ok(value)=>{*out=value;return 0;},err(e)=>{return e;},}
+}}
+export("rl_bind") fn bind(c:*r.Context,d:*ud.Domain,s:*pg.Space,a:*const buddy.Allocator,
+ roots:*const forest.Root,count:usize,physical:u64,check:r.Check,hw:r.Hardware,load:r.Load,window:r.Window,digest:r.Digest)u64{unsafe{
+ match r.bind(c,d,s,a,slice_from_raw_parts(roots,count),physical,0x16,check,hw,load,window,digest,10000000){ok=>{return 0;},err(e)=>{return e;},}
+}}
+var ACTIVE:*r.Context=null;
+unsafe fn hook(d:*ud.Domain,cpu:usize)u64{unsafe{return r.poll(ACTIVE,d,cpu);}}
+export("rl_hook") fn install(c:*r.Context,d:*ud.Domain)u64{unsafe{
+ ACTIVE=c;match ud.register_poll(d,hook){ok=>{return 0;},err(e)=>{return e;},}
+}}
+export("rl_run") fn run(c:*r.Context)u64{unsafe{match r.run(c){ok=>{return 0;},err(e)=>{return e;},}}}
+export("rl_step") fn step(c:*r.Context,k:u64)u64{unsafe{match r.step(c,k){ok=>{return 0;},err(e)=>{return e;},}}}
+export("rl_readers") fn readers(c:*r.Context,round:u64,value:u64)u64{unsafe{match r.readers(c,round,value){ok=>{return 0;},err(e)=>{return e;},}}}
+export("rl_poll") fn poll(d:*ud.Domain,cpu:usize)u64{unsafe{match ud.poll(d,cpu){ok(value)=>{return 0;},err(e)=>{return e;},}}}
+export("rl_get") fn get(c:*r.Context,which:u64,id:usize)u64{unsafe{
+ if which==0{return &(*c).report as u64;}if which==1{return &(*c).readers[0] as u64;}
+ if which==2{return (*c).report.operation;}if which==3{return (*c).report.post_sequence;}
+ if which==4{return (*c).report.barriers;}if which==5{return (*c).report.retired;}
+ if which==6{return (*c).report.reclaimed;}if which==7{return (*c).report.state;}
+ if which==8{return (*c).report.complete;}if which==9{return (*c).report.poison;}
+ if which==10{return (*c).report.steps;}if which==11{return (*c).report.tables_before;}
+ if which==12{return (*c).report.tables_after;}if which==13{return (*c).report.old_checksum;}
+ if which==14{return (*c).report.final_checksum;}if which==15{return (*c).readers[id].count;}
+ if which==16{return (*c).readers[id].replaced.value;}return 0;
+}}

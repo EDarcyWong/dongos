@@ -1,0 +1,95 @@
+{
+  "assignment_owner": "codex",
+  "auto_dispatch": false,
+  "auto_verify": false,
+  "candidate": null,
+  "checks": [
+    "module:tests.test_framebuffer_gate",
+    "module:tests.test_runtime_cache",
+    "module:tests.test_panic_binding"
+  ],
+  "claim_from_status": "todo",
+  "claimed_at": "2026-10-22T21:30:36+00:00",
+  "claimed_by": "codex-mcp-daece153b59c4bd5",
+  "completed_at": "2026-10-22T21:45:39+00:00",
+  "complexity": "standard",
+  "created_at": "2026-10-22T21:30:32+00:00",
+  "delivery": "codex-works/deliveries/P2GOP29.md",
+  "depends_on": [],
+  "description": "作为P2CACHE20调度后WC迁移接线的必要前置，在kernel/entry.asm从boot即存在一个永久固定、64B对齐的32B Gate{word,epoch,drained,opened}，offset0/8/16/24完全符合runtime_cache.Gate。提供固定getter返回同一地址，禁止晚发布/替换指针和额外BKL等待。所有entry.asm GOP写入(screen_draw/kernel_panic_screen及其text/hex内部调用)须在最外圈一次非阻塞writer enter、所有出口正确leave；Gate closed/closing或计数非法/overflow时在读取显示几何或GOP前立即返回。初始Gate零，count与runtime_cache_gate_close/drain/open可并发协作，支持NMI重入/失败安全；panic原串口优先和fatal流程不改。不能向runtime0..6引入未链接CACHE外部依赖，局部helpers或正确共享实现均可，SysV保存寄存器及栈对齐保持。memory_runtime.asm启动可逆GOP写只读审查并证明其仅发生在任何新Domain/AP发布及迁移之前，本项不改它或宣称用户compositor已排空。测试必须真实抽取并原样汇编生产渲染器/文字/hex/Gate代码和真实rodata，C用自有受guard framebuffer验证正常绘制/closed和closing拒绝(包括NOACCESS地址)/无效几何释放/嵌套writer/计数overflow/与真实runtime_cache_reader.asm close-drain-open协作；至少删除enter/leave、错误closed判断、错误同Gate地址等实际坏源码必须导致独立C oracle失败。生产完整entry.asm实际ELF64/COFF汇编，硬件特权入口仅汇编不宿主执行。保存源码工具前后SHA、实际命令raw输出、对象/EXE哈希和明确host/VM边界，不做VM/编译/测试，由root协调器独立复验。不改B/C/D服务、memory/build文件或绘图功能语义，不扩大预算。",
+  "document": "codex-works/tasks/P2GOP29-board.md",
+  "historical": false,
+  "id": "codex:P2GOP29",
+  "integration_note": "授权文件已实际落于D:\\projects\\2026\\dongos主工作树；独立复验后逐文件SHA与回执完全一致，真实审查及范围见验收note。仅登记已完成文件集成，不进行commit/push，不扩展为P2整体验收。",
+  "legacy_hash": "0e376d7ae733a7b1ec783686d7f98d48101ba356cbe4ffa1dd84a818305f0419",
+  "number": "P2GOP29",
+  "owner": "codex",
+  "rev": 6,
+  "review_note": "根及独立审查者逐审实际entry Gate及四绘图入口、cache契约、原生C/ASM/oracle/真坏源与完整entry双格式各runtime汇编。固定align64 Gate32B/getter/singleCAS failfast，SFENCE再decrement、close/drain/epoch契约、panic serial优先/每获gate恰leave、异常参数和NOACCESS受控边界一致；boot-only GOP probe实际调用先于SMP/service。独立6e1f20d8758f4eca972db0e0f64997d7三模块3test/0skip/stable/stopped/exited；正常及7真坏源各O0/O2共16native和12 whole-entry对象真实执行/汇编范围，不声称特权host执行或实际AP/WC/NMI完成。根逐核当前6文件SHA完全相同，已真实在主工作树。",
+  "status": "integrated",
+  "title": "为正常及 panic GOP 写入接入永久静态绘图 Gate",
+  "updated_at": "2026-10-22T22:10:47+00:00",
+  "verification": {
+    "checks": [
+      {
+        "cancelled": false,
+        "elapsed_seconds": 18.875,
+        "execution_exited": true,
+        "passed": true,
+        "process_stopped": true,
+        "returncode": 0,
+        "skips": 0,
+        "spec": "module:tests.test_framebuffer_gate",
+        "tests": 1,
+        "timed_out": false
+      },
+      {
+        "cancelled": false,
+        "elapsed_seconds": 141.734,
+        "execution_exited": true,
+        "passed": true,
+        "process_stopped": true,
+        "returncode": 0,
+        "skips": 0,
+        "spec": "module:tests.test_runtime_cache",
+        "tests": 1,
+        "timed_out": false
+      },
+      {
+        "cancelled": false,
+        "elapsed_seconds": 1.422,
+        "execution_exited": true,
+        "passed": true,
+        "process_stopped": true,
+        "returncode": 0,
+        "skips": 0,
+        "spec": "module:tests.test_panic_binding",
+        "tests": 1,
+        "timed_out": false
+      }
+    ],
+    "execution_exited": true,
+    "fingerprint": {
+      "codex-works/deliveries/P2GOP29.md": "93a52f865da6201c849a5deef54c316bcd90fc59417c745a79ca6aa80bf0fdc3",
+      "docs/p2-framebuffer-gate.md": "dc2b66a89506235b15be9c363c82a910477757a16f66b05ac7467782c88a40a1",
+      "kernel/entry.asm": "50b61f652b6b13f60c5f3f8bc93f4703f2ac086f3471975adc3edbfcf691608b",
+      "tests/framebuffer_gate_probe.asm": "ca1e27542ff43c27e897497925122f37dd669715ac7729037035b4bed6417d33",
+      "tests/framebuffer_gate_probe.c": "ff9ee7ccd44ab3a1c233dac00f1c33e758505db6db8b792609263d91772a8df5",
+      "tests/test_framebuffer_gate.py": "846b87120079ad97213cc71b668fc801c6187fc18d37a5feca32fad5c0acfce3"
+    },
+    "finished_at": "2026-10-22T22:07:07+00:00",
+    "job": "6e1f20d8758f4eca972db0e0f64997d7",
+    "passed": true,
+    "process_stopped": true,
+    "source_stable": true,
+    "summary": "定向复验通过，等待源码/契约审查"
+  },
+  "write_paths": [
+    "kernel/entry.asm",
+    "tests/test_framebuffer_gate.py",
+    "tests/framebuffer_gate_probe.c",
+    "tests/framebuffer_gate_probe.asm",
+    "docs/p2-framebuffer-gate.md",
+    "codex-works/deliveries/P2GOP29.md"
+  ]
+}

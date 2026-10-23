@@ -7,7 +7,6 @@
     "module:lang.tests.test_bootstrap_compiler_job"
   ],
   "claim_from_status": "todo",
-  "claim_token": "4d0cdee2f7274ce0a345a9ce97747f1f",
   "claimed_at": "2026-10-20T10:05:52+00:00",
   "claimed_by": "codex-mcp-d76b66689d824a70",
   "completed_at": "2026-10-20T10:06:31+00:00",
@@ -21,14 +20,14 @@
   "historical": false,
   "id": "codex:CX15",
   "integration_note": "实际主线tools/compiler_job.py、docs/l3-compiler-job-host.md与恢复的原交付已落盘，三文件逐项匹配本轮正式验收指纹；代码原已进入当前4e1fede，保留当前后继启动桥，无旧版本回退。正式当前两模式双格式完整ELF固定点1test零skip通过，登记宿主兼容修复真实集成；不冒作本轮Linux/VM运行。",
-  "legacy_hash": "cff9c314d125752ee03957f14734a791ec7fee6aa93df5e88386981244d6b277",
+  "legacy_hash": "c1d2a8a07e991011bd56fb3a6fb64a0d3bf3af970db8201b8703f0aac8819e7e",
   "number": "CX15",
   "owner": "codex",
-  "rev": 8,
+  "rev": 9,
   "review_note": "已实际审查原契约、64位ULL/printf ABI、Linux非PIE宿主0x10000000段地址及guarded loader，当前工具与G6 f54c35c的LF内容一致。正式隔离8d6893090cd74e3c96a9af844a27a15c：1test/0skip/391.284秒，source_stable/process_stopped/execution_exited均true，当前三声明文件指纹一致；当前debug/release、双格式、完整ELF固定点、32前置原子性、真实语义/容量拒绝及启动桥机器正反例实际通过。本轮Windows运行，不冒作新机Linux/VM执行；原独审和后继G6证据分范围保留。完整依据reviews/2026-10-22-task-recovery/CX15-formal-review.json。",
   "status": "integrated",
   "title": "[L3] 修正编译作业宿主验证器的Linux布局与u64格式兼容",
-  "updated_at": "2026-10-22T01:12:41+00:00",
+  "updated_at": "2026-10-22T14:38:35+00:00",
   "verification": {
     "checks": [
       {

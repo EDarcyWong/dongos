@@ -16,7 +16,6 @@
     "discover:cursor-works/tests:test_guest_source_catalog.py"
   ],
   "claim_from_status": "todo",
-  "claim_token": "94da995f7cab47c6b2383fb5240a7dba",
   "claimed_at": "2026-10-20T07:23:49+00:00",
   "claimed_by": "codex-mcp-d76b66689d824a70",
   "completed_at": "2026-10-20T07:40:26+00:00",
@@ -33,14 +32,14 @@
   "historical": false,
   "id": "cursor:CR45",
   "integration_note": "已真实复制生产源码/契约至code/lang/bootstrap并将永久测试仅路径适配到code/lang/tests；清单code/build/test/guest-integration/CR45-CR46-files.json。主线联合3 tests/0skip/877.096秒，源码稳定通过；CR45生产SHAd4e6abff...、CR46生产SHA46c59707...与验收候选一致。沿用独立review_catalog_sink及各正式复验。仅组件主线集成，非客体L3/FLUSH/重启验收。",
-  "legacy_hash": "ccbc07d7a793d130f0d723b1d356f11613da5cb258db8036294267513d260de3",
+  "legacy_hash": "70b0f6fc0d1de989d2c8c890cd9f09e47c6c22451d53fae5e6b567f09e8eff30",
   "number": "CR45",
   "owner": "codex",
-  "rev": 8,
+  "rev": 9,
   "review_note": "实现者之外的独立子代理review_catalog_sink已实际审查完整源码/契约/永久测试及实际负控产物，未发现阻塞；独立安全C探针复用已核对SHA对象重新链接debug/release，catalog18场景+sink12场景/模式全通过。报告reviews/2026-10-20-independent-catalog-sink-review.md及code/build/test/independent-catalog-sink/summary.json。正式隔离CR45 2tests0skip233.343秒、CR46 1test0skip638.269秒，均returncode0/source_stable/process_stopped/execution_exited=true，当前四文件指纹一致。准予组件验收；尚未集成，非L3整体验收。",
   "status": "integrated",
   "title": "[L3] 受限文件清单批量装载为原生frontend源码目录",
-  "updated_at": "2026-10-22T00:59:00+00:00",
+  "updated_at": "2026-10-22T14:38:34+00:00",
   "verification": {
     "checks": [
       {

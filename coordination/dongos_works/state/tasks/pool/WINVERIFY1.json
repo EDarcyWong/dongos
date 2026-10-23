@@ -7,7 +7,6 @@
     "discover:pool-works/tests:test_windows_verification_finish.py"
   ],
   "claim_from_status": "rework",
-  "claim_token": "97d006dcdc2e4e77849459ac2cd3624a",
   "claimed_at": "2026-10-20T05:58:39+00:00",
   "claimed_by": "manual:claude",
   "completed_at": "2026-10-20T06:14:02+00:00",
@@ -21,14 +20,14 @@
   "historical": false,
   "id": "pool:WINVERIFY1",
   "integration_note": "已完成真实文件集成：候选runner.py复制至coordination/dongos_coordination/runner.py，两者SHA256同为40504e6f0ca2beca2d6e1a08b9c91735d978529854c575f3a4590cc325b08abe；新增coordination/tests/test_windows_verification_finish.py对正式包运行11项零skip回归。原runner备份coordination/.local/WINVERIFY1-integration/runner-before.py。通过正式shutdown接口停止旧服务13684，无活动/排队作业，隐藏启动新服务1388，HTTP/MCP恢复且多项正式复验process_stopped=true正常登记。任务正式11项零skip与文件稳定已验收，不改库/索引、不伪造复验。",
-  "legacy_hash": "9695b41b0b2aee918981eecbb6c7a504f2ab062d65dd4cb503b6e529e8fa77d7",
+  "legacy_hash": "e044fe62ff9efb3ef09962149809e9866c5bd4db51fcc27b59462f49c585e877",
   "number": "WINVERIFY1",
   "owner": "claude",
-  "rev": 10,
+  "rev": 11,
   "review_note": "按用户明确授权Codex接续集成适配。已实际审查WindowsJob的挂起创建→先归入Job→恢复、无breakaway、活动计数为0才确认停止、残留后代终止、无Job保守回退及服务重启停止确认，未把None伪造为True。修复测试正式隔离目录的只读依赖定位、依赖前后SHA守卫和集成后候选相同的误断言。正式隔离作业c0f8c5285d28423e80eafea8e049c648通过11tests/0skip，48.706秒，process_stopped=true/source_stable=true，当前任务文件指纹一致；主线coordination/tests/test_windows_verification_finish.py另11tests/0skip通过44.470秒。确认正常父子退出保存verification，残留/暂停/取消/旧令牌/重启/失效Job保护均真实子进程通过。源码runner已复制到正式包，等待下一步登记实际集成。",
   "status": "integrated",
   "title": "修复Windows定向复验正常退出后无法登记完成",
-  "updated_at": "2026-10-22T00:59:08+00:00",
+  "updated_at": "2026-10-22T14:38:36+00:00",
   "verification": {
     "checks": [
       {

@@ -7,7 +7,6 @@
     "discover:tests:test_compiler_stack.py"
   ],
   "claim_from_status": "rework",
-  "claim_token": "1166544bcb184666bbde5cc21aeed9ed",
   "claimed_at": "2026-10-20T08:30:02+00:00",
   "claimed_by": "codex-mcp-d76b66689d824a70",
   "completed_at": "2026-10-20T08:30:03+00:00",
@@ -21,14 +20,14 @@
   "historical": false,
   "id": "codex:CX7",
   "integration_note": "此任务声明路径即主线真实文件，已落盘并逐项与正式指纹一致；主线先前1test0skip267.672s及独立全面执行、正式最终288.257s均通过。完成组件真实集成；尚未宣称客体编译链完成。",
-  "legacy_hash": "816b1f0d0a48c405a95013efa71f3a654b533904323fa6e7cb00a267c34e13e1",
+  "legacy_hash": "b93d4c3c54572a48692d8b64fad66f10e9b04291aa9a2d190bd156b5f3017a2e",
   "number": "CX7",
   "owner": "codex",
-  "rev": 13,
+  "rev": 14,
   "review_note": "用户明确委托选择栈约束，采用专用64KiB上下guard且计入既有64MiB，普通仍16KiB。独立review_stack每模式2729145实测检查全17失败位置/回滚/复用清零/边界/ET_DYN通过，报告2026-10-20-independent-compiler-stack-review.md；正式003019复验1test0skip288.257s源码稳定/停止确认。已审查profile封闭入口与容量/保护保留，无用户选择大小或权限扩张。",
   "status": "integrated",
   "title": "[L3] 编译器专用64KiB受保护栈配置与装载入口",
-  "updated_at": "2026-10-22T00:59:02+00:00",
+  "updated_at": "2026-10-22T14:38:35+00:00",
   "verification": {
     "checks": [
       {

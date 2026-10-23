@@ -1,0 +1,77 @@
+{
+  "assignment_owner": "codex",
+  "auto_dispatch": false,
+  "auto_verify": false,
+  "candidate": null,
+  "checks": [
+    "module:tests.test_p2_wc_benchmark"
+  ],
+  "claim_from_status": "rework",
+  "claimed_at": "2026-10-22T19:11:48+00:00",
+  "claimed_by": "codex-mcp-daece153b59c4bd5",
+  "completed_at": "2026-10-22T19:17:15+00:00",
+  "complexity": "standard",
+  "created_at": "2026-10-22T18:41:35+00:00",
+  "delivery": "codex-works/deliveries/P2WC14.md",
+  "depends_on": [
+    "codex:P2ALIAS8"
+  ],
+  "description": "用户要求先完整P2再P5。P2ALIAS8机制/像素已验，TCG不证明真实WC吞吐。本项准备可在物理机使用的有限GOP UC/WC采集器，不伪造性能通过，不新增未必要正常行为。新DG+ASM模块，对真实GOP范围内最多64KiB有界窗口，在启动WC迁移前UC与迁移后WC用完全同一写模式测7次cycles，SFENCE完成WC store、序列化TSC；保存/逐字恢复原窗口，guard与报告记录phase/真实query flags/root/范围/频率与samples/bytes/restored，工作backup由既有service arena实际分配，避免巨型BSS。前后必须绑定实际已验收alias_memory配置/全GOP owner、PAT/MTRR读回及正常kernel Space。不能把newfield标签当cache实际状态。新staging工具复制完整当前源码，只在私有alias_memory.dg的明确两位置插入采样调用/导入，并在私有alias ASM追加新timing helper；保存精确overlay diff与原始/fixture/工具/artifact SHA，用真实builder构建runtime7镜像，正常生产源码不被重写。默认prepare、明确--execute分开；普通执行者不启动OS/VM，协调者另据用户P2授权执行准备好的受控VM/外部物理验收。TCG/WHPX/VMware记录全部标虚拟环境，不能给physical_wc_performance=true；真实物理来源需独立实际记录，未测则P2外部门禁保持未完成。\n永久host测试对真实DG+ASM用真实paging在本地RAM执行有界写/恢复与报告验证，明确本地RAM cache unknown、不算UC/WC效果。debug/release guard、无效范围/容量/错误cache flags、真实越界或跳恢复坏体须准确拒绝，保留commands/raw/SHA/source stable/0skip。staging/硬件receipt伪造或仅bool flags不得通过来源审查。不修改其它已验P2 owner、编译器、2MiB装载ABI或原门槛，不commit/push/AI CLI。",
+  "document": "codex-works/tasks/P2WC14-board.md",
+  "historical": false,
+  "id": "codex:P2WC14",
+  "integration_note": "八个实现/测试/文档已在真实本地主线工作树，当前SHA与771f1364正式指纹一致；固定隔离副本内新freshbuild与实际四核采集/raw replay另提供执行证据，非以booleans假冒集成。登记本地工具组件集成，不commit/push。物理WC门禁和动态多根WC仍pending，P2整体partial。",
+  "legacy_hash": "e2c7c1e37576007c2e489d69cb82e1a3fdf3dcac1ba503dd0863ef243ca194f8",
+  "number": "P2WC14",
+  "owner": "codex",
+  "rev": 10,
+  "review_note": "实际审查DG/ASM计时SFENCE+CPUID/RDTSC/LFENCE、完整叶PTE/flags、备份guards逐字恢复、native C直接核pattern、精确overlay和source/tool/log/artifact身份及显式runner/replay。新正式771f1364dcae4599970d908643969e73五tests/0skip、191.516秒、stable/stopped/exited=true；含真实fresh runtime7 build→direct/CLIidentity→真实command tamper拒绝→恢复。root复算597SHA，kernel.bin2006736B，native debug/release两正向及跳恢复/越界4坏体精确拒绝。另root在该固定源码副本显式实际四核TCG采集run-fbd3198c8e47，CLI rc0；raw replay一致、67物理dump逐项SHA/长度复算，完整PAT/MTRR/owner/GOP/PTE和备份恢复通过，QEMU stopped/cleanup=true/alive=false/rc0、source/disk稳定。首轮真实identity失败保留。physical_wc_performance/physical_gate_complete仍false，本项不关闭物理WC或调度后迁移义务。",
+  "status": "integrated",
+  "title": "P2真实GOP UC/WC性能采集器及可复验启动镜像准备",
+  "updated_at": "2026-10-22T19:23:04+00:00",
+  "verification": {
+    "checks": [
+      {
+        "cancelled": false,
+        "elapsed_seconds": 191.516,
+        "execution_exited": true,
+        "passed": true,
+        "process_stopped": true,
+        "returncode": 0,
+        "skips": 0,
+        "spec": "module:tests.test_p2_wc_benchmark",
+        "tests": 5,
+        "timed_out": false
+      }
+    ],
+    "execution_exited": true,
+    "fingerprint": {
+      "codex-works/deliveries/P2WC14.md": "689cdafa2a9011ddebf565b18ed5b3875c52756f77397965ddac8d6806088d86",
+      "docs/p2-wc-benchmark.md": "1fce501e8275504d3217858ef6f06443ce002013bf3b419d78f1c9ea5b286994",
+      "kernel/mm/wc_benchmark.asm": "fc3cb9fc686a38e212363341f9266dc0c4dff515d7adc8fa483ec001ade70204",
+      "kernel/mm/wc_benchmark.dg": "7b6bffb9fabaf3dee70c1fa6a8b6daf566793b4e4f752996b756f9d4ed931cba",
+      "tests/p2_wc_stage.py": "ae9eeaa48bad21d2be59564830ac5fa4d92c5f0d2621c9a9974585bf865bc79e",
+      "tests/run_p2_wc_benchmark.py": "6c8a30b812024d434c545d2290048a4789a798e93b58b3f595e1527354260b7f",
+      "tests/test_p2_wc_benchmark.py": "8453510ea64d8fa79bcd582d725b2c9825aa9ce4389fc60a44917e650497cd1a",
+      "tests/wc_benchmark_probe.c": "d3c9c1c0002204e496be9640988f5cc2b89fbb9f0f9661c91ce5de30e3f964da",
+      "tests/wc_benchmark_probe.dg": "a2ec0f787f5c6fc4df920b58a245c19afcf7a37df4e794e3131cc8b19f870eaf"
+    },
+    "finished_at": "2026-10-22T19:21:00+00:00",
+    "job": "771f1364dcae4599970d908643969e73",
+    "passed": true,
+    "process_stopped": true,
+    "source_stable": true,
+    "summary": "定向复验通过，等待源码/契约审查"
+  },
+  "write_paths": [
+    "kernel/mm/wc_benchmark.dg",
+    "kernel/mm/wc_benchmark.asm",
+    "tests/p2_wc_stage.py",
+    "tests/run_p2_wc_benchmark.py",
+    "tests/wc_benchmark_probe.dg",
+    "tests/wc_benchmark_probe.c",
+    "tests/test_p2_wc_benchmark.py",
+    "docs/p2-wc-benchmark.md",
+    "codex-works/deliveries/P2WC14.md"
+  ]
+}

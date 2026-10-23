@@ -1,0 +1,45 @@
+module runtime_exec_probe;
+import mm.runtime_exec as r;
+import mm.runtime_roots as forest;
+import mm.paging as pg;
+import mm.phys_buddy as buddy;
+import sched.user_domain as ud;
+export("re_size") fn size(which:u64)u64{
+ if which==0{return sizeof(r.Context) as u64;}if which==1{return sizeof(pg.Space) as u64;}
+ if which==2{return sizeof(ud.Domain) as u64;}if which==3{return sizeof(ud.Cpu) as u64;}
+ if which==4{return sizeof(buddy.Allocator) as u64;}if which==5{return sizeof(buddy.PageMeta) as u64;}
+ if which==6{return sizeof(r.ReaderReport) as u64;}if which==7{return sizeof(r.Report) as u64;}
+ if which==8{return sizeof(r.FaultTicket) as u64;}if which==9{return sizeof(r.Fault) as u64;}
+ return sizeof(r.FaultBinding) as u64;
+}
+export("re_init") fn initialize(s:*pg.Space,p:*pg.Table,m:*u8,physical:u64)u64{unsafe{
+ *s=pg.EMPTY_SPACE;match pg.init(s,slice_from_raw_parts(p,32),physical,slice_from_raw_parts(m,32),48,true){ok=>{return 0;},err(e)=>{return e;},}
+}}
+export("re_map") fn map(s:*pg.Space,v:u64,p:u64,f:u64)u64{unsafe{
+ match pg.map_live(s,v,p,f){ok=>{return 0;},err(e)=>{return e;},}
+}}
+export("re_buddy") fn allocate(s:*buddy.Allocator,m:*buddy.PageMeta,old:*u64,frame:*u64)u64{unsafe{
+ *s=buddy.EMPTY_ALLOCATOR;match buddy.init(s,0x1000_0000,64,slice_from_raw_parts(m,64)){ok=>{},err(e)=>{return e;},}
+ match buddy.add_usable(s,0,64){ok=>{},err(e)=>{return e;},}
+ match buddy.alloc(s,0){ok(p)=>{*old=p;},err(e)=>{return e;},}
+ match buddy.alloc(s,0){ok(p)=>{*frame=p;return 0;},err(e)=>{return e;},}
+}}
+export("re_bind") fn bind(c:*r.Context,d:*ud.Domain,s:*pg.Space,a:*const buddy.Allocator,roots:*const forest.Root,
+ count:usize,frame:u64,check:r.Check,hardware:r.Hardware,action:r.Action)u64{unsafe{
+ match r.bind(c,d,s,a,slice_from_raw_parts(roots,count),frame,0x19,check,hardware,action,1000000){ok=>{return 0;},err(e)=>{return e;},}
+}}
+var ACTIVE:*r.Context=null;
+unsafe fn hook(d:*ud.Domain,id:usize)u64{unsafe{return r.poll(ACTIVE,d,id);}}
+export("re_install") fn install(c:*r.Context,d:*ud.Domain)u64{unsafe{
+ ACTIVE=c;match ud.register_poll(d,hook){ok=>{return 0;},err(e)=>{return e;},}
+}}
+export("re_run") fn run(c:*r.Context)u64{unsafe{match r.run(c){ok=>{return 0;},err(e)=>{return e;},}}}
+export("re_poll") fn poll(d:*ud.Domain,id:usize)u64{unsafe{
+ match ud.poll(d,id){ok(value)=>{return 0;},err(e)=>{return e;},}
+}}
+export("re_fault") fn fault(c:*r.Context,id:usize,f:*const r.Fault,out:*u64)u64{unsafe{return r.handle_fault(c,id,f,out);}}
+export("re_consume") fn consume(t:*r.FaultTicket,f:*const r.Fault,b:*const r.FaultBinding,out:*u64)u64{unsafe{return r.consume_fault(t,f,b,out);}}
+export("re_pointer") fn pointer(c:*r.Context,which:u64)u64{unsafe{
+ if which==0{return &(*c).report as u64;}if which==1{return &(*c).readers[0] as u64;}
+ if which==2{return &(*c).roots[0] as u64;}return &(*c).retired[0] as u64;
+}}

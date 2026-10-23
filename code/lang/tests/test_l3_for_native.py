@@ -42,6 +42,7 @@ pub fn early(s:[]u8)[]u8{trace=0;defer push(8);
 '''
 
 ELF_ENTRY='''module entry;
+export("__dong_panic")fn panic(k:u32,line:u32,p:*const u8,n:usize)noreturn{loop{}}
 pub var total:u64=0;
 fn add(n:u64)void{total+=n;}
 fn compute()u64{total=0;defer add(3);for i in 1..4{defer add(i);match i==2{true=>{continue;},_=>{},}}return total;}
@@ -133,6 +134,8 @@ typedef uint64_t U;typedef struct{void*p;U n;}Slice;
             for mode in (0,1):
                 _,asm=self.h.generate('good',[('entry.dg',ELF_ENTRY)],'control-native-elf-'+str(mode),mode)
                 text=asm.read_text();kind='release' if mode else 'debug';entry=bridge.label('entry','f')
+                self.assertIn('global $__dong_panic\n',text)
+                self.assertNotIn('extern $__dong_panic\n',text)
                 status,image,result=check.assemble(kind,text,entry=entry)
                 self.assertEqual(status,0,(result.line,result.detail));self.assertEqual(image[:4],b'\x7fELF')
                 self.assertEqual(check.execute(image),69)

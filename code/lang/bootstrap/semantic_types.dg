@@ -41,6 +41,7 @@ pub struct RuntimeWorkspace{pub info:[]Info,pub initialized:[]u8,pub snapshots:[
  pub breaks:[]u8,pub loop_seen:[]u8}
 const PLACE:u64=1;const WRITE:u64=2;const KNOWN:u64=4;const NEVER:u64=8;const LENGTH:u64=16;const TAG:u64=32;
 const NULL_TYPE:usize=0xffff_ffff_ffff_fffc;
+const ERROR_TYPE:usize=0xffff_ffff_ffff_fffb;
 struct Runtime{s:*State,w:*const RuntimeWorkspace,unit:usize,returns:usize,unsafe_depth:usize,
  loop_depth:usize,snapshot_depth:usize,in_defer:bool,defer_token:usize,live:bool}
 struct Region{p:u64,n:usize,width:usize,alignment:usize}
@@ -145,6 +146,19 @@ unsafe fn leaf(s:*State,u:usize,id:usize,out:*Value)bool{unsafe{
 unsafe fn fold(s:*State,u:usize,id:usize,expected:usize,depth:usize,out:*Value)bool{unsafe{
  if !enter(s,u,id,depth){return false;}let n=*at(s,u,id);
  if n.kind==ast.INTEGER||n.kind==ast.BOOLEAN{return leaf(s,u,id,out);}
+ if n.kind==ast.CALL{let r=(*s).refs[gid(s,u,n.a)];
+  if r.kind!=binding.INTRINSIC||r.target<1||r.target>3{fail(s,CONSTANT,u,id,n.kind);return false;}
+  let first=n.b;if first==NONE{fail(s,TYPE,u,id,15);return false;}let second=(*at(s,u,first)).next;
+  if second==NONE||(*at(s,u,second)).next!=NONE{fail(s,TYPE,u,id,16);return false;}
+  var a=Value{kind:0,typ:NONE,negative:false,first:0,used:0};var b=Value{kind:0,typ:NONE,negative:false,first:0,used:0};
+  var target=expected;if target>=8{target=NONE;}
+  if !fold(s,u,first,target,depth+1,&a)||!fold(s,u,second,target,depth+1,&b){return false;}
+  if target==NONE{target=a.typ;if target==NONE{target=b.typ;}if target==NONE{target=7;}}
+  if target>=8||(a.typ!=NONE&&a.typ!=target)||(b.typ!=NONE&&b.typ!=target){fail(s,TYPE,u,id,17);return false;}
+  if !coerce(s,u,first,&a,target)||!coerce(s,u,second,&b,target){return false;}
+  var op:u64=1067;if r.target==2{op=1069;}else if r.target==3{op=1066;}
+  if !run_math(s,u,id,op,&a,&b,false,out){return false;}return wrapped(s,u,id,out,target);
+ }
  if n.kind==ast.NAME||n.kind==ast.FIELD{
   let r=(*s).refs[gid(s,u,id)];var owner=r.unit;var declaration=r.target;
   if r.kind==binding.GLOBAL{let sym=(*s).symbols[r.target];if sym.kind!=names.CONST{fail(s,CONSTANT,u,id,1);return false;}owner=sym.unit;declaration=sym.declaration;}
@@ -380,6 +394,10 @@ unsafe fn top_function(s:*State,u:usize,id:usize,wrapper:usize)bool{unsafe{
   if a.op==267&&a.a!=NONE{let string=*at(s,u,a.a);if (*s).tokens[(*s).units[u].token_start+string.token].value_length==5{flags|=1;}}
   if a.op==268{flags|=2;}p=a.next;
  }
+ // Bodyless declarations are external; the seed marks every external function
+ // unsafe by default, with or without an explicit ABI. Keep the ABI bit and
+ // enforce the same unsafe call boundary for free functions and methods.
+ if n.c==NONE{flags|=2;}
  let t=Type{kind:FUNCTION,flags:flags,element:ret,count:0,first:first,length:count,unit:u,node:id,alignment:0};let typ=add_type(s,&t);
  if (*s).status!=0{return false;}(*w).node_types[gid(s,u,id)]=typ;return signature(s,typ,n.c==NONE);
 }}
@@ -565,22 +583,25 @@ unsafe fn rt_accept(c:*Runtime,id:usize,target:usize)usize{unsafe{
   let g=gid(s,(*c).unit,id);(*w).values[g]=v;(*w).value_states[g]=2;(*info).typ=target;(*info).flags|=KNOWN;return target;
  }
  let tk=rt_kind(c,target);let sk=rt_kind(c,source);
- if source==NONE&&(tk==OPTIONAL||tk==RESULT){let payload=(*w).types[target].element;
-  if payload<8{rt_accept(c,id,payload);if (*s).status==0{return rt_wrap(c,id,target,tk==OPTIONAL);}}return NONE;
- }
+ if source==ERROR_TYPE&&tk==RESULT{(*info).typ=target;(*info).flags=((*info).flags&NEVER)|512|TAG;(*info).length=1;return target;}
  if source==NULL_TYPE&&tk==OPTIONAL{return rt_wrap(c,id,target,false);}
  if source==NULL_TYPE&&tk==POINTER{(*info).typ=target;return target;}
+ if tk==OPTIONAL||tk==RESULT{let payload=(*w).types[target].element;
+  if payload!=VOID{rt_accept(c,id,payload);if (*s).status==0{return rt_wrap(c,id,target,tk==OPTIONAL);}return NONE;}
+ }
  if source<(*s).type_count&&target<(*s).type_count{
   let a=(*w).types[source];let b=(*w).types[target];
   if sk==tk&&(tk==POINTER||tk==SLICE)&&(b.flags&1)!=0&&rt_same(c,a.element,b.element,0){(*info).typ=target;return target;}
-  if tk==OPTIONAL||tk==RESULT{if b.element!=VOID&&rt_same(c,source,b.element,0){return rt_wrap(c,id,target,tk==OPTIONAL);}}
  }
  return rt_fail(c,TYPE,id,target as u64);
 }}
 // Tagged values cannot retain scalar/place/length facts from their payload.
 // TAG uses Info.length for the known tag; LENGTH and TAG are disjoint.
 unsafe fn rt_wrap(c:*Runtime,id:usize,target:usize,present:bool)usize{unsafe{
- let info=rt_info(c,id);(*info).typ=target;(*info).flags=((*info).flags&NEVER)|TAG;
+ let info=rt_info(c,id);let original=(*info).typ;var saved:u64=0;
+ if original<(*(*c).s).type_count{saved=((original+1)as u64)<<32;}
+ if ((*info).flags&KNOWN)!=0{saved|=256;}
+ (*info).typ=target;(*info).flags=((*info).flags&NEVER)|TAG|64|saved;
  (*info).length=0;if present{(*info).length=1;}
  (*(*(*c).s).w).value_states[gid((*c).s,(*c).unit,id)]=0;return target;
 }}
@@ -637,6 +658,10 @@ unsafe fn rt_expr_general(c:*Runtime,id:usize,expected:usize,read:bool,depth:usi
    if r.kind==binding.GLOBAL&&(*s).symbols[r.target].kind==names.CONST{flags|=PLACE;}
   }
  }else if n.kind==ast.NULL{typ=NULL_TYPE;}
+ else if n.kind==ast.ERROR{typ=ERROR_TYPE;}
+ else if n.kind==ast.FIELD&&(*s).refs[gid(s,u,id)].kind==binding.ENUM_MEMBER{
+  typ=rt_enum(c,id,&(*s).refs[gid(s,u,id)],NONE,depth+1);flags=(*info).flags;
+ }
  else if n.kind==ast.STRING{typ=rt_type(c,SLICE,1,0,0,id);flags=LENGTH;(*info).length=(*s).tokens[(*s).units[u].token_start+n.token].value_length;}
  else if n.kind==ast.NAME||(n.kind==ast.FIELD&&(*s).refs[gid(s,u,id)].kind==binding.GLOBAL){
   let r=(*s).refs[gid(s,u,id)];if r.kind==binding.LOCAL{
@@ -705,6 +730,7 @@ unsafe fn rt_try(c:*Runtime,id:usize,depth:usize)usize{unsafe{
  let typ=rt_expr(c,n.a,NONE,true,depth+1);if (*s).status!=0{return NONE;}
  if rt_kind(c,typ)!=RESULT{return rt_fail(c,TYPE,id,81);}
  (*rt_info(c,id)).flags=(*rt_info(c,n.a)).flags&NEVER;
+ if rt_tag(c,(*c).unit,n.a,0)==1{(*rt_info(c,id)).flags|=NEVER;}
  return (*(*s).w).types[typ].element;
 }}
 // EXIT is deliberately reachable only as an orelse RHS. The caller selects
@@ -788,8 +814,22 @@ unsafe fn rt_calculate(c:*Runtime,id:usize,op:u64,typ:usize,modular:bool)bool{un
  if modular{if !wrapped(s,u,id,&value,typ){return false;}}else if typ!=NONE{if !coerce(s,u,id,&value,typ){return false;}}
  let g=gid(s,u,id);(*w).values[g]=value;(*w).value_states[g]=2;(*rt_info(c,id)).flags|=KNOWN;return true;
 }}
+// Binding identifies the nominal enum and exact variant without reparsing a
+// path. Publish its tag on this expression; variant payloads stay scalar.
+unsafe fn rt_enum(c:*Runtime,id:usize,r:*const binding.Ref,args:usize,depth:usize)usize{unsafe{
+ let s=(*c).s;let w=(*s).w;if (*r).detail>=(*s).symbols.len{return rt_fail(c,BAD_GRAPH,id,92);}
+ let sy=(*s).symbols[(*r).detail];let typ=(*w).node_types[gid(s,sy.unit,sy.declaration)];
+ if rt_kind(c,typ)!=ENUM{return rt_fail(c,TYPE,id,93);}let t=(*w).types[typ];var f:usize=0;
+ while f<t.length{let field=(*w).fields[t.first+f];if field.unit==(*r).unit&&field.node==(*r).target{
+  var flags:u64=TAG;if field.typ==NONE{if args!=NONE{return rt_fail(c,TYPE,id,94);}}
+  else{if args==NONE||(*at(s,(*c).unit,args)).next!=NONE{return rt_fail(c,TYPE,id,95);}
+   rt_expr(c,args,field.typ,true,depth+1);if (*s).status!=0{return NONE;}flags|=(*rt_info(c,args)).flags&NEVER;
+  }*rt_info(c,id)=Info{typ:typ,flags:flags,length:f};return typ;
+ }f+=1;}return rt_fail(c,BAD_GRAPH,id,96);
+}}
 unsafe fn rt_call(c:*Runtime,id:usize,expected:usize,depth:usize)usize{unsafe{
  let s=(*c).s;let u=(*c).unit;let w=(*s).w;let n=*at(s,u,id);let r=(*s).refs[gid(s,u,n.a)];
+ if r.kind==binding.ENUM_MEMBER{return rt_enum(c,id,&r,n.b,depth+1);}
  if r.kind==binding.INTRINSIC{
   if r.target>=4&&r.target<=12{return rt_memory_intrinsic(c,id,r.target,depth+1);}
   let first=n.b;if first==NONE{return rt_fail(c,TYPE,id,15);}let second=(*at(s,u,first)).next;
@@ -1056,32 +1096,51 @@ unsafe fn rt_loop(c:*Runtime,id:usize,depth:usize)bool{unsafe{
   if (*c).live{rt_unpack(c,(*rw).breaks,level);}
  }return (*c).live;
 }}
+unsafe fn rt_enum_tag(c:*Runtime,u:usize,id:usize,depth:usize)usize{unsafe{
+ let s=(*c).s;if depth>=(*s).limit{return NONE;}let info=(*(*c).w).info[gid(s,u,id)];if (info.flags&TAG)!=0{return info.length;}
+ let n=*at(s,u,id);if n.kind==ast.NAME||n.kind==ast.FIELD{let r=(*s).refs[gid(s,u,id)];
+  if r.kind==binding.GLOBAL{let sy=(*s).symbols[r.target];if sy.kind==names.CONST{return rt_enum_tag(c,sy.unit,(*at(s,sy.unit,sy.declaration)).b,depth+1);}}
+  if r.kind==binding.LOCAL&&r.detail==260{return rt_enum_tag(c,r.unit,(*at(s,r.unit,r.target)).b,depth+1);}
+ }return NONE;
+}}
 unsafe fn rt_match(c:*Runtime,id:usize,depth:usize)bool{unsafe{
  let s=(*c).s;let u=(*c).unit;let n=*at(s,u,id);let typ=rt_expr(c,n.a,NONE,true,depth+1);
  if (*s).status!=0{return false;}let kind=rt_kind(c,typ);
- if typ!=8&&kind!=OPTIONAL&&kind!=RESULT{rt_fail(c,UNSUPPORTED,id,ast.MATCH);return false;}
- let live=(*c).live;var truth:u64=2;if typ==8{truth=rt_truth(c,n.a);}else{truth=rt_tag(c,u,n.a,0);}
+ if typ!=8&&kind!=OPTIONAL&&kind!=RESULT&&kind!=ENUM{rt_fail(c,TYPE,id,ast.MATCH);return false;}
+ let live=(*c).live;var truth:u64=2;if typ==8{truth=rt_truth(c,n.a);}else{truth=rt_tag(c,u,n.a,0);}var known=truth<2;
+ if kind==ENUM{let tag=rt_enum_tag(c,u,n.a,0);known=tag!=NONE;truth=tag as u64;}
  let slot=(*c).snapshot_depth*2;(*c).snapshot_depth+=1;if !rt_copy(c,slot,true){return false;}
- var seen:u64=0;var any_live=false;var arm=n.b;while arm!=NONE{let a=*at(s,u,arm);let p=*at(s,u,a.a);var mask:u64=0;
+ var seen:usize=0;var total:usize=2;if kind==ENUM{total=(*(*s).w).types[typ].length;}
+ var wildcard=false;var taken=false;var any_live=false;var arm=n.b;while arm!=NONE{let a=*at(s,u,arm);let p=*at(s,u,a.a);var key:usize=NONE;
   var payload:usize=NONE;var name:[]const u8="";
   if p.a!=NONE{let path=*at(s,u,p.a);if path.kind==ast.NAME{name=text(s,u,path.token);}}
-  if p.op==0&&equal(name,"_"){mask=3^seen;}
-  else if typ==8{if p.op==286{mask=2;}else if p.op==287{mask=1;}}
+  if p.op==0&&equal(name,"_"){if wildcard||seen==total{rt_fail(c,FLOW,a.a,1);return false;}wildcard=true;}
+  else if typ==8{if p.op==286{key=1;}else if p.op==287{key=0;}}
   else if kind==OPTIONAL{
-   if p.op==288{mask=1;}else if p.op==0&&equal(name,"some"){mask=2;payload=(*(*s).w).types[typ].element;}
+   if p.op==288{key=0;}else if p.op==0&&equal(name,"some"){key=1;payload=(*(*s).w).types[typ].element;}
   }else if kind==RESULT{
-   if p.op==0&&equal(name,"ok"){mask=1;payload=(*(*s).w).types[typ].element;}
-   else if p.op==0&&equal(name,"err"){mask=2;payload=3;}
+   if p.op==0&&equal(name,"ok"){key=0;payload=(*(*s).w).types[typ].element;}
+   else if p.op==0&&equal(name,"err"){key=1;payload=3;}
+  }else if kind==ENUM&&p.a!=NONE{
+   let r=(*s).refs[gid(s,u,p.a)];let t=(*(*s).w).types[typ];
+   if r.kind==binding.ENUM_MEMBER&&r.detail<(*s).symbols.len{
+    let sy=(*s).symbols[r.detail];if (*(*s).w).node_types[gid(s,sy.unit,sy.declaration)]==typ{
+     var f:usize=0;while f<t.length{let member=(*(*s).w).fields[t.first+f];if member.unit==r.unit&&member.node==r.target{key=f;payload=member.typ;break;}f+=1;}
+    }
+   }
   }
   if payload==VOID{payload=NONE;}
-  if mask==0&&!equal(name,"_"){rt_fail(c,TYPE,a.a,42);return false;}
+  if key==NONE&&!equal(name,"_"){rt_fail(c,TYPE,a.a,42);return false;}
   if (payload==NONE)!=(p.b==NONE){rt_fail(c,TYPE,a.a,88);return false;}
-  if mask==0||(seen&mask)!=0{rt_fail(c,FLOW,a.a,1);return false;}seen|=mask;rt_copy(c,slot,false);
+  if key!=NONE{if wildcard{rt_fail(c,FLOW,a.a,1);return false;}var prior=n.b;while prior!=arm{
+   let old=*at(s,u,prior);if (*rt_info(c,old.a)).length==key{rt_fail(c,FLOW,a.a,1);return false;}prior=old.next;
+  }seen+=1;}
+  *rt_info(c,a.a)=Info{typ:payload,flags:TAG,length:key};rt_copy(c,slot,false);
   if p.b!=NONE{let g=gid(s,u,p.b);(*(*s).w).node_types[g]=payload;(*(*c).w).initialized[g]=1;}
-  var selected=truth==2;if truth==0{selected=(mask&1)!=0;}if truth==1{selected=(mask&2)!=0;}
+  let selected=!known||(!taken&&(key==truth||key==NONE));if known&&selected{taken=true;}
   (*c).live=live&&selected;rt_statement(c,a.b,depth+1);if (*c).live{rt_merge(c,slot+1,!any_live);any_live=true;}
   if (*s).status!=0{return false;}arm=a.next;
- }if seen!=3{rt_fail(c,FLOW,id,2);return false;}rt_copy(c,slot,false);if any_live{rt_copy(c,slot+1,false);}(*c).snapshot_depth-=1;(*c).live=any_live;return any_live;
+ }if seen!=total&&!wildcard{rt_fail(c,FLOW,id,2);return false;}rt_copy(c,slot,false);if any_live{rt_copy(c,slot+1,false);}(*c).snapshot_depth-=1;(*c).live=any_live;return any_live;
 }}
 unsafe fn rt_statement(c:*Runtime,id:usize,depth:usize)bool{unsafe{
  let s=(*c).s;let u=(*c).unit;let w=(*s).w;if !enter(s,u,id,depth){return false;}let n=*at(s,u,id);let rw=(*c).w;
@@ -1089,14 +1148,13 @@ unsafe fn rt_statement(c:*Runtime,id:usize,depth:usize)bool{unsafe{
   while item!=NONE{let node=*at(s,u,item);
    if node.kind==ast.DEFER{if (*c).in_defer{rt_fail(c,FLOW,item,3);return false;}let slot=(*c).snapshot_depth*2;(*c).snapshot_depth+=1;
     if !rt_copy(c,slot,true){return false;}let live=(*c).live;(*c).in_defer=true;(*c).defer_token=node.token;(*c).live=true;rt_statement(c,node.a,depth+1);cleanup_stops=cleanup_stops||!(*c).live;
-    if (*s).status==0&&cleanup_stops{rt_fail(c,UNSUPPORTED,item,ast.DEFER);return false;}
     (*c).in_defer=false;rt_copy(c,slot,false);(*c).snapshot_depth-=1;(*c).live=live;
    }else{rt_statement(c,item,depth+1);}if (*s).status!=0{return false;}item=node.next;
   }if cleanup_stops{(*c).live=false;}return (*c).live;
  }
  if n.kind==ast.BINDING{let g=gid(s,u,id);var typ=(*w).node_types[g];(*rw).initialized[g]=0;
   if n.b!=NONE{typ=rt_expr(c,n.b,typ,true,depth+1);if typ==NONE{typ=rt_default(c,n.b);}(*rw).initialized[g]=1;}
-  if typ==NONE||typ==VOID||typ==NORETURN||typ==NULL_TYPE{rt_fail(c,TYPE,id,43);return false;}(*w).node_types[g]=typ;
+  if typ==NONE||typ==VOID||typ==NORETURN||typ==NULL_TYPE||typ==ERROR_TYPE{rt_fail(c,TYPE,id,43);return false;}(*w).node_types[g]=typ;
  }else if n.kind==ast.ASSIGN{
   let target=*at(s,u,n.a);let plain=n.op==1085;let typ=rt_expr(c,n.a,NONE,!plain||target.kind!=ast.NAME,depth+1);let flags=(*rt_info(c,n.a)).flags;
   if (*s).status!=0{return false;}if (flags&PLACE)==0{rt_fail(c,TYPE,n.a,44);return false;}if (flags&WRITE)==0{rt_fail(c,IMMUTABLE,n.a,0);return false;}
@@ -1150,13 +1208,18 @@ unsafe fn rt_static_place(c:*Runtime,id:usize,depth:usize)bool{unsafe{
 }}
 unsafe fn rt_static(c:*Runtime,id:usize,depth:usize)bool{unsafe{
  let s=(*c).s;if depth>=(*s).limit{return false;}let u=(*c).unit;let n=*at(s,u,id);
- if rt_pure(c,id,0)||n.kind==ast.NULL||n.kind==ast.STRING{return true;}
+ if (*(*s).w).value_states[gid(s,u,id)]==2{return true;}
+ if rt_pure(c,id,0)||n.kind==ast.NULL||n.kind==ast.STRING||n.kind==ast.ERROR{return true;}
+ if n.kind==ast.FIELD&&(*s).refs[gid(s,u,id)].kind==binding.ENUM_MEMBER{return true;}
+ if n.kind==ast.CALL&&(*s).refs[gid(s,u,n.a)].kind==binding.ENUM_MEMBER{
+  return n.b==NONE||rt_static(c,n.b,depth+1);
+ }
  if n.kind==ast.UNARY&&n.op==1062{return rt_static_place(c,n.a,depth+1);}
  if n.kind==ast.ARRAY{var p=n.a;while p!=NONE{if !rt_static(c,p,depth+1){return false;}p=(*at(s,u,p)).next;}return true;}
  if n.kind==ast.REPEAT{return rt_static(c,n.a,depth+1)&&rt_pure(c,n.b,0);}
  if n.kind==ast.STRUCT{var p=n.b;while p!=NONE{let init=*at(s,u,p);if !rt_static(c,init.a,depth+1){return false;}p=init.next;}return true;}
  if n.kind==ast.NAME||n.kind==ast.FIELD{let r=(*s).refs[gid(s,u,id)];
-  if r.kind==binding.GLOBAL{let sy=(*s).symbols[r.target];if sy.kind==names.CONST{let original=(*c).unit;(*c).unit=sy.unit;
+  if r.kind==binding.GLOBAL{let sy=(*s).symbols[r.target];if sy.kind==names.FUNCTION{return true;}if sy.kind==names.CONST{let original=(*c).unit;(*c).unit=sy.unit;
    let result=rt_static(c,(*at(s,sy.unit,sy.declaration)).b,depth+1);(*c).unit=original;return result;
   }}
  }return false;
@@ -1234,9 +1297,19 @@ pub unsafe fn analyze_program(sources:[]const modules.Source,units:[]const modul
   type_count:declaration.types,field_count:declaration.fields,limb_count:declaration.limbs,unchecked:0,limit:max_depth,status:0,error_unit:0,error_token:0,detail:0};
  var c=Runtime{s:&s,w:rw,unit:0,returns:VOID,unsafe_depth:0,loop_depth:0,snapshot_depth:0,in_defer:false,defer_token:0,live:true};
  i=0;while i<nodes.len{(*rw).info[i]=Info{typ:NONE,flags:0,length:0};(*rw).initialized[i]=0;i+=1;}
- // Error declarations remain unsupported. Methods are validated in analyze and
- // checked like free functions below (pointer-to-struct receivers only).
- i=0;while i<symbols.len&&s.status==0{let sy=symbols[i];if sy.kind==names.ERROR{fail(&s,UNSUPPORTED,sy.unit,sy.declaration,sy.kind);}i+=1;}
+ // Validate every error number, including unused declarations and duplicates
+ // across modules. The folded initializer is the immutable lowering evidence.
+ i=0;while i<symbols.len&&s.status==0{let sy=symbols[i];if sy.kind==names.ERROR{
+  let n=*at(&s,sy.unit,sy.declaration);var code:usize=0;
+  var raw=Value{kind:0,typ:NONE,negative:false,first:0,used:0};
+  if fold(&s,sy.unit,n.b,NONE,0,&raw){
+   if raw.kind!=arithmetic.INTEGER||raw.negative||raw.used!=1{fail(&s,TYPE,sy.unit,sy.declaration,90);}
+   else{code=(*w).limbs[raw.first]as usize;if code==0{fail(&s,TYPE,sy.unit,sy.declaration,90);}}
+   if s.status==0{var v=Value{kind:0,typ:NONE,negative:false,first:0,used:0};if number(&s,code,3,&v){let g=gid(&s,sy.unit,sy.declaration);(*w).values[g]=v;(*w).value_states[g]=2;(*w).node_types[g]=ERROR_TYPE;}
+    var j:usize=0;while j<i&&s.status==0{let old=symbols[j];if old.kind==names.ERROR{let g=gid(&s,old.unit,old.declaration);let prior=(*w).values[g];var value:usize=0;if small(&s,old.unit,old.declaration,&prior,true,&value)&&value==code{fail(&s,TYPE,sy.unit,sy.declaration,91);}}j+=1;}
+   }
+  }
+ }i+=1;}
  var u:usize=0;while u<units.len&&s.status==0{c.unit=u;i=0;while i<units[u].node_count&&s.status==0{let n=*at(&s,u,i);
   if n.kind==ast.GLOBAL{let typ=(*w).node_types[gid(&s,u,i)];rt_expr(&c,n.b,typ,true,0);
    if s.status==0&&!rt_static(&c,n.b,0){rt_fail(&c,CONSTANT,n.b,51);}

@@ -1,0 +1,77 @@
+{
+  "assignment_owner": "codex",
+  "auto_dispatch": false,
+  "auto_verify": false,
+  "candidate": null,
+  "checks": [
+    "module:tests.test_user_smp_barrier"
+  ],
+  "claim_from_status": "todo",
+  "claimed_at": "2026-10-23T01:37:38+00:00",
+  "claimed_by": "codex-mcp-daece153b59c4bd5",
+  "completed_at": "2026-10-23T01:52:23+00:00",
+  "complexity": "standard",
+  "created_at": "2026-10-23T01:37:35+00:00",
+  "delivery": "codex-works/deliveries/P2SYNC40.md",
+  "depends_on": [
+    "codex:P2SYNC35"
+  ],
+  "description": "用户固定顺序：P2全部软件/本机门→P5全部软件/本机门→真机待验留档→完整代码GitHub推送并验证→关机，执行不询问，未完成前不提前上传/关机。同步当前09:40+08左右真实检查点并保留六主文档原有全部body历史；每篇只在顶部追加明确带时间/边界的新checkpoint，旧07:50 SYNC35 integrated6记录保留。MCP优先实际核任务最新rev；source/contract/raw evidence各自区分。OBS36 R3 submitted12正式0e6d7f219f48448eab82270188736f59独立71/0skip/stable/stopped/exited，主预检99/0skip；R4历史image诊断failed ps timeout，首pause1281ms(922stopconfirm+343bulk+16tail)，E1Domain/Bridgehealthy E2Timeout/Held，444raw独核；R5同冻结observer+明确795历史R6image诊断observationscompletedtrue但diagnosticonly/acceptancefalse/passedfalse，13epochs78bulks690slices52HMP/742files26batches/strictGUIps4kill，末Domain/Bridgefailed0、四CPUACK8388，Battempted0/requestedfalse，独核359leafwalk+36parts，最大pause859ms但配置10s非1s保证。B R8正式c33a7c763bd94b86925883bd6e76b217完整44零skip/stable/exited，两fresh run-892cf48fd37a build各1109source/1109stage/286artifacts、kernel1966480 margin130672，root重新identity及18主线指纹匹配。真实normal-r8仍passedfalse：32epochs末B.complete1 poison0 steps127/barriers16/2retiredreclaimed，APtimer真增长，但当前Domaincompleted84550/later barrier84551/owner0锁1，B.post22280；原idle gate90s未采到idle，不把B组件完成当actual gatepass。R8omit真实首ps超时/首pause1781ms/无B触发，不算精确负控，两个actual都inputstable/ownedexit/finaldisktrue，原件保留。B R9 claim36只4路径normalprofile返修：legacy默认原样，新current-kernel-v2显式同epoch全4CS8/GSHeader/kernelCR3/ACK下界区分laterpending，negativeexact保持。此检查点R9未测试/未通过，验收/集成仍待后续全套。新的C/D三书与P5恢复/依赖计划仅只读build产物，非已发布实现/测试；C/D GOPledger/Rawtrace/7森林、PCID cold-warm-retire-reuse+wrongtag、真正WC性能仍未关；P2partial，P5本轮实施未开始。CTX1 integrated7 CTX2 integrated6原历史组件保留不可重做。G5和既有集成不重复。Git main db4ea7c9a74839d95a5e80a0bbf8468a4bfa0d73/origin已核，当前未commit/push/shutdown。只改九声明路径，不碰B/OBS正文doc/delivery及code/tests/coordination状态库index；状态由MCP统一。JSON列明确绝对evidence路径/实际SHA、scope、schema、tests/skips/source-stable/cleanup、actualfailed与diagnostictrue区分，machine flags不得布尔拼成总pass；root独立hash/artifact/source状态审查后正式barrier1复验再分accept/integrate。作者只编辑不测试编译VM/自行状态写。",
+  "document": "codex-works/tasks/P2SYNC40-board.md",
+  "historical": false,
+  "id": "codex:P2SYNC40",
+  "integration_note": "九授权文档实物已位于main工作树code/与coordination/dongos_works映射；主目录与独立复验九文件fingerprint完全一致，37证据/31链接/六旧正文留存核通过，accept与integrate分开登记。09:40历史检查点保持有界，不追加冒充后续RAW/B/P2/P5完成。Git提交/远端推送仍待全部P2/P5软件本机工作完成后统一执行。",
+  "legacy_hash": "9058f4ba79e5a37ece422976a03117c254112f1fce1675f891ab5b89fd012996",
+  "number": "P2SYNC40",
+  "owner": "codex",
+  "rev": 6,
+  "review_note": "根实际审查六主文档、09:40有界历史检查点MD/JSON及交付，独立重算37份证据SHA/长度、31新本地链接、六份旧正文与SYNC35正式副本逐字suffix一致；root audit4a39b2cc17a621a103e088540b14c58d78116bb60be0f8bab5bdfa6d591aa2e8。正确保留R4/R8失败、R5历史诊断/未验收、B owner已complete≠完整actual、raw archive final_disk≠guest data.img链、P2partial/P5未实现/硬件待验。正式14b7d33e030744cbb22013cf977cfa29 barrier1/0skip/rc0/13.297s，stable/stopped/exited；九指纹与实物一致。本次仅验收历史进度同步，不关闭P2/OBS/B actual门。",
+  "status": "integrated",
+  "title": "P2 历史采集、44项复验与真实屏障观察失败进度同步",
+  "updated_at": "2026-10-23T02:15:12+00:00",
+  "verification": {
+    "checks": [
+      {
+        "cancelled": false,
+        "elapsed_seconds": 13.297,
+        "execution_exited": true,
+        "passed": true,
+        "process_stopped": true,
+        "returncode": 0,
+        "skips": 0,
+        "spec": "module:tests.test_user_smp_barrier",
+        "tests": 1,
+        "timed_out": false
+      }
+    ],
+    "execution_exited": true,
+    "fingerprint": {
+      "PLAN.md": "d27ba2a79ff1240c0573ddd01c95a191cc54c1eeed4525c6aa639b7e86dfa65c",
+      "codex-works/deliveries/P2SYNC40.md": "f79464ebcc6103b7303eb5040355999ed671617182a81d661754826f46055193",
+      "codex-works/reviews/2026-10-23-P2-historical-progress.json": "c53324632bc95e68e3213169ed07d71aaa484e037a0b8c3fefb96d4e139c2468",
+      "codex-works/reviews/2026-10-23-P2-historical-progress.md": "e2f8ac6cfc650bc91c2c81fa6a56c6ef9b22fff47ef58d2a5bc086e8667bc77e",
+      "docs/p2-acceptance.md": "b54092a5c2e2e0f1b7210b66113cda2331d8247b66cc286fb43e462b4389c593",
+      "docs/p2-alias-consumers.md": "b1514a1169c6a83f45c5b4bf857ae7c120304fe8d801a6b401939c47252b1c73",
+      "docs/p2-extensions.md": "701865a069947e5fcc4d2e8783d83a5754a10f5a47e0b45f1d5023e9b261b522",
+      "docs/progress-map.md": "35220ade0472864de22ebf27ea3b756af83fc373ff029fcfbf0a85992e2266d6",
+      "docs/remaining-plan.md": "0a3121c2c87aab23ea855a1552ff969b65fb40ec082195160f171d9f9787405a"
+    },
+    "finished_at": "2026-10-23T02:13:32+00:00",
+    "job": "14b7d33e030744cbb22013cf977cfa29",
+    "passed": true,
+    "process_stopped": true,
+    "source_stable": true,
+    "summary": "定向复验通过，等待源码/契约审查"
+  },
+  "write_paths": [
+    "PLAN.md",
+    "docs/p2-acceptance.md",
+    "docs/p2-extensions.md",
+    "docs/p2-alias-consumers.md",
+    "docs/remaining-plan.md",
+    "docs/progress-map.md",
+    "codex-works/reviews/2026-10-23-P2-historical-progress.md",
+    "codex-works/reviews/2026-10-23-P2-historical-progress.json",
+    "codex-works/deliveries/P2SYNC40.md"
+  ]
+}

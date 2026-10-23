@@ -1,0 +1,69 @@
+// Permanent FIFO admission sidecar. Domain remains the real lock authority.
+// Failure retains the ticket; the Bridge caller must take its existing held path.
+module sched.user_bkl;
+import sched.user_domain as ud;
+pub error Invalid=0x0623_0001;pub error Held=0x0623_0002;
+pub error Overflow=0x0623_0003;pub error Timeout=0x0623_0004;
+const MAX:u64=0xffff_ffff_ffff_ffff;pub const NONE:u64=16;
+// wait=0 is free, MAX is a private reservation, otherwise ticket+1.
+// Consequently MAX-1 is the first unallocatable ticket. No counter wraps.
+pub align(64) struct State{pub ready:u64,pub domain:*ud.Domain,
+ pub next:u64,pub serving:u64,pub owner:u64,pub wait:[16]u64}
+var STATE:State=State{ready:0,domain:null,next:0,serving:0,owner:NONE,wait:[0;16]};
+pub fn pointer()*const State{unsafe{return &STATE;}}
+// Called before Header GS activation. This routine reads no hardware or TLS.
+pub unsafe fn bind(d:*ud.Domain)!void{unsafe{
+ if atomic_load(&STATE.ready)!=0||STATE.domain!=null||d==null||(*d).ready!=1||(*d).failed!=0
+  ||(*d).lock!=0||(*d).owner!=NONE||(*d).barrier!=0||(*d).cpus==null
+  ||(*d).engine==null||(*d).online==0||((*d).online&~0xffff)!=0{return error.Invalid;}
+ if atomic_compare_exchange(&STATE.ready,0,2)!=0{return error.Invalid;}
+ STATE.domain=d;compiler_fence();atomic_store(&STATE.ready,1);
+}return;}
+unsafe fn bound(d:*ud.Domain,cpu:usize)!void{unsafe{
+ if atomic_load(&STATE.ready)!=1||d==null||STATE.domain!=d||(*d).ready!=1
+  ||cpu>=16||((*d).online&(1<<cpu as u64))==0{return error.Invalid;}
+}return;}
+unsafe fn waiting(d:*ud.Domain,cpu:usize,limit:u64)!void{unsafe{
+ let progress=try ud.poll(d,cpu);
+ if ud.user_smp_arch_clock()>=limit{return error.Timeout;}
+}return;}
+pub unsafe fn acquire(d:*ud.Domain,cpu:usize,limit:u64)!void{unsafe{
+ try bound(d,cpu);if limit==0{return error.Invalid;}
+ let c=(*d).cpus+cpu;if (*c).mode!=ud.IDLE&&(*c).mode!=ud.KERNEL{return error.Held;}
+ // poll validates actual CPU/IF0/online/failed, but NOT a foreign CR3.
+ // The original acquire below remains the kernel-root authority.
+ let initial=try ud.poll(d,cpu);
+ if atomic_compare_exchange(&STATE.wait[cpu],0,MAX)!=0{return error.Held;}
+ var ticket:u64=0;var queued:bool=false;
+ while true{
+  let next=atomic_load(&STATE.next);if next>=MAX-1{return error.Overflow;}
+  // Remember observed predecessors BEFORE reservation. They may release before
+  // our first wait-loop load; that must not erase an already queued deadline.
+  let before=atomic_load(&STATE.serving);
+  if atomic_compare_exchange(&STATE.next,next,next+1)==next{ticket=next;queued=before<next;break;}
+  try waiting(d,cpu,limit);ud.user_smp_arch_pause();
+ }
+ atomic_store(&STATE.wait[cpu],ticket+1);
+ while true{
+  let serving=atomic_load(&STATE.serving);if serving>ticket{return error.Held;}
+  if serving==ticket{if queued{try waiting(d,cpu,limit);}break;}
+  queued=true;try waiting(d,cpu,limit);ud.user_smp_arch_pause();
+ }
+ if atomic_load(&STATE.owner)!=NONE{return error.Held;}
+ // Head waiting for the bootstrap lock preserves Domain.Timeout and limit.
+ // A previously queued ticket has already checked its original absolute limit.
+ try ud.acquire(d,cpu,limit);
+ if atomic_compare_exchange(&STATE.owner,NONE,cpu as u64)!=NONE{return error.Held;}
+}return;}
+pub unsafe fn unlock(d:*ud.Domain,cpu:usize)!void{unsafe{
+ try bound(d,cpu);let wait=atomic_load(&STATE.wait[cpu]);
+ if wait==0||wait==MAX||atomic_load(&STATE.owner)!=cpu as u64
+  ||atomic_load(&STATE.serving)!=wait-1||(*d).lock!=1||(*d).owner!=cpu as u64{return error.Held;}
+ let c=(*d).cpus+cpu;
+ if (*c).mode!=ud.LOCKED&&(*c).mode!=ud.RETURNING{return error.Held;}
+ // A failed original unlock must retain every sidecar field and its ticket.
+ try ud.unlock(d,cpu);
+ atomic_store(&STATE.wait[cpu],0);atomic_store(&STATE.owner,NONE);
+ // Publish last: no old owner's cleanup may overwrite the next owner.
+ atomic_store(&STATE.serving,wait);
+}return;}

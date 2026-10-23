@@ -12,6 +12,10 @@ pub const INDEX:u64=7;pub const BINARY:u64=8;pub const UNARY:u64=9;
 pub const CAST:u64=10;pub const LABEL:u64=11;pub const JUMP:u64=12;
 pub const BRANCH:u64=13;pub const CALL:u64=14;pub const RETURN:u64=15;
 pub const ZERO:u64=16;pub const STRING:u64=17;pub const PAIR:u64=18;pub const STATIC_ADDRESS:u64=19;pub const SUBSLICE:u64=20;
+pub const TAGGED:u64=21;
+pub const FUNCTION_ADDRESS:u64=22;pub const INDIRECT_CALL:u64=23;
+pub const MEMORY:u64=24;pub const ASM:u64=25;
+pub const FRAME_ALIGNMENT:u64=26;
 // value/extra are operation-specific immediates. typ is the input arithmetic
 // type for BINARY/UNARY, the stored type for LOAD/STORE/COPY, and the return
 // type for CALL/RETURN. source coordinates remain available for diagnostics.
@@ -31,15 +35,19 @@ pub struct Result{pub status:u64,pub unit:usize,pub node:usize,pub detail:u64,
 pub fn scalar_kind(kind:u64)bool{return (kind>=1&&kind<=9)||kind==semantic.POINTER||kind==semantic.FUNCTION;}
 pub unsafe fn words(g:*const frontend.Graph,typ:usize)usize{unsafe{
  if typ==semantic.VOID||typ==semantic.NORETURN{return 0;}
- if typ==0xffff_ffff_ffff_fffc{return 1;}
+ if typ==0xffff_ffff_ffff_fffc||typ==0xffff_ffff_ffff_fffb{return 1;}
  if typ>=(*g).types.len{return NONE;}
  let kind=(*g).types[typ].kind;if scalar_kind(kind){return 1;}
- if kind==semantic.SLICE{return 2;}
- if aggregate(g,typ){let size=(*g).layouts[typ].size;if size>4080{return NONE;}return (size+7)/8;}return NONE;
+ if kind==semantic.SLICE||kind==semantic.OPTIONAL||kind==semantic.RESULT{return 2;}
+ if kind==semantic.ENUM{return (*g).layouts[typ].size/8;}
+ // Size is a type property; static objects need not fit a stack frame. The
+ // slot allocator and emitter separately enforce each function's 4 KiB budget.
+ if aggregate(g,typ){let size=(*g).layouts[typ].size;if size>NONE-7{return NONE;}return (size+7)/8;}return NONE;
 }}
 pub unsafe fn width(g:*const frontend.Graph,typ:usize)usize{unsafe{
- if typ==0xffff_ffff_ffff_fffc{return 64;}
+ if typ==0xffff_ffff_ffff_fffc||typ==0xffff_ffff_ffff_fffb{return 64;}
  if typ>=(*g).types.len{return 0;}let kind=(*g).types[typ].kind;
+ if kind==semantic.ENUM{return 64;}
  if kind==1||kind==5||kind==9{return 8;}if kind==2||kind==6{return 16;}
  if kind==3||kind==7{return 32;}if scalar_kind(kind){return 64;}return 0;
 }}

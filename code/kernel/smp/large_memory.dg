@@ -170,3 +170,16 @@ pub unsafe fn run(domain:*tlb.Domain)!void{unsafe{
   return completed;
  },}
 }return;}
+
+// A read-only borrow of the old sealed owner. No ownership transfer and no
+// relaxation of shared_paging's original pre-scheduler admission contract.
+pub unsafe fn borrow_held(out:*u64)!void{unsafe{
+ if out==null||REPORT.attempted!=1||REPORT.complete!=1||REPORT.sealed!=1||REPORT.held!=1
+  ||REPORT.error_code!=0||REPORT.physical==0||((REPORT.final_entry^REPORT.merged_entry)&~(96 as u64))!=0
+  ||REPORT.pages!=512||REPORT.order!=9{return error.InvalidIntegration;}
+ try buddy.allocated_block(startup.allocator_pointer(),REPORT.physical,9);
+ var mapping=paging.Mapping{physical:0,flags:0};
+ try paging.query(startup.space_pointer(),WINDOW,&mapping);
+ if mapping.physical!=REPORT.physical||mapping.flags!=paging.WRITE{return error.InvalidIntegration;}
+ *out=REPORT.physical;
+}return;}

@@ -1,0 +1,39 @@
+module runtime_cache_probe;
+import mm.runtime_cache as r;
+import mm.paging as pg;
+import mm.runtime_roots as forest;
+import sched.user_domain as ud;
+export("rc_size") fn size(kind:u64)u64{
+ if kind==0{return sizeof(r.Context) as u64;}if kind==1{return sizeof(r.Work) as u64;}
+ if kind==2{return sizeof(r.Page) as u64;}if kind==3{return sizeof(r.Config) as u64;}
+ if kind==4{return ud.required_bytes();}if kind==5{return sizeof(r.Reading) as u64;}
+ if kind==6{return sizeof(pg.Retired) as u64;}if kind==7{return sizeof(r.Reader) as u64;}
+ return sizeof(r.Report) as u64;
+}
+export("rc_init") fn initialize(s:*pg.Space,p:*pg.Table,meta:*u8,physical:u64)u64{unsafe{
+ *s=pg.EMPTY_SPACE;match pg.init(s,slice_from_raw_parts(p,32),physical,slice_from_raw_parts(meta,32),48,true){ok=>{return 0;},err(e)=>{return e;},}
+}}
+export("rc_map") fn map(s:*pg.Space,v:u64,p:u64,f:u64)u64{unsafe{
+ match pg.map_live(s,v,p,f){ok=>{return 0;},err(e)=>{return e;},}
+}}
+export("rc_domain") fn domain(arena:u64,bytes:u64,out:**ud.Domain)u64{unsafe{
+ match ud.initialize(arena,bytes,7,0x400_0000,out){ok=>{return 0;},err(e)=>{return e;},}
+}}
+export("rc_bind") fn bind(c:*r.Context,cfg:*const r.Config)u64{unsafe{
+ match r.bind(c,cfg){ok=>{return 0;},err(e)=>{return e;},}
+}}
+var ACTIVE:*r.Context=null;
+unsafe fn hook(d:*ud.Domain,cpu:usize)u64{unsafe{return r.poll(ACTIVE,d,cpu);}}
+export("rc_hook") fn install(c:*r.Context,d:*ud.Domain)u64{unsafe{
+ ACTIVE=c;match ud.register_poll(d,hook){ok=>{return 0;},err(e)=>{return e;},}
+}}
+export("rc_poll") fn poll(d:*ud.Domain,cpu:usize)u64{unsafe{
+ match ud.poll(d,cpu){ok(value)=>{return 0;},err(e)=>{return e;},}
+}}
+export("rc_run") fn run(c:*r.Context)u64{unsafe{
+ match r.run(c){ok=>{return 0;},err(e)=>{return e;},}
+}}
+export("rc_get") fn get(c:*r.Context,which:u64)u64{unsafe{
+ if which==0{return &(*c).report as u64;}if which==1{return &(*c).readers[0] as u64;}
+ return (*c).ready;
+}}

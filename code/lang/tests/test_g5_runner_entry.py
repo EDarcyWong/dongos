@@ -11,7 +11,7 @@ ROOT=Path(__file__).resolve().parents[2]
 class MainlineRunnerEntryTests(unittest.TestCase):
     def test_actual_module_cli_and_source_root(self):
         self.assertEqual(runner.ROOT,ROOT)
-        self.assertEqual(runner.DEFAULT_BUILD,ROOT/'build/test/G5')
+        self.assertEqual(runner.DEFAULT_BUILD,ROOT/'build/test/G5-full')
         process=subprocess.run([sys.executable,'-m','tools.g5_differential','--help'],cwd=ROOT,capture_output=True,text=True,timeout=20)
         self.assertEqual(process.returncode,0,process.stdout+process.stderr)
         self.assertIn('--output',process.stdout)

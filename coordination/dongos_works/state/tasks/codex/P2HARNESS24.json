@@ -1,0 +1,78 @@
+{
+  "assignment_owner": "codex",
+  "auto_dispatch": false,
+  "auto_verify": false,
+  "candidate": null,
+  "checks": [
+    "module:tests.test_user_smp_gui_control",
+    "module:tests.test_user_smp_oracle"
+  ],
+  "claim_from_status": "todo",
+  "claimed_at": "2026-10-22T20:50:14+00:00",
+  "claimed_by": "codex-mcp-daece153b59c4bd5",
+  "completed_at": "2026-10-22T21:04:38+00:00",
+  "complexity": "standard",
+  "created_at": "2026-10-22T20:50:08+00:00",
+  "delivery": "codex-works/deliveries/P2HARNESS24.md",
+  "depends_on": [],
+  "description": "实际P2LARGE16 normal-r1在close_gui发送stop terminal后收到unknown command，fresh_response准确拒绝，未取得B before/after；旧失败回执保持failed。修复共享close_gui，读取真实暂停一致Catalog的14..17配置/current token+generation/slot/incarnation身份、必要时真实ps回执，使用现有shell kill <token>，核精确新鲜KILL OK和后续Catalog KILLED=5/旧token释放；已不运行配置只据真实state安全跳过，不凭任意异常/旧输出当成功，防token代际竞争、错误配置/essential被kill/自动restart。不要新增shell stop别名、放松fresh_response或写guest内存寄存器。现有三调用方negative/PCID/B保持同helper，允许函数新增结构化执行证据不破坏调用；失败和QEMU清理保持。新增有效host控制覆盖坏PS/KILL回执、stale token/changedgeneration/alias、已停止/部分运行、正确配置与essential保留，默认/host不启动VM。写明只是采集器修复，B实际交易/AP PCID仍待root隔离VM，不能改历史回执。实现者只声明路径、不编译测试VM/提交推送/状态；root独立0skip复验后再实际使用。",
+  "document": "codex-works/tasks/P2HARNESS24-board.md",
+  "historical": false,
+  "id": "codex:P2HARNESS24",
+  "integration_note": "声明文件已真实落入主工作区，按本次独立作业fingerprint复核后登记本地集成；没有提交推送。检查点按明确日期保留，不作为整体P2通过声明。",
+  "legacy_hash": "a37364a5aef999c22448281ac3c86c2b04128cd5be837db49cefd51355984ea2",
+  "number": "P2HARNESS24",
+  "owner": "codex",
+  "rev": 6,
+  "review_note": "root实际审查ps/Catalog统一身份、14..17精确角色、stale token不重定向、fresh UART重复绑定、KILL OK同代KILLED5/slot释放及essential全程保持，新增11个host方法覆盖真实错误传播/错回执/代际竞争/部分停止/重启。正式1e1aca5ebfee495f83d984acb615f038共18tests/0skip，source_stable/stopped/exited，主目录四路径同fingerprint。仅采集器修复通过，不证明实际B事务或AP PCID。",
+  "status": "integrated",
+  "title": "P2真实UART GUI收尾采集器命令契约修复",
+  "updated_at": "2026-10-22T21:06:17+00:00",
+  "verification": {
+    "checks": [
+      {
+        "cancelled": false,
+        "elapsed_seconds": 0.625,
+        "execution_exited": true,
+        "passed": true,
+        "process_stopped": true,
+        "returncode": 0,
+        "skips": 0,
+        "spec": "module:tests.test_user_smp_gui_control",
+        "tests": 11,
+        "timed_out": false
+      },
+      {
+        "cancelled": false,
+        "elapsed_seconds": 2.266,
+        "execution_exited": true,
+        "passed": true,
+        "process_stopped": true,
+        "returncode": 0,
+        "skips": 0,
+        "spec": "module:tests.test_user_smp_oracle",
+        "tests": 7,
+        "timed_out": false
+      }
+    ],
+    "execution_exited": true,
+    "fingerprint": {
+      "codex-works/deliveries/P2HARNESS24.md": "709ed95178709cd8dc28b3e970923afe1ef38efaa75a94a76148d987239d1a04",
+      "docs/p2-smp-gui-control.md": "c65566bcefd92204a53b260296668bf8e32aa29b40533ef4f8ea4d308cc830ec",
+      "tests/run_current_user_smp_qemu.py": "f459d4f3de8393ef3295d31c23af36d8db3f9099af42d23a526013670f533951",
+      "tests/test_user_smp_gui_control.py": "38163bbe679931e990cef000167ec16f7292d14c2a1c7517e844f589dbc2588c"
+    },
+    "finished_at": "2026-10-22T21:04:57+00:00",
+    "job": "1e1aca5ebfee495f83d984acb615f038",
+    "passed": true,
+    "process_stopped": true,
+    "source_stable": true,
+    "summary": "定向复验通过，等待源码/契约审查"
+  },
+  "write_paths": [
+    "tests/run_current_user_smp_qemu.py",
+    "tests/test_user_smp_gui_control.py",
+    "docs/p2-smp-gui-control.md",
+    "codex-works/deliveries/P2HARNESS24.md"
+  ]
+}

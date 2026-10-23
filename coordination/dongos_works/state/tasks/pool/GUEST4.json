@@ -16,7 +16,6 @@
     "discover:pool-works/tests:test_guest_compile_image.py"
   ],
   "claim_from_status": "rework",
-  "claim_token": "ade500d740fe4664a349dc0f650d4ac8",
   "claimed_at": "2026-10-20T08:27:36+00:00",
   "claimed_by": "codex-mcp-d76b66689d824a70",
   "completed_at": "2026-10-20T08:28:35+00:00",
@@ -30,14 +29,14 @@
   "historical": false,
   "id": "pool:GUEST4",
   "integration_note": "已逐字真实复制guest_compile_image.dg/.md至code/lang/bootstrap，永久测试仅SOURCE/build输出路径适配至code/lang/tests/test_bootstrap_guest_compile_image.py。主线完整6tests/0skip/673.778秒全部通过；正式749.438秒通过；生产SHA5d69356d09ba92336377888fcdc38becf5eeb83d4940546b76fc37c5796030e7保持，三文件清单code/build/test/guest-integration/GUEST4-files.json。沿用独立源码/契约/Graph/空alignment/真实ELF复审，登记组件真实主线集成，非完整L3。",
-  "legacy_hash": "d9395f05ac2ba8af2e01dc14904a2d2a19d6e158463e7bc8d53c13e6afa746f6",
+  "legacy_hash": "cdb89275000cf91010e36a39f0375ee341fbdb55b1714b4486ff27064b4055af",
   "number": "GUEST4",
   "owner": "codex",
-  "rev": 14,
+  "rev": 15,
   "review_note": "R1由独立review_io源码/契约/永久测试复审，并用冻结debug/release对象自身alignment witness确认两空slice缺陷关闭；四正常方法独立复放含20预检、真实ELF验证及入口36全部通过。完整正式7c3f234b... 6tests/0skip/749.438秒/source_stable/已停止退出，指纹一致；实际Graph prefix/skip assembler/UNSUPPORTED-as-OK三坏体各双模式精确拒绝。并行编排独立读审确认无竞态/无弱化。报告reviews/2026-10-20-independent-io-review.md。准予组件验收，不等同客体L3或FLUSH重启验收。",
   "status": "integrated",
   "title": "[L3] 将现有编译器文本输出接入原生汇编器",
-  "updated_at": "2026-10-22T00:59:08+00:00",
+  "updated_at": "2026-10-22T14:38:35+00:00",
   "verification": {
     "checks": [
       {

@@ -1,0 +1,65 @@
+{
+  "assignment_owner": "codex",
+  "auto_dispatch": false,
+  "auto_verify": false,
+  "candidate": null,
+  "checks": [
+    "module:lang.tests.test_g5_runner_entry"
+  ],
+  "claim_from_status": "todo",
+  "claimed_at": "2026-10-22T17:24:18+00:00",
+  "claimed_by": "codex-mcp-daece153b59c4bd5",
+  "completed_at": "2026-10-22T17:27:16+00:00",
+  "complexity": "standard",
+  "created_at": "2026-10-22T15:46:13+00:00",
+  "delivery": "codex-works/deliveries/G5DOC1.md",
+  "depends_on": [
+    "codex:G5INT1"
+  ],
+  "description": "用户授权G5独立复验并主线集成后同步进度文档。本项只在G5INT1验收后执行，更新nasm_program组件说明中已过时的enum/error/try/orelse/Win64/对齐/panic缺口描述，保留历史范围和当前预算。记录候选及主线真实正式job/测试数、四份完整ELF固定点SHA和独立复算、各任务实际状态与原始失败，不修改实现/旧通过证据、不把宿主G5外推为新G6客体或P5等OS阶段完成。协调角色另据这些真实结果更新工作区progress-map/roadmap/ALLOCATION（文档，不是数据库/index）。仅运行现有主线runner入口2项定向检查，零skip源码稳定；不OS/VM/CLI/commit/push。",
+  "document": "codex-works/tasks/G5DOC1-board.md",
+  "historical": false,
+  "id": "codex:G5DOC1",
+  "integration_note": "文档已真实写入code主线及协调审查目录，入口复验和独立实际内容/链接审查通过，登记本地集成。工作区整体进度由协调角色依最新MCP同步，不修改库/index。",
+  "legacy_hash": "c5dc9452f71a60ea17576f193debe011bce0746a9846c0753562b2c376e832c3",
+  "number": "G5DOC1",
+  "owner": "codex",
+  "rev": 6,
+  "review_note": "独立入口2项0skip/rc0、source_stable/process_stopped/execution_exited全true；独立逐文档实际审查通过：70项/协调器967.625,321.766,1248.36s、实际integrated rev、四ELF与源码SHA/预算等匹配正式0856原始产物，36新/修local links均存在，13受管文档指纹现场一致。G5宿主NASM范围、CLI scopefalse、内建assembler dialect、新G6及历史profile、Linux未运行和旧失败边界准确。未改实现/测试。",
+  "status": "integrated",
+  "title": "G5主线集成后的后端契约与进度文档收尾",
+  "updated_at": "2026-10-22T17:34:38+00:00",
+  "verification": {
+    "checks": [
+      {
+        "cancelled": false,
+        "elapsed_seconds": 0.594,
+        "execution_exited": true,
+        "passed": true,
+        "process_stopped": true,
+        "returncode": 0,
+        "skips": 0,
+        "spec": "module:lang.tests.test_g5_runner_entry",
+        "tests": 2,
+        "timed_out": false
+      }
+    ],
+    "execution_exited": true,
+    "fingerprint": {
+      "codex-works/deliveries/G5DOC1.md": "f3986c10d76c52f54e8210547608a587036381eabaf9872215a6228dc70fff7e",
+      "codex-works/reviews/2026-10-22-G5-completion.md": "a1091c63e639bf478935eea298f3823ca1d770cb4add987fecdef9efc9690e79",
+      "lang/bootstrap/nasm_program.md": "e7dffac21ddd483452ce298b15389c1f96dc67d39c4f8227b3076f1f8f70634d"
+    },
+    "finished_at": "2026-10-22T17:27:29+00:00",
+    "job": "4a53b1adbd654b9794010966cb5d3c54",
+    "passed": true,
+    "process_stopped": true,
+    "source_stable": true,
+    "summary": "定向复验通过，等待源码/契约审查"
+  },
+  "write_paths": [
+    "lang/bootstrap/nasm_program.md",
+    "codex-works/reviews/2026-10-22-G5-completion.md",
+    "codex-works/deliveries/G5DOC1.md"
+  ]
+}

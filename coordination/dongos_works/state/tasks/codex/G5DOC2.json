@@ -1,0 +1,79 @@
+{
+  "assignment_owner": "codex",
+  "auto_dispatch": false,
+  "auto_verify": false,
+  "candidate": null,
+  "checks": [
+    "module:lang.tests.test_g5_runner_entry"
+  ],
+  "claim_from_status": "todo",
+  "claimed_at": "2026-10-22T17:24:21+00:00",
+  "claimed_by": "codex-mcp-daece153b59c4bd5",
+  "completed_at": "2026-10-22T17:27:17+00:00",
+  "complexity": "standard",
+  "created_at": "2026-10-22T17:24:19+00:00",
+  "delivery": "codex-works/deliveries/G5DOC2.md",
+  "depends_on": [
+    "codex:G5INT1"
+  ],
+  "description": "G5INT1正式70项独立复验与真实集成已完成，用户授权同步状态和进度文档。本项仅更新主线八份进度/入口文档的最终实际job、测试数和integrated结论，以及native_assembler.md已过时的.data/extern/填充说明，补明确XMM/atomic/asm dialect边界。保留历史日期/失败/原G6旧head49模块profile，L3整体继续partial为扩大编译器新G6，完整NASM G5已闭、广泛纯ELF指令覆盖另列；不改实现/测试或旧候选。与G5DOC1的nasm_program.md及最终独审回执互补，不写库/index。现有runner入口2项定向检查+独立实际文档/链接审查，源稳定0skip后验收并集成；不OS/VM/CLI/commit/push。",
+  "document": "codex-works/tasks/G5DOC2-board.md",
+  "historical": false,
+  "id": "codex:G5DOC2",
+  "integration_note": "文档已真实写入code主线及协调审查目录，入口复验和独立实际内容/链接审查通过，登记本地集成。工作区整体进度由协调角色依最新MCP同步，不修改库/index。",
+  "legacy_hash": "7a6484030b3c3d86cacc3e7ec8aa999be5fb8eb07ca88b5a966d961c0b00f3d9",
+  "number": "G5DOC2",
+  "owner": "codex",
+  "rev": 6,
+  "review_note": "独立入口2项0skip/rc0、source_stable/process_stopped/execution_exited全true；独立逐文档实际审查通过：70项/协调器967.625,321.766,1248.36s、实际integrated rev、四ELF与源码SHA/预算等匹配正式0856原始产物，36新/修local links均存在，13受管文档指纹现场一致。G5宿主NASM范围、CLI scopefalse、内建assembler dialect、新G6及历史profile、Linux未运行和旧失败边界准确。未改实现/测试。",
+  "status": "integrated",
+  "title": "主线G5最终检查点与内建汇编器契约同步",
+  "updated_at": "2026-10-22T17:34:40+00:00",
+  "verification": {
+    "checks": [
+      {
+        "cancelled": false,
+        "elapsed_seconds": 0.656,
+        "execution_exited": true,
+        "passed": true,
+        "process_stopped": true,
+        "returncode": 0,
+        "skips": 0,
+        "spec": "module:lang.tests.test_g5_runner_entry",
+        "tests": 2,
+        "timed_out": false
+      }
+    ],
+    "execution_exited": true,
+    "fingerprint": {
+      "PLAN.md": "bb5094ca105ba75b0fa2270f5b56fb5f1401a7cb593d59839bb3d11b940915b5",
+      "README.md": "0fbaa4d9eb8f65f0ce240846fb015ed11239bf8b92f97232ddd469255f351255",
+      "codex-works/deliveries/G5DOC2.md": "a2f1a84cbce4c235e3ab96f1a1284cec3dcfa4755794c9d1dabdcd70704dc445",
+      "docs/g5-closure.md": "7fa671560ab247eca6f5f9e23e4ec7c7fd9e578591a80bf0c5aec3569564b000",
+      "docs/g5-differential.md": "41ae5bea6540c0181bf8ec47bab9467cdd23d89f9dde18999278220af43ecb23",
+      "docs/l3-native-selfhost-progress.md": "61844fd568a31684b6937e79d7fc339c9178b326b3ff262012c8ed532ae13105",
+      "docs/language-l2-l3.md": "21a199facfe7ace9116ace50ddbe487a372d77795c486fdc70526e3729563aa0",
+      "docs/progress-map.md": "f033dda54d3eb7d984b0cc6abc3586c330ce38f587b4178d6468368b4fcf1489",
+      "docs/remaining-plan.md": "df169cc7a673ff213cd0d867be0d62e15a2cf1b297304f89720877dc4723ea2b",
+      "lang/bootstrap/native_assembler.md": "5c807b4d429a40a87a6ed129ee7e7c747352362b62f2eab4d2b4d75d55bcad3c"
+    },
+    "finished_at": "2026-10-22T17:27:41+00:00",
+    "job": "c0b9455ad28b4c5da9ba1790569ed175",
+    "passed": true,
+    "process_stopped": true,
+    "source_stable": true,
+    "summary": "定向复验通过，等待源码/契约审查"
+  },
+  "write_paths": [
+    "README.md",
+    "PLAN.md",
+    "docs/progress-map.md",
+    "docs/remaining-plan.md",
+    "docs/language-l2-l3.md",
+    "docs/l3-native-selfhost-progress.md",
+    "docs/g5-differential.md",
+    "docs/g5-closure.md",
+    "lang/bootstrap/native_assembler.md",
+    "codex-works/deliveries/G5DOC2.md"
+  ]
+}

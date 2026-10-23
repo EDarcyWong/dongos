@@ -7,7 +7,6 @@
     "module:lang.tests.test_guest_files_reader"
   ],
   "claim_from_status": "todo",
-  "claim_token": "787b20d07fc94cf3a9abcad276a0a398",
   "claimed_at": "2026-10-20T07:04:06+00:00",
   "claimed_by": "codex-mcp-d76b66689d824a70",
   "completed_at": "2026-10-20T07:08:31+00:00",
@@ -38,14 +37,14 @@
     "note": "依据固定50ab7cf读取器契约、HEAD原归档NASM契约与两支原事件SHA逐项核对，当前CX6仅为L3读取适配器；另一份本地NASM CX6原已归档，后继为CXNASM3。规范任务书/交付已恢复。精确分离5条NASM旧事件的派生统计，原数据库事件全部保留，未授予新验收或改写原指纹。来源reviews/2026-10-22-task-recovery/cx6-history-plan.json及cx6-identity-resolution.md。"
   },
   "integration_note": "实现已真实落于主线code/services/lib/compiler_source.dg/.md和lang/tests/test_guest_files_reader.py，文件身份与独立验收/正式隔离指纹一致。正式隔离及独立2200边界/模式通过，主线此前完整1test0skip34.794秒通过，冻结后未修改。独立审查报告reviews/2026-10-20-independent-io-review.md。登记真实集成，未扩大权限/内存/栈。",
-  "legacy_hash": "41d0a14bbdab5e8e44f8c74c24262abf394dad0428fc938dba153836096004ca",
+  "legacy_hash": "d3124a96642a0379b0f498ef14f12ebf97b36e4d80b306f81b2bf5324e744504",
   "number": "CX6",
   "owner": "codex",
-  "rev": 9,
+  "rev": 10,
   "review_note": "独立审查子代理review_io实际完整审核源码/契约/测试，独立SHA核对原对象并追加debug/release各2200条短读/精确容量/超容边界及9预检，全部原生exit0。正式隔离425a27aeef594fce946c7d6944844eb8 1test/0skip/38.717秒/source_stable/退出并停止。当前四文件指纹一致。报告reviews/2026-10-20-independent-io-review.md，证据code/build/test/independent-io/reader/evidence.json。准予文件读取适配组件验收，非完整L3完成。\n\n身份校正：依据固定50ab7cf读取器契约、HEAD原归档NASM契约与两支原事件SHA逐项核对，当前CX6仅为L3读取适配器；另一份本地NASM CX6原已归档，后继为CXNASM3。规范任务书/交付已恢复。精确分离5条NASM旧事件的派生统计，原数据库事件全部保留，未授予新验收或改写原指纹。来源reviews/2026-10-22-task-recovery/cx6-history-plan.json及cx6-identity-resolution.md。",
   "status": "integrated",
   "title": "[L3] 将有界源码读取器接入已有DongOS文件句柄",
-  "updated_at": "2026-10-22T01:13:55+00:00",
+  "updated_at": "2026-10-22T14:38:35+00:00",
   "verification": {
     "checks": [
       {

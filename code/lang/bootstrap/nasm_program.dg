@@ -33,7 +33,7 @@ import bootstrap.decimal_integer as decimal;
 pub const OK:u64=0;pub const INVALID:u64=1;pub const CAPACITY:u64=2;pub const UNSUPPORTED:u64=3;pub const FRAME:u64=4;
 const NONE:usize=0xffff_ffff_ffff_ffff;
 pub struct Workspace{pub text:[]u8,pub piece:[]u8,pub kinds:[]u8,pub locations:[]abi.Location}
-struct State{p:*const ir.Program,w:*const Workspace,at:usize,status:u64,frame_bytes:usize,trap:usize,next_block:usize}
+struct State{p:*const ir.Program,w:*const Workspace,at:usize,status:u64,frame_bytes:usize,trap:usize,next_block:usize,stack_extra:usize,frame_base:u64,need_panic:bool}
 struct Region{p:u64,n:usize}
 fn span(p:u64,n:usize)bool{return n==0||(p!=0&&n<=NONE-p);}
 fn overlap(a:u64,n:usize,b:u64,m:usize)bool{return n!=0&&m!=0&&a<b+m&&b<a+n;}
@@ -55,9 +55,19 @@ unsafe fn load(s:*State,r:u64,base:u64,off:i64,width:usize,signed:bool)bool{unsa
 unsafe fn store(s:*State,r:u64,base:u64,off:i64,width:usize)bool{unsafe{
  var n:usize=0;let status=memstore.emit(r,base,off,width,(*(*s).w).piece,&n);return piece(s,status,n);
 }}
-unsafe fn slotload(s:*State,r:u64,off:usize)bool{unsafe{return load(s,r,5,-(off as i64),64,false);}}
-unsafe fn slotstore(s:*State,r:u64,off:usize)bool{unsafe{return store(s,r,5,-(off as i64),64);}}
+unsafe fn slotload(s:*State,r:u64,off:usize)bool{unsafe{return load(s,r,(*s).frame_base,-(off as i64),64,false);}}
+unsafe fn slotstore(s:*State,r:u64,off:usize)bool{unsafe{return store(s,r,(*s).frame_base,-(off as i64),64);}}
 unsafe fn immediate(s:*State,r:u64,value:u64)bool{unsafe{
+ // A 32-bit MOV zero-extends and preserves flags, exactly like the full
+ // 64-bit load for these values. Avoid imm64 encodings for small constants;
+ // the complete self-compiler must still fit its existing 2 MiB ELF budget.
+ if r>15{(*s).status=INVALID;return false;}
+ if value<=0xffff_ffff{
+  put(s,"mov ");if r==0{put(s,"eax");}else if r==1{put(s,"ecx");}else if r==2{put(s,"edx");}
+  else if r==3{put(s,"ebx");}else if r==4{put(s,"esp");}else if r==5{put(s,"ebp");}
+  else if r==6{put(s,"esi");}else if r==7{put(s,"edi");}else{put(s,"r");number(s,r);put(s,"d");}
+  return put(s,", ")&&number(s,value)&&put(s,"\n");
+ }
  var n:usize=0;let status=imm.emit(r,value,64,false,(*(*s).w).piece,&n);return piece(s,status,n);
 }}
 unsafe fn arithmetic(s:*State,op:u64,d:u64,a:u64)bool{unsafe{
@@ -76,7 +86,7 @@ unsafe fn normalize(s:*State,t:usize)bool{unsafe{
 unsafe fn typed_load(s:*State,t:usize,off:usize)bool{unsafe{
  let g=(*(*s).p).graph;if ir.words(g,t)==2{return slotload(s,0,off)&&slotload(s,2,off-8);}
  let width=ir.width(g,t);if width==0{(*s).status=UNSUPPORTED;return false;}
- return load(s,0,5,-(off as i64),width,ir.signed(g,t));
+ return load(s,0,(*s).frame_base,-(off as i64),width,ir.signed(g,t));
 }}
 unsafe fn typed_save(s:*State,t:usize,off:usize)bool{unsafe{
  let words=ir.words((*(*s).p).graph,t);if words==0{return true;}
@@ -149,8 +159,12 @@ unsafe fn incoming(s:*State,f:*const ir.Function)bool{unsafe{
  }return (*s).status==0;
 }}
 unsafe fn invoke(s:*State,x:*const ir.Instruction)bool{unsafe{
+ let g=(*(*s).p).graph;var ft=(*x).value;
+ if (*x).operation==ir.CALL{let sy=(*g).symbols[ft];ft=(*g).node_types[(*g).units[sy.unit].node_start+sy.declaration];}
+ if ft>=(*g).types.len||(*g).types[ft].kind!=sem.FUNCTION{(*s).status=INVALID;return false;}
+ if ((*g).types[ft].flags&1)!=0{return win_invoke(s,x);}
  var a=abi.Result{used:0,stack_bytes:0};if !plan(s,(*x).a,(*x).b,&a){return false;}
- if a.stack_bytes>4080-(*s).frame_bytes{(*s).status=FRAME;return false;}
+ if (*s).stack_extra>4080-(*s).frame_bytes||a.stack_bytes>4080-(*s).frame_bytes-(*s).stack_extra{(*s).status=FRAME;return false;}
  stack_adjust(s,true,a.stack_bytes);var word:usize=0;var i:usize=0;
  // Stack words first: RAX scratch never destroys a register argument already
  // assigned, including the whole-pair-on-stack rule with a spare register.
@@ -162,15 +176,68 @@ unsafe fn invoke(s:*State,x:*const ir.Instruction)bool{unsafe{
  word=0;i=0;while i<(*x).b{let arg=(*(*s).p).arguments[(*x).a+i];let words=ir.words((*(*s).p).graph,arg.typ);var j:usize=0;
   while j<words{let location=(*(*s).w).locations[word];if location.kind==abi.REGISTER{slotload(s,reg(location.index),arg.offset-j*8);}word+=1;j+=1;}i+=1;
  }
- put(s,"call ");symbol(s,(*x).value);put(s,"\n");if (*x).typ==sem.NORETURN{return put(s,"ud2\n");}stack_adjust(s,false,a.stack_bytes);
+ call_target(s,x);if (*x).typ==sem.NORETURN{return put(s,"ud2\n");}stack_adjust(s,false,a.stack_bytes);
  if ir.words((*(*s).p).graph,(*x).typ)==1{normalize(s,(*x).typ);}
  return typed_save(s,(*x).typ,(*x).destination);
+}}
+unsafe fn call_target(s:*State,x:*const ir.Instruction)bool{unsafe{
+ if (*x).operation==ir.INDIRECT_CALL{slotload(s,11,(*x).extra);return put(s,"call r11\n");}
+ return put(s,"call ")&&symbol(s,(*x).value)&&put(s,"\n");
+}}
+fn win_reg(i:usize)u64{if i==0{return 1;}if i==1{return 2;}return (i+6)as u64;}
+unsafe fn win_invoke(s:*State,x:*const ir.Instruction)bool{unsafe{
+ var bytes:usize=32;if (*x).b>4{bytes+=((*x).b-4)*8;}bytes=(bytes+15)/16*16;
+ if (*s).stack_extra>4080-(*s).frame_bytes||bytes>4080-(*s).frame_bytes-(*s).stack_extra{(*s).status=FRAME;return false;}
+ stack_adjust(s,true,bytes);var i:usize=0;
+ while i<(*x).b{let arg=(*(*s).p).arguments[(*x).a+i];if ir.words((*(*s).p).graph,arg.typ)!=1{(*s).status=INVALID;return false;}
+  if i>=4{slotload(s,0,arg.offset);store(s,0,4,(32+(i-4)*8)as i64,64);}i+=1;
+ }i=0;while i<(*x).b&&i<4{let arg=(*(*s).p).arguments[(*x).a+i];slotload(s,win_reg(i),arg.offset);i+=1;}
+ call_target(s,x);if (*x).typ==sem.NORETURN{return put(s,"ud2\n");}stack_adjust(s,false,bytes);
+ if ir.words((*(*s).p).graph,(*x).typ)==1{normalize(s,(*x).typ);}return typed_save(s,(*x).typ,(*x).destination);
+}}
+unsafe fn win_body(s:*State,index:usize)bool{unsafe{return put(s,"__dong_winbody_")&&symbol(s,index);}}
+unsafe fn win_wrapper(s:*State,f:*const ir.Function)bool{unsafe{
+ var outgoing:usize=0;if (*f).parameter_count>6{outgoing=((*f).parameter_count-6)*8;}let bytes=(176+outgoing+15)/16*16;
+ if bytes+16>4080-(*f).frame_bytes{(*s).status=FRAME;return false;}(*s).stack_extra=bytes+16;
+ var n:usize=0;let status=frame.prologue(bytes,0,(*(*s).w).piece,&n);piece(s,status,n);put(s,"cld\n");
+ store(s,7,5,-8,64);store(s,6,5,-16,64);var i:usize=0;
+ while i<10{put(s,"movdqu [rbp-");number(s,32+16*i);put(s,"], xmm");number(s,6+i);put(s,"\n");i+=1;}
+ i=6;while i<(*f).parameter_count{load(s,0,5,(48+8*(i-4))as i64,64,false);store(s,0,4,(8*(i-6))as i64,64);i+=1;}
+ if (*f).parameter_count>0{put(s,"mov rdi, rcx\n");}if (*f).parameter_count>1{put(s,"mov rsi, rdx\n");}
+ if (*f).parameter_count>2{put(s,"mov rdx, r8\n");}if (*f).parameter_count>3{put(s,"mov rcx, r9\n");}
+ if (*f).parameter_count>4{load(s,8,5,48,64,false);}if (*f).parameter_count>5{load(s,9,5,56,64,false);}
+ put(s,"call ");win_body(s,(*f).symbol);put(s,"\n");if (*f).returns==sem.NORETURN{return put(s,"ud2\n");}
+ i=0;while i<10{put(s,"movdqu xmm");number(s,6+i);put(s,", [rbp-");number(s,32+16*i);put(s,"]\n");i+=1;}
+ load(s,7,5,-8,64,false);load(s,6,5,-16,64,false);put(s,"cld\n");n=0;let rc=frame.epilogue(bytes,0,(*(*s).w).piece,&n);return piece(s,rc,n);
 }}
 fn comparison(op:u64,signed:bool)u64{
  if op==514{return 0;}if op==515{return 1;}var n:u64=2;
  if op==516{n=3;}else if op==1086{n=4;}else if op==517{n=5;}else if op!=1084{return NONE;}
  if signed{n+=4;}return n;
 }
+unsafe fn source_label(s:*State,u:usize)bool{unsafe{return put(s,"__dong_source_")&&number(s,u);}}
+// Materialize a target panic block behind an unconditional normal-path jump.
+// The normal path changes no registers or flags; each guard keeps its own
+// kind and original source coordinate, including multiple division failures.
+unsafe fn panic_for(s:*State,x:*const ir.Instruction,kind:u64)usize{unsafe{
+ let g=(*(*s).p).graph;let unit=(*g).units[(*x).unit];let n=(*g).nodes[unit.node_start+(*x).node];let token=(*g).tokens[unit.token_start+n.token];
+ let path=(*g).sources[unit.source_index].path;let trap=(*s).next_block;let normal=trap+1;(*s).next_block+=2;(*s).need_panic=true;
+ label(s,1,normal);label(s,0,trap);immediate(s,7,kind);immediate(s,6,token.line);
+ put(s,"lea rdx, [rel ");source_label(s,(*x).unit);put(s,"]\n");immediate(s,1,path.len);
+ put(s,"call $__dong_panic\nud2\n");label(s,0,normal);return trap;
+}}
+unsafe fn defines_panic(s:*State)bool{unsafe{
+ let g=(*(*s).p).graph;var i:usize=0;while i<(*g).symbols.len{let sy=(*g).symbols[i];
+  if sy.kind==names.FUNCTION||sy.kind==names.METHOD{let u=(*g).units[sy.unit];if (*g).nodes[u.node_start+sy.declaration].c!=NONE{
+   var j:usize=0;while j<u.node_count{let n=(*g).nodes[u.node_start+j];if n.kind==ast.DECLARATION&&n.a==sy.declaration{
+    var a=n.b;while a!=NONE{let attr=(*g).nodes[u.node_start+a];var v:usize=NONE;if attr.op==271{v=attr.a;}else if attr.op==267{v=attr.b;}
+     if v!=NONE{let val=(*g).nodes[u.node_start+v];let tok=(*g).tokens[u.token_start+val.token];let bytes=slice_from_raw_parts((*g).strings.ptr+u.string_start+tok.value_start,tok.value_length);if equal(bytes,"__dong_panic"){return true;}}
+     a=attr.next;
+    }
+   }j+=1;}
+  }}i+=1;
+ }return false;
+}}
 unsafe fn binary_instruction(s:*State,x:*const ir.Instruction)bool{unsafe{
  let g=(*(*s).p).graph;let t=(*x).typ;let op=(*x).value;let sign=ir.signed(g,t);let width=ir.width(g,t);
  slotload(s,0,(*x).a);slotload(s,1,(*x).b);var n:usize=0;var status:u64=0;
@@ -183,33 +250,35 @@ unsafe fn binary_instruction(s:*State,x:*const ir.Instruction)bool{unsafe{
   arithmetic(s,operation,0,1);return slotstore(s,0,(*x).destination);
  }
  let check=(*(*s).p).mode==0&&(*x).extra==0;
+ var overflow=(*s).trap;if check&&(op==1067||op==1069||op==1066){overflow=panic_for(s,x,2);}
  if op==1067||op==1069{var operation:u64=0;if op==1069{operation=1;}
-  if check{status=checked.emit(operation,sign,0,1,(*s).trap,(*(*s).w).piece,&n);piece(s,status,n);}
+  if check{status=checked.emit(operation,sign,0,1,overflow,(*(*s).w).piece,&n);piece(s,status,n);}
   else{arithmetic(s,operation,0,1);}
  }else if op==1066{
-  if check{put(s,"mov rdi, rax\nmov rsi, rcx\n");status=multiply.emit(sign,(*s).trap,(*(*s).w).piece,&n);piece(s,status,n);}
+  if check{put(s,"mov rdi, rax\nmov rsi, rcx\n");status=multiply.emit(sign,overflow,(*(*s).w).piece,&n);piece(s,status,n);}
   else{arithmetic(s,5,0,1);}
  }else if op==1062||op==1148||op==1118{var operation:u64=2;if op==1148{operation=3;}else if op==1118{operation=4;}arithmetic(s,operation,0,1);}
  else if op==520||op==521{
-  status=shiftguard.emit(1,width,(*s).trap,(*(*s).w).piece,&n);piece(s,status,n);
+  let invalid=panic_for(s,x,4);status=shiftguard.emit(1,width,invalid,(*(*s).w).piece,&n);piece(s,status,n);
   var operation:u64=0;if op==521{operation=1;if sign{operation=2;}}
   status=shift.emit(operation,0,(*(*s).w).piece,&n);piece(s,status,n);
  }else if op==1071||op==1061{
   // Guarded divide uses a fresh globally unique block. For narrow signed
   // inputs the MIN/-1 overflow is also checked before hardware division.
+  let zero=panic_for(s,x,3);let invalid=panic_for(s,x,5);
   put(s,"mov rdi, rax\nmov rsi, rcx\n");let next=(*s).next_block;(*s).next_block+=1;
-  status=divguard.emit(sign,(*s).trap,(*s).trap,next,(*(*s).w).piece,&n);piece(s,status,n);label(s,0,next);
+  status=divguard.emit(sign,zero,invalid,next,(*(*s).w).piece,&n);piece(s,status,n);label(s,0,next);
   if sign&&width<64{immediate(s,0,(1 as u64)<<(width-1));put(s,"neg rax\ncmp rdi, rax\n");
    let safe=(*s).next_block;let check= safe+1;(*s).next_block+=2;branch(s,1,safe,check);label(s,0,check);
-   put(s,"cmp rsi, -1\n");branch(s,0,(*s).trap,safe);label(s,0,safe);
+   put(s,"cmp rsi, -1\n");branch(s,0,invalid,safe);label(s,0,safe);
   }
   status=divide.emit(sign,op==1061,(*(*s).w).piece,&n);piece(s,status,n);
  }else{(*s).status=UNSUPPORTED;return false;}
- if check&&width<64&&(op==1067||op==1069||op==1066){status=narrow.emit(width,sign,(*s).trap,(*(*s).w).piece,&n);piece(s,status,n);}
+ if check&&width<64&&(op==1067||op==1069||op==1066){status=narrow.emit(width,sign,overflow,(*(*s).w).piece,&n);piece(s,status,n);}
  normalize(s,t);return slotstore(s,0,(*x).destination);
 }}
 unsafe fn address_slot(s:*State,r:u64,off:usize)bool{unsafe{
- var n:usize=0;let status=addr.emit(r,5,-(off as i64),(*(*s).w).piece,&n);return piece(s,status,n);
+ var n:usize=0;let status=addr.emit(r,(*s).frame_base,-(off as i64),(*(*s).w).piece,&n);return piece(s,status,n);
 }}
 unsafe fn number(s:*State,value:u64)bool{unsafe{var n:usize=0;let status=decimal.encode(value,64,false,(*(*s).w).piece,&n);return piece(s,status,n);}}
 unsafe fn string_label(s:*State,unit:usize,node:usize)bool{unsafe{return put(s,"__dong_string_")&&number(s,(*(*(*s).p).graph).units[unit].node_start+node);}}
@@ -219,12 +288,29 @@ unsafe fn zeros(s:*State,n:usize)bool{unsafe{if n==0{return true;}return put(s,"
 unsafe fn static_value(s:*State,u:usize,id:usize,t:usize,depth:usize)bool{unsafe{
  let g=(*(*s).p).graph;if depth>=256||u>=(*g).units.len||id>=(*g).units[u].node_count||t>=(*g).types.len{(*s).status=INVALID;return false;}
  let global=(*g).units[u].node_start+id;let n=(*g).nodes[global];let typ=(*g).types[t];let size=(*g).layouts[t].size;
- if (*g).value_states[global]==2&&size<=8{let v=(*g).values[global];if v.used>2||v.first>(*g).limbs.len||v.used>(*g).limbs.len-v.first{(*s).status=INVALID;return false;}
+ let info=(*g).info[global];
+ if (info.flags&64)!=0&&t==info.typ{
+  put(s,"dq ");number(s,info.length);put(s,"\n");if n.kind==ast.NULL{return zeros(s,8);}
+  let original=((info.flags>>32)as usize)-1;
+  if !static_value(s,u,id,original,depth+1){return false;}return zeros(s,8-(*g).layouts[original].size);
+ }
+ if (info.flags&512)!=0&&t==info.typ&&n.kind==ast.ERROR{
+  let ref=(*g).refs[global];let sy=(*g).symbols[ref.target];let value=(*g).values[(*g).units[sy.unit].node_start+sy.declaration];
+  put(s,"dq ");number(s,(*g).limbs[value.first]as u64);return put(s,",0\n");
+ }
+ if typ.kind==sem.ENUM&&((n.kind==ast.FIELD&&(*g).refs[global].kind==binding.ENUM_MEMBER)
+  ||(n.kind==ast.CALL&&(*g).refs[(*g).units[u].node_start+n.a].kind==binding.ENUM_MEMBER)){
+  put(s,"dq ");number(s,info.length);put(s,"\n");if size==8{return true;}
+  if n.kind!=ast.CALL||n.b==NONE{return zeros(s,8);}let payload=(*g).info[(*g).units[u].node_start+n.b].typ;
+  if !static_value(s,u,n.b,payload,depth+1){return false;}return zeros(s,8-(*g).layouts[payload].size);
+ }
+ if ((*g).value_states[global]==2||(info.flags&256)!=0)&&size<=8{let v=(*g).values[global];if v.used>2||v.first>(*g).limbs.len||v.used>(*g).limbs.len-v.first{(*s).status=INVALID;return false;}
   var raw:u64=0;if v.used!=0{raw=(*g).limbs[v.first]as u64;}if v.used>1{raw|=((*g).limbs[v.first+1]as u64)<<32;}if v.negative{raw=wrapping_sub(0 as u64,raw);}
   put(s,"db ");var b:usize=0;while b<size{if b!=0{put(s,",");}number(s,(raw>>(b*8))&255);b+=1;}return put(s,"\n");
  }
  let ref=(*g).refs[global];if (n.kind==ast.NAME||n.kind==ast.FIELD)&&ref.kind==binding.GLOBAL{
   if ref.target>=(*g).symbols.len{(*s).status=INVALID;return false;}let sy=(*g).symbols[ref.target];
+  if sy.kind==names.FUNCTION&&typ.kind==sem.FUNCTION{return put(s,"dq ")&&symbol(s,ref.target)&&put(s,"\n");}
   if sy.kind!=names.CONST{(*s).status=UNSUPPORTED;return false;}let decl=(*g).nodes[(*g).units[sy.unit].node_start+sy.declaration];return static_value(s,sy.unit,decl.b,t,depth+1);
  }
  if n.kind==ast.NULL{return zeros(s,size);}
@@ -315,8 +401,36 @@ unsafe fn aggregate_copy(s:*State,x:*const ir.Instruction)bool{unsafe{
  immediate(s,1,(*(*(*s).p).graph).layouts[(*x).typ].size);let next=(*s).next_block;(*s).next_block+=2;
  var n:usize=0;let status=memmove.emit(next,next+1,(*(*s).w).piece,&n);return piece(s,status,n);
 }}
+unsafe fn memory_instruction(s:*State,x:*const ir.Instruction)bool{unsafe{
+ let operation=(*x).value;if operation==12{return true;}
+ let args=(*(*s).p).arguments;let element=(*x).extra;let width=ir.width((*(*s).p).graph,element);
+ slotload(s,11,args[(*x).a].offset);
+ if operation==4||operation==6||operation==8{load(s,0,11,0,width,ir.signed((*(*s).p).graph,element));}
+ else{
+  typed_load(s,element,args[(*x).a+1].offset);
+  if operation==5||operation==7{store(s,0,11,0,width);}
+  else if operation==9{if width==32{put(s,"xchg dword [r11], eax\n");}else{put(s,"xchg qword [r11], rax\n");}}
+  else if operation==10{load(s,2,(*s).frame_base,-(args[(*x).a+2].offset as i64),width,false);
+   if width==32{put(s,"lock cmpxchg dword [r11], edx\n");}else{put(s,"lock cmpxchg qword [r11], rdx\n");}
+  }else if width==32{put(s,"lock xadd dword [r11], eax\n");}else{put(s,"lock xadd qword [r11], rax\n");}
+ }
+ return typed_save(s,(*x).typ,(*x).destination);
+}}
 unsafe fn instruction(s:*State,x:*const ir.Instruction)bool{unsafe{
  let g=(*(*s).p).graph;let op=(*x).operation;let t=(*x).typ;var n:usize=0;var status:u64=0;
+ if op==ir.FRAME_ALIGNMENT{return true;}
+ if op==ir.FUNCTION_ADDRESS{put(s,"lea rax, [rel ");symbol(s,(*x).value);put(s,"]\n");return typed_save(s,t,(*x).destination);}
+ if op==ir.MEMORY{return memory_instruction(s,x);}
+ if op==ir.ASM{
+  if (*x).value==0{return put(s,"cli\n");}if (*x).value==1{return put(s,"sti\n");}if (*x).value==2{return put(s,"hlt\n");}
+  if (*x).value==3{return put(s,"pause\n");}if (*x).value==4{return put(s,"int3\n");}if (*x).value==5{return put(s,"lfence\n");}
+  if (*x).value==6{return put(s,"sfence\n");}return put(s,"mfence\n");
+ }
+ if op==ir.TAGGED{
+  if (*x).a!=0{slotload(s,0,(*x).a);}else{immediate(s,0,(*x).value);}
+  immediate(s,2,0);if (*x).b!=0{load(s,2,(*s).frame_base,-((*x).b as i64),ir.width(g,(*x).extra),false);}
+  return typed_save(s,t,(*x).destination);
+ }
  if (op==ir.COPY||op==ir.LOAD||op==ir.STORE)&&ir.aggregate(g,t){return aggregate_copy(s,x);}
  if op==ir.ZERO{address_slot(s,7,(*x).destination);immediate(s,1,(*g).layouts[t].size);return put(s,"xor eax, eax\ncld\nrep stosb\n");}
  if op==ir.PAIR{slotload(s,0,(*x).a);slotload(s,2,(*x).b);return typed_save(s,t,(*x).destination);}
@@ -324,13 +438,14 @@ unsafe fn instruction(s:*State,x:*const ir.Instruction)bool{unsafe{
   put(s,"lea rax, [rel ");string_label(s,(*x).unit,(*x).node);put(s,"]\n");immediate(s,2,token.value_length);return typed_save(s,t,(*x).destination);}
  if op==ir.STATIC_ADDRESS{put(s,"lea rax, [rel ");symbol(s,(*x).value);put(s,"]\n");return slotstore(s,0,(*x).destination);}
  if op==ir.SUBSLICE{
+  let invalid=panic_for(s,x,1);
   slotload(s,0,(*x).b);slotload(s,2,(*x).value);slotload(s,1,(*x).extra);let first=(*s).next_block;(*s).next_block+=2;
-  put(s,"cmp rax, rdx\n");branch(s,4,(*s).trap,first);label(s,0,first);put(s,"cmp rdx, rcx\n");branch(s,4,(*s).trap,first+1);label(s,0,first+1);
+  put(s,"cmp rax, rdx\n");branch(s,4,invalid,first);label(s,0,first);put(s,"cmp rdx, rcx\n");branch(s,4,invalid,first+1);label(s,0,first+1);
   put(s,"sub rdx, rax\n");immediate(s,1,(*g).layouts[(*g).types[t].element].size);arithmetic(s,5,0,1);slotload(s,1,(*x).a);arithmetic(s,0,0,1);return typed_save(s,t,(*x).destination);
  }
  if op==ir.CONSTANT{immediate(s,0,(*x).value);return typed_save(s,t,(*x).destination);}
  if op==ir.COPY{typed_load(s,t,(*x).a);return typed_save(s,t,(*x).destination);}
- if op==ir.ADDRESS{status=addr.emit(0,5,-((*x).a as i64),(*(*s).w).piece,&n);piece(s,status,n);return slotstore(s,0,(*x).destination);}
+ if op==ir.ADDRESS{status=addr.emit(0,(*s).frame_base,-((*x).a as i64),(*(*s).w).piece,&n);piece(s,status,n);return slotstore(s,0,(*x).destination);}
  if op==ir.LOAD{
   slotload(s,11,(*x).a);if ir.words(g,t)==2{load(s,0,11,0,64,false);load(s,2,11,8,64,false);}
   else{load(s,0,11,0,ir.width(g,t),ir.signed(g,t));}return typed_save(s,t,(*x).destination);
@@ -341,7 +456,7 @@ unsafe fn instruction(s:*State,x:*const ir.Instruction)bool{unsafe{
  }
  if op==ir.OFFSET{slotload(s,0,(*x).a);immediate(s,1,(*x).value);arithmetic(s,0,0,1);return slotstore(s,0,(*x).destination);}
  if op==ir.INDEX{
-  slotload(s,0,(*x).a);slotload(s,1,(*x).b);if (*x).extra!=0{slotload(s,2,(*x).extra);status=bounds.emit(1,2,(*s).trap,(*(*s).w).piece,&n);piece(s,status,n);}
+  slotload(s,0,(*x).a);slotload(s,1,(*x).b);if (*x).extra!=0{slotload(s,2,(*x).extra);let invalid=panic_for(s,x,1);status=bounds.emit(1,2,invalid,(*(*s).w).piece,&n);piece(s,status,n);}
   immediate(s,2,(*x).value);arithmetic(s,5,1,2);arithmetic(s,0,0,1);return slotstore(s,0,(*x).destination);
  }
  if op==ir.BINARY{return binary_instruction(s,x);}
@@ -349,8 +464,8 @@ unsafe fn instruction(s:*State,x:*const ir.Instruction)bool{unsafe{
   slotload(s,0,(*x).a);var operation:u64=0;if (*x).value==1057{operation=2;}else if (*x).value==1150{operation=1;}
   if (*x).value==1069&&(*(*s).p).mode==0{
    // Negation is checked subtraction from zero: signed uses OF, unsigned CF.
-   slotload(s,1,(*x).a);immediate(s,0,0);status=checked.emit(1,ir.signed(g,t),0,1,(*s).trap,(*(*s).w).piece,&n);piece(s,status,n);
-   if ir.width(g,t)<64{status=narrow.emit(ir.width(g,t),ir.signed(g,t),(*s).trap,(*(*s).w).piece,&n);piece(s,status,n);}
+   let invalid=panic_for(s,x,2);slotload(s,1,(*x).a);immediate(s,0,0);status=checked.emit(1,ir.signed(g,t),0,1,invalid,(*(*s).w).piece,&n);piece(s,status,n);
+   if ir.width(g,t)<64{status=narrow.emit(ir.width(g,t),ir.signed(g,t),invalid,(*(*s).w).piece,&n);piece(s,status,n);}
   }else{status=unary.emit(operation,0,(*(*s).w).piece,&n);piece(s,status,n);}
   if (*x).value!=1057{normalize(s,t);}return slotstore(s,0,(*x).destination);
  }
@@ -358,10 +473,11 @@ unsafe fn instruction(s:*State,x:*const ir.Instruction)bool{unsafe{
  if op==ir.LABEL{return label(s,0,(*x).value);}
  if op==ir.JUMP{return label(s,1,(*x).value);}
  if op==ir.BRANCH{slotload(s,0,(*x).a);put(s,"test rax, rax\n");return branch(s,1,(*x).value,(*x).extra);}
- if op==ir.CALL{return invoke(s,x);}
+ if op==ir.CALL||op==ir.INDIRECT_CALL{return invoke(s,x);}
  if op==ir.RETURN{
   if ir.words(g,t)!=0{typed_load(s,t,(*x).a);}
-  status=frame.epilogue((*s).frame_bytes,0,(*(*s).w).piece,&n);return piece(s,status,n);
+  if (*s).frame_base==12{load(s,12,5,-8,64,false);return put(s,"cld\nmov rsp, rbp\npop rbp\nret\n");}
+  put(s,"cld\n");status=frame.epilogue((*s).frame_bytes,0,(*(*s).w).piece,&n);return piece(s,status,n);
  }
  (*s).status=UNSUPPORTED;return false;
 }}
@@ -399,9 +515,16 @@ unsafe fn valid(p:*const ir.Program)bool{unsafe{
   var j:usize=0;while j<f.parameter_count{let a=(*p).arguments[f.parameter_first+j];let words=ir.words(g,a.typ);
    if words==0||words==NONE||!offset(a.offset,words,f.frame_bytes){return false;}j+=1;}
   j=0;while j<f.count{let x=(*p).instructions[f.first+j];let words=ir.words(g,x.typ);
-   if words==NONE||x.operation<ir.CONSTANT||x.operation>ir.SUBSLICE{return false;}
+   if x.unit>=(*g).units.len||x.node>=(*g).units[x.unit].node_count{return false;}
+   if words==NONE||x.operation<ir.CONSTANT||x.operation>ir.FRAME_ALIGNMENT{return false;}
    if x.operation==ir.CONSTANT&&words!=1{return false;}
-   if x.operation>=ir.ZERO{var destination_words=words;if x.operation==ir.STATIC_ADDRESS{destination_words=1;}if !offset(x.destination,destination_words,f.frame_bytes){return false;}
+   if x.operation>=ir.ZERO&&x.operation<=ir.FUNCTION_ADDRESS{var destination_words=words;if x.operation==ir.STATIC_ADDRESS{destination_words=1;}if !offset(x.destination,destination_words,f.frame_bytes){return false;}
+    if x.operation==ir.FUNCTION_ADDRESS{if x.value>=(*g).symbols.len||(*g).symbols[x.value].kind!=names.FUNCTION||x.typ>=(*g).types.len||(*g).types[x.typ].kind!=sem.FUNCTION||words!=1{return false;}}
+    if x.operation==ir.TAGGED{
+     if words!=1&&words!=2{return false;}
+     if x.a!=0&&!offset(x.a,1,f.frame_bytes){return false;}
+     if x.b!=0&&(!offset(x.b,1,f.frame_bytes)||ir.words(g,x.extra)!=1||ir.width(g,x.extra)==0){return false;}
+    }
     if x.operation==ir.STATIC_ADDRESS{if x.value>=(*g).symbols.len||((*g).symbols[x.value].kind!=names.CONST&&(*g).symbols[x.value].kind!=names.GLOBAL){return false;}}
     if x.operation==ir.SUBSLICE{if x.typ>=(*g).types.len||(*g).types[x.typ].kind!=sem.SLICE||words!=2||!offset(x.a,1,f.frame_bytes)||!offset(x.b,1,f.frame_bytes)||!offset(x.value,1,f.frame_bytes)||!offset(x.extra,1,f.frame_bytes){return false;}}
     if x.operation==ir.ZERO&&!ir.aggregate(g,x.typ){return false;}
@@ -423,10 +546,29 @@ unsafe fn valid(p:*const ir.Program)bool{unsafe{
    }else if x.operation==ir.RETURN{if words!=0&&!offset(x.a,words,f.frame_bytes){return false;}}
    if x.operation==ir.LABEL||x.operation==ir.JUMP||x.operation==ir.BRANCH{if x.value>=(*p).block_count{return false;}}
    if x.operation==ir.BRANCH&&x.extra>=(*p).block_count{return false;}
-   if x.operation==ir.CALL{
-    if x.value>=(*g).symbols.len||x.a>(*p).arguments.len||x.b>(*p).arguments.len-x.a{return false;}
+   if x.operation==ir.CALL||x.operation==ir.INDIRECT_CALL{
+    if x.a>(*p).arguments.len||x.b>(*p).arguments.len-x.a{return false;}
+    if x.operation==ir.CALL{if x.value>=(*g).symbols.len||((*g).symbols[x.value].kind!=names.FUNCTION&&(*g).symbols[x.value].kind!=names.METHOD){return false;}}
+    else if !offset(x.extra,1,f.frame_bytes)||x.value>=(*g).types.len||(*g).types[x.value].kind!=sem.FUNCTION{return false;}
     if words!=0&&!offset(x.destination,words,f.frame_bytes){return false;}
     var k:usize=0;while k<x.b{let a=(*p).arguments[x.a+k];let aw=ir.words(g,a.typ);if aw==0||aw==NONE||!offset(a.offset,aw,f.frame_bytes){return false;}k+=1;}
+   }
+   if x.operation==ir.ASM{if words!=0||x.value>7{return false;}}
+   if x.operation==ir.FRAME_ALIGNMENT{if words!=0||x.value<16||x.value>4096||(x.value&(x.value-1))!=0{return false;}}
+   if x.operation==ir.MEMORY{
+    if x.value<4||x.value>12||x.a>(*p).arguments.len||x.b>(*p).arguments.len-x.a{return false;}
+    var arity:usize=2;if x.value==12{arity=0;}else if x.value==10{arity=3;}else if x.value==4||x.value==6||x.value==8{arity=1;}
+    if x.b!=arity{return false;}
+    if x.value==12{if words!=0{return false;}}
+    else{if x.extra>=8{return false;}let ptr=(*p).arguments[x.a];
+     if ptr.typ>=(*g).types.len||(*g).types[ptr.typ].kind!=sem.POINTER||(*g).types[ptr.typ].element!=x.extra{return false;}
+     if x.value>=8&&x.extra!=2&&x.extra!=3{return false;}
+     let writing=x.value==5||x.value==7||x.value==9||x.value==10||x.value==11;
+     if writing&&((*g).types[ptr.typ].flags&1)!=0{return false;}
+     let returns=x.value!=5&&x.value!=7&&x.value!=9;
+     if returns{if x.typ!=x.extra||!offset(x.destination,1,f.frame_bytes){return false;}}else if words!=0{return false;}
+     var k:usize=0;while k<x.b{let a=(*p).arguments[x.a+k];if !offset(a.offset,1,f.frame_bytes)||(k!=0&&a.typ!=x.extra){return false;}k+=1;}
+    }
    }j+=1;
   }i+=1;
  }return true;
@@ -434,7 +576,7 @@ unsafe fn valid(p:*const ir.Program)bool{unsafe{
 pub unsafe fn emit(p:*const ir.Program,w:*const Workspace,out:[]u8,written:*usize)u64{unsafe{
  if !descriptors(p,w,out,written)||!valid(p){return INVALID;}
  if (*w).piece.len<1024{return CAPACITY;}
- var s=State{p:p,w:w,at:0,status:0,frame_bytes:0,trap:0,next_block:(*p).block_count};
+ var s=State{p:p,w:w,at:0,status:0,frame_bytes:0,trap:0,next_block:(*p).block_count,stack_extra:0,frame_base:5,need_panic:false};
  put(&s,"bits 64\ndefault rel\nsection .text\n");var i:usize=0;
  let g=(*p).graph;while i<(*g).symbols.len&&s.status==0{let sy=(*g).symbols[i];
   if (sy.kind==names.FUNCTION||sy.kind==names.METHOD)&&(*g).nodes[(*g).units[sy.unit].node_start+sy.declaration].c==NONE{
@@ -442,13 +584,25 @@ pub unsafe fn emit(p:*const ir.Program,w:*const Workspace,out:[]u8,written:*usiz
   }i+=1;
  }i=0;
  while i<(*p).functions.len&&s.status==0{let f=(*p).functions[i];s.frame_bytes=f.frame_bytes;s.trap=f.trap_block;
+  s.stack_extra=0;s.frame_base=5;var alignment:usize=16;var a:usize=0;
+  while a<f.count{let x=(*p).instructions[f.first+a];if x.operation==ir.FRAME_ALIGNMENT{if x.value>alignment{alignment=x.value as usize;}}a+=1;}
   export_aliases(&s,f.symbol);put(&s,"global ");symbol(&s,f.symbol);put(&s,"\n");symbol(&s,f.symbol);put(&s,":\n");
-  var n:usize=0;let status=frame.prologue(f.frame_bytes,0,(*w).piece,&n);piece(&s,status,n);incoming(&s,&f);
+  let sy=(*g).symbols[f.symbol];let ft=(*g).types[(*g).node_types[(*g).units[sy.unit].node_start+sy.declaration]];
+  if (ft.flags&1)!=0{win_wrapper(&s,&f);win_body(&s,f.symbol);put(&s,":\n");}
+  if alignment>16{
+   if s.stack_extra+alignment>4080-f.frame_bytes{s.status=FRAME;}else{s.stack_extra+=alignment;}
+   put(&s,"push rbp\nmov rbp, rsp\npush r12\nand rsp, -");number(&s,alignment);put(&s,"\nmov r12, rsp\n");
+   stack_adjust(&s,true,f.frame_bytes);s.frame_base=12;
+  }else{var n:usize=0;let status=frame.prologue(f.frame_bytes,0,(*w).piece,&n);piece(&s,status,n);}
+  put(&s,"cld\n");incoming(&s,&f);
   var j:usize=0;while j<f.count&&s.status==0{instruction(&s,&(*p).instructions[f.first+j]);j+=1;}
   // No unsupported/dead-tail path is permitted to fall into the next body.
   put(&s,"ud2\n");label(&s,0,f.trap_block);put(&s,"ud2\n");i+=1;
  }
- put(&s,"section .rodata\n");var u:usize=0;while u<(*(*p).graph).units.len{let unit=(*(*p).graph).units[u];var j:usize=0;while j<unit.node_count{let node=(*(*p).graph).nodes[unit.node_start+j];
+ if s.need_panic&&!defines_panic(&s){put(&s,"extern $__dong_panic\n");}
+ put(&s,"section .rodata\n");var u:usize=0;while u<(*(*p).graph).units.len{let unit=(*(*p).graph).units[u];
+  if s.need_panic{let path=(*g).sources[unit.source_index].path;source_label(&s,u);put(&s,": db ");var b:usize=0;while b<path.len{if b!=0{put(&s,",");}number(&s,path[b]as u64);b+=1;}if path.len==0{put(&s,"0");}put(&s,"\n");}
+  var j:usize=0;while j<unit.node_count{let node=(*(*p).graph).nodes[unit.node_start+j];
   if node.kind==ast.STRING{let token=(*(*p).graph).tokens[unit.token_start+node.token];string_label(&s,u,j);put(&s,": db ");var b:usize=0;
    while b<token.value_length{if b!=0{put(&s,",");}number(&s,(*(*p).graph).strings[unit.string_start+token.value_start+b]as u64);b+=1;}
    if token.value_length==0{put(&s,"0");}put(&s,"\n");}j+=1;}u+=1;}

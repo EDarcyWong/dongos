@@ -1,0 +1,17 @@
+module wc_benchmark_probe;
+import mm.wc_benchmark as wb;
+import mm.paging as pg;
+export("wb_size") fn size(kind:u64)usize{if kind==0{return sizeof(pg.Space);}return sizeof(wb.Sample);}
+export("wb_init") fn init(space:*pg.Space,pool:*pg.Table,metadata:*u8)u64{unsafe{
+ *space=pg.EMPTY_SPACE;match pg.init(space,slice_from_raw_parts(pool,32),0x400000,slice_from_raw_parts(metadata,32),48,true){ok=>{return 0;},err(e)=>{return e;},}
+}}
+export("wb_map") fn map(space:*pg.Space,va:u64,pa:u64,flags:u64)u64{unsafe{
+ match pg.map(space,va,pa,flags){ok=>{return 0;},err(e)=>{return e;},}
+}}
+export("wb_protect") fn protect(space:*pg.Space,va:u64,flags:u64)u64{unsafe{
+ match pg.protect_live(space,va,flags){ok=>{return 0;},err(e)=>{return e;},}
+}}
+export("wb_measure") fn measure(space:*pg.Space,va:u64,pa:u64,bytes:u64,hz:u64,flags:u64,backup:*u8,capacity:usize,out:*wb.Sample)u64{unsafe{
+ let config=wb.Config{space:space,virtual:va,physical:pa,bytes:bytes,tsc_hz:hz,flags:flags,backup:backup,capacity:capacity};
+ return wb.measure(&config,out);
+}}

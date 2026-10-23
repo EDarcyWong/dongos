@@ -5,6 +5,54 @@ from lang.dongc import compile_file
 from lang.dongc.modules import Resolver
 from lang.tests.test_dongc import tool,nasm_flags
 ROOT=Path(__file__).resolve().parents[1]
+def host_link_flags():
+    # The generated ELF executes at 0x400000. Some MinGW toolchains also put
+    # the host PE there by default, so give the observer a disjoint image base.
+    return ['-Wl,--image-base,0x10000000'] if os.name=='nt' else ['-no-pie','-Wl,-Ttext-segment=0x10000000']
+
+def host_harness(source):
+    if os.name!='nt':return source
+    entry='int main(int argc,char**argv)'
+    if source.count(entry)!=1:raise ValueError('expected one host main entry')
+    # Older non-ASLR MinGW puts the initial 2 MiB thread stack at 0x400000.
+    # Retire that thread before mapping the unchanged ELF there. The context
+    # lives in static storage, never on the retiring stack; the real thread
+    # handle is signalled only after thread cleanup. CRT initialization has
+    # already finished when main starts the worker.
+    prefix=r'''
+#ifndef __USE_MINGW_ANSI_STDIO
+#define __USE_MINGW_ANSI_STDIO 1
+#endif
+#include <windows.h>
+static void*g5_host_elf_reservation;
+static void g5_host_reserve_elf_window(void){
+ if(!g5_host_elf_reservation)g5_host_elf_reservation=VirtualAlloc((void*)0x400000,2*1024*1024,MEM_RESERVE,PAGE_NOACCESS);
+}
+static void g5_host_release_elf_window(void){
+ if(g5_host_elf_reservation){VirtualFree(g5_host_elf_reservation,0,MEM_RELEASE);g5_host_elf_reservation=NULL;}
+}
+'''
+    return prefix+source.replace(entry,'static int g5_host_main(int argc,char**argv)',1)+r'''
+#include <process.h>
+typedef struct{HANDLE original;int argc;char**argv;} G5HostContext;
+static G5HostContext g5_host_context;
+static unsigned __stdcall g5_host_worker(void*opaque){
+ G5HostContext*c=(G5HostContext*)opaque;
+ if(WaitForSingleObject(c->original,30000)!=WAIT_OBJECT_0)ExitProcess(98);
+ CloseHandle(c->original);
+ g5_host_reserve_elf_window();
+ int result=g5_host_main(c->argc,c->argv);
+ fflush(NULL);ExitProcess((UINT)result);return 98;
+}
+int main(int argc,char**argv){
+ g5_host_context.argc=argc;g5_host_context.argv=argv;
+ if(!DuplicateHandle(GetCurrentProcess(),GetCurrentThread(),GetCurrentProcess(),
+   &g5_host_context.original,SYNCHRONIZE,FALSE,0))return 98;
+ uintptr_t worker=_beginthreadex(NULL,0,g5_host_worker,&g5_host_context,0,NULL);
+ if(!worker){CloseHandle(g5_host_context.original);return 98;}
+ CloseHandle((HANDLE)worker);ExitThread(0);return 98;
+}
+'''
 BRIDGE='''bits 64
 section .text
 global invoke_guarded
@@ -202,6 +250,7 @@ static void*load(const unsigned char*p,U n){
  }
  check(entry>=0x401000&&entry<text_end&&text_end-entry>=27,"ELF entry");mapped_extent=extent;
 #ifdef _WIN32
+ g5_host_release_elf_window();
  void*m=VirtualAlloc((void*)0x400000,extent,MEM_RESERVE|MEM_COMMIT,PAGE_READWRITE);check(m!=NULL,"ELF map");
 #else
  void*m=mmap((void*)0x400000,extent,PROT_READ|PROT_WRITE,MAP_PRIVATE|MAP_ANONYMOUS|MAP_FIXED_NOREPLACE,-1,0);check(m!=MAP_FAILED,"ELF map");
@@ -229,6 +278,7 @@ int main(int argc,char**argv){
  U(ABI*tiny)(void)=(U(ABI*)(void))load(a+r->offset,r->written);check(tiny()==37,"small native code");
 #ifdef _WIN32
  check(VirtualFree((void*)0x400000,0,MEM_RELEASE),"unmap small");
+ g5_host_reserve_elf_window();
 #else
  check(!munmap((void*)0x400000,mapped_extent),"unmap small");
 #endif
@@ -271,7 +321,7 @@ def exercise(output,mode='release',root=ROOT):
     output=Path(output).resolve();output.mkdir(parents=True,exist_ok=True)
     payload,sources=source_blob(root);(output/'sources.bin').write_bytes(payload)
     c=compile_file(root/'lang/bootstrap/compiler_job.dg',roots=[root/'lang',root/'lang/std'],mode=mode)
-    (output/'job.asm').write_text(c.assembly,encoding='utf-8');(output/'bridge.asm').write_text(BRIDGE,encoding='ascii');(output/'probe.c').write_text(HARNESS,encoding='utf-8')
+    (output/'job.asm').write_text(c.assembly,encoding='utf-8');(output/'bridge.asm').write_text(BRIDGE,encoding='ascii');(output/'probe.c').write_text(host_harness(HARNESS),encoding='utf-8')
     nasm,cc=tool('nasm','NASM'),tool('gcc','CC')
     if not nasm or not cc:raise RuntimeError('NASM and GCC required')
     records=[]
@@ -287,7 +337,7 @@ def exercise(output,mode='release',root=ROOT):
         run([nasm,'-O0','-f',fmt,*nasm_flags(nasm),'-o',output/(part+'.o'),output/(part+'.asm')],part)
     run([nasm,'-O0','-f','elf64' if fmt=='win64' else 'win64',*nasm_flags(nasm),'-o',output/'job-other.o',output/'job.asm'],'other-format')
     exe=output/('probe.exe' if os.name=='nt' else 'probe')
-    run([cc,'-std=c11','-O2','-Wall','-Wextra','-Werror',*([] if os.name=='nt' else ['-no-pie','-Wl,-Ttext-segment=0x10000000']),output/'probe.c',output/'job.o',output/'bridge.o','-o',exe],'link')
+    run([cc,'-std=c11','-O2','-Wall','-Wextra','-Werror',*host_link_flags(),output/'probe.c',output/'job.o',output/'bridge.o','-o',exe],'link')
     stdout=run([exe,output/'sources.bin'],'execute')
     after={p:hashlib.sha256((root/p).read_bytes()).hexdigest() for p in sources}
     if sources!=after:raise RuntimeError('compiler sources changed')

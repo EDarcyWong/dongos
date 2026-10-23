@@ -1,6 +1,8 @@
 """Independent full-root and report oracle rejection, no hardware simulation."""
-import copy,struct,unittest,hashlib
+import copy,struct,unittest,hashlib,tempfile
+from pathlib import Path
 from tests import run_p2_alias_qemu as q
+from tools.kernel_storage_profile import generate,module_bytes
 
 class AliasGuestOracleTests(unittest.TestCase):
     def test_independent_actual_msr_decode_and_overlap_rejection(self):
@@ -17,6 +19,15 @@ class AliasGuestOracleTests(unittest.TestCase):
     def test_real_profile_source_is_in_the_observed_input_inventory(self):
         key='kernel/build/storage_profile.dg'
         self.assertEqual(q.source_hashes()[key],hashlib.sha256((q.ROOT/key).read_bytes()).hexdigest())
+    def test_alias_definition_rejects_rehashed_historical_two_pool_runtime7(self):
+        # Definition-only component fixture; no build or guest is claimed.
+        with tempfile.TemporaryDirectory() as temp:
+            output=Path(temp);_,profile=generate(output,7,q.ROOT/'kernel')
+            build=dict(runtime_level=7,source_unchanged=True,source_sha256=q.source_hashes(),kernel_storage_profile=profile)
+            self.assertEqual(1,q.verify_definition(build,module_bytes(7),expected_runtime=7,source_root=q.ROOT))
+            old=module_bytes(7).replace(b'POOLS:usize=1;',b'POOLS:usize=2;')
+            build['kernel_storage_profile'].update(static_user_pools=2,sha256=hashlib.sha256(old).hexdigest())
+            with self.assertRaisesRegex(ValueError,'kernel storage'):q.verify_definition(build,old,expected_runtime=7,source_root=q.ROOT)
     def fixture(self):
         base=0x400000;frame=0x10000000;fb=0x80000000;pool=bytearray(16*4096);meta=bytearray(16);meta[0]=1;next_table=1
         def map_page(va,pa,flags):

@@ -5,7 +5,6 @@
   "checks": [
     "discover:claude-works/tests:test_nasm_u64_module.py"
   ],
-  "claim_token": null,
   "claimed_at": "2026-10-19T15:35:14+00:00",
   "claimed_by": null,
   "complexity": "standard",

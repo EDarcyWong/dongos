@@ -1,0 +1,54 @@
+module user_bkl_probe;
+import sched.user_bkl as b;
+import sched.user_domain as ud;
+import sched.multicore as q;
+var D:*ud.Domain=null;var OTHER:*ud.Domain=null;
+export("bk_required") fn required()u64{return ud.required_bytes();}
+export("bk_init") fn initialize(a:u64,z:u64,bytes:u64)u64{unsafe{
+ match ud.initialize(a,bytes,7,0x100000,&D){ok=>{},err(e)=>{return e;},}
+ match ud.initialize(z,bytes,7,0x100000,&OTHER){ok=>{return 0;},err(e)=>{return e;},}
+}}
+export("bk_bind") fn bind(other:u64)u64{unsafe{var d=D;if other!=0{d=OTHER;}
+ match b.bind(d){ok=>{return 0;},err(e)=>{return e;},}
+}}
+export("bk_acquire") fn acquire(cpu:usize,limit:u64,other:u64)u64{unsafe{var d=D;if other!=0{d=OTHER;}
+ match b.acquire(d,cpu,limit){ok=>{return 0;},err(e)=>{return e;},}
+}}
+export("bk_unlock") fn unlock(cpu:usize,other:u64)u64{unsafe{var d=D;if other!=0{d=OTHER;}
+ match b.unlock(d,cpu){ok=>{return 0;},err(e)=>{return e;},}
+}}
+export("bk_domain") fn domain(other:u64)*ud.Domain{if other!=0{return OTHER;}return D;}
+export("bk_state") fn state()*const b.State{return b.pointer();}
+export("bk_original_acquire") fn original_acquire(cpu:usize,limit:u64)u64{unsafe{
+ match ud.acquire(D,cpu,limit){ok=>{return 0;},err(e)=>{return e;},}
+}}
+export("bk_original_unlock") fn original_unlock(cpu:usize)u64{unsafe{
+ match ud.unlock(D,cpu){ok=>{return 0;},err(e)=>{return e;},}
+}}
+export("bk_poll") fn poll(cpu:usize)u64{unsafe{
+ match ud.poll(D,cpu){ok(value)=>{return value as u64;},err(e)=>{return e;},}
+}}
+var HOOKS:[16]u64=[0;16];
+unsafe fn hook(d:*ud.Domain,cpu:usize)u64{unsafe{if d!=D||cpu>=16{return 1;}HOOKS[cpu]+=1;}return 0;}
+export("bk_register_hook") fn register_hook()u64{unsafe{
+ match ud.register_poll(D,hook){ok=>{return 0;},err(e)=>{return e;},}
+}}
+export("bk_hooks") fn hooks(cpu:usize)u64{unsafe{if cpu>=16{return 0;}return HOOKS[cpu];}}
+export("bk_barrier") fn barrier()u64{unsafe{
+ match ud.barrier_begin(D,0){ok(value)=>{return value;},err(e)=>{return e;},}
+}}
+export("bk_wait") fn wait(sequence:u64,limit:u64)u64{unsafe{
+ match ud.barrier_wait(D,0,sequence,limit){ok=>{return 0;},err(e)=>{return e;},}
+}}
+export("bk_audit") fn audit()u64{unsafe{match q.audit((*D).engine){ok=>{return 0;},err(e)=>{return e;},}}}
+export("bk_park") fn park(cpu:usize)u64{unsafe{match ud.park(D,cpu){ok=>{return 0;},err(e)=>{return e;},}}}
+export("bk_returning") fn returning(cpu:usize,frame:u64,xstate:u64)u64{unsafe{
+ var token:u64=0;match ud.admit(D,cpu,0,1,0x200000,frame,xstate,8,1<<cpu as u64,&token){ok=>{},err(e)=>{return e;},}
+ var out:u64=0;match ud.select(D,cpu,&out){ok(found)=>{if !found||out==0{return 1;}return 0;},err(e)=>{return e;},}
+}}
+// Test-only raw corruption; production exports only a const observation pointer.
+export("bk_fault") fn fault(which:u64,value:u64)void{unsafe{
+ let s=b.pointer() as *b.State;
+ if which==0{atomic_store(&(*s).next,value);}else if which==1{atomic_store(&(*s).serving,value);}
+ else if which==2{atomic_store(&(*s).owner,value);}else if which>=16&&which<32{atomic_store(&(*s).wait[(which-16) as usize],value);}
+}return;}

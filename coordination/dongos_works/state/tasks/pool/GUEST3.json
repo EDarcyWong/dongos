@@ -7,7 +7,6 @@
     "discover:pool-works/tests:test_guest_compile_memory.py"
   ],
   "claim_from_status": "rework",
-  "claim_token": "a508b7fba1b2496db4798949e1e3e39f",
   "claimed_at": "2026-10-20T05:53:11+00:00",
   "claimed_by": "claude-worker-guest3",
   "completed_at": "2026-10-20T05:53:12+00:00",
@@ -21,14 +20,14 @@
   "historical": false,
   "id": "pool:GUEST3",
   "integration_note": "已实际复制Dong生产/说明到code/lang/bootstrap及路径适配永久测试到code/lang/tests，生产与验收源逐字SHA相同；主线联合53 tests/0skip/97.642秒通过（GUEST1=19/GUEST2=21/GUEST3=13），包括debug/release真实编译执行、双格式及坏Dong负控，测试源码稳定。build/test/guest-integration/integration-files.json记录来源与目标指纹。此为组件真实集成，不代表客体I/O/内存已接线或完整L3完成。",
-  "legacy_hash": "f5bb59bacfc33223e97e106931a666b02ee3e5ea90056ddbf40d3eb9ced1994b",
+  "legacy_hash": "bc90307b5a861bff21c084f83f6e330d15dea0dc127885f270349b0b0016ca37",
   "number": "GUEST3",
   "owner": "claude",
-  "rev": 10,
+  "rev": 11,
   "review_note": "已实际审查R1源码：所有非OK路径先返回，Result/out全文保持，成功后一次发布；规划/对齐/阶段并存复用/溢出/栈门禁正确。独立13测试与debug/release额外安全探针均确认BUDGET时Result改变0字节，251产物SHA已审查。正式隔离作业e8069a1bf067437b898b92c5c8e56514通过13 tests/0skip/returncode0、source_stable=true、process_stopped=true，当前交付指纹一致。修复原P2，登记组件验收，未集成主线。",
   "status": "integrated",
   "title": "[L3] 客体编译阶段内存预算与独占复用规划",
-  "updated_at": "2026-10-22T00:59:08+00:00",
+  "updated_at": "2026-10-22T14:38:35+00:00",
   "verification": {
     "checks": [
       {

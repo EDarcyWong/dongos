@@ -157,6 +157,7 @@ extern permission_test_inject
 global kernel_fail
 global __dong_panic
 global kernel_panic_screen
+global kernel_framebuffer_gate_get
 
 section .text
 %if RUNTIME_LEVEL >= 5
@@ -1024,11 +1025,62 @@ serial_write:
 .done:
     ret
 
+; FRAMEBUFFER_GATE_TEXT_BEGIN
+; Permanent boot-lifetime Gate, matching runtime_cache.Gate exactly:
+; {word(count bits0..31, closing bit62, closed bit63), epoch, drained, opened}.
+; Writers touch only word. No GS, BKL, published pointer or optional reader ABI.
+kernel_framebuffer_gate_get:
+    lea rax,[rel framebuffer_gate]
+    ret
+
+; Nonblocking, fail-fast acquire. A competing CAS may suppress one redraw.
+; Both helpers use only rax, rdx and flags; preserve every other GPR.
+framebuffer_gate_enter:
+    mov rax,[rel framebuffer_gate]
+    mov rdx,rax
+    shr rdx,32
+    jnz .no
+    cmp eax,-1
+    je .no
+    lea rdx,[rax+1]
+    lock cmpxchg [rel framebuffer_gate],rdx
+    jne .no
+    mov eax,1
+    ret
+.no:
+    xor eax,eax
+    ret
+
+framebuffer_gate_leave:
+    ; Publish every WC pixel store before releasing the writer count. A close
+    ; can then observe zero only after all acquired writers have drained.
+    sfence
+    mov rax,[rel framebuffer_gate]
+.retry:
+    mov edx,eax
+    test edx,edx
+    jz .no
+    mov rdx,rax
+    btr rdx,63
+    btr rdx,62
+    shr rdx,32
+    jnz .no
+    lea rdx,[rax-1]
+    lock cmpxchg [rel framebuffer_gate],rdx
+    jne .retry
+    mov eax,1
+    ret
+.no:
+    xor eax,eax
+    ret
+; FRAMEBUFFER_GATE_TEXT_END
+
+; FRAMEBUFFER_RENDER_TEXT_BEGIN
 ; 功能：直接向 GOP 帧缓冲绘制独立内核的背景和文字。
 ; 输入：r12=RuntimeDisplay*（高半区地址）。
 ; 输出：eax=1 成功，0 表示不支持/不合法的 GOP 几何。
 ; 破坏：调用者保存寄存器、标志；保留 r12 和 SysV 非易失寄存器。
-; 中断/锁：退出固件后调用，中断关闭，独占帧缓冲，无需持锁。
+; 中断/锁：最外圈取得一个 Gate writer；关闭/争用时立即返回，无需持锁。
 screen_draw:
     push rbp
     mov rbp, rsp
@@ -1036,6 +1088,9 @@ screen_draw:
     push r13
     push r14
     push r15
+    call framebuffer_gate_enter
+    test eax,eax
+    jz .denied
     cmp qword [r12 + RuntimeDisplay.pixel_format], 1
     ja .bad
     mov r13, [r12 + RuntimeDisplay.width]
@@ -1132,6 +1187,13 @@ screen_draw:
 .bad:
     xor eax, eax
 .done:
+    mov ebx,eax
+    call framebuffer_gate_leave
+    mov eax,ebx
+    jmp .restore
+.denied:
+    xor eax,eax
+.restore:
     pop r15
     pop r14
     pop r13
@@ -1154,6 +1216,9 @@ kernel_panic_screen:
     sub rsp, 8
     mov r12, rsi
     mov r13, rdi
+    call framebuffer_gate_enter
+    test eax,eax
+    jz .restore
     cmp qword [r12 + RuntimeDisplay.pixel_format], 1
     ja .done
     mov rbx, [r12 + RuntimeDisplay.width]
@@ -1249,6 +1314,8 @@ kernel_panic_screen:
     mov edx, 456
     call text_draw
 .done:
+    call framebuffer_gate_leave
+.restore:
     add rsp, 8
     pop r15
     pop r14
@@ -1346,6 +1413,7 @@ text_draw:
     pop r13
     pop rbx
     ret
+; FRAMEBUFFER_RENDER_TEXT_END
 
 section .rodata
 entered: db "DONGOS_P1_KERNEL_HIGH_OK",13,10,0
@@ -1698,6 +1766,11 @@ glyphs:
     db 31,1,2,4,8,16,31 ; Z
 
 section .bss
+; FRAMEBUFFER_GATE_STORAGE_BEGIN
+align 64, resb 1
+framebuffer_gate: resq 4
+framebuffer_gate_end:
+; FRAMEBUFFER_GATE_STORAGE_END
 align 8, resb 1
 memory_report: resb MemoryReport_size
 memory_info_physical: resq 1

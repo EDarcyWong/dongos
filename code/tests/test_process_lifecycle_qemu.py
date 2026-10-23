@@ -7,7 +7,7 @@ from tests import run_process_lifecycle_qemu as runner
 
 def catalog_fixture():
     raw=bytearray(10776);struct.pack_into('<3Q',raw,0,1,18,7)
-    flags=[7,7,5,7,5,5,7]+[8]*6+[4]+[8]*4
+    flags=[7,7,5,7,5,5,7]+[8]*6+[4]+[9]*4
     for index in range(32):
         base=24+128*index;struct.pack_into('<Q',raw,base,1)
         if index<18:
@@ -27,6 +27,37 @@ def catalog_fixture():
 
 
 class ProcessLifecycleControls(unittest.TestCase):
+    def test_current_gui_autostart_flags_are_exact_not_historical_ordinary_only(self):
+        raw,_=catalog_fixture();current=runner.decode_catalog(raw)
+        self.assertEqual([9]*4,[c['flags'] for c in current['configs'][14:18]])
+        for cfg in range(14,18):
+            bad=bytearray(raw);struct.pack_into('<Q',bad,24+cfg*128+40,8)
+            with self.subTest(cfg=cfg),self.assertRaises(ValueError):runner.decode_catalog(bad)
+
+    def test_verify_process_reuses_bound_profile_before_reading_elf(self):
+        from tests.test_private_pool_oracle import PoolOracleTests
+        factory=PoolOracleTests();self.addCleanup(factory.doCleanups)
+        class ReachedElf(RuntimeError):pass
+        original=Path.read_bytes
+        for level in (4,5,6,7):
+            guest=factory.guest(True,level)
+            def refresh():
+                guest.processes=guest._data[guest.ksym('user.memory','PROCESSES')]
+                guest.roots=[struct.unpack_from('<Q',guest.processes,i*1288+8)[0] for i in range(16)]
+            guest.refresh_processes=refresh;target=guest.esp.parent/'services/fs/program.elf'
+            def read(path):
+                if path==target:raise ReachedElf('actual ELF checking remains required')
+                return original(path)
+            with patch.object(Path,'read_bytes',read),self.assertRaises(ReachedElf):runner.ProcessGuest.verify_process(guest,1,'fs')
+            self.assertEqual(level!=7,guest.uses_static_pool(1))
+        guest=factory.guest(True,7);guest.roots[1]=guest._dynamic[1]=0x230000
+        guest._pointers[1]=guest.ksym('user.memory','TABLES')+32*4096;guest.fixture_rebuild()
+        def refresh_bad():
+            guest.processes=guest._data[guest.ksym('user.memory','PROCESSES')]
+            guest.roots=[struct.unpack_from('<Q',guest.processes,i*1288+8)[0] for i in range(16)]
+        guest.refresh_processes=refresh_bad
+        with self.assertRaises(ValueError):runner.ProcessGuest.verify_process(guest,1,'fs')
+
     def test_complete_catalog_and_actual_ready_dependencies(self):
         raw,_=catalog_fixture();catalog=runner.decode_catalog(raw);result=runner.check_boot_dag(catalog)
         self.assertEqual([5,6,2,4,1,0,3],result['ready_order']);self.assertEqual(7,catalog['sequence'])

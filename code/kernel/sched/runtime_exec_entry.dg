@@ -1,0 +1,256 @@
+// Exact CPL0 EXEC fault adapter. Registration is dormant until trusted bind.
+module sched.runtime_exec_entry;
+import mm.runtime_exec as re;
+import mm.runtime_roots as forest;
+import mm.paging as pg;
+import mm.phys_buddy as buddy;
+import sched.user_domain as ud;
+pub error Invalid=0x0616_0001;pub error Authority=0x0616_0002;pub error Registered=0x0616_0003;
+const MAX:u64=0xffff_ffff_ffff_ffff;const MAGIC:u64=0x5553_4552_534d_5036;
+pub struct Raw{pub cr2:u64,pub r15:u64,pub r14:u64,pub r13:u64,pub r12:u64,pub r11:u64,
+ pub r10:u64,pub r9:u64,pub r8:u64,pub rdi:u64,pub rsi:u64,pub rbp:u64,pub rdx:u64,
+ pub rcx:u64,pub rbx:u64,pub rax:u64,pub vector:u64,pub error_code:u64,pub rip:u64,pub cs:u64,
+ pub rflags:u64,pub rsp:u64,pub ss:u64}
+// Byte-for-byte UserEntryCpu. The 8192-byte planner arena remains caller owned.
+pub struct Header{pub kernel_stack:u64,pub user_stack:u64,pub continuation:u64,pub root_frame:u64,
+ pub original_cr3:u64,pub syscalls:u64,pub busy:u64,pub result:u64,pub smp:u64,pub domain:*ud.Domain,
+ pub logical_id:u64,pub contexts:u64,pub context_count:u64,pub pcid_enabled:u64,
+ pub gdt:u64,pub tss:u64,pub idt:u64,pub stack_bottom:u64,pub df_top:u64,pub nmi_top:u64,
+ pub exception_top:u64,pub kernel_xstate:u64,pub capture:u64,pub returned:u64,pub return_xstate:u64,
+ pub ready:u64,pub last_error:u64,pub event:u64,pub raw_frame:u64,pub deadline_ticks:u64,pub tsc_hz:u64,pub timer_hz:u64}
+pub struct Snapshot{pub cpu:u64,pub root:u64,pub cr0:u64,pub cr4:u64,pub rflags:u64,pub header:u64}
+// Two pre-ASM PROBE events per CPU, never a before/after pair of Raw frames.
+// The caller owns this separate 16-KiB array for the complete registration life.
+pub const TRACE_SLOTS:usize=32;pub const TRACE_VERSION:u64=1;pub const TRACE_COMMITTED:u64=1;
+pub align(64) struct RawTrace{pub version:u64,pub commit:u64,pub cpu:u64,pub payload:u64,
+ pub header:u64,pub root:u64,pub generation:u64,pub frame:u64,pub stack_bottom:u64,pub stack_top:u64,
+ pub context:u64,pub domain:u64,pub reader:u64,pub request:u64,pub acknowledged:u64,pub action_sequence:u64,
+ pub command:u64,pub virtual:u64,pub expected:u64,pub after:u64,pub raw:Raw,
+ pub ticket_before:re.FaultTicket,pub ticket_after:re.FaultTicket,pub reserved:[5]u64}
+pub type Callback=unsafe fn(header:*Header,root:u64,raw:*const Raw,generation:u64)u64;
+unsafe extern "sysv64" fn user_smp_exec_snapshot(out:*Snapshot)void;
+unsafe extern "sysv64" fn user_smp_exec_callback_bits(callback:Callback)u64;
+unsafe extern "sysv64" fn user_smp_exec_register(callback:Callback,probe:u64,after:u64,generation:u64,slots:*const u64,online:u64)u64;
+unsafe extern "sysv64" fn user_smp_exec_registration(which:u64)u64;
+var ACTIVE:*re.Context=null;var DOMAIN:*ud.Domain=null;var CPU_BASE:*ud.Cpu=null;
+var ENGINE:u64=0;var PROCESSES:u64=0;var ARENA:u64=0;var ARENA_BYTES:u64=0;
+var ROOT:u64=0;var ONLINE:u64=0;var ROOT_COUNT:usize=0;var GENERATION:u64=0;
+var PROBE:u64=0;var AFTER:u64=0;var SPACE:u64=0;var ALLOCATOR:u64=0;var PHYSICAL:u64=0;
+var HEADERS:[16]*Header=[null as *Header;16];var FIXED:[512]u64=[0;512];
+var ROOTS:[16]forest.Root=[forest.Root{space:null,identity:0,generation:0};16];
+var TRACE_CONTEXT:*re.Context=null;var TRACE_RECORDS:*RawTrace=null;
+var TRACE_BASE:u64=0;var TRACE_BYTES:u64=0;
+fn object(p:u64,n:u64,a:u64)bool{return p!=0&&(p&(a-1))==0&&n<=MAX-p;}
+fn overlap(a:u64,n:u64,b:u64,m:u64)bool{return n!=0&&m!=0&&a<b+m&&b<a+n;}
+fn fixed(i:usize)bool{return i!=1&&i!=5&&i!=6&&i!=26&&i!=27&&i!=28;}
+unsafe fn stack_bottom(h:*const Header,kind:usize)u64{unsafe{
+ if kind==0{return (*h).stack_bottom;}if kind==1{return (*h).df_top-16384;}
+ if kind==2{return (*h).nmi_top-16384;}return (*h).exception_top-16384;
+}}
+unsafe fn stack_top(h:*const Header,kind:usize)u64{unsafe{
+ if kind==0{return (*h).kernel_stack;}if kind==1{return (*h).df_top;}
+ if kind==2{return (*h).nmi_top;}return (*h).exception_top;
+}}
+unsafe fn trace_empty(record:*const RawTrace)bool{unsafe{
+ var i:usize=0;while i<64{if *((record as *const u64)+i)!=0{return false;}i+=1;}return true;
+}}
+// Binding only: inspect the real initialized paging descriptor, not a caller's
+// list of alleged pool ranges. No pool walk or inspection occurs in dispatch.
+unsafe fn trace_pool(base:u64,bytes:u64,s:*const pg.Space)!void{unsafe{
+ if !object(s as u64,sizeof(pg.Space) as u64,8){return error.Invalid;}
+ var v=pg.PoolView{tables:null,metadata:null,count:0,physical:0,address_mask:0,used:0,nx:false};
+ try pg.inspect(s,&v);
+ if v.count==0||v.count>256||overlap(base,bytes,s as u64,sizeof(pg.Space) as u64)
+  ||overlap(base,bytes,v.tables as u64,v.count as u64*4096)
+  ||overlap(base,bytes,v.metadata as u64,v.count as u64){return error.Invalid;}
+}return;}
+unsafe fn trace_storage(c:*re.Context,d:*ud.Domain,base:u64,bytes:u64)!void{unsafe{
+ if !object(base,bytes,64)||bytes==0||!object((*d).arena,(*d).bytes,8)||(*d).bytes==0
+  ||!object((*c).allocator as u64,sizeof(buddy.Allocator) as u64,8)
+  ||overlap(base,bytes,c as u64,sizeof(re.Context) as u64)
+  ||overlap(base,bytes,d as u64,sizeof(ud.Domain) as u64)
+  ||overlap(base,bytes,(*d).cpus as u64,16*sizeof(ud.Cpu) as u64)
+  ||overlap(base,bytes,(*d).arena,(*d).bytes)
+  ||overlap(base,bytes,(*c).allocator as u64,sizeof(buddy.Allocator) as u64){return error.Invalid;}
+ try trace_pool(base,bytes,(*c).space);
+ var i:usize=0;while i<(*c).report.root_count as usize{try trace_pool(base,bytes,(*c).roots[i].space);i+=1;}
+}return;}
+// Trusted caller supplies one real, separate allocation extent. Numeric range
+// checks do not establish its physical ownership; the eventual consumer must
+// bind this extent to its actual allocation and raw physical provenance.
+pub unsafe fn bind_trace(c:*re.Context,records:[]RawTrace,storage_base:u64,storage_bytes:u64,headers:[]*Header)!void{unsafe{
+ if TRACE_CONTEXT!=null||ACTIVE!=null||user_smp_exec_registration(0)!=0{return error.Registered;}
+ if !object(c as u64,sizeof(re.Context) as u64,64)||records.len!=TRACE_SLOTS
+  ||!object(records.ptr as u64,TRACE_SLOTS as u64*sizeof(RawTrace) as u64,64)
+  ||!object(storage_base,storage_bytes,64)||storage_bytes<TRACE_SLOTS as u64*sizeof(RawTrace) as u64
+  ||records.ptr as u64<storage_base||records.ptr as u64-storage_base>storage_bytes-TRACE_SLOTS as u64*sizeof(RawTrace) as u64{return error.Invalid;}
+ let d=(*c).domain;if !object(d as u64,sizeof(ud.Domain) as u64,8)
+  ||(*c).ready!=1||(*c).busy!=0||(*c).report.version!=1||(*c).report.attempted!=0||(*c).report.poison!=0
+  ||(*c).report.complete!=0||(*c).report.error_code!=0||(*d).kernel_root==0||((*d).kernel_root&4095)!=0
+  ||(*c).report.root_count>16||(*c).report.online!=(*d).online||(*c).report.root!=(*d).kernel_root
+  ||(*d).ready!=1||(*d).failed!=0||(*d).lock!=1||(*d).owner!=0||(*d).barrier!=0
+  ||((*d).online&1)==0||((*d).online&~(0xffff as u64))!=0
+  ||!object((*d).cpus as u64,16*sizeof(ud.Cpu) as u64,8)||(*(*d).cpus).mode!=ud.LOCKED{return error.Authority;}
+ try trace_admit(c,d,records.ptr,storage_base,storage_bytes,headers);
+ TRACE_RECORDS=records.ptr;TRACE_BASE=storage_base;TRACE_BYTES=storage_bytes;compiler_fence();TRACE_CONTEXT=c;
+}return;}
+unsafe fn header_shape(h:*Header,d:*ud.Domain,id:usize)bool{unsafe{
+ if !object(h as u64,8192,64){return false;}let p=h as u64;let v=*h;
+ if v.domain!=d||v.logical_id!=id as u64||v.original_cr3!=(*d).kernel_root||v.ready!=2||v.result!=MAGIC
+  ||v.continuation!=p||v.root_frame!=v.returned||v.gdt!=p+256||v.tss!=p+320||v.idt!=p+512||v.kernel_xstate!=p+4608
+  ||v.context_count==0||v.context_count>16||id as u64>=v.context_count||v.pcid_enabled>1
+  ||!object(v.contexts,v.context_count*256,64)||v.smp!=v.contexts+id as u64*256
+  ||!object(v.stack_bottom,1,4096)||!object(v.kernel_stack,1,4096)||v.kernel_stack<=v.stack_bottom
+  ||v.kernel_stack-v.stack_bottom<16384||v.df_top<16384||v.nmi_top<16384||v.exception_top<16384
+  ||(v.df_top&4095)!=0||(v.nmi_top&4095)!=0||(v.exception_top&4095)!=0{return false;}
+ let cpu=(*d).cpus+id;
+ if !object(v.capture,200,8)||!object(v.returned,200,8)||!object(v.return_xstate,1024,64)
+  ||v.capture!=(*cpu).capture||v.returned!=(*cpu).returned||v.return_xstate!=(*cpu).return_xstate{return false;}
+ return true;
+}}
+unsafe fn disjoint_storage(c:*re.Context,d:*ud.Domain,headers:[]*Header)!void{unsafe{
+ var i:usize=0;while i<16{if ((*d).online&(1<<i as u64))!=0{let h=headers[i];
+  if overlap(h as u64,8192,c as u64,sizeof(re.Context) as u64)||overlap(h as u64,8192,d as u64,sizeof(ud.Domain) as u64)
+   ||overlap(h as u64,8192,(*d).cpus as u64,16*sizeof(ud.Cpu) as u64){return error.Invalid;}
+  var k:usize=0;while k<4{let low=stack_bottom(h,k);let bytes=stack_top(h,k)-low;
+   if overlap(low,bytes,c as u64,sizeof(re.Context) as u64)||overlap(low,bytes,d as u64,sizeof(ud.Domain) as u64)
+    ||overlap(low,bytes,(*d).cpus as u64,16*sizeof(ud.Cpu) as u64){return error.Invalid;}
+   var j:usize=0;while j<16{if ((*d).online&(1<<j as u64))!=0{let other=headers[j];
+    if overlap(low,bytes,other as u64,8192){return error.Invalid;}
+    if j!=i&&overlap(h as u64,8192,other as u64,8192){return error.Invalid;}
+    var m:usize=0;while m<4{if j!=i||m!=k{let a=stack_bottom(other,m);let n=stack_top(other,m)-a;
+     if overlap(low,bytes,a,n){return error.Invalid;}}
+     m+=1;}
+   }j+=1;}
+   k+=1;}
+ }i+=1;}
+}return;}
+// Complete admission takes only explicit arguments. A rejected Header, pool,
+// stack or destination publishes no pending pointer and writes no record.
+unsafe fn trace_admit(c:*re.Context,d:*ud.Domain,records:*RawTrace,base:u64,bytes:u64,headers:[]*Header)!void{unsafe{
+ if headers.len!=16||!object(headers.ptr as u64,128,8)
+  ||!object(records as u64,TRACE_SLOTS as u64*sizeof(RawTrace) as u64,64)
+  ||!object(base,bytes,64)||bytes<TRACE_SLOTS as u64*sizeof(RawTrace) as u64
+  ||records as u64<base||records as u64-base>bytes-TRACE_SLOTS as u64*sizeof(RawTrace) as u64
+  ||overlap(base,bytes,headers.ptr as u64,128){return error.Invalid;}
+ try trace_storage(c,d,base,bytes);
+ var i:usize=0;while i<16{if ((*d).online&(1<<i as u64))!=0{let h=headers[i];
+  if !header_shape(h,d,i){return error.Authority;}
+  if (*h).contexts!=(*headers[0]).contexts||(*h).context_count!=(*headers[0]).context_count{return error.Authority;}
+  let cpu=(*d).cpus+i;
+  if !object((*cpu).capture_xstate,1024,64)
+   ||overlap(base,bytes,h as u64,8192)||overlap(base,bytes,(*h).contexts,(*h).context_count*256)
+   ||overlap(base,bytes,(*cpu).capture,200)||overlap(base,bytes,(*cpu).capture_xstate,1024)
+   ||overlap(base,bytes,(*cpu).returned,200)||overlap(base,bytes,(*cpu).return_xstate,1024){return error.Invalid;}
+  var k:usize=0;while k<4{let low=stack_bottom(h,k);if overlap(base,bytes,low,stack_top(h,k)-low){return error.Invalid;}k+=1;}
+ }else if headers[i]!=null{return error.Invalid;}i+=1;}
+ try disjoint_storage(c,d,headers);
+ i=0;while i<TRACE_SLOTS{if !trace_empty(records+i){return error.Invalid;}i+=1;}
+}return;}
+// The snapshot overload is the explicit trusted-evidence seam for host tests.
+// Production callers use bind(), which obtains these values from real hardware.
+pub unsafe fn bind_snapshot(c:*re.Context,d:*ud.Domain,headers:[]*Header,generation:u64,callback:Callback,e:*const Snapshot)!void{unsafe{
+ if ACTIVE!=null||user_smp_exec_registration(0)!=0{return error.Registered;}
+ if !object(c as u64,sizeof(re.Context) as u64,64)||!object(d as u64,sizeof(ud.Domain) as u64,8)
+  ||!object(e as u64,sizeof(Snapshot) as u64,8)||headers.len!=16||!object(headers.ptr as u64,128,8)
+  ||generation==0||callback!=dispatch{return error.Invalid;}
+ let bits=user_smp_exec_callback_bits(callback);let actual=user_smp_exec_callback_bits(dispatch);
+ if bits==0||bits!=actual{return error.Invalid;}
+ if (*d).ready!=1||(*d).failed!=0||(*d).lock!=1||(*d).owner!=0||(*d).barrier!=0
+  ||((*d).online&1)==0||((*d).online&~(0xffff as u64))!=0||(*d).kernel_root==0||((*d).kernel_root&4095)!=0
+  ||!object((*d).cpus as u64,16*sizeof(ud.Cpu) as u64,8)||(*(*d).cpus).mode!=ud.LOCKED{return error.Authority;}
+ if (*c).ready!=1||(*c).busy!=0||(*c).domain!=d||(*c).report.version!=1||(*c).report.attempted!=0
+  ||(*c).report.poison!=0||(*c).report.online!=(*d).online||(*c).report.root!=(*d).kernel_root
+  ||(*c).report.root_count>16||(*c).probe_rip==0||(*c).probe_after<=(*c).probe_rip{return error.Authority;}
+ if (*e).cpu!=0||(*e).header!=headers[0] as u64||(*e).root!=(*d).kernel_root||((*e).rflags&512)!=0
+  ||((*e).cr4&128)!=0||((*e).cr4&32)==0||((*e).cr0&0x8001_0001)!=0x8001_0001||((*e).cr0&0x6000_0000)!=0{return error.Authority;}
+ if overlap(c as u64,sizeof(re.Context) as u64,d as u64,sizeof(ud.Domain) as u64)
+  ||overlap(c as u64,sizeof(re.Context) as u64,(*d).cpus as u64,16*sizeof(ud.Cpu) as u64)
+  ||overlap(d as u64,sizeof(ud.Domain) as u64,(*d).cpus as u64,16*sizeof(ud.Cpu) as u64){return error.Invalid;}
+ var i:usize=0;while i<16{if ((*d).online&(1<<i as u64))!=0{
+  if !header_shape(headers[i],d,i){return error.Authority;}
+  if (*headers[i]).contexts!=(*headers[0]).contexts||(*headers[i]).context_count!=(*headers[0]).context_count{return error.Authority;}
+ }else if headers[i]!=null{return error.Invalid;}i+=1;}
+ if TRACE_CONTEXT!=null{
+  if TRACE_CONTEXT!=c||overlap(TRACE_BASE,TRACE_BYTES,e as u64,sizeof(Snapshot) as u64){return error.Invalid;}
+  try trace_admit(c,d,TRACE_RECORDS,TRACE_BASE,TRACE_BYTES,headers);
+ }else{try disjoint_storage(c,d,headers);}
+ var slots:[64]u64=[0;64];i=0;while i<16{if ((*d).online&(1<<i as u64))!=0{let h=headers[i];
+  slots[i*4]=h as u64;slots[i*4+1]=(*h).stack_bottom;slots[i*4+2]=(*h).kernel_stack;slots[i*4+3]=(*h).exception_top;
+ }i+=1;}
+ if user_smp_exec_register(callback,(*c).probe_rip,(*c).probe_after,generation,&slots[0],(*d).online)!=0{return error.Registered;}
+ DOMAIN=d;CPU_BASE=(*d).cpus;ENGINE=(*d).engine as u64;PROCESSES=(*d).processes as u64;ARENA=(*d).arena;ARENA_BYTES=(*d).bytes;
+ ROOT=(*d).kernel_root;ONLINE=(*d).online;ROOT_COUNT=(*c).report.root_count as usize;GENERATION=generation;
+ PROBE=(*c).probe_rip;AFTER=(*c).probe_after;SPACE=(*c).space as u64;ALLOCATOR=(*c).allocator as u64;PHYSICAL=(*c).report.physical;
+ i=0;while i<16{HEADERS[i]=headers[i];if headers[i]!=null{var j:usize=0;while j<32{
+  FIXED[i*32+j]=*((headers[i] as *const u64)+j);j+=1;}}
+  ROOTS[i]=(*c).roots[i];i+=1;}
+ compiler_fence();ACTIVE=c;
+}return;}
+pub unsafe fn bind(c:*re.Context,d:*ud.Domain,headers:[]*Header,generation:u64,callback:Callback)!void{unsafe{
+ var e=Snapshot{cpu:0,root:0,cr0:0,cr4:0,rflags:0,header:0};user_smp_exec_snapshot(&e);
+ if e.header<0xffff_8000_0000_0000{return error.Authority;}
+ try bind_snapshot(c,d,headers,generation,callback,&e);
+}return;}
+unsafe fn identity(h:*Header,id:usize)bool{unsafe{
+ if h!=HEADERS[id]{return false;}var j:usize=0;while j<32{
+  if fixed(j)&&*((h as *const u64)+j)!=FIXED[id*32+j]{return false;}j+=1;}
+ return true;
+}}
+// The only extension to ticket consumption is a fixed bounded copy into an
+// admitted caller-owned record. Raw is still const; there is no ACK, hardware
+// operation, allocator, clock or opaque callback in the exception closure.
+// The assembly caller alone commits the returned fixed continuation to raw.rip.
+unsafe fn trace_commit(record:*RawTrace,h:*Header,raw:*const Raw,reader:*re.ReaderReport,before:*const re.FaultTicket,after:u64)void{unsafe{
+ let c=ACTIVE;
+ (*record).version=TRACE_VERSION;(*record).cpu=(*h).logical_id;(*record).payload=(*c).payload;
+ (*record).header=h as u64;(*record).root=ROOT;(*record).generation=GENERATION;(*record).frame=raw as u64;
+ (*record).stack_bottom=(*h).stack_bottom;(*record).stack_top=(*h).kernel_stack;
+ (*record).context=c as u64;(*record).domain=DOMAIN as u64;(*record).reader=reader as u64;
+ (*record).request=atomic_load(&(*reader).request);(*record).acknowledged=atomic_load(&(*reader).acknowledged);
+ (*record).action_sequence=(*c).report.action_sequence;(*record).command=(*reader).command;
+ (*record).virtual=(*reader).virtual;(*record).expected=(*reader).expected;(*record).after=after;
+ var i:usize=0;while i<23{*((&(*record).raw as *u64)+i)=*((raw as *const u64)+i);i+=1;}
+ i=0;while i<8{*((&(*record).ticket_before as *u64)+i)=*((before as *const u64)+i);
+  *((&(*record).ticket_after as *u64)+i)=*((&(*reader).ticket as *const u64)+i);i+=1;}
+ compiler_fence();atomic_store(&(*record).commit,TRACE_COMMITTED);
+}return;}
+pub unsafe fn dispatch(h:*Header,root:u64,raw:*const Raw,generation:u64)u64{unsafe{
+ let c=ACTIVE;let d=DOMAIN;if c==null||d==null||generation!=GENERATION||root!=ROOT{return 0;}
+ if !object(h as u64,sizeof(Header) as u64,64)||!object(raw as u64,sizeof(Raw) as u64,8){return 0;}
+ let id=(*h).logical_id as usize;if id>=16||(ONLINE&(1<<id as u64))==0||!identity(h,id){return 0;}
+ if user_smp_exec_registration(0)!=2||user_smp_exec_registration(1)!=user_smp_exec_callback_bits(dispatch)
+  ||user_smp_exec_registration(2)!=PROBE||user_smp_exec_registration(3)!=AFTER||user_smp_exec_registration(4)!=GENERATION
+  ||user_smp_exec_registration(80+id as u64)!=1{return 0;}
+ if (*d).ready!=1||(*d).failed!=0||(*d).lock!=1||(*d).owner!=0||(*d).barrier!=0||(*d).online!=ONLINE||(*d).kernel_root!=ROOT
+  ||(*d).cpus!=CPU_BASE||(*d).engine as u64!=ENGINE||(*d).processes as u64!=PROCESSES||(*d).arena!=ARENA||(*d).bytes!=ARENA_BYTES
+  ||(*CPU_BASE).mode!=ud.LOCKED{return 0;}
+ let mode=(*(CPU_BASE+id)).mode;if mode!=ud.IDLE&&mode!=ud.KERNEL&&mode!=ud.LOCKED{return 0;}
+ if (*c).ready!=1||(*c).busy!=1||(*c).domain!=d||(*c).space as u64!=SPACE||(*c).allocator as u64!=ALLOCATOR
+  ||(*c).report.version!=1||(*c).report.attempted!=1||(*c).report.complete!=0||(*c).report.error_code!=0||(*c).report.poison!=0
+  ||(*c).report.root!=ROOT||(*c).report.online!=ONLINE||(*c).report.physical!=PHYSICAL||(*c).report.root_count as usize!=ROOT_COUNT
+  ||(*c).probe_rip!=PROBE||(*c).probe_after!=AFTER||(*c).report.command!=re.PROBE||(*c).report.phase!=5||(*c).report.state!=2
+  ||((*c).payload!=re.CODE42&&(*c).payload!=re.CODE43){return 0;}
+ var i:usize=0;while i<16{let a=(*c).roots[i];let b=ROOTS[i];
+  if a.space!=b.space||a.identity!=b.identity||a.generation!=b.generation{return 0;}i+=1;}
+ let p=raw as u64;if p<(*h).stack_bottom||p+sizeof(Raw) as u64>(*h).kernel_stack
+  ||(*raw).rsp<p+sizeof(Raw) as u64||(*raw).rsp>(*h).kernel_stack
+  ||overlap(p,sizeof(Raw) as u64,c as u64,sizeof(re.Context) as u64)
+  ||overlap(p,sizeof(Raw) as u64,d as u64,sizeof(ud.Domain) as u64)
+  ||overlap(p,sizeof(Raw) as u64,CPU_BASE as u64,16*sizeof(ud.Cpu) as u64){return 0;}
+ i=0;while i<16{if HEADERS[i]!=null&&overlap(p,sizeof(Raw) as u64,HEADERS[i] as u64,8192){return 0;}i+=1;}
+ if (*raw).vector!=14||(*raw).error_code!=3||(*raw).cs!=8||((*raw).rflags&512)!=0||(*raw).rip!=PROBE||(*raw).cr2!=re.WRITE_ALIAS{return 0;}
+ let reader=&(*c).readers[id];let sequence=atomic_load(&(*reader).request);
+ if sequence==0||sequence!=(*c).report.action_sequence||(*reader).command!=re.PROBE||(*reader).virtual!=re.WRITE_ALIAS
+  ||(*reader).expected!=re.CODE99||atomic_load(&(*reader).acknowledged)>=sequence{return 0;}
+ var record:*RawTrace=null;
+ if TRACE_CONTEXT!=null{
+  if TRACE_CONTEXT!=c{return 0;}var slot=id*2;if (*c).payload==re.CODE43{slot+=1;}
+  record=TRACE_RECORDS+slot;if !trace_empty(record){return 0;}
+ }
+ let before=(*reader).ticket;
+ let f=re.Fault{cpu:id as u64,sequence:sequence,root:root,rip:(*raw).rip,cr2:(*raw).cr2,error_code:(*raw).error_code,
+  cs:(*raw).cs,rflags:(*raw).rflags,vector:(*raw).vector};var after:u64=0;
+ if re.handle_fault(c,id,&f,&after)!=0{return 0;}
+ if record!=null{trace_commit(record,h,raw,reader,&before,after);}return after;
+}}

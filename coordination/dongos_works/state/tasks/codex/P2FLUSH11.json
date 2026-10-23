@@ -1,0 +1,93 @@
+{
+  "assignment_owner": "codex",
+  "auto_dispatch": false,
+  "auto_verify": false,
+  "candidate": null,
+  "checks": [
+    "module:tests.test_user_shared_flush",
+    "module:tests.test_user_domain",
+    "module:tests.test_user_smp_barrier"
+  ],
+  "claim_from_status": "todo",
+  "claimed_at": "2026-10-22T18:26:16+00:00",
+  "claimed_by": "codex-mcp-daece153b59c4bd5",
+  "completed_at": "2026-10-22T18:37:18+00:00",
+  "complexity": "standard",
+  "created_at": "2026-10-22T18:26:15+00:00",
+  "delivery": "codex-works/deliveries/P2FLUSH11.md",
+  "depends_on": [
+    "codex:P2ALIAS8"
+  ],
+  "description": "用户最新要求先完成P2、再P5；不重做已integrated11个P2组件。当前user/shared_barrier.asm的纯selector声称原生测试但tests没有调用，调度后per-CPU PCIDE已由sched/user_arch启用，不能靠旧BSP软件flag选MOV CR3。补对真实生产ASM selector和共享屏障三态orchestration的native正反例，RUNTIME4/6/7分支、inactive才legacy、active成功不fallback、active失败永久拒绝、local或AP广播失败拒绝、PCIDE开关/PGE拒绝及旧BSP flag不具权威均覆盖；特权读CR/INVPCID仅在明确硬件边界替身，不能在宿主执行或声称硬件效果。只对私有copy替换local_flush硬件body（保持被测orchestration和selector逐字）；唯一漏broadcast/active错误回退/PGE接受真实坏ASM须正常构建运行并被独立C状态/顺序断言拒绝。保存命令/对象/日志/receipt/SHA及source stability；不skip，不启动OS/VM/CLI，不commit/push。更新地址空间契约，说明其余真实AP PCIDE和调度后owner范围，独立审查+协调器定向复验后本地集成。",
+  "document": "codex-works/tasks/P2FLUSH11-board.md",
+  "historical": false,
+  "id": "codex:P2FLUSH11",
+  "integration_note": "3授权源码/文档已真实位于code主目录并匹配正式独立指纹，源码/契约/测试有效性与原始产物复算通过，登记本地集成。未改已验生产实现或执行OS/VM/提交推送；整体P2仍按新PCID/根闭包/WC任务及后调度消费者和外部门禁继续。",
+  "legacy_hash": "5b6f78be605dc9381faa9564dbb97a0b26b1e87c12942cc8117e4b616c41ebc5",
+  "number": "P2FLUSH11",
+  "owner": "codex",
+  "rev": 6,
+  "review_note": "已逐项实际审查3新/改文件及生产shared_barrier.asm。真实runtime4/6/7 selector和orchestration逐字保留，仅local特权body在私有copy替身；三态、inactive唯一fallback、真实CR4优先旧flag、PGE拒绝、local/AP错误与SysV stack/GPR保存均独立C断言，3唯一坏ASM真实构建运行rc1精确拒绝。正式64cf4d5d11454dfebd38a28ec54136b8三模块3tests/0skip，rc0/source_stable/process_stopped/execution_exited全true。root独立复算190产物SHA/46真实命令、6native执行(3正+3负)与before/after输入，已验domain及barrier原13坏体回归保持。actualCR4read/INVPCID/AP执行字段false准确，不冒充硬件验收。文档perCPU/静态池/失败持有边界匹配当前源码。",
+  "status": "integrated",
+  "title": "P2逐CPU实际CR4失效选择与共享屏障三态原生门禁",
+  "updated_at": "2026-10-22T18:42:36+00:00",
+  "verification": {
+    "checks": [
+      {
+        "cancelled": false,
+        "elapsed_seconds": 4.781,
+        "execution_exited": true,
+        "passed": true,
+        "process_stopped": true,
+        "returncode": 0,
+        "skips": 0,
+        "spec": "module:tests.test_user_shared_flush",
+        "tests": 1,
+        "timed_out": false
+      },
+      {
+        "cancelled": false,
+        "elapsed_seconds": 47.562,
+        "execution_exited": true,
+        "passed": true,
+        "process_stopped": true,
+        "returncode": 0,
+        "skips": 0,
+        "spec": "module:tests.test_user_domain",
+        "tests": 1,
+        "timed_out": false
+      },
+      {
+        "cancelled": false,
+        "elapsed_seconds": 11.344,
+        "execution_exited": true,
+        "passed": true,
+        "process_stopped": true,
+        "returncode": 0,
+        "skips": 0,
+        "spec": "module:tests.test_user_smp_barrier",
+        "tests": 1,
+        "timed_out": false
+      }
+    ],
+    "execution_exited": true,
+    "fingerprint": {
+      "codex-works/deliveries/P2FLUSH11.md": "c3225006893294871173f78cb9e9cdd88e59778397b9ee70a494a16a3a74a0a5",
+      "docs/user-address-spaces.md": "209a834aec5ac70c73ba31d8ef6d67649d5d8d579a4d13193094a2f318848c13",
+      "tests/test_user_shared_flush.py": "610b14dd72b9d2ca5903341a1b8b73b8ad4e3c0202c8a46bd6e6f5a1ff1d2579",
+      "tests/user_shared_flush_probe.c": "f79b464c972267d2eb4349468a3a443bb7e3d4c60d0a51f74bc3dffced491f45"
+    },
+    "finished_at": "2026-10-22T18:38:35+00:00",
+    "job": "64cf4d5d11454dfebd38a28ec54136b8",
+    "passed": true,
+    "process_stopped": true,
+    "source_stable": true,
+    "summary": "定向复验通过，等待源码/契约审查"
+  },
+  "write_paths": [
+    "tests/test_user_shared_flush.py",
+    "tests/user_shared_flush_probe.c",
+    "docs/user-address-spaces.md",
+    "codex-works/deliveries/P2FLUSH11.md"
+  ]
+}

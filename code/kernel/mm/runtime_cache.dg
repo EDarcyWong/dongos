@@ -1,0 +1,383 @@
+// Post-scheduler, full-GOP WC -> UC -> WC component. Production ledger,
+// poll multiplexer and panic/entry drawing integration are separate owners.
+module mm.runtime_cache;
+import mm.paging as pg;
+import mm.runtime_roots as forest;
+import mm.cache_type_plan as plan;
+import sched.user_domain as ud;
+import sched.multicore as queue;
+import boot.abi as abi;
+pub error Invalid=0x0615_0001;pub error Authority=0x0615_0002;
+pub error Forest=0x0615_0003;pub error HardwareState=0x0615_0004;
+pub error Held=0x0615_0005;pub error Deadline=0x0615_0006;
+pub error Capacity=0x0615_0007;pub error Storage=0x0615_0008;
+pub const READ:u64=1;pub const MAINTAIN:u64=2;
+pub const MAX_LINEAR:usize=65536;
+pub const HHDM:u64=0xffff_8000_0000_0000;
+const MAX:u64=0xffff_ffff_ffff_ffff;const CLOSED:u64=0x8000_0000_0000_0000;
+pub struct Gate{pub word:u64,pub epoch:u64,pub drained:u64,pub opened:u64}
+// Full raw MTRR state, including unused variable slots and all fixed registers.
+// action/request/barrier identify the actual local action, not an aggregate
+// callback success or a flush counter. MAINTAIN operations3 = SFENCE+WBINVD.
+pub struct Reading{pub cpu:u64,pub if0:u64,pub root:u64,pub cr0:u64,pub cr4:u64,
+ pub pat:u64,pub bits:u64,pub cap:u64,pub default_type:u64,pub request:u64,
+ pub barrier:u64,pub action:u64,pub operations:u64,pub apic:u64,
+ pub variable:[32]u64,pub fixed:[11]u64}
+const EMPTY_READING:Reading=Reading{cpu:0,if0:0,root:0,cr0:0,cr4:0,pat:0,bits:0,cap:0,
+ default_type:0,request:0,barrier:0,action:0,operations:0,apic:0,variable:[0;32],fixed:[0;11]};
+const EMPTY_VIEW:pg.PoolView=pg.PoolView{tables:null,metadata:null,count:0,physical:0,address_mask:0,used:0,nx:false};
+pub type Hardware=unsafe fn(action:u64,request:u64,barrier:u64,out:*Reading)u64;
+// Trusted independent authority must RE-ENUMERATE actual memory/Catalog roots
+// (including preloaded/dormant/retiring descriptors), and the published ledger.
+// Comparing just this caller's array to itself cannot implement this contract.
+pub type Check=unsafe fn(cookie:u64,roots:*const forest.Root,count:usize,
+ ledger:*const forest.Alias,aliases:usize)u64;
+pub struct Page{pub space:*pg.Space,pub virtual:u64,pub physical:u64,pub flags:u64,pub retired:pg.Retired}
+pub align(64) struct Work{pub scratch:forest.Scratch,pub aliases:[64]forest.Alias,pub report:forest.Report}
+pub struct Config{pub domain:*ud.Domain,pub kernel:*pg.Space,pub info:*const abi.BootInfo,
+ pub roots:[]const forest.Root,pub ledger:[]const forest.Alias,pub pages:[]Page,
+ pub work:*Work,pub gate:*Gate,pub ledger_epoch:*u64,pub check:Check,pub hardware:Hardware,
+ pub cookie:u64,pub ticks:u64}
+pub struct Reader{pub request:u64,pub acknowledged:u64,pub reads:u64,pub maintenances:u64,
+ pub baseline:Reading,pub latest:Reading}
+pub struct Report{pub version:u64,pub attempted:u64,pub complete:u64,pub poison:u64,
+ pub error_code:u64,pub phase:u64,pub round:u64,pub target:u64,pub root:u64,pub online:u64,
+ pub physical:u64,pub bytes:u64,pub linear:u64,pub revoked:u64,pub reclaimed:u64,
+ pub remapped:u64,pub barriers:u64,pub first:u64,pub second:u64,pub request:u64,
+ pub action:u64,pub held:u64,pub gate_token:u64,pub committed:u64}
+// Caller arena storage, never BSS or a local function frame. Page[] is a
+// separately bounded linear receipt arena proportional to ALL alias pages.
+pub align(64) struct Context{pub report:Report,pub config:Config,pub ready:u64,pub busy:u64,
+ pub binding:u64,pub initial_epoch:u64,pub anchor:u64,pub shared:u64,pub readers:[16]Reader}
+unsafe extern "sysv64" fn runtime_cache_gate_close(gate:*Gate,token:u64)u64;
+unsafe extern "sysv64" fn runtime_cache_gate_drain(gate:*Gate,token:u64)u64;
+unsafe extern "sysv64" fn runtime_cache_gate_open(gate:*Gate,token:u64)u64;
+fn region(p:u64,n:u64,a:u64)bool{return n==0||(p!=0&&(p&(a-1))==0&&n<=MAX-p);}
+fn overlap(a:u64,n:u64,b:u64,m:u64)bool{return n!=0&&m!=0&&a<b+m&&b<a+n;}
+fn kind(k:u64)bool{return k==0||k==1||k==4||k==5||k==6;}
+unsafe fn inspect(s:*const pg.Space,out:*pg.PoolView)!void{unsafe{try pg.inspect(s,out);}return;}
+unsafe fn source(c:*const Config,id:u64,generation:u64,root:u64)!*pg.Space{unsafe{
+ if id==forest.KERNEL_ID{if generation!=0||root!=(try pg.root_physical((*c).kernel)){return error.Forest;}return (*c).kernel;}
+ var i:usize=0;while i<(*c).roots.len{let r=(*c).roots[i];if r.identity==id{
+  if r.generation!=generation||(try pg.root_physical(r.space))!=root{return error.Forest;}return r.space as *pg.Space;
+ }i+=1;}return error.Forest;
+}}
+unsafe fn fingerprint(c:*const Config)u64{unsafe{
+ var h:u64=14695981039346656037;let prime:u64=1099511628211;
+ let info=(*c).info;var i:usize=0;while i<sizeof(abi.BootInfo)/8{h=wrapping_mul(h^*((info as *const u64)+i),prime);i+=1;}
+ i=0;while i<(*c).roots.len{let r=(*c).roots[i];
+  h=wrapping_mul(h^(r.space as u64),prime);h=wrapping_mul(h^r.identity,prime);h=wrapping_mul(h^r.generation,prime);
+  var j:usize=0;while j<7{h=wrapping_mul(h^*((r.space as *const u64)+j),prime);j+=1;}i+=1;}
+ i=0;while i<7{h=wrapping_mul(h^*(((*c).kernel as *const u64)+i),prime);i+=1;}
+ i=0;while i<(*c).ledger.len{let a=&(*c).ledger[i];var j:usize=0;while j<8{
+  h=wrapping_mul(h^*((a as *const u64)+j),prime);j+=1;}i+=1;}
+ // Domain token/incarnation are a separate namespace from memory generation.
+ // Bind their raw publication independently, never by equating the counters.
+ let d=(*c).domain;h=wrapping_mul(h^(*d).online,prime);h=wrapping_mul(h^(*d).kernel_root,prime);
+ h=wrapping_mul(h^((*d).engine as u64),prime);h=wrapping_mul(h^((*d).cpus as u64),prime);
+ h=wrapping_mul(h^((*d).processes as u64),prime);h=wrapping_mul(h^(*d).arena,prime);h=wrapping_mul(h^(*d).bytes,prime);
+ i=0;while i<16{let p=(*d).processes+i;var j:usize=0;while j<7{
+  h=wrapping_mul(h^*((p as *const u64)+j),prime);j+=1;}i+=1;}return h;
+}}
+unsafe fn identities(c:*const Config)!void{unsafe{
+ let d=(*c).domain;
+ if (*c).check((*c).cookie,(*c).roots.ptr,(*c).roots.len,(*c).ledger.ptr,(*c).ledger.len)!=0{return error.Authority;}
+ // Every admitted Domain root is independently tied to the complete root set.
+ var slot:usize=0;while slot<16{let p=(*d).processes+slot;if (*p).token!=0{
+  var found:usize=0;var i:usize=0;while i<(*c).roots.len{let r=(*c).roots[i];if r.identity==slot as u64{
+   if (try pg.root_physical(r.space))!=(*p).root{return error.Authority;}found+=1;
+  }i+=1;}if found!=1{return error.Authority;}
+ }slot+=1;}
+}return;}
+unsafe fn hardware_valid(c:*const Config,r:*const Reading,physical:u64,bytes:u64)!void{unsafe{
+ var v=EMPTY_VIEW;try inspect((*c).kernel,&v);
+ if (*r).if0!=1||(*r).root!=v.physical||((*r).cr4&128)!=0||((*r).cr4&32)==0
+  ||((*r).cr0&0x8001_0001)!=0x8001_0001||((*r).cr0&0x6000_0000)!=0
+  ||(*r).bits<32||(*r).bits>52||((1<<(*r).bits)-4096)!=v.address_mask
+  ||!plan.pat_valid((*r).pat)||((*r).pat&255)!=plan.WB||(((*r).pat>>24)&255)!=plan.UC
+  ||(((*r).pat>>32)&255)!=plan.WC||((*r).cap&255)>16||((*r).default_type&~(0xcff as u64))!=0
+  ||((*r).default_type&0x800)==0||!kind((*r).default_type&255){return error.HardwareState;}
+ var ranges:[16]plan.Range=[plan.Range{base:0,size:4096,kind:0};16];var count:usize=0;
+ var i:usize=0;while i<16{let base=(*r).variable[i*2];let mask=(*r).variable[i*2+1];
+  if i>=((*r).cap&255) as usize{if base!=0||mask!=0{return error.HardwareState;}}
+  else{
+   if (base&~(v.address_mask|255))!=0||(mask&~(v.address_mask|2048))!=0||!kind(base&255){return error.HardwareState;}
+   if (mask&2048)!=0{let size=(v.address_mask&~mask)+4096;let start=base&v.address_mask;
+    if (size&(size-1))!=0||(start&(size-1))!=0||start>v.address_mask+4096-size{return error.HardwareState;}
+    ranges[count]=plan.Range{base:start,size:size,kind:base&255};count+=1;
+   }
+  }i+=1;
+ }
+ i=0;while i<11{let fixed=(*r).fixed[i];if ((*r).cap&256)==0{if fixed!=0{return error.HardwareState;}}
+  else{var b:u64=0;while b<8{if !kind((fixed>>(b*8))&255){return error.HardwareState;}b+=1;}}i+=1;
+ }
+ // GOP below 1 MiB is outside this component's fixed-MTRR support envelope.
+ var page:u64=0;while page<bytes{var memory:u64=0;
+  if plan.mtrr_type(ranges[..count],(*r).default_type&255,physical+page,&memory)!=plan.OK||memory!=plan.WB{return error.HardwareState;}
+  page+=4096;
+ }
+}return;}
+unsafe fn same(a:*const Reading,b:*const Reading)bool{unsafe{
+ if (*a).root!=(*b).root||(*a).cr0!=(*b).cr0||(*a).cr4!=(*b).cr4||(*a).pat!=(*b).pat
+  ||(*a).bits!=(*b).bits||(*a).cap!=(*b).cap||(*a).default_type!=(*b).default_type||(*a).apic!=(*b).apic{return false;}
+ var i:usize=0;while i<32{if (*a).variable[i]!=(*b).variable[i]{return false;}i+=1;}
+ i=0;while i<11{if (*a).fixed[i]!=(*b).fixed[i]{return false;}i+=1;}return true;
+}}
+unsafe fn linear(c:*Context)!void{unsafe{
+ let cfg=&(*c).config;var at:usize=0;var i:usize=0;
+ while i<(*cfg).ledger.len{let a=(*cfg).ledger[i];let s=try source(cfg,a.identity,a.generation,a.root);var offset:u64=0;
+  while offset<a.bytes{
+   if at>=(*c).report.linear as usize{return error.Forest;}let p=&(*cfg).pages[at];
+   if (*p).space!=s||(*p).virtual!=a.virtual+offset||(*p).physical!=a.physical+offset
+    ||(*p).flags!=(a.flags&~pg.WRITE_COMBINING){return error.Forest;}at+=1;offset+=4096;
+  }i+=1;
+ }if at!=(*c).report.linear as usize{return error.Forest;}
+}return;}
+unsafe fn authority(c:*Context)!void{unsafe{
+ let cfg=&(*c).config;let d=(*cfg).domain;
+ if (*c).ready!=1||(*c).report.poison!=0||(*d).ready!=1||(*d).failed!=0||(*d).lock!=1||(*d).owner!=0
+  ||(*d).online!=(*c).report.online||(*d).kernel_root!=(*c).report.root||(*d).barrier!=0
+  ||(*(*d).cpus).mode!=ud.LOCKED||(*d).engine==null||(*d).processes==null{return error.Authority;}
+ try queue.audit((*d).engine);try identities(cfg);try linear(c);
+ if fingerprint(cfg)!=(*c).binding||*(*cfg).ledger_epoch!=(*c).initial_epoch{return error.Authority;}
+ var e=EMPTY_READING;let status=(*cfg).hardware(READ,0,(*d).completed,&e);
+ if status!=0||e.cpu!=0||e.request!=0||e.barrier!=(*d).completed||e.action!=READ||e.operations!=0{return error.Authority;}
+ try hardware_valid(cfg,&e,(*c).report.physical,(*c).report.bytes);
+ if (*c).readers[0].reads!=0&&!same(&(*c).readers[0].baseline,&e){return error.HardwareState;}
+ if (*c).report.phase>=2&&((*(*cfg).gate).word!=CLOSED||(*(*cfg).gate).drained!=(*c).report.gate_token){return error.Held;}
+}return;}
+unsafe fn anchor(c:*Context)!void{unsafe{
+ let cfg=(*c).config;var v=EMPTY_VIEW;try inspect(cfg.kernel,&v);var m=pg.Mapping{physical:0,flags:0};
+ try pg.query(cfg.kernel,(*c).anchor,&m);
+ if m.physical!=v.physical||m.flags!=pg.WRITE||overlap(m.physical,4096,(*c).report.physical,(*c).report.bytes)
+  ||(((*v.tables).entries[256]^(*c).shared)&~(32 as u64))!=0{return error.Forest;}
+}return;}
+unsafe fn closure(c:*Context,target:u64,absent:bool)!void{unsafe{
+ let cfg=(*c).config;try identities(&(*c).config);try anchor(c);
+ let status=forest.audit(cfg.kernel,cfg.roots,(*c).report.physical,(*c).report.bytes,
+  (*cfg.work).aliases[..],&(*cfg.work).report,&(*cfg.work).scratch);
+ if status!=forest.OK{return error.Forest;}
+ let found=(*cfg.work).report.aliases as usize;
+ if absent{if found!=0{return error.Forest;}return;}
+ if found!=cfg.ledger.len{return error.Forest;}
+ var i:usize=0;while i<found{let actual=(*cfg.work).aliases[i];let allowed=cfg.ledger[i];
+  let flags=(allowed.flags&~(pg.WRITE_COMBINING|pg.UNCACHED))|target;
+  if actual.root!=allowed.root||actual.identity!=allowed.identity||actual.generation!=allowed.generation
+   ||actual.virtual!=allowed.virtual||actual.physical!=allowed.physical||actual.bytes!=allowed.bytes
+   ||actual.leaf_bytes!=4096||actual.flags!=flags{return error.Forest;}i+=1;
+ }
+}return;}
+unsafe fn limit(c:*Context)!u64{unsafe{let now=ud.user_smp_arch_clock();if (*c).config.ticks==0||(*c).config.ticks>MAX-now{return error.Deadline;}return now+(*c).config.ticks;}}
+unsafe fn barrier(c:*Context)!u64{unsafe{
+ try authority(c);
+ let d=(*c).config.domain;let sequence=try ud.barrier_begin(d,0);
+ try ud.barrier_wait(d,0,sequence,try limit(c));
+ try authority(c);
+ var i:usize=0;while i<16{if ((*d).online&(1<<i as u64))!=0{let cpu=(*d).cpus+i;
+  if (*cpu).acknowledged!=sequence||((*cpu).mode!=ud.IDLE&&(*cpu).mode!=ud.KERNEL&&(*cpu).mode!=ud.LOCKED){return error.Authority;}
+ }i+=1;}(*c).report.barriers+=1;return sequence;
+}}
+// Call from the later shared poll multiplexer. Only captured kernel-root CPUs
+// may perform this real local action; user_domain owns their flush ACKs.
+pub unsafe fn poll(c:*Context,d:*ud.Domain,id:usize)u64{unsafe{
+ if c==null||(*c).ready!=1||(*c).report.poison!=0||(*c).config.domain!=d||id>=16
+  ||((*d).online&(1<<id as u64))==0{return 1;}
+ let r=&(*c).readers[id];let request=atomic_load(&(*r).request);
+ if request<=atomic_load(&(*r).acknowledged){return 0;}
+ let local=(*d).cpus+id;
+ if request!=(*c).report.request||((*local).mode!=ud.IDLE&&(*local).mode!=ud.KERNEL&&(*local).mode!=ud.LOCKED){return 1;}
+ let status=(*c).config.hardware((*c).report.action,request,(*d).completed,&(*r).latest);
+ let sample=&(*r).latest;
+ if status!=0||(*sample).cpu!=id as u64||(*sample).request!=request||(*sample).barrier!=(*d).completed
+  ||(*sample).action!=(*c).report.action{return 1;}
+ let valid=hardware_valid(&(*c).config,sample,(*c).report.physical,(*c).report.bytes);
+ match valid{ok=>{},err(e)=>{return 1;},}
+ if (*c).report.action==MAINTAIN{
+  if (*sample).operations!=3{return 1;}(*r).maintenances+=1;
+ }else if (*sample).operations!=0{return 1;}
+ if (*r).reads==0{(*r).baseline=*sample;}else if !same(&(*r).baseline,sample){return 1;}
+ (*r).reads+=1;compiler_fence();atomic_store(&(*r).acknowledged,request);return 0;
+}}
+unsafe fn actions(c:*Context,action:u64)!void{unsafe{
+ if (*c).report.request==MAX{return error.HardwareState;}(*c).report.request+=1;(*c).report.action=action;
+ let d=(*c).config.domain;let request=(*c).report.request;var id:usize=0;
+ while id<16{if ((*d).online&(1<<id as u64))!=0{atomic_store(&(*c).readers[id].request,request);
+  if id!=0&&ud.user_smp_arch_kick(id as u64)!=0{return error.HardwareState;}
+ }id+=1;}
+ let until=try limit(c);while true{let progress=try ud.poll(d,0);var done=true;id=0;
+  while id<16{if ((*d).online&(1<<id as u64))!=0&&atomic_load(&(*c).readers[id].acknowledged)!=request{done=false;}id+=1;}
+  if done{break;}if ud.user_smp_arch_clock()>=until{return error.Deadline;}ud.user_smp_arch_pause();
+ }
+ // All CPUs must have identical complete PAT/MTRRs. CR4 may differ by local
+ // PCID capability, but each CPU's CR0/CR4 stays bound to its own baseline.
+ id=0;while id<16{if ((*d).online&(1<<id as u64))!=0{let a=&(*c).readers[0].latest;let b=&(*c).readers[id].latest;
+  if (*a).pat!=(*b).pat||(*a).bits!=(*b).bits||(*a).cap!=(*b).cap||(*a).default_type!=(*b).default_type{return error.HardwareState;}
+  var j:usize=0;while j<32{if (*a).variable[j]!=(*b).variable[j]{return error.HardwareState;}j+=1;}
+  j=0;while j<11{if (*a).fixed[j]!=(*b).fixed[j]{return error.HardwareState;}j+=1;}
+  var before:usize=0;while before<id{if ((*d).online&(1<<before as u64))!=0&&(*c).readers[before].latest.apic==(*b).apic{return error.HardwareState;}before+=1;}
+ }id+=1;}
+}return;}
+// Fixed source/workspace regions, all checked before Context/Page writes.
+struct Region{p:u64,n:u64}
+unsafe fn storage(config:*const Config,out:*Context)!void{unsafe{
+ let c=*config;let d=c.domain;
+ var r:[10]Region=[Region{p:0,n:0};10];
+ r[0]=Region{p:config as u64,n:sizeof(Config) as u64};r[1]=Region{p:out as u64,n:sizeof(Context) as u64};
+ r[2]=Region{p:c.pages.ptr as u64,n:c.pages.len as u64*sizeof(Page) as u64};
+ r[3]=Region{p:c.roots.ptr as u64,n:c.roots.len as u64*sizeof(forest.Root) as u64};
+ r[4]=Region{p:c.ledger.ptr as u64,n:c.ledger.len as u64*sizeof(forest.Alias) as u64};
+ r[5]=Region{p:c.gate as u64,n:sizeof(Gate) as u64};r[6]=Region{p:c.ledger_epoch as u64,n:8};
+ r[7]=Region{p:c.info as u64,n:sizeof(abi.BootInfo) as u64};r[8]=Region{p:c.work as u64,n:sizeof(Work) as u64};
+ r[9]=Region{p:(*d).arena,n:(*d).bytes};
+ var i:usize=0;while i<10{if !region(r[i].p,r[i].n,8){return error.Storage;}
+  var j:usize=0;while j<i{if overlap(r[i].p,r[i].n,r[j].p,r[j].n){return error.Storage;}j+=1;}i+=1;
+ }
+ var a:usize=0;while a<c.ledger.len{let alias=c.ledger[a];
+  if !region(alias.virtual,alias.bytes,4096){return error.Storage;}
+  i=0;while i<10{if overlap(alias.virtual,alias.bytes,r[i].p,r[i].n){return error.Storage;}i+=1;}a+=1;
+ }
+ i=0;while i<=c.roots.len{var s:*const pg.Space=c.kernel;if i!=0{s=c.roots[i-1].space;}
+  var v=EMPTY_VIEW;try inspect(s,&v);var index:usize=0;while index<10{
+   if overlap(r[index].p,r[index].n,s as u64,sizeof(pg.Space) as u64)
+    ||overlap(r[index].p,r[index].n,v.tables as u64,v.count as u64*4096)
+    ||overlap(r[index].p,r[index].n,v.metadata as u64,v.count as u64){return error.Storage;}index+=1;
+  }
+  a=0;while a<c.ledger.len{let alias=c.ledger[a];
+   if overlap(alias.virtual,alias.bytes,s as u64,sizeof(pg.Space) as u64)
+    ||overlap(alias.virtual,alias.bytes,v.tables as u64,v.count as u64*4096)
+    ||overlap(alias.virtual,alias.bytes,v.metadata as u64,v.count as u64){return error.Storage;}a+=1;
+  }i+=1;
+ }
+ // No linear Retired receipt may be overwritten or replayed at bind.
+ i=0;while i<c.pages.len*sizeof(Page){if *((c.pages.ptr as *const u8)+i)!=0{return error.Held;}i+=1;}
+}return;}
+pub unsafe fn bind(out:*Context,config:*const Config)!void{unsafe{
+ if !region(out as u64,sizeof(Context) as u64,64)||!region(config as u64,sizeof(Config) as u64,8){return error.Invalid;}
+ let c=*config;
+ if (*out).ready!=0||c.domain==null||c.kernel==null||c.info==null
+  ||read_unaligned((&c.check) as *const u64)==0||read_unaligned((&c.hardware) as *const u64)==0
+  ||c.work==null||c.gate==null||c.ledger_epoch==null||c.ticks==0||c.roots.len>16||c.ledger.len==0||c.ledger.len>64
+  ||c.pages.len==0||c.pages.len>MAX_LINEAR||!region(c.work as u64,sizeof(Work) as u64,64)
+  ||!region(c.domain as u64,sizeof(ud.Domain) as u64,8){return error.Invalid;}
+ if (*c.domain).ready!=1||(*c.domain).failed!=0||(*c.domain).lock!=1||(*c.domain).owner!=0
+  ||(*c.domain).online==0||((*c.domain).online&1)==0||((*c.domain).online&~(0xffff as u64))!=0
+  ||(*c.domain).cpus==null||(*c.domain).processes==null||(*c.domain).engine==null{return error.Authority;}
+ let d=c.domain;
+ if (*d).arena!=d as u64||(*d).bytes<ud.required_bytes()||!region((*d).arena,(*d).bytes,64)
+  ||!region((*d).cpus as u64,16*sizeof(ud.Cpu) as u64,8)
+  ||!region((*d).processes as u64,16*sizeof(ud.Process) as u64,8)
+  ||!region((*d).engine as u64,sizeof(queue.Engine) as u64,8)
+  ||((*d).cpus as u64)<(*d).arena||((*d).cpus as u64)> (*d).arena+(*d).bytes-16*sizeof(ud.Cpu) as u64
+  ||((*d).processes as u64)<(*d).arena||((*d).processes as u64)> (*d).arena+(*d).bytes-16*sizeof(ud.Process) as u64
+  ||((*d).engine as u64)<(*d).arena||((*d).engine as u64)> (*d).arena+(*d).bytes-sizeof(queue.Engine) as u64{return error.Authority;}
+ if (*d).barrier!=0||(*(*d).cpus).mode!=ud.LOCKED||(*(*d).engine).online!=(*d).online{return error.Authority;}
+ try storage(config,out);try queue.audit((*c.domain).engine);try identities(config);
+ let info=c.info;let base=(*info).framebuffer_base as u64;let raw=(*info).framebuffer_size as u64;
+ if (*info).magic!=0x544f_4f42_474e_4f44||(*info).size!=sizeof(abi.BootInfo)||(*info).version!=1
+  ||base<0x10_0000||raw==0||raw>MAX-base||base+raw>MAX-4095{return error.Invalid;}
+ let physical=base&~(4095 as u64);let end=(base+raw+4095)&~(4095 as u64);let bytes=end-physical;
+ var v=EMPTY_VIEW;try inspect(c.kernel,&v);let root=v.physical;
+ if (*c.domain).kernel_root!=root||physical>=0x80_0000_0000||bytes>0x80_0000_0000-physical
+  ||v.physical>=0x80_0000_0000||v.count as u64*4096>0x80_0000_0000-v.physical
+  ||overlap(physical,bytes,v.physical,v.count as u64*4096){return error.Invalid;}
+ var pool_index:usize=0;while pool_index<c.roots.len{var private_view=EMPTY_VIEW;
+  try inspect(c.roots[pool_index].space,&private_view);
+  if overlap(physical,bytes,private_view.physical,private_view.count as u64*4096){return error.Forest;}pool_index+=1;
+ }
+ var e=EMPTY_READING;let hw=c.hardware(READ,0,(*c.domain).completed,&e);
+ if hw!=0||e.cpu!=0||e.request!=0||e.barrier!=(*c.domain).completed||e.action!=READ||e.operations!=0{return error.Authority;}
+ try hardware_valid(config,&e,physical,bytes);
+ if (*c.gate).word>>32!=0||(*c.gate).epoch==MAX||(*c.gate).opened!=(*c.gate).epoch
+  ||*c.ledger_epoch==0||*c.ledger_epoch==MAX{return error.Held;}
+ let scanned=forest.audit(c.kernel,c.roots,physical,bytes,(*c.work).aliases[..],&(*c.work).report,&(*c.work).scratch);
+ if scanned!=forest.OK||(*c.work).report.aliases!=c.ledger.len as u64{return error.Forest;}
+ var linear:usize=0;var hhdm:usize=0;var users:usize=0;var i:usize=0;
+ while i<c.ledger.len{let a=c.ledger[i];let got=(*c.work).aliases[i];
+  if a.root!=got.root||a.identity!=got.identity||a.generation!=got.generation||a.virtual!=got.virtual||a.physical!=got.physical
+   ||a.bytes!=got.bytes||a.flags!=got.flags||a.leaf_bytes!=4096||got.leaf_bytes!=4096
+   ||(a.flags&~(pg.WRITE|pg.USER|pg.WRITE_COMBINING))!=0||(a.flags&pg.WRITE_COMBINING)==0
+   ||(a.virtual&4095)!=0||(a.physical&4095)!=0||(a.bytes&4095)!=0||a.bytes==0
+   ||a.physical<physical||a.physical>=end||a.bytes>end-a.physical{return error.Forest;}
+  let space=try source(config,a.identity,a.generation,a.root);
+  if a.identity==forest.KERNEL_ID{
+   if (a.flags&pg.USER)!=0||a.virtual<HHDM||a.virtual-HHDM!=a.physical
+    ||a.physical!=physical||a.bytes!=bytes||a.bytes>0x80_0000_0000-(a.virtual-HHDM){return error.Forest;}
+   hhdm+=1;
+  }else{if a.virtual>=0x80_0000_0000||a.bytes>0x80_0000_0000-a.virtual{return error.Forest;}
+   if (a.flags&pg.USER)!=0{users+=1;}}
+  let count=(a.bytes/4096) as usize;if count>MAX_LINEAR-linear{return error.Capacity;}linear+=count;
+  // Each private page-table pool is permanently outside the GOP lease.
+  var own=EMPTY_VIEW;try inspect(space,&own);if overlap(physical,bytes,own.physical,own.count as u64*4096){return error.Forest;}i+=1;
+ }
+ if hhdm!=1||users==0||linear>c.pages.len{return error.Capacity;}
+ var anchor_map=pg.Mapping{physical:0,flags:0};let anchor_va=HHDM+v.physical;
+ try pg.query(c.kernel,anchor_va,&anchor_map);
+ if anchor_map.physical!=v.physical||anchor_map.flags!=pg.WRITE||((*v.tables).entries[256]&1)==0{return error.Forest;}
+ // No source/gate/ledger/Page write occurs before this complete preflight.
+ var clear:usize=0;while clear<sizeof(Context){*((out as *u8)+clear)=0;clear+=1;}
+ (*out).config=c;(*out).binding=fingerprint(config);(*out).initial_epoch=*c.ledger_epoch;
+ (*out).anchor=anchor_va;(*out).shared=(*v.tables).entries[256];
+ (*out).report.version=1;(*out).report.root=root;(*out).report.online=(*c.domain).online;
+ (*out).report.physical=physical;(*out).report.bytes=bytes;(*out).report.linear=linear as u64;(*out).report.held=1;
+ var at:usize=0;i=0;while i<c.ledger.len{let a=c.ledger[i];let s=try source(config,a.identity,a.generation,a.root);var offset:u64=0;
+  while offset<a.bytes{c.pages[at]=Page{space:s,virtual:a.virtual+offset,physical:a.physical+offset,
+   flags:a.flags&~pg.WRITE_COMBINING,retired:pg.EMPTY_RETIRED};at+=1;offset+=4096;}i+=1;
+ }
+ (*out).ready=1;
+}return;}
+unsafe fn poison(c:*Context,code:u64)void{unsafe{
+ (*c).report.poison=1;(*c).report.error_code=code;(*c).report.complete=0;
+ atomic_store(&(*(*c).config.domain).failed,1);
+ let gate=(*c).config.gate;var old=atomic_load(&(*gate).word);
+ while (old&CLOSED)==0{let actual=atomic_compare_exchange(&(*gate).word,old,old|CLOSED);if actual==old{break;}old=actual;}
+ // Do not open, roll back, remap early, release a lease or discard receipts.
+}return;}
+unsafe fn transition(c:*Context,target:u64)!void{unsafe{
+ let cfg=(*c).config;let count=(*c).report.linear as usize;
+ try authority(c);try closure(c,(*c).report.target,false);
+ (*c).report.target=target;(*c).report.phase=3;
+ var page:usize=0;while page<count{let p=&cfg.pages[page];
+  try pg.unmap_live((*p).space,(*p).virtual,&(*p).retired);(*c).report.revoked+=1;page+=1;
+ }
+ try anchor(c);(*c).report.phase=4;(*c).report.first=try barrier(c);
+ // The entire online all-tag ACK is a hard boundary before FIRST reclaim.
+ if (*cfg.domain).completed!=(*c).report.first{return error.Authority;}
+ page=0;while page<count{let p=&cfg.pages[page];var m=pg.Mapping{physical:0,flags:0};
+  match pg.query((*p).space,(*p).virtual,&m){ok=>{return error.Forest;},err(e)=>{if e!=0x0203_0002{return error.Forest;}},}page+=1;
+ }
+ (*c).report.phase=5;page=0;while page<count{let p=&cfg.pages[page];
+  try pg.reclaim((*p).space,&(*p).retired);(*c).report.reclaimed+=1;page+=1;
+ }
+ try closure(c,target,true);(*c).report.phase=6;
+ try actions(c,MAINTAIN);
+ try authority(c);
+ (*c).report.phase=7;page=0;while page<count{let p=&cfg.pages[page];
+  try pg.map_live((*p).space,(*p).virtual,(*p).physical,(*p).flags|target);(*c).report.remapped+=1;page+=1;
+ }
+ (*c).report.phase=8;(*c).report.second=try barrier(c);
+ try authority(c);try closure(c,target,false);try actions(c,READ);
+}return;}
+unsafe fn lifecycle(c:*Context)!void{unsafe{
+ let cfg=(*c).config;try authority(c);try closure(c,pg.WRITE_COMBINING,false);
+ let token=(*cfg.gate).epoch+1;(*c).report.gate_token=token;
+ if runtime_cache_gate_close(cfg.gate,token)!=1{return error.Held;}
+ (*c).report.phase=1;let until=try limit(c);
+ while runtime_cache_gate_drain(cfg.gate,token)!=1{if ud.user_smp_arch_clock()>=until{return error.Deadline;}ud.user_smp_arch_pause();}
+ (*c).report.phase=2;let captured=try barrier(c);try authority(c);try actions(c,READ);
+ (*c).report.round=1;try transition(c,pg.UNCACHED);
+ (*c).report.round=2;try transition(c,pg.WRITE_COMBINING);
+ try authority(c);try closure(c,pg.WRITE_COMBINING,false);
+ var cpu:usize=0;while cpu<16{if ((*c).report.online&(1<<cpu as u64))!=0&&(*c).readers[cpu].maintenances!=2{return error.HardwareState;}cpu+=1;}
+ (*c).report.phase=9;
+ if runtime_cache_gate_open(cfg.gate,token)!=1{return error.Held;}
+ // No fallible operation follows opening. Mapping/cache/identity closure is
+ // complete; the published ledger remains WC with one new committed epoch.
+ atomic_store(cfg.ledger_epoch,(*c).initial_epoch+1);(*c).report.committed=1;
+}return;}
+pub unsafe fn run(c:*Context)!void{unsafe{
+ if c==null||(*c).ready!=1||(*c).busy!=0||(*c).report.attempted!=0||(*c).report.poison!=0{return error.Invalid;}
+ // Admission rejection is atomic and does not close the drawing gate.
+ try authority(c);try closure(c,pg.WRITE_COMBINING,false);
+ (*c).busy=1;(*c).report.attempted=1;(*c).report.target=pg.WRITE_COMBINING;
+ let result=lifecycle(c);match result{ok=>{(*c).busy=0;(*c).report.complete=1;(*c).report.phase=10;},err(code)=>{poison(c,code);return result;},}
+}return;}

@@ -1,0 +1,179 @@
+// Read-only audit of the production kernel/private-user page-table forest.
+// Caller supplies the COMPLETE trusted root set and keeps it and every table
+// stable (including lifetime) for the call. This does not acquire BKL, stop
+// CPUs, establish a lease, invalidate translations, or authorize reclamation.
+module mm.runtime_roots;
+import mm.paging as pg;
+pub const OK:u64=0;pub const INVALID:u64=1;pub const CAPACITY:u64=2;
+pub const SHARED_MISMATCH:u64=3;pub const FOREIGN:u64=4;pub const MALFORMED:u64=5;
+pub const ACCOUNTING:u64=6;pub const PENDING:u64=7;pub const STORAGE:u64=8;
+pub const MAX_USERS:usize=16;pub const MAX_TABLES:usize=256;pub const MAX_ALIASES:usize=64;
+pub const KERNEL_ID:u64=0xffff_ffff_ffff_ffff;
+pub struct Root{pub space:*const pg.Space,pub identity:u64,pub generation:u64}
+// An alias describes the INTERSECTION with the requested physical byte range.
+// Adjacent intersections coalesce only with identical identity/flags/leaf size
+// and BOTH virtual and physical continuity. Every constituent leaf is audited.
+// Shared kernel aliases are returned once, with KERNEL_ID/generation zero.
+// flags are effective pg.WRITE/USER/EXECUTE and leaf UC/WC selector flags.
+pub struct Alias{pub root:u64,pub identity:u64,pub generation:u64,pub virtual:u64,
+ pub physical:u64,pub bytes:u64,pub flags:u64,pub leaf_bytes:u64}
+pub struct Report{pub roots:u64,pub tables:u64,pub leaves:u64,pub aliases:u64,
+ pub shared_entries:u64,pub kernel_scans:u64,pub physical:u64,pub bytes:u64}
+// Consumed workspace, deliberately caller-owned: an Alias array alone exceeds
+// the compiler's 4096-byte function-frame bound. No zero initialization needed.
+pub align(64) struct Scratch{records:[64]Alias,views:[17]pg.PoolView}
+const MAX:u64=0xffff_ffff_ffff_ffff;const NX:u64=0x8000_0000_0000_0000;
+const EMPTY_VIEW:pg.PoolView=pg.PoolView{tables:null,metadata:null,count:0,physical:0,address_mask:0,used:0,nx:false};
+struct Region{p:u64,n:u64}
+const EMPTY_REGION:Region=Region{p:0,n:0};
+fn span(p:u64,n:u64)bool{return n==0||(p!=0&&n<=MAX-p);}
+fn object(p:u64,n:u64,a:u64)bool{return p!=0&&(p&(a-1))==0&&span(p,n);}
+fn overlap(a:u64,n:u64,b:u64,m:u64)bool{return n!=0&&m!=0&&a<b+m&&b<a+n;}
+fn valid_mask(mask:u64)bool{if (mask&4095)!=0||mask>MAX-4096{return false;}let n=mask+4096;return n>=0x1_0000_0000&&n<=0x10_0000_0000_0000&&(n&(n-1))==0;}
+unsafe fn source_at(kernel:*const pg.Space,users:[]const Root,index:usize)*const pg.Space{unsafe{
+ if index==0{return kernel;}return users[index-1].space;
+}}
+// Validate the descriptor's own mask before deriving a transient view bounded
+// by the trusted kernel hardware limit. Never rewrite the actual Space.
+unsafe fn describe(space:*const pg.Space,hardware:u64,out:*pg.PoolView)u64{unsafe{
+ match pg.inspect(space,out){ok=>{},err(e)=>{return INVALID;},}
+ let v=*out;var mask=v.address_mask;
+ if hardware!=0&&hardware<mask{mask=hardware;}
+ if v.count==0||v.count>MAX_TABLES||!v.nx||!valid_mask(v.address_mask)||v.physical==0||(v.physical&4095)!=0
+  ||v.physical>mask||((v.count as u64)-1)*4096>mask-v.physical||v.used==0||v.used>v.count{return INVALID;}
+ (*out).address_mask=mask;
+ return OK;
+}}
+unsafe fn storage_region(space:*const pg.Space,view:*const pg.PoolView,index:usize,out:*Region)void{unsafe{
+ if index==0{*out=Region{p:space as u64,n:sizeof(pg.Space) as u64};return;}
+ if index==1{*out=Region{p:(*view).tables as u64,n:((*view).count as u64)*4096};return;}
+ *out=Region{p:(*view).metadata as u64,n:(*view).count as u64};
+}return;}
+unsafe fn emit(v:*const pg.PoolView,identity:u64,generation:u64,virtual:u64,pa:u64,size:u64,
+ flags:u64,physical:u64,bytes:u64,records:*Alias,count:*usize)u64{unsafe{
+ if !overlap(pa,size,physical,bytes){return OK;}
+ var first=pa;if first<physical{first=physical;}
+ var end=pa+size;if end>physical+bytes{end=physical+bytes;}
+ let address=virtual+(first-pa);let length=end-first;
+ if *count!=0{let previous=records+(*count-1);
+  if (*previous).root==(*v).physical&&(*previous).identity==identity&&(*previous).generation==generation
+   &&(*previous).flags==flags&&(*previous).leaf_bytes==size&&(*previous).bytes<=MAX-(*previous).virtual
+   &&(*previous).virtual+(*previous).bytes==address&&(*previous).physical+(*previous).bytes==first{
+   (*previous).bytes+=length;return OK;
+  }
+ }
+ if *count>=MAX_ALIASES{return CAPACITY;}
+ *(records+*count)=Alias{root:(*v).physical,identity:identity,generation:generation,
+  virtual:address,physical:first,bytes:length,flags:flags,leaf_bytes:size};
+ *count+=1;return OK;
+}}
+// The kernel's complete tree is walked once. A user's only private subtree is
+// PML4[0]; its shared entries 1..511 were checked against the kernel beforehand.
+unsafe fn walk(v:*const pg.PoolView,private_only:bool,identity:u64,generation:u64,
+ physical:u64,bytes:u64,records:*Alias,count:*usize,report:*Report)u64{unsafe{
+ var seen:[256]u8=[0;256];var tables:[4]usize=[0;4];var slots:[4]usize=[0;4];
+ var prefixes:[4]u64=[0;4];var writable:[4]bool=[true;4];var user:[4]bool=[true;4];var noexec:[4]bool=[false;4];
+ var index:usize=0;while index<(*v).count{
+  let m=*((*v).metadata+index);if m==2{return PENDING;}if m>1{return MALFORMED;}index+=1;
+ }
+ if *((*v).metadata)!=1{return ACCOUNTING;}
+ let pool_bytes=((*v).count as u64)*4096;var level:usize=0;var reached:usize=1;seen[0]=1;
+ while true{
+  var limit:usize=512;if private_only&&level==0{limit=1;}
+  if slots[level]==limit{if level==0{break;}level-=1;continue;}
+  let slot=slots[level];slots[level]+=1;
+  let entry=(*((*v).tables+tables[level])).entries[slot];if entry==0{continue;}if (entry&1)==0{return MALFORMED;}
+  var va=prefixes[level]|((slot as u64)<<(39-(level as u64)*9));
+  if level==0&&slot>=256{va|=0xffff_0000_0000_0000;}
+  let write=writable[level]&&(entry&2)!=0;let accessible=user[level]&&(entry&4)!=0;let denied=noexec[level]||(entry&NX)!=0;
+  if level<3&&(entry&128)==0{
+   if (entry&~((*v).address_mask|NX|39))!=0{return MALFORMED;}
+   let pa=entry&(*v).address_mask;
+   if pa<(*v).physical||pa-(*v).physical>=pool_bytes{return FOREIGN;}
+   let child=((pa-(*v).physical)/4096) as usize;
+   if seen[child]!=0{return MALFORMED;}if *((*v).metadata+child)!=1{return ACCOUNTING;}
+   seen[child]=1;reached+=1;level+=1;tables[level]=child;slots[level]=0;prefixes[level]=va;
+   writable[level]=write;user[level]=accessible;noexec[level]=denied;continue;
+  }
+  var size:u64=4096;var pa=entry&(*v).address_mask;var cache=entry&152;
+  if level<3{
+   if level!=2||(entry&0x001f_e000)!=0||(entry&~((*v).address_mask|NX|0x10ff))!=0{return MALFORMED;}
+   size=0x20_0000;pa&=~(0x1f_ffff as u64);cache=entry&0x1018;
+   if cache==0x1000{cache=128;}
+  }else if (entry&~((*v).address_mask|NX|255))!=0{return MALFORMED;}
+  if cache!=0&&cache!=24&&cache!=128{return MALFORMED;}
+  if (write&&!denied)||((va>>63)!=0&&accessible){return MALFORMED;}
+  if pa>(*v).address_mask+4096-size{return MALFORMED;}
+  var flags:u64=0;if write{flags|=pg.WRITE;}if accessible{flags|=pg.USER;}if !denied{flags|=pg.EXECUTE;}
+  if cache==24{flags|=pg.UNCACHED;}if cache==128{flags|=pg.WRITE_COMBINING;}
+  (*report).leaves+=1;
+  let status=emit(v,identity,generation,va,pa,size,flags,physical,bytes,records,count);if status!=OK{return status;}
+ }
+ index=0;while index<(*v).count{
+  if ((*((*v).metadata+index)==1)!=(seen[index]==1)){return ACCOUNTING;}index+=1;
+ }
+ if reached!=(*v).used{return ACCOUNTING;}(*report).tables+=reached as u64;return OK;
+}}
+pub unsafe fn audit(kernel:*const pg.Space,users:[]const Root,physical:u64,bytes:u64,
+ output:[]Alias,out:*Report,scratch:*Scratch)u64{unsafe{
+ // Reject numeric overflow and writable/input overlaps before dereferencing
+ // their descriptors. Numeric checks cannot prove arbitrary pointers readable.
+ if users.len>MAX_USERS||output.len>MAX_ALIASES||physical==0||bytes==0||bytes>MAX-physical{return INVALID;}
+ let up=users.ptr as u64;let un=(users.len as u64)*(sizeof(Root) as u64);
+ let op=output.ptr as u64;let on=(output.len as u64)*(sizeof(Alias) as u64);
+ let wp=scratch as u64;let wn=sizeof(Scratch) as u64;
+ if !object(kernel as u64,sizeof(pg.Space) as u64,8)||!object(out as u64,sizeof(Report) as u64,8)
+  ||!object(wp,wn,64)||!span(up,un)||(un!=0&&(up&7)!=0)||!span(op,on)||(on!=0&&(op&7)!=0){return INVALID;}
+ if overlap(up,un,op,on)||overlap(up,un,out as u64,sizeof(Report) as u64)
+  ||overlap(op,on,out as u64,sizeof(Report) as u64)||overlap(wp,wn,up,un)||overlap(wp,wn,op,on)
+  ||overlap(wp,wn,out as u64,sizeof(Report) as u64){return STORAGE;}
+ var i:usize=0;while i<users.len{
+  let r=users[i];if r.identity>=16||r.generation==0||!object(r.space as u64,sizeof(pg.Space) as u64,8){return INVALID;}
+  var j:usize=0;while j<i{if users[j].identity==r.identity{return INVALID;}j+=1;}
+  i+=1;
+ }
+ // Preflight into small LOCAL descriptors, never into Scratch. This bounded
+ // pairwise pass checks ALL source/output/workspace storage before any Scratch
+ // write, so a rejected workspace cannot overwrite a table or descriptor.
+ var canonical=EMPTY_VIEW;
+ i=0;while i<=users.len{
+  let space=source_at(kernel,users,i);let sp=space as u64;
+  if overlap(sp,sizeof(pg.Space) as u64,op,on)||overlap(sp,sizeof(pg.Space) as u64,out as u64,sizeof(Report) as u64)
+   ||overlap(sp,sizeof(pg.Space) as u64,wp,wn){return STORAGE;}
+  var v=EMPTY_VIEW;let described=describe(space,canonical.address_mask,&v);if described!=OK{return described;}
+  if i==0{canonical=v;}
+  var k:usize=0;while k<3{var r=EMPTY_REGION;storage_region(space,&v,k,&r);
+   if overlap(r.p,r.n,up,un)||overlap(r.p,r.n,op,on)||overlap(r.p,r.n,out as u64,sizeof(Report) as u64)
+    ||overlap(r.p,r.n,wp,wn){return STORAGE;}
+   var before:usize=0;while before<k{var other=EMPTY_REGION;storage_region(space,&v,before,&other);if overlap(r.p,r.n,other.p,other.n){return STORAGE;}before+=1;}k+=1;
+  }
+  var j:usize=0;while j<i{
+   let previous=source_at(kernel,users,j);var other=EMPTY_VIEW;let checked=describe(previous,canonical.address_mask,&other);if checked!=OK{return checked;}
+   if overlap(v.physical,(v.count as u64)*4096,other.physical,(other.count as u64)*4096){return STORAGE;}
+   k=0;while k<3{var a=EMPTY_REGION;storage_region(space,&v,k,&a);var l:usize=0;while l<3{
+    var b=EMPTY_REGION;storage_region(previous,&other,l,&b);if overlap(a.p,a.n,b.p,b.n){return STORAGE;}l+=1;}k+=1;
+   }j+=1;
+  }i+=1;
+ }
+ if physical>canonical.address_mask+4095||bytes-1>canonical.address_mask+4095-physical{return INVALID;}
+ // Scratch contents are now expendable. Caller stability makes these the
+ // same descriptors just preflighted; outputs remain untouched on any error.
+ i=0;while i<=users.len{let status=describe(source_at(kernel,users,i),canonical.address_mask,&(*scratch).views[i]);if status!=OK{return status;}i+=1;}
+ // A/D: PML4 references are non-leaves, so only A may differ. D is not
+ // hardware-updated there. These borrowed references retain the canonical
+ // hardware width, even when a user's private descriptor is narrower. The
+ // kernel walks that shared tree once; private slot0 uses its bounded view.
+ i=0;while i<users.len{var slot:usize=1;while slot<512{
+  let actual=(*((*scratch).views[i+1].tables)).entries[slot];let expected=(*((*scratch).views[0].tables)).entries[slot];
+  if ((actual^expected)&~(32 as u64))!=0{return SHARED_MISMATCH;}
+  if expected==0&&actual!=0{return SHARED_MISMATCH;}slot+=1;
+ }i+=1;}
+ var count:usize=0;
+ var report=Report{roots:(users.len as u64)+1,tables:0,leaves:0,aliases:0,shared_entries:(users.len as u64)*511,kernel_scans:1,physical:physical,bytes:bytes};
+ let first=walk(&(*scratch).views[0],false,KERNEL_ID,0,physical,bytes,&(*scratch).records[0],&count,&report);if first!=OK{return first;}
+ i=0;while i<users.len{
+  let status=walk(&(*scratch).views[i+1],true,users[i].identity,users[i].generation,physical,bytes,&(*scratch).records[0],&count,&report);if status!=OK{return status;}i+=1;
+ }
+ if count>output.len{return CAPACITY;}
+ report.aliases=count as u64;i=0;while i<count{output[i]=(*scratch).records[i];i+=1;}*out=report;return OK;
+}}

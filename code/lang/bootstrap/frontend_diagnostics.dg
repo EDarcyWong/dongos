@@ -35,6 +35,8 @@ pub fn error_code(stage:u64,code:u64,detail:u64)[]const u8{
   if code==binding.CONTROL{return "E0501";}if code==binding.KIND{return "E0301";}return "E0201";
  }
  if stage==front.SEMANTIC{
+  if code==semantic.TYPE&&detail==90{return "E0302";}
+  if code==semantic.TYPE&&detail==91{return "E0602";}
   if code==semantic.INVALID||code==semantic.BAD_GRAPH{return "E0901";}
   if code==semantic.CAPACITY||code==semantic.DEPTH||code==semantic.UNSUPPORTED{return "E0601";}
   if code==semantic.CYCLE||code==semantic.CONSTANT||code==semantic.LAYOUT{return "E0302";}
@@ -81,6 +83,8 @@ pub fn message(stage:u64,code:u64,detail:u64)[]const u8{
   if code==binding.DEPTH{return "binding depth limit exceeded";}
  }
  if stage==front.SEMANTIC{
+  if code==semantic.TYPE&&detail==90{return "error code must be in 1..4294967295";}
+  if code==semantic.TYPE&&detail==91{return "duplicate error code";}
   if code==semantic.TYPE{return "type mismatch or invalid type";}
   if code==semantic.CYCLE{return "cyclic type or constant dependency";}
   if code==semantic.CONSTANT{return "invalid constant expression";}
