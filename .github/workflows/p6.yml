@@ -1,0 +1,112 @@
+name: P6 focused validation
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  initial-dag:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: code
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Install standard structural validation tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends nasm lld qemu-system-x86 ovmf python3 gcc
+      - name: Test initial DAG evidence rejection
+        run: python3 -m unittest tests.test_p6_initial_dag tests.test_p6_kvm_runner tests.test_boot_trace_oracle -v
+      - name: Build current normal runtime7 image
+        run: python3 -c "from pathlib import Path; from tools.build import build; build(runtime_level=7, output=Path('build/test/p6-initial-dag/build'))"
+      - name: Observe first-generation init DAG on four TCG CPUs
+        run: python3 -m tests.run_p6_initial_dag_qemu --reuse-esp build/test/p6-initial-dag/build/esp --output build/test/p6-initial-dag/actual --timeout 180
+      - name: Preserve structural evidence without claiming KVM timing
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: p6-initial-dag-evidence
+          path: code/build/test/p6-initial-dag/
+          if-no-files-found: error
+  input-irq:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: code
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Install standard native test tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends nasm gcc python3
+      - name: Execute production input IRQ and real-source negative controls
+        run: python3 -m unittest tests.test_input_service tests.test_usb_input_entry tests.test_usb_input_usbonly tests.test_boot_trace_oracle tests.test_p6_kvm_runner -v
+      - name: Save exact source and native execution evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: p6-input-irq-evidence
+          path: |
+            code/build/test/input-service/
+            code/build/test/usb-input-entry/
+            code/build/test/usb-input-usbonly/
+          if-no-files-found: error
+  kvm-timing:
+    # One-task authorization: this PR's validation process may use the existing
+    # device group. Do not grant persistent membership or authorize future PRs.
+    if: github.event_name == 'pull_request' && github.event.pull_request.number == 3 && github.event.pull_request.head.repo.full_name == 'EDarcyWong/dongos' && github.event.pull_request.head.ref == 'codex/p6-input-irq-kvm-validation'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: code
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Probe KVM access without changing host permissions
+        run: |
+          python3 - <<'VERIFY'
+          import grp, os, pwd, stat
+          device = os.stat('/dev/kvm')
+          assert stat.S_ISCHR(device.st_mode), 'KVM must be a character device'
+          assert device.st_gid == grp.getgrnam('kvm').gr_gid, 'existing kvm group must own device'
+          assert os.getuid() == pwd.getpwnam('runner').pw_uid, 'expected unprivileged runner user'
+          VERIFY
+          sudo -n -u runner -g kvm -- python3 - <<'PYCODE'
+          import json
+          from pathlib import Path
+          from tests.run_p6_kvm_qemu import preflight
+          out = Path('build/test/p6-kvm')
+          out.mkdir(parents=True)
+          try:
+              result = preflight()
+          except Exception as error:
+              (out/'preflight.json').write_text(json.dumps({'passed': False, 'error': str(error)}))
+              raise
+          (out/'preflight.json').write_text(json.dumps(result))
+          PYCODE
+      - name: Install standard build and emulator tools
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes --no-install-recommends nasm lld qemu-system-x86 ovmf python3 gcc
+      - name: Build current normal runtime7 image
+        run: python3 -c "from pathlib import Path; from tools.build import build; build(runtime_level=7, output=Path('build/test/p6-kvm/build'))"
+      - name: Run uninterrupted four-core KVM timing gate
+        run: sudo -n -u runner -g kvm -- python3 -m tests.run_p6_kvm_qemu --reuse-esp build/test/p6-kvm/build/esp --output build/test/p6-kvm/actual --timeout 120
+      - name: Preserve successful or failed real-guest evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: p6-kvm-timing-evidence
+          path: code/build/test/p6-kvm/
+          if-no-files-found: error
